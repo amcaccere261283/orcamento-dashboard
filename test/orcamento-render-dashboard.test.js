@@ -171,6 +171,18 @@ test('renderCorpoTabela (extraído do HTML real gerado) monta o bloco TOTAL GERA
   assert.match(corpo, /data-valor="PÁTRIA"/);
 });
 
+test('renderCorpoTabela never uses rowspan for the Tipologia/badge column -- it must repeat on every P/R/T row so the filtro-serie filter can hide exactly one of the 3 rows without breaking the other 2 (real bug: rowspan="3" lived only on the Previsto row, so filtering to Realizado/Tendência made the whole column vanish)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoTabela } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoTabela([registroExemplo()]);
+  assert.doesNotMatch(corpo, /rowspan/);
+  // 3 registro rows (P/R/T) + 3 total-sup rows + 3 total-geral rows + 3
+  // total-geral-tipologia rows (1 distinct tipologia here) = 12 rows total,
+  // each needs its own col-tipologia cell now.
+  const celulasTipologia = corpo.match(/class="col-mesclavel col-tipologia"/g) || [];
+  assert.equal(celulasTipologia.length, 12);
+});
+
 test('renderCorpoTabela adds a "total geral por tipologia" block for each distinct tipologia (alphabetical), aggregating across ALL SUPs that have it, right after the overall TOTAL GERAL and before any per-contract row', () => {
   const registroSM_supA = registroExemplo({ sup: 'SUP-A', grupo: 'PÁTRIA', tipologia: 'SM' });
   const registroST_supA = registroExemplo({ sup: 'SUP-A', grupo: 'PÁTRIA', tipologia: 'ST' });

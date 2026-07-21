@@ -213,22 +213,35 @@ function mesclarConsecutivos(valores) {
   return resultado;
 }
 
+// Nunca reescreve o conteúdo da célula (só a classe que esmaece) -- a coluna
+// Tipologia guarda um <span class="tipologia-chip"> colorido, e sobrescrever
+// com textContent destruiria esse HTML. Pro mesmo motivo, sup/grupo/tomador
+// também pararam de ter o conteúdo reescrito (era sempre o mesmo valor já
+// presente, um no-op).
 function mesclarColunasRepetidas() {
+  var linhasVisiveis = Array.prototype.filter.call(
+    document.querySelectorAll('#tabela-orcamento tbody tr'),
+    function (tr) { return tr.style.display !== 'none'; }
+  );
   ['col-sup', 'col-grupo', 'col-tomador'].forEach(function (classe) {
-    var linhasVisiveis = Array.prototype.filter.call(
-      document.querySelectorAll('#tabela-orcamento tbody tr'),
-      function (tr) { return tr.style.display !== 'none'; }
-    );
     var celulas = linhasVisiveis
       .map(function (tr) { return tr.querySelector('.' + classe); })
       .filter(Boolean);
     var valores = celulas.map(function (c) { return c.getAttribute('data-valor'); });
     var mesclados = mesclarConsecutivos(valores);
-    celulas.forEach(function (c, i) {
-      c.textContent = mesclados[i].valor;
-      c.classList.toggle('valor-repetido', mesclados[i].repetido);
-    });
+    celulas.forEach(function (c, i) { c.classList.toggle('valor-repetido', mesclados[i].repetido); });
   });
+
+  // Tipologia (e os selos TOTAL/TOTAL GERAL) mesclam por GRUPO de linha
+  // (as 3 linhas P/R/T de um mesmo bloco compartilham o mesmo
+  // data-registro-indices), não por valor de texto -- se comparasse por
+  // texto, duas tipologias iguais vindas de blocos diferentes (ex.: dois
+  // SUPs distintos, ambos "SM") se mesclariam entre si, o que nunca foi o
+  // comportamento pretendido.
+  var celulasTipologia = linhasVisiveis.map(function (tr) { return tr.querySelector('.col-tipologia'); }).filter(Boolean);
+  var chavesTipologia = linhasVisiveis.map(function (tr) { return tr.dataset.registroIndices; });
+  var mescladosTipologia = mesclarConsecutivos(chavesTipologia);
+  celulasTipologia.forEach(function (c, i) { c.classList.toggle('valor-repetido', mescladosTipologia[i].repetido); });
 }
 
 // Mesmo mapeamento de cores por tipologia da matriz de equipes
@@ -274,19 +287,19 @@ function renderLinhaTabela(registro, indice) {
   var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(registro.sup) + '">' + escapeHtml(registro.sup) + '</td>';
   var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(registro.grupo) + '">' + escapeHtml(registro.grupo) + '</td>';
   var celulaTomador = '<td class="col-mesclavel col-tomador" data-valor="' + escapeHtml(registro.tomador) + '">' + escapeHtml(registro.tomador) + '</td>';
+  var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(registro.tipologia) + '</span></td>';
   return '<tr class="linha-serie linha-previsto" data-serie="previsto" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador +
-      '<td rowspan="3"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(registro.tipologia) + '</span></td>' +
+      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
     '<tr class="linha-serie linha-realizado" data-serie="realizado" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador +
+      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
     '<tr class="linha-serie linha-total" data-serie="total" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador +
+      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>';
@@ -298,19 +311,19 @@ function renderLinhaTotalSup(sup, grupo, tomador, indices) {
   var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(sup) + '">' + escapeHtml(sup) + '</td>';
   var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(grupo) + '">' + escapeHtml(grupo) + '</td>';
   var celulaTomador = '<td class="col-mesclavel col-tomador" data-valor="' + escapeHtml(tomador) + '">' + escapeHtml(tomador) + '</td>';
+  var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip tipologia-chip-total">TOTAL</span></td>';
   return '<tr class="linha-serie linha-previsto linha-total-sup" data-serie="previsto" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador +
-      '<td rowspan="3"><span class="tipologia-chip tipologia-chip-total">TOTAL</span></td>' +
+      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
     '<tr class="linha-serie linha-realizado linha-total-sup" data-serie="realizado" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador +
+      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
     '<tr class="linha-serie linha-total linha-total-sup" data-serie="total" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador +
+      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>';
@@ -322,19 +335,19 @@ function renderLinhaTotalGeral(totalRegistros) {
   var dataAttrs = 'data-registro-indices="' + todosIndices.join(',') + '" data-total-geral="1"';
   var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
   var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
+  var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip tipologia-chip-total">TOTAL GERAL</span></td>';
   return '<tr class="linha-serie linha-previsto linha-total-geral" data-serie="previsto" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
-      '<td rowspan="3"><span class="tipologia-chip tipologia-chip-total">TOTAL GERAL</span></td>' +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
     '<tr class="linha-serie linha-realizado linha-total-geral" data-serie="realizado" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
     '<tr class="linha-serie linha-total linha-total-geral" data-serie="total" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>';
@@ -349,19 +362,19 @@ function renderLinhaTotalGeralTipologia(tipologia, indices) {
   var dataAttrs = 'data-tipologia="' + escapeHtml(tipologia) + '" data-registro-indices="' + indices.join(',') + '" data-total-geral-tipologia="1"';
   var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
   var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
-  return '<tr class="linha-serie linha-previsto linha-total-geral" data-serie="previsto" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
-      '<td rowspan="3"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(tipologia) + '</span></td>' +
+  var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(tipologia) + '</span></td>';
+  return '<tr class="linha-serie linha-previsto linha-total-geral linha-total-geral-tipologia" data-serie="previsto" ' + dataAttrs + '>' +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
-    '<tr class="linha-serie linha-realizado linha-total-geral" data-serie="realizado" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+    '<tr class="linha-serie linha-realizado linha-total-geral linha-total-geral-tipologia" data-serie="realizado" ' + dataAttrs + '>' +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
-    '<tr class="linha-serie linha-total linha-total-geral" data-serie="total" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+    '<tr class="linha-serie linha-total linha-total-geral linha-total-geral-tipologia" data-serie="total" ' + dataAttrs + '>' +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>';
@@ -445,13 +458,6 @@ function popularFiltros(registros) {
   popularSelect('filtro-sup', linhasDistintas(registros, 'sup'));
 }
 
-function filtrarIndicesPorGrupoSup(indices, filtroContrato, filtroSup) {
-  return indices.filter(function (idx) {
-    var r = window.__REGISTROS__[idx];
-    return (!filtroContrato || r.grupo === filtroContrato) && (!filtroSup || r.sup === filtroSup);
-  });
-}
-
 function recalcularTabela() {
   var dimensao = document.getElementById('seletor-dimensao').value;
   var filtroTipologia = document.getElementById('filtro-tipologia').value;
@@ -469,18 +475,16 @@ function recalcularTabela() {
     var indices = linha.dataset.registroIndices.split(',').map(Number);
     var mostra;
     if (ehTotalGeral) {
-      // Total geral: soma TODAS as tipologias, refiltrado por
-      // contrato/SUP em vigor -- só aparece quando nenhuma tipologia
-      // específica estiver selecionada (senão "todas as tipologias" perde
-      // o sentido).
-      indices = filtrarIndicesPorGrupoSup(indices, filtroContrato, filtroSup);
-      mostra = indices.length > 0 && !filtroTipologia && combinaSerie;
+      // Total geral (a visão-resumo de TUDO): só aparece na visão sem
+      // nenhum recorte -- some assim que qualquer filtro (tipologia,
+      // contrato ou SUP) restringe os dados, porque nesse ponto o total
+      // por SUP (ou a própria linha do registro) já cobre o recorte atual.
+      mostra = !filtroContrato && !filtroSup && !filtroTipologia && combinaSerie;
     } else if (ehTotalGeralTipologia) {
-      // Total geral de UMA tipologia através de todos os contratos/SUPs --
-      // some sozinho igual às linhas normais quando outra tipologia
-      // estiver selecionada, e também refiltra por contrato/SUP em vigor.
-      indices = filtrarIndicesPorGrupoSup(indices, filtroContrato, filtroSup);
-      mostra = indices.length > 0 && (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) && combinaSerie;
+      // Total de UMA tipologia através de todos os contratos/SUPs -- mesma
+      // regra do total geral (some com filtro de contrato/SUP), mas o
+      // filtro de tipologia escolhe QUAL bloco aparece em vez de escondê-lo.
+      mostra = !filtroContrato && !filtroSup && (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) && combinaSerie;
     } else if (ehTotalSup) {
       mostra = combinaGrupoSup && !filtroTipologia && combinaSerie;
     } else {
@@ -646,6 +650,8 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   .linha-total-sup td { background: rgba(0,0,0,0.32); }
   .linha-total-geral td { background: rgba(246,181,63,0.10); }
   tr.linha-total.linha-total-geral td { border-bottom: 2px solid #f6b53f; }
+  .linha-total-geral-tipologia td { background: rgba(255,255,255,0.03); }
+  tr.linha-total.linha-total-geral-tipologia td { border-bottom: 1px solid var(--gridline); }
   .valor-repetido { color: rgba(255,255,255,0.14); }
 </style>
 </head>
