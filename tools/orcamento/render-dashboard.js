@@ -223,14 +223,33 @@ function mesclarColunasRepetidas() {
     document.querySelectorAll('#tabela-orcamento tbody tr'),
     function (tr) { return tr.style.display !== 'none'; }
   );
-  ['col-sup', 'col-grupo', 'col-tomador'].forEach(function (classe) {
-    var celulas = linhasVisiveis
-      .map(function (tr) { return tr.querySelector('.' + classe); })
-      .filter(Boolean);
-    var valores = celulas.map(function (c) { return c.getAttribute('data-valor'); });
-    var mesclados = mesclarConsecutivos(valores);
-    celulas.forEach(function (c, i) { c.classList.toggle('valor-repetido', mesclados[i].repetido); });
-  });
+
+  // SUP > Grupo > Tomador é uma hierarquia, não 3 colunas independentes --
+  // Grupo só pode contar como repetido se o SUP acima também não tiver
+  // mudado (senão um SUP novo que por coincidência tem o mesmo Grupo do
+  // anterior ficaria com o nome apagado, escondendo que um bloco novo
+  // começou; mesmo raciocínio pra Tomador exigir Grupo+SUP inalterados).
+  // Por isso cada nível usa uma CHAVE que inclui todos os níveis acima, não
+  // só seu próprio texto -- reaproveita mesclarConsecutivos (já testada)
+  // aplicando-a a essas chaves compostas em vez do texto puro.
+  var celulasSup = linhasVisiveis.map(function (tr) { return tr.querySelector('.col-sup'); });
+  var celulasGrupo = linhasVisiveis.map(function (tr) { return tr.querySelector('.col-grupo'); });
+  var celulasTomador = linhasVisiveis.map(function (tr) { return tr.querySelector('.col-tomador'); });
+  var valoresSup = celulasSup.map(function (c) { return c.getAttribute('data-valor'); });
+  var valoresGrupo = celulasGrupo.map(function (c) { return c.getAttribute('data-valor'); });
+  var valoresTomador = celulasTomador.map(function (c) { return c.getAttribute('data-valor'); });
+  // Chave = array [niveis acima..., proprio valor] serializado em JSON, em
+  // vez de uma string concatenada com separador -- evita qualquer risco de
+  // colisao entre valores que por acaso contenham o proprio separador.
+  var chavesGrupo = valoresSup.map(function (sup, i) { return JSON.stringify([sup, valoresGrupo[i]]); });
+  var chavesTomador = valoresSup.map(function (sup, i) { return JSON.stringify([sup, valoresGrupo[i], valoresTomador[i]]); });
+
+  var mescladosSup = mesclarConsecutivos(valoresSup);
+  var mescladosGrupo = mesclarConsecutivos(chavesGrupo);
+  var mescladosTomador = mesclarConsecutivos(chavesTomador);
+  celulasSup.forEach(function (c, i) { c.classList.toggle('valor-repetido', mescladosSup[i].repetido); });
+  celulasGrupo.forEach(function (c, i) { c.classList.toggle('valor-repetido', mescladosGrupo[i].repetido); });
+  celulasTomador.forEach(function (c, i) { c.classList.toggle('valor-repetido', mescladosTomador[i].repetido); });
 
   // Tipologia (e os selos TOTAL/TOTAL GERAL) mesclam por GRUPO de linha
   // (as 3 linhas P/R/T de um mesmo bloco compartilham o mesmo
