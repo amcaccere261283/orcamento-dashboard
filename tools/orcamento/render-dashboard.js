@@ -340,8 +340,55 @@ function renderLinhaTotalGeral(totalRegistros) {
     '</tr>';
 }
 
+// Total geral de UMA tipologia (soma através de TODOS os contratos/SUPs que
+// têm essa tipologia, não só um) -- SUP/Grupo/Tomador ficam em branco (como
+// o total geral) mas a Tipologia aparece de verdade e colorida, pra
+// distinguir qual bloco é qual quando vários aparecem juntos no topo.
+function renderLinhaTotalGeralTipologia(tipologia, indices) {
+  var chipColor = tipologiaColor(tipologia);
+  var dataAttrs = 'data-tipologia="' + escapeHtml(tipologia) + '" data-registro-indices="' + indices.join(',') + '" data-total-geral-tipologia="1"';
+  var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
+  var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
+  return '<tr class="linha-serie linha-previsto linha-total-geral" data-serie="previsto" ' + dataAttrs + '>' +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      '<td rowspan="3"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(tipologia) + '</span></td>' +
+      '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>' +
+    '<tr class="linha-serie linha-realizado linha-total-geral" data-serie="realizado" ' + dataAttrs + '>' +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>' +
+    '<tr class="linha-serie linha-total linha-total-geral" data-serie="total" ' + dataAttrs + '>' +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>';
+}
+
 function renderCorpoTabela(registros) {
   var html = renderLinhaTotalGeral(registros.length);
+
+  // Um total geral por tipologia, logo depois do total geral -- agrega
+  // todos os registros daquela tipologia através de TODOS os SUPs (não só
+  // do bloco de um contrato), em ordem alfabética (mesma ordem do filtro de
+  // tipologia).
+  var indicesPorTipologia = {};
+  var ordemTipologias = [];
+  registros.forEach(function (registro, indice) {
+    if (!registro.tipologia) return;
+    if (!indicesPorTipologia[registro.tipologia]) {
+      indicesPorTipologia[registro.tipologia] = [];
+      ordemTipologias.push(registro.tipologia);
+    }
+    indicesPorTipologia[registro.tipologia].push(indice);
+  });
+  ordemTipologias.sort();
+  ordemTipologias.forEach(function (tipologia) {
+    html += renderLinhaTotalGeralTipologia(tipologia, indicesPorTipologia[tipologia]);
+  });
+
   var supAtual = null;
   var grupoAtual = null;
   var tomadorAtual = null;
@@ -398,6 +445,13 @@ function popularFiltros(registros) {
   popularSelect('filtro-sup', linhasDistintas(registros, 'sup'));
 }
 
+function filtrarIndicesPorGrupoSup(indices, filtroContrato, filtroSup) {
+  return indices.filter(function (idx) {
+    var r = window.__REGISTROS__[idx];
+    return (!filtroContrato || r.grupo === filtroContrato) && (!filtroSup || r.sup === filtroSup);
+  });
+}
+
 function recalcularTabela() {
   var dimensao = document.getElementById('seletor-dimensao').value;
   var filtroTipologia = document.getElementById('filtro-tipologia').value;
@@ -410,15 +464,23 @@ function recalcularTabela() {
     var combinaGrupoSup = (!filtroContrato || linha.dataset.grupo === filtroContrato) &&
       (!filtroSup || linha.dataset.sup === filtroSup);
     var ehTotalGeral = linha.dataset.totalGeral === '1';
+    var ehTotalGeralTipologia = linha.dataset.totalGeralTipologia === '1';
     var ehTotalSup = linha.dataset.totalSup === '1';
     var indices = linha.dataset.registroIndices.split(',').map(Number);
     var mostra;
     if (ehTotalGeral) {
-      indices = indices.filter(function (idx) {
-        var r = window.__REGISTROS__[idx];
-        return (!filtroContrato || r.grupo === filtroContrato) && (!filtroSup || r.sup === filtroSup);
-      });
+      // Total geral: soma TODAS as tipologias, refiltrado por
+      // contrato/SUP em vigor -- só aparece quando nenhuma tipologia
+      // específica estiver selecionada (senão "todas as tipologias" perde
+      // o sentido).
+      indices = filtrarIndicesPorGrupoSup(indices, filtroContrato, filtroSup);
       mostra = indices.length > 0 && !filtroTipologia && combinaSerie;
+    } else if (ehTotalGeralTipologia) {
+      // Total geral de UMA tipologia através de todos os contratos/SUPs --
+      // some sozinho igual às linhas normais quando outra tipologia
+      // estiver selecionada, e também refiltra por contrato/SUP em vigor.
+      indices = filtrarIndicesPorGrupoSup(indices, filtroContrato, filtroSup);
+      mostra = indices.length > 0 && (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) && combinaSerie;
     } else if (ehTotalSup) {
       mostra = combinaGrupoSup && !filtroTipologia && combinaSerie;
     } else {

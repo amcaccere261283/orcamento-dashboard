@@ -171,6 +171,32 @@ test('renderCorpoTabela (extraído do HTML real gerado) monta o bloco TOTAL GERA
   assert.match(corpo, /data-valor="PÁTRIA"/);
 });
 
+test('renderCorpoTabela adds a "total geral por tipologia" block for each distinct tipologia (alphabetical), aggregating across ALL SUPs that have it, right after the overall TOTAL GERAL and before any per-contract row', () => {
+  const registroSM_supA = registroExemplo({ sup: 'SUP-A', grupo: 'PÁTRIA', tipologia: 'SM' });
+  const registroST_supA = registroExemplo({ sup: 'SUP-A', grupo: 'PÁTRIA', tipologia: 'ST' });
+  const registroSM_supB = registroExemplo({ sup: 'SUP-B', grupo: 'SYSTRA', tipologia: 'SM' });
+  const html = renderComSenha([registroSM_supA, registroST_supA, registroSM_supB]);
+  const { renderCorpoTabela } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoTabela([registroSM_supA, registroST_supA, registroSM_supB]);
+
+  // Ordem: TOTAL GERAL, depois total geral por tipologia em ordem
+  // alfabética (SM antes de ST), só depois disso os registros normais.
+  const posTotalGeral = corpo.indexOf('data-total-geral="1"');
+  const posTotalTipologiaSM = corpo.search(/data-tipologia="SM"[^>]*data-total-geral-tipologia="1"/);
+  const posTotalTipologiaST = corpo.search(/data-tipologia="ST"[^>]*data-total-geral-tipologia="1"/);
+  const posPrimeiroRegistro = corpo.indexOf('data-sup="SUP-A"');
+  assert.ok(posTotalTipologiaSM >= 0 && posTotalTipologiaST >= 0, 'esperava blocos de total geral por tipologia pra SM e ST');
+  assert.ok(posTotalGeral < posTotalTipologiaSM, 'total geral deve vir antes do total por tipologia');
+  assert.ok(posTotalTipologiaSM < posTotalTipologiaST, 'SM deve vir antes de ST (ordem alfabética)');
+  assert.ok(posTotalTipologiaST < posPrimeiroRegistro, 'totais por tipologia devem vir antes dos registros normais');
+
+  // O bloco de total geral de "SM" reúne os índices das DUAS tipologias SM
+  // (SUP-A e SUP-B), não só a primeira.
+  const matchIndicesSM = corpo.match(/data-tipologia="SM" data-registro-indices="([\d,]*)" data-total-geral-tipologia="1"/);
+  assert.ok(matchIndicesSM);
+  assert.deepEqual(matchIndicesSM[1].split(',').map(Number).sort(), [0, 2]);
+});
+
 test('calcularMensal (extraído do HTML real gerado), com uma lista de 1 item (caso normal de uma tipologia), devolve os 12 valores mensais crus pra equipes/volume/financeiro, sem agregação', () => {
   const html = renderComSenha([registroExemplo()]);
   const { calcularMensal } = extrairFuncoesPuras(html);
