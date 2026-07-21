@@ -139,7 +139,8 @@ function extrairFuncoesPuras(html) {
       '\nthis.calcularMensal = calcularMensal; this.calcularTotalAno = calcularTotalAno;' +
       ' this.mesclarConsecutivos = mesclarConsecutivos; this.tipologiaColor = tipologiaColor;' +
       ' this.renderCorpoTabela = renderCorpoTabela; this.escapeHtml = escapeHtml;' +
-      ' this.calcularAcumulado = calcularAcumulado; this.indicesFiltrados = indicesFiltrados;',
+      ' this.calcularAcumulado = calcularAcumulado; this.indicesFiltrados = indicesFiltrados;' +
+      ' this.construirGraficoSvg = construirGraficoSvg;',
     sandbox
   );
   return {
@@ -147,6 +148,7 @@ function extrairFuncoesPuras(html) {
     mesclarConsecutivos: sandbox.mesclarConsecutivos, tipologiaColor: sandbox.tipologiaColor,
     renderCorpoTabela: sandbox.renderCorpoTabela, escapeHtml: sandbox.escapeHtml,
     calcularAcumulado: sandbox.calcularAcumulado, indicesFiltrados: sandbox.indicesFiltrados,
+    construirGraficoSvg: sandbox.construirGraficoSvg,
   };
 }
 
@@ -377,6 +379,52 @@ test('indicesFiltrados combines tipologia/grupo/sup with AND semantics, not OR',
   assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'PÁTRIA', '')), [0, 1]);
   assert.deepEqual(paraPlano(indicesFiltrados(registros, 'SM', 'PÁTRIA', '')), [0]);
   assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', 'SUP-Z')), []);
+});
+
+test('construirGraficoSvg (extraído do HTML real gerado) draws 12 bars per série plus 1 cumulative line per série, for a soma dimension (ehRazao=false)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoSvg, calcularAcumulado } = extrairFuncoesPuras(html);
+  const mensalPrevisto = Array(12).fill(100);
+  const mensalRealizado = Array(12).fill(50);
+  const dados = [
+    { serie: 'previsto', mensal: mensalPrevisto, acumulado: calcularAcumulado(mensalPrevisto) },
+    { serie: 'realizado', mensal: mensalRealizado, acumulado: calcularAcumulado(mensalRealizado) },
+  ];
+  const svg = construirGraficoSvg(dados, false);
+  assert.equal((svg.match(/<rect class="grafico-barra"/g) || []).length, 24);
+  assert.equal((svg.match(/<polyline class="grafico-linha"/g) || []).length, 2);
+  assert.match(svg, /<svg viewBox="0 0 1000 380" class="grafico-svg">/);
+});
+
+test('construirGraficoSvg draws NO bars for a razão dimension (ehRazao=true), only 1 line per série using the monthly value (not the cumulative)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoSvg } = extrairFuncoesPuras(html);
+  const dados = [{ serie: 'previsto', mensal: Array(12).fill(1.5), acumulado: null }];
+  const svg = construirGraficoSvg(dados, true);
+  assert.equal((svg.match(/<rect class="grafico-barra"/g) || []).length, 0);
+  assert.equal((svg.match(/<polyline class="grafico-linha"/g) || []).length, 1);
+});
+
+test('construirGraficoSvg scales bar heights proportionally to their value (guards against a numerator/denominator swap in the Y scale)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoSvg } = extrairFuncoesPuras(html);
+  const mensal = [100, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const dados = [{ serie: 'previsto', mensal: mensal, acumulado: mensal }];
+  const svg = construirGraficoSvg(dados, false);
+  const alturas = [...svg.matchAll(/<rect class="grafico-barra"[^>]*height="([\d.]+)"/g)].map(m => Number(m[1]));
+  assert.equal(alturas.length, 12);
+  assert.ok(Math.abs(alturas[0] - 2 * alturas[1]) < 0.5, `expected month0 (value 100) bar to be ~2x month1 (value 50) bar, got ${alturas[0]} vs ${alturas[1]}`);
+});
+
+test('construirGraficoSvg only draws bars/lines for the séries actually passed in (respects an upstream série filter)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoSvg, calcularAcumulado } = extrairFuncoesPuras(html);
+  const mensal = Array(12).fill(10);
+  const dados = [{ serie: 'realizado', mensal: mensal, acumulado: calcularAcumulado(mensal) }];
+  const svg = construirGraficoSvg(dados, false);
+  assert.equal((svg.match(/<rect class="grafico-barra"/g) || []).length, 12);
+  assert.equal((svg.match(/<polyline class="grafico-linha"/g) || []).length, 1);
+  assert.match(svg, /fill="#7fd858"/); // Realizado's color, confirming the right série was drawn
 });
 
 test('escapeHtml (extraído do HTML real gerado) escapes the same 5 characters as the server-side helper, protecting against markup injection from spreadsheet text once rendered client-side', () => {

@@ -214,6 +214,115 @@ function indicesFiltrados(registros, filtroTipologia, filtroGrupo, filtroSup) {
   return indices;
 }
 
+var SERIE_COR = { previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f' };
+var DIMENSOES_RAZAO = ['produtividade', 'ticketMedio'];
+var MESES_ABREVIADOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+var GRAFICO_LARGURA = 1000;
+var GRAFICO_ALTURA = 380;
+var GRAFICO_MARGEM = { topo: 24, baixo: 36, esquerda: 64, direita: 64 };
+
+// Mapeia um valor pra uma distância em pixels dentro de [0, pixelMax],
+// proporcional a valorMax -- 0 quando valorMax é 0 (evita divisão por
+// zero quando não há nenhum dado no recorte filtrado).
+function escalaLinear(valor, valorMax, pixelMax) {
+  if (!valorMax) return 0;
+  return (valor / valorMax) * pixelMax;
+}
+
+function construirEixoXSvg(larguraMes, alturaPlot) {
+  var svg = '';
+  for (var mes = 0; mes < 12; mes++) {
+    var x = GRAFICO_MARGEM.esquerda + mes * larguraMes + larguraMes / 2;
+    var y = GRAFICO_MARGEM.topo + alturaPlot + 18;
+    svg += '<text class="grafico-eixo-texto" x="' + x.toFixed(1) + '" y="' + y + '" text-anchor="middle">' + MESES_ABREVIADOS[mes] + '</text>';
+  }
+  return svg;
+}
+
+var GRAFICO_NUM_TICKS = 4;
+function construirTicksEixoY(valorMax, alturaPlot, ladoDireita) {
+  var svg = '';
+  for (var i = 0; i <= GRAFICO_NUM_TICKS; i++) {
+    var fracao = i / GRAFICO_NUM_TICKS;
+    var y = GRAFICO_MARGEM.topo + alturaPlot - fracao * alturaPlot;
+    var valor = fracao * valorMax;
+    var x = ladoDireita ? (GRAFICO_LARGURA - GRAFICO_MARGEM.direita + 8) : (GRAFICO_MARGEM.esquerda - 8);
+    var ancora = ladoDireita ? 'start' : 'end';
+    svg += '<text class="grafico-eixo-texto" x="' + x + '" y="' + (y + 4) + '" text-anchor="' + ancora + '">' + formatarNumero(valor) + '</text>';
+    if (!ladoDireita) {
+      svg += '<line class="grafico-gridline" x1="' + GRAFICO_MARGEM.esquerda + '" y1="' + y + '" x2="' + (GRAFICO_LARGURA - GRAFICO_MARGEM.direita) + '" y2="' + y + '"/>';
+    }
+  }
+  return svg;
+}
+
+function construirLegendaSvg(dadosPorSerie) {
+  var svg = '';
+  dadosPorSerie.forEach(function (d, i) {
+    var x = GRAFICO_MARGEM.esquerda + i * 130;
+    var y = 10;
+    svg += '<circle cx="' + x + '" cy="' + y + '" r="5" fill="' + SERIE_COR[d.serie] + '"/>';
+    svg += '<text class="grafico-eixo-texto" x="' + (x + 10) + '" y="' + (y + 4) + '" text-anchor="start">' + SERIE_LABELS[d.serie] + '</text>';
+  });
+  return svg;
+}
+
+// dadosPorSerie: [{ serie, mensal: number[12], acumulado: number[12]|null }],
+// já filtrado só com as séries visíveis (respeita filtro-serie) e com
+// valores mensais nunca-nulos (null já virou 0 antes de chegar aqui --
+// ver montarGrafico). ehRazao=true pras dimensões Produtividade/Ticket
+// médio: nesse caso não faz sentido "acumular" uma razão, então só a
+// linha do valor mensal aparece, sem barras e sem eixo secundário.
+function construirGraficoSvg(dadosPorSerie, ehRazao) {
+  var larguraPlot = GRAFICO_LARGURA - GRAFICO_MARGEM.esquerda - GRAFICO_MARGEM.direita;
+  var alturaPlot = GRAFICO_ALTURA - GRAFICO_MARGEM.topo - GRAFICO_MARGEM.baixo;
+  var larguraMes = larguraPlot / 12;
+  var numSeries = dadosPorSerie.length;
+
+  var maxMensal = 0;
+  dadosPorSerie.forEach(function (d) { d.mensal.forEach(function (v) { if (v > maxMensal) maxMensal = v; }); });
+  var maxAcumulado = 0;
+  if (!ehRazao) {
+    dadosPorSerie.forEach(function (d) { d.acumulado.forEach(function (v) { if (v > maxAcumulado) maxAcumulado = v; }); });
+  }
+
+  var svg = '';
+  svg += construirTicksEixoY(maxMensal, alturaPlot, false);
+  if (!ehRazao) svg += construirTicksEixoY(maxAcumulado, alturaPlot, true);
+  svg += construirEixoXSvg(larguraMes, alturaPlot);
+
+  if (!ehRazao) {
+    var larguraBarra = (larguraMes * 0.7) / (numSeries || 1);
+    for (var mes = 0; mes < 12; mes++) {
+      var inicioMes = GRAFICO_MARGEM.esquerda + mes * larguraMes + larguraMes * 0.15;
+      dadosPorSerie.forEach(function (d, i) {
+        var valor = d.mensal[mes];
+        var alturaBarra = escalaLinear(valor, maxMensal, alturaPlot);
+        var x = inicioMes + i * larguraBarra;
+        var y = GRAFICO_MARGEM.topo + alturaPlot - alturaBarra;
+        svg += '<rect class="grafico-barra" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + larguraBarra.toFixed(1) + '" height="' + alturaBarra.toFixed(1) + '" fill="' + SERIE_COR[d.serie] + '"><title>' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor) + '</title></rect>';
+      });
+    }
+  }
+
+  dadosPorSerie.forEach(function (d) {
+    var serieValores = ehRazao ? d.mensal : d.acumulado;
+    var maxEixo = ehRazao ? maxMensal : maxAcumulado;
+    var pontos = serieValores.map(function (valor, mes) {
+      var x = GRAFICO_MARGEM.esquerda + mes * larguraMes + larguraMes / 2;
+      var y = GRAFICO_MARGEM.topo + alturaPlot - escalaLinear(valor, maxEixo, alturaPlot);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    });
+    var tracejado = ehRazao ? '' : ' stroke-dasharray="5,4"';
+    svg += '<polyline class="grafico-linha" points="' + pontos.join(' ') + '" fill="none" stroke="' + SERIE_COR[d.serie] + '" stroke-width="2"' + tracejado + '/>';
+  });
+
+  svg += construirLegendaSvg(dadosPorSerie);
+
+  return '<svg viewBox="0 0 ' + GRAFICO_LARGURA + ' ' + GRAFICO_ALTURA + '" class="grafico-svg">' + svg + '</svg>';
+}
+
 function preencherLinha(linha, valoresLista, serie, dimensao) {
   var mensal = calcularMensal(valoresLista, serie, dimensao);
   var celulasMes = linha.querySelectorAll('.celula-mes');
