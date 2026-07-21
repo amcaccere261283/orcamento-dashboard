@@ -74,9 +74,38 @@ test('renderDashboard includes produtividade and ticket médio as dimension opti
   assert.match(html, /<option value="ticketMedio">Ticket médio<\/option>/);
 });
 
-test('renderDashboard header shows Previsto x Realizado x Total per período', () => {
+test('renderDashboard renders Previsto/Realizado/Total as 3 separate rows per registro, each labeled and tagged with its série', () => {
   const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /Previsto x Realizado x Total por período/);
+  assert.match(html, /<tr class="linha-serie linha-previsto" data-serie="previsto"/);
+  assert.match(html, /<tr class="linha-serie linha-realizado" data-serie="realizado"/);
+  assert.match(html, /<tr class="linha-serie linha-total" data-serie="total"/);
+  assert.match(html, /<td class="serie-label">Previsto<\/td>/);
+  assert.match(html, /<td class="serie-label">Realizado<\/td>/);
+  assert.match(html, /<td class="serie-label">Total<\/td>/);
+});
+
+test('renderDashboard gives each série row a distinct color (P azul, R verde, T amarelo) via CSS classes', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  assert.match(html, /\.linha-previsto \.serie-label,\s*\.linha-previsto \.celula-periodos\s*\{\s*color:\s*#2f6ad0/);
+  assert.match(html, /\.linha-realizado \.serie-label,\s*\.linha-realizado \.celula-periodos\s*\{\s*color:\s*#7fd858/);
+  assert.match(html, /\.linha-total \.serie-label,\s*\.linha-total \.celula-periodos\s*\{\s*color:\s*#f6b53f/);
+});
+
+test('renderDashboard colors the tipologia chip using the same tipologia→cor mapping as the matriz de equipes dashboard (SM is blue #2f6ad0)', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  assert.match(html, /<span class="tipologia-chip" style="--chip-color:#2f6ad0">SM<\/span>/);
+});
+
+test('renderDashboard resolves a composite tipologia string without parentheses (real MATRIZ format, e.g. "SM / SM.F / SR") to its first token\'s cor, unlike matriz de equipes which only needs the parenthesis form', () => {
+  const registro = { ...registroExemplo(), tipologia: 'SM / SM.F / SR' };
+  const html = renderDashboard({ registros: [registro], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  assert.match(html, /<span class="tipologia-chip" style="--chip-color:#2f6ad0">SM \/ SM\.F \/ SR<\/span>/);
+});
+
+test('renderDashboard header shows a Série column and per-período values', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  assert.match(html, /<th>Série<\/th>/);
+  assert.match(html, /Valores por período/);
 });
 
 function extrairFuncoesClientScript(html) {
@@ -90,8 +119,16 @@ function extrairFuncoesClientScript(html) {
     window: {},
   };
   vm.createContext(sandbox);
-  vm.runInContext(scriptCliente + '\nthis.calcularJanelas = calcularJanelas; this.dividirJanelas = dividirJanelas; this.dividir = dividir; this.renderizarCelulasPeriodo = renderizarCelulasPeriodo;', sandbox);
-  return { calcularJanelas: sandbox.calcularJanelas, dividirJanelas: sandbox.dividirJanelas, dividir: sandbox.dividir, renderizarCelulasPeriodo: sandbox.renderizarCelulasPeriodo };
+  vm.runInContext(
+    scriptCliente +
+      '\nthis.calcularJanelas = calcularJanelas; this.dividirJanelas = dividirJanelas; this.dividir = dividir;' +
+      ' this.calcularSerie = calcularSerie; this.renderizarCelulasPeriodo = renderizarCelulasPeriodo;',
+    sandbox
+  );
+  return {
+    calcularJanelas: sandbox.calcularJanelas, dividirJanelas: sandbox.dividirJanelas, dividir: sandbox.dividir,
+    calcularSerie: sandbox.calcularSerie, renderizarCelulasPeriodo: sandbox.renderizarCelulasPeriodo,
+  };
 }
 
 // A função do cliente roda dentro de um vm.Context, ou seja, um realm
@@ -135,19 +172,19 @@ test('renderizarCelulasPeriodo (extracted from the real rendered HTML) computes 
     total: null,
   };
   const html = renderDashboard({ registros: [registro], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  const { renderizarCelulasPeriodo } = extrairFuncoesClientScript(html);
+  const { calcularSerie, renderizarCelulasPeriodo } = extrairFuncoesClientScript(html);
 
   // Produtividade Realizado = volume ÷ equipes = 200 ÷ 5 = 40 (não 5/200=0,03).
-  const produtividadeHtml = renderizarCelulasPeriodo(registro, 'produtividade', 5);
-  assert.match(produtividadeHtml, /R: 40(?!\d)/);
-  assert.doesNotMatch(produtividadeHtml, /R: 0,03/);
+  const produtividadeRealizado = renderizarCelulasPeriodo(calcularSerie(registro, 'realizado', 'produtividade', 5));
+  assert.match(produtividadeRealizado, /^(?:<span[^>]*>40<\/span>)+$/);
 
   // Ticket médio Realizado = financeiro ÷ volume = 3000 ÷ 200 = 15 (não 200/3000≈0,07).
-  const ticketHtml = renderizarCelulasPeriodo(registro, 'ticketMedio', 5);
-  assert.match(ticketHtml, /R: 15(?!\d)/);
-  assert.doesNotMatch(ticketHtml, /R: 0,07/);
+  const ticketRealizado = renderizarCelulasPeriodo(calcularSerie(registro, 'realizado', 'ticketMedio', 5));
+  assert.match(ticketRealizado, /^(?:<span[^>]*>15<\/span>)+$/);
 
-  // Previsto usa a premissa fixa da planilha (PROD./TICKET), não uma razão recalculada.
-  assert.match(produtividadeHtml, /P: 1,5/);
-  assert.match(ticketHtml, /P: 1\.885,65/);
+  // Previsto usa a premissa fixa da planilha (PROD./TICKET), repetida nas 6 janelas, não uma razão recalculada.
+  const produtividadePrevisto = renderizarCelulasPeriodo(calcularSerie(registro, 'previsto', 'produtividade', 5));
+  assert.match(produtividadePrevisto, /^(?:<span[^>]*>1,5<\/span>)+$/);
+  const ticketPrevisto = renderizarCelulasPeriodo(calcularSerie(registro, 'previsto', 'ticketMedio', 5));
+  assert.match(ticketPrevisto, /^(?:<span[^>]*>1\.885,65<\/span>)+$/);
 });

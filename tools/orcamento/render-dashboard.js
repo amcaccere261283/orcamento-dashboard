@@ -40,12 +40,57 @@ function renderSeletorDimensao() {
     `</select>`;
 }
 
+// Mesmo mapeamento de cores por tipologia da matriz de equipes
+// (tools/matriz/render-dashboard.js's tipologiaColor) -- mantém os dois
+// dashboards consistentes entre si. Pequena extensão: quando a tipologia
+// vem como string composta sem parêntese (ex. "SM / SM.F / SR", formato
+// real da aba MATRIZ do orçamento -- a matriz de equipes só usa parêntese
+// pra isso), tenta o primeiro token antes da barra antes de cair no cinza
+// neutro.
+const TIPOLOGIA_COLOR = {
+  SP: '#3f851a', SM: '#2f6ad0', ST: '#8d6f00', PI: '#606060',
+  BL: '#4a3aa7', CPTU: '#db244e', SH: '#e87ba4', VT: '#eda100',
+  'SEGURANÇA': '#2775b8', ESPECIAIS: '#db244e', SSMA: '#2775b8',
+};
+const TIPOLOGIA_COMPOSTA_COLOR = {
+  'CPTU / VT / SH': TIPOLOGIA_COLOR.CPTU,
+  'SP/SM': TIPOLOGIA_COLOR.SP,
+};
+function tipologiaColor(tipologia) {
+  const raw = String(tipologia || '').trim();
+  const key = raw.toUpperCase();
+  if (TIPOLOGIA_COLOR[key]) return TIPOLOGIA_COLOR[key];
+  if (TIPOLOGIA_COMPOSTA_COLOR[key]) return TIPOLOGIA_COMPOSTA_COLOR[key];
+  const parenMatch = raw.match(/\(([^)]+)\)\s*$/);
+  if (parenMatch) {
+    const viaParen = TIPOLOGIA_COLOR[parenMatch[1].trim().toUpperCase()];
+    if (viaParen) return viaParen;
+  }
+  const primeiroToken = key.split('/')[0].trim();
+  if (TIPOLOGIA_COLOR[primeiroToken]) return TIPOLOGIA_COLOR[primeiroToken];
+  return '#898781';
+}
+
+// Previsto/Realizado/Total viram 3 linhas separadas (Grupo/Tomador/Tipologia
+// com rowspan) em vez de uma única linha combinada -- cada série colorida
+// (azul/verde/amarelo) via a classe .linha-<serie>, ver CSS.
 function renderLinhaTabela(registro) {
-  return `<tr data-tipologia="${escapeHtml(registro.tipologia)}" data-grupo="${escapeHtml(registro.grupo)}">` +
-    `<td>${escapeHtml(registro.grupo)}</td>` +
-    `<td>${escapeHtml(registro.tomador)}</td>` +
-    `<td><span class="tipologia-chip">${escapeHtml(registro.tipologia)}</span></td>` +
-    `<td colspan="6" class="celula-periodos num" data-linha-periodos></td>` +
+  const chipColor = tipologiaColor(registro.tipologia);
+  const dataAttrs = `data-tipologia="${escapeHtml(registro.tipologia)}" data-grupo="${escapeHtml(registro.grupo)}"`;
+  return `<tr class="linha-serie linha-previsto" data-serie="previsto" ${dataAttrs}>` +
+      `<td rowspan="3">${escapeHtml(registro.grupo)}</td>` +
+      `<td rowspan="3">${escapeHtml(registro.tomador)}</td>` +
+      `<td rowspan="3"><span class="tipologia-chip" style="--chip-color:${chipColor}">${escapeHtml(registro.tipologia)}</span></td>` +
+      `<td class="serie-label">Previsto</td>` +
+      `<td class="celula-periodos num" data-linha-periodos></td>` +
+    `</tr>` +
+    `<tr class="linha-serie linha-realizado" data-serie="realizado" ${dataAttrs}>` +
+      `<td class="serie-label">Realizado</td>` +
+      `<td class="celula-periodos num" data-linha-periodos></td>` +
+    `</tr>` +
+    `<tr class="linha-serie linha-total" data-serie="total" ${dataAttrs}>` +
+      `<td class="serie-label">Total</td>` +
+      `<td class="celula-periodos num" data-linha-periodos></td>` +
     `</tr>`;
 }
 
@@ -77,41 +122,36 @@ function dividirJanelas(num, den) {
   buckets.forEach(function (b) { r[b] = dividir(num[b], den[b]); });
   return r;
 }
+function janelasConstante(valor) {
+  return { acumuladoAnterior: valor, mesVigente: valor, m1: valor, m2: valor, m3: valor, acumuladoFuturo: valor };
+}
 function formatarNumero(v) { return v === null || v === undefined ? '—' : (Math.round(v * 100) / 100).toLocaleString('pt-BR'); }
 
-function renderizarCelulasPeriodo(registro, dimensao, vigenteIdx) {
-  var buckets = [['acumuladoAnterior', 'Acum. anterior'], ['mesVigente', 'Mês vigente'], ['m1', 'M+1'], ['m2', 'M+2'], ['m3', 'M+3'], ['acumuladoFuturo', 'Acum. futuro']];
-
+// Calcula as 6 janelas de período pra UMA série (previsto/realizado/total)
+// de UMA linha, na dimensão escolhida. Previsto de produtividade/ticketMedio
+// é a premissa fixa da planilha (mesmo valor repetido nas 6 janelas, nunca
+// recalculado); Realizado/Total recalculam a razão por período (mesmas
+// fórmulas confirmadas de compute-orcamento.js).
+function calcularSerie(registro, serie, dimensao, vigenteIdx) {
+  var valores = registro[serie];
+  if (!valores) return null;
   if (dimensao === 'produtividade' || dimensao === 'ticketMedio') {
+    if (serie === 'previsto') {
+      var premissa = dimensao === 'produtividade' ? valores.equipesResumo.prod : valores.volumeResumo.ticket;
+      return janelasConstante((premissa === null || premissa === undefined) ? null : premissa);
+    }
     var numeradorCampo = dimensao === 'produtividade' ? 'volume' : 'financeiro';
     var denominadorCampo = dimensao === 'produtividade' ? 'equipes' : 'volume';
-    var premissa = dimensao === 'produtividade'
-      ? (registro.previsto ? registro.previsto.equipesResumo.prod : null)
-      : (registro.previsto ? registro.previsto.volumeResumo.ticket : null);
-    var realizadoJanelas = registro.realizado
-      ? dividirJanelas(calcularJanelas(registro.realizado[numeradorCampo], vigenteIdx), calcularJanelas(registro.realizado[denominadorCampo], vigenteIdx))
-      : null;
-    var totalJanelas = registro.total
-      ? dividirJanelas(calcularJanelas(registro.total[numeradorCampo], vigenteIdx), calcularJanelas(registro.total[denominadorCampo], vigenteIdx))
-      : null;
-    return buckets.map(function (par) {
-      var chave = par[0];
-      var p = (premissa !== null && premissa !== undefined) ? formatarNumero(premissa) : '—';
-      var r = realizadoJanelas ? formatarNumero(realizadoJanelas[chave]) : '—';
-      var t = totalJanelas ? formatarNumero(totalJanelas[chave]) : '—';
-      return '<span class="periodo-cell" title="' + par[1] + '">P: ' + p + ' / R: ' + r + ' / T: ' + t + '</span>';
-    }).join('');
+    return dividirJanelas(calcularJanelas(valores[numeradorCampo], vigenteIdx), calcularJanelas(valores[denominadorCampo], vigenteIdx));
   }
+  return calcularJanelas(valores[dimensao], vigenteIdx);
+}
 
-  var previsto = registro.previsto ? calcularJanelas(registro.previsto[dimensao], vigenteIdx) : null;
-  var realizado = registro.realizado ? calcularJanelas(registro.realizado[dimensao], vigenteIdx) : null;
-  var total = registro.total ? calcularJanelas(registro.total[dimensao], vigenteIdx) : null;
+function renderizarCelulasPeriodo(janelas) {
+  var buckets = [['acumuladoAnterior', 'Acum. anterior'], ['mesVigente', 'Mês vigente'], ['m1', 'M+1'], ['m2', 'M+2'], ['m3', 'M+3'], ['acumuladoFuturo', 'Acum. futuro']];
   return buckets.map(function (par) {
-    var chave = par[0];
-    var p = previsto ? formatarNumero(previsto[chave]) : '—';
-    var r = realizado ? formatarNumero(realizado[chave]) : '—';
-    var t = total ? formatarNumero(total[chave]) : '—';
-    return '<span class="periodo-cell" title="' + par[1] + '">P: ' + p + ' / R: ' + r + ' / T: ' + t + '</span>';
+    var valor = janelas ? janelas[par[0]] : null;
+    return '<span class="periodo-cell" title="' + par[1] + '">' + formatarNumero(valor) + '</span>';
   }).join('');
 }
 
@@ -122,12 +162,13 @@ function recalcularTabela() {
   var filtroContrato = document.getElementById('filtro-contrato').value;
   var linhas = document.querySelectorAll('#tabela-orcamento tbody tr');
   linhas.forEach(function (linha, i) {
-    var registro = window.__REGISTROS__[i];
+    var registro = window.__REGISTROS__[Math.floor(i / 3)];
     var mostra = (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) &&
       (!filtroContrato || linha.dataset.grupo === filtroContrato);
     linha.style.display = mostra ? '' : 'none';
     var celula = linha.querySelector('[data-linha-periodos]');
-    celula.innerHTML = renderizarCelulasPeriodo(registro, dimensao, vigenteIdx);
+    var janelas = calcularSerie(registro, linha.dataset.serie, dimensao, vigenteIdx);
+    celula.innerHTML = renderizarCelulasPeriodo(janelas);
   });
 }
 
@@ -203,15 +244,22 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   th { color: var(--text-secondary); font-weight: 600; }
   .tipologia-chip {
     display: inline-block;
-    background: #f6b53f; color: #1a1a19;
+    background: var(--chip-color); color: #fff;
     border-radius: 4px; padding: 2px 8px;
     font-size: 12px; font-weight: 600;
   }
   .periodo-cell {
     display: inline-block; margin-right: 10px; white-space: nowrap;
     padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px;
-    color: var(--text-secondary);
   }
+  .serie-label { font-weight: 700; border-left: 4px solid transparent; padding-left: 10px; }
+  .linha-previsto .serie-label, .linha-previsto .celula-periodos { color: #2f6ad0; }
+  .linha-previsto .serie-label { border-left-color: #2f6ad0; }
+  .linha-realizado .serie-label, .linha-realizado .celula-periodos { color: #7fd858; }
+  .linha-realizado .serie-label { border-left-color: #7fd858; }
+  .linha-total .serie-label, .linha-total .celula-periodos { color: #f6b53f; }
+  .linha-total .serie-label { border-left-color: #f6b53f; }
+  tr.linha-total td { border-bottom: 2px solid var(--gridline); }
 </style>
 </head>
 <body>
@@ -232,7 +280,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   </div>
   <div class="table-scroll">
   <table id="tabela-orcamento">
-    <thead><tr><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Previsto x Realizado x Total por período</th></tr></thead>
+    <thead><tr><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th><th>Valores por período (acumulado anterior · mês vigente · M+1 · M+2 · M+3 · acumulado futuro)</th></tr></thead>
     <tbody>${linhasTabela}</tbody>
   </table>
   </div>
