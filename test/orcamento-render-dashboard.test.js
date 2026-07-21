@@ -117,6 +117,15 @@ test('renderDashboard defaults the dimension selector to "Financeiro", not "Equi
   assert.doesNotMatch(html, /<option value="equipes" selected>/);
 });
 
+test('renderDashboard includes Tabela/Gráfico tab buttons and both view sections (Gráfico hidden by default)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  assert.match(html, /<button id="aba-tabela" type="button" class="aba-ativa">Tabela<\/button>/);
+  assert.match(html, /<button id="aba-grafico" type="button">Gráfico<\/button>/);
+  assert.match(html, /<div id="secao-tabela">/);
+  assert.match(html, /<div id="secao-grafico" style="display:none">/);
+  assert.match(html, /<div id="grafico-svg-container"><\/div>/);
+});
+
 // Todas as funções de montagem da tabela (linhas, cores, agregação) rodam
 // só no navegador, DEPOIS de decifrar -- por isso vivem dentro do 3º
 // <script> da página (SCRIPT_CLIENTE_TABELA), não no 2º (o gate, que só

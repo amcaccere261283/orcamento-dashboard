@@ -323,6 +323,33 @@ function construirGraficoSvg(dadosPorSerie, ehRazao) {
   return '<svg viewBox="0 0 ' + GRAFICO_LARGURA + ' ' + GRAFICO_ALTURA + '" class="grafico-svg">' + svg + '</svg>';
 }
 
+// Recalcula e redesenha o gráfico a partir dos MESMOS filtros/dimensão da
+// tabela -- chamado toda vez que recalcularTabela roda, então nunca fica
+// desatualizado mesmo se o usuário estiver na aba Tabela quando muda um
+// filtro e só depois troca pra aba Gráfico.
+function montarGrafico(registros, filtroTipologia, filtroGrupo, filtroSup, filtroSerie, dimensao) {
+  var indices = indicesFiltrados(registros, filtroTipologia, filtroGrupo, filtroSup);
+  var seriesTodas = ['previsto', 'realizado', 'total'];
+  var seriesVisiveis = seriesTodas.filter(function (s) { return !filtroSerie || filtroSerie === s; });
+  var ehRazao = DIMENSOES_RAZAO.indexOf(dimensao) !== -1;
+
+  var dadosPorSerie = seriesVisiveis.map(function (serie) {
+    var valoresLista = indices.map(function (idx) { return registros[idx][serie]; });
+    var mensalBruto = calcularMensal(valoresLista, serie, dimensao) || new Array(12).fill(null);
+    var mensal = mensalBruto.map(function (v) { return v === null ? 0 : v; });
+    return { serie: serie, mensal: mensal, acumulado: ehRazao ? null : calcularAcumulado(mensal) };
+  });
+
+  document.getElementById('grafico-svg-container').innerHTML = construirGraficoSvg(dadosPorSerie, ehRazao);
+}
+
+function alternarAba(aba) {
+  document.getElementById('secao-tabela').style.display = aba === 'tabela' ? '' : 'none';
+  document.getElementById('secao-grafico').style.display = aba === 'grafico' ? '' : 'none';
+  document.getElementById('aba-tabela').classList.toggle('aba-ativa', aba === 'tabela');
+  document.getElementById('aba-grafico').classList.toggle('aba-ativa', aba === 'grafico');
+}
+
 function preencherLinha(linha, valoresLista, serie, dimensao) {
   var mensal = calcularMensal(valoresLista, serie, dimensao);
   var celulasMes = linha.querySelectorAll('.celula-mes');
@@ -655,6 +682,7 @@ function recalcularTabela() {
     }
   });
   mesclarColunasRepetidas();
+  montarGrafico(window.__REGISTROS__, filtroTipologia, filtroGrupo, filtroSup, filtroSerie, dimensao);
 }
 
 function limparFiltros() {
@@ -674,6 +702,8 @@ function montarDashboard(registros) {
     document.getElementById(id).addEventListener('change', recalcularTabela);
   });
   document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
+  document.getElementById('aba-tabela').addEventListener('click', function () { alternarAba('tabela'); });
+  document.getElementById('aba-grafico').addEventListener('click', function () { alternarAba('grafico'); });
   recalcularTabela();
 }
 
@@ -783,6 +813,21 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     font-size: 13px; font-weight: 600; cursor: pointer;
   }
   #atualizar-dashboard:hover { background: rgba(246,181,63,0.1); }
+  .abas-visualizacao { display: flex; gap: 8px; }
+  .abas-visualizacao button {
+    padding: 8px 16px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-secondary);
+    font-size: 13px; cursor: pointer;
+  }
+  .abas-visualizacao button.aba-ativa { border-color: #f6b53f; color: var(--text-primary); font-weight: 600; }
+  #secao-grafico {
+    background: rgba(26,26,25,0.68); border-radius: 8px; padding: 16px 8px;
+    position: relative; z-index: 1;
+  }
+  .grafico-svg { width: 100%; height: auto; display: block; }
+  .grafico-eixo-texto { fill: var(--text-secondary); font-size: 11px; }
+  .grafico-gridline { stroke: var(--gridline); stroke-width: 1; }
   .table-scroll { overflow-x: auto; position: relative; z-index: 1; }
   table { width: 100%; border-collapse: collapse; background: rgba(26,26,25,0.68); }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--gridline); font-size: 13px; }
@@ -840,14 +885,23 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
       ${renderFiltroSup()}
       ${renderFiltroSerie()}
       ${renderSeletorDimensao()}
+      <div class="abas-visualizacao">
+        <button id="aba-tabela" type="button" class="aba-ativa">Tabela</button>
+        <button id="aba-grafico" type="button">Gráfico</button>
+      </div>
       <button id="limpar-filtros" type="button">Limpar filtros</button>
       <button id="atualizar-dashboard" type="button">Atualizar dados</button>
     </div>
+    <div id="secao-tabela">
     <div class="table-scroll">
     <table id="tabela-orcamento">
       <thead><tr><th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th>${renderCabecalhoMeses(periodos)}<th>Total</th></tr></thead>
       <tbody id="corpo-tabela"></tbody>
     </table>
+    </div>
+    </div>
+    <div id="secao-grafico" style="display:none">
+      <div id="grafico-svg-container"></div>
     </div>
   </div>
   </main>
