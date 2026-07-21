@@ -75,23 +75,34 @@ function tipologiaColor(tipologia) {
 // <td> por mês (12 ao todo), não mais janelas agregadas -- o cliente
 // preenche cada .celula-mes com o valor daquele mês quando a dimensão ou
 // os filtros mudarem (ver SCRIPT_CLIENTE).
+// SUP/Grupo/Tomador aparecem em TODA linha (nunca com rowspan de verdade --
+// rowspan quebra visualmente quando um filtro esconde uma linha no meio do
+// grupo mesclado). O efeito de "mesclado" vem do cliente: ele compara o
+// valor de cada linha com o da linha VISÍVEL anterior e apaga (mas nunca
+// remove -- fica em data-valor) quando são iguais, recalculado toda vez que
+// o filtro muda (ver mesclarConsecutivos/mesclarColunasRepetidas). Tipologia
+// continua com rowspan="3" de verdade porque é seguro: as 3 linhas P/R/T de
+// um mesmo registro nunca são filtradas de forma independente uma da outra.
 function renderLinhaTabela(registro) {
   const chipColor = tipologiaColor(registro.tipologia);
   const dataAttrs = `data-tipologia="${escapeHtml(registro.tipologia)}" data-grupo="${escapeHtml(registro.grupo)}"`;
   const celulasMes = Array.from({ length: 12 }, () => `<td class="celula-mes num"></td>`).join('');
+  const celulaSup = `<td class="col-mesclavel col-sup" data-valor="${escapeHtml(registro.sup)}">${escapeHtml(registro.sup)}</td>`;
+  const celulaGrupo = `<td class="col-mesclavel col-grupo" data-valor="${escapeHtml(registro.grupo)}">${escapeHtml(registro.grupo)}</td>`;
+  const celulaTomador = `<td class="col-mesclavel col-tomador" data-valor="${escapeHtml(registro.tomador)}">${escapeHtml(registro.tomador)}</td>`;
   return `<tr class="linha-serie linha-previsto" data-serie="previsto" ${dataAttrs}>` +
-      `<td rowspan="3">${escapeHtml(registro.sup)}</td>` +
-      `<td rowspan="3">${escapeHtml(registro.grupo)}</td>` +
-      `<td rowspan="3">${escapeHtml(registro.tomador)}</td>` +
+      celulaSup + celulaGrupo + celulaTomador +
       `<td rowspan="3"><span class="tipologia-chip" style="--chip-color:${chipColor}">${escapeHtml(registro.tipologia)}</span></td>` +
       `<td class="serie-label">Previsto</td>` +
       celulasMes +
     `</tr>` +
     `<tr class="linha-serie linha-realizado" data-serie="realizado" ${dataAttrs}>` +
+      celulaSup + celulaGrupo + celulaTomador +
       `<td class="serie-label">Realizado</td>` +
       celulasMes +
     `</tr>` +
     `<tr class="linha-serie linha-total" data-serie="total" ${dataAttrs}>` +
+      celulaSup + celulaGrupo + celulaTomador +
       `<td class="serie-label">Total</td>` +
       celulasMes +
     `</tr>`;
@@ -134,6 +145,40 @@ function preencherCelulasMes(linha, valoresMensais) {
   });
 }
 
+// Dado um array de valores (na ordem das linhas visíveis de UMA coluna),
+// devolve um array do mesmo tamanho onde cada valor igual ao da linha
+// visível anterior vira '' -- é o efeito visual de "mesclar" sem usar
+// rowspan de verdade, que quebra quando um filtro esconde uma linha no meio
+// do grupo. Função pura (sem DOM) pra poder testar sozinha.
+function mesclarConsecutivos(valores) {
+  var resultado = [];
+  var anterior = null;
+  valores.forEach(function (valor, i) {
+    resultado.push(i > 0 && valor === anterior ? '' : valor);
+    anterior = valor;
+  });
+  return resultado;
+}
+
+// Aplica mesclarConsecutivos a cada coluna mesclável (SUP/Grupo/Tomador),
+// olhando só pras linhas atualmente visíveis (depois do filtro já ter
+// rodado) -- por isso precisa ser chamada de novo toda vez que o filtro
+// muda, nunca uma vez só.
+function mesclarColunasRepetidas() {
+  ['col-sup', 'col-grupo', 'col-tomador'].forEach(function (classe) {
+    var linhasVisiveis = Array.prototype.filter.call(
+      document.querySelectorAll('#tabela-orcamento tbody tr'),
+      function (tr) { return tr.style.display !== 'none'; }
+    );
+    var celulas = linhasVisiveis
+      .map(function (tr) { return tr.querySelector('.' + classe); })
+      .filter(Boolean);
+    var valores = celulas.map(function (c) { return c.getAttribute('data-valor'); });
+    var mesclados = mesclarConsecutivos(valores);
+    celulas.forEach(function (c, i) { c.textContent = mesclados[i]; });
+  });
+}
+
 function recalcularTabela() {
   var dimensao = document.getElementById('seletor-dimensao').value;
   var filtroTipologia = document.getElementById('filtro-tipologia').value;
@@ -146,6 +191,7 @@ function recalcularTabela() {
     linha.style.display = mostra ? '' : 'none';
     preencherCelulasMes(linha, calcularSerieMensal(registro, linha.dataset.serie, dimensao));
   });
+  mesclarColunasRepetidas();
 }
 
 ['seletor-dimensao', 'filtro-tipologia', 'filtro-contrato'].forEach(function (id) {

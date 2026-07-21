@@ -46,10 +46,20 @@ test('renderDashboard embeds one row per registro, with tipologia and contrato a
   assert.match(html, /data-grupo="PÁTRIA"/);
 });
 
-test('renderDashboard shows the SUP contract code as its own column, spanning the 3 série rows', () => {
+test('renderDashboard shows the SUP contract code as its own column, on every one of the 3 série rows (no rowspan -- rowspan would break when a filter hides a row mid-group)', () => {
   const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
   assert.match(html, /<th>SUP<\/th>/);
-  assert.match(html, /<td rowspan="3">SUP-7133-24<\/td>/);
+  const celulasSup = html.match(/<td class="col-mesclavel col-sup" data-valor="SUP-7133-24">SUP-7133-24<\/td>/g) || [];
+  assert.equal(celulasSup.length, 3);
+  assert.doesNotMatch(html, /rowspan="3">SUP-7133-24/);
+});
+
+test('renderDashboard also renders Grupo and Tomador as mesclável columns (data-valor + col-grupo/col-tomador), one per série row', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const celulasGrupo = html.match(/<td class="col-mesclavel col-grupo" data-valor="PÁTRIA">PÁTRIA<\/td>/g) || [];
+  const celulasTomador = html.match(/<td class="col-mesclavel col-tomador" data-valor="Via Araucária S\.A">Via Araucária S\.A<\/td>/g) || [];
+  assert.equal(celulasGrupo.length, 3);
+  assert.equal(celulasTomador.length, 3);
 });
 
 test('renderDashboard titles each of the 12 month columns with the real "Mês/Ano" label, not a generic period bucket', () => {
@@ -115,7 +125,7 @@ test('renderDashboard resolves a composite tipologia string without parentheses 
   assert.match(html, /<span class="tipologia-chip" style="--chip-color:#2f6ad0">SM \/ SM\.F \/ SR<\/span>/);
 });
 
-function extrairCalcularSerieMensal(html) {
+function extrairFuncoesPuras(html) {
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   const scriptCliente = scripts[1][1]; // segundo <script> é o SCRIPT_CLIENTE (o primeiro é window.__REGISTROS__)
   const sandbox = {
@@ -126,8 +136,15 @@ function extrairCalcularSerieMensal(html) {
     window: {},
   };
   vm.createContext(sandbox);
-  vm.runInContext(scriptCliente + '\nthis.calcularSerieMensal = calcularSerieMensal;', sandbox);
-  return sandbox.calcularSerieMensal;
+  vm.runInContext(
+    scriptCliente + '\nthis.calcularSerieMensal = calcularSerieMensal; this.mesclarConsecutivos = mesclarConsecutivos;',
+    sandbox
+  );
+  return { calcularSerieMensal: sandbox.calcularSerieMensal, mesclarConsecutivos: sandbox.mesclarConsecutivos };
+}
+
+function extrairCalcularSerieMensal(html) {
+  return extrairFuncoesPuras(html).calcularSerieMensal;
 }
 
 // calcularSerieMensal roda dentro de um vm.Context (um realm diferente do
@@ -182,4 +199,40 @@ test('calcularSerieMensal (extraído do HTML real gerado) computa produtividade 
 
   // Total é null nesse registro -- não deve lançar, só devolver null.
   assert.equal(calcularSerieMensal(registro, 'total', 'produtividade'), null);
+});
+
+test('mesclarConsecutivos (extraído do HTML real gerado) blanks a value only when it repeats the immediately previous entry, keeping the first occurrence and any later re-appearance after a change', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const { mesclarConsecutivos } = extrairFuncoesPuras(html);
+
+  // 3 linhas P/R/T do mesmo registro (mesmo SUP) + 3 do próximo registro do
+  // MESMO contrato (mesmo SUP de novo) -- tudo deve mesclar num bloco só.
+  assert.deepEqual(
+    paraArrayPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-A', 'SUP-A', 'SUP-A', 'SUP-A'])),
+    ['SUP-A', '', '', '', '', '']
+  );
+});
+
+test('mesclarConsecutivos starts a new visible block when the value actually changes (a different contract\'s SUP)', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const { mesclarConsecutivos } = extrairFuncoesPuras(html);
+
+  assert.deepEqual(
+    paraArrayPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-A', 'SUP-B', 'SUP-B', 'SUP-B'])),
+    ['SUP-A', '', '', 'SUP-B', '', '']
+  );
+});
+
+test('mesclarConsecutivos re-shows the value right after a hidden/filtered row removes it from the visible sequence (guards the exact bug rowspan would have)', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const { mesclarConsecutivos } = extrairFuncoesPuras(html);
+
+  // Simula o filtro tendo escondido a 2ª linha do grupo "SUP-A" -- a
+  // sequência VISÍVEL passada pra função já vem sem ela. A 1ª linha
+  // remanescente do grupo continua precisando mostrar o valor (não pode
+  // ficar em branco só porque não é fisicamente a 1ª linha do registro).
+  assert.deepEqual(
+    paraArrayPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-B'])),
+    ['SUP-A', '', 'SUP-B']
+  );
 });
