@@ -35,6 +35,8 @@ function renderSeletorDimensao() {
     `<option value="equipes">Equipes</option>` +
     `<option value="volume">Volume</option>` +
     `<option value="financeiro">Financeiro</option>` +
+    `<option value="produtividade">Produtividade</option>` +
+    `<option value="ticketMedio">Ticket médio</option>` +
     `</select>`;
 }
 
@@ -78,14 +80,38 @@ function dividirJanelas(num, den) {
 function formatarNumero(v) { return v === null || v === undefined ? '—' : (Math.round(v * 100) / 100).toLocaleString('pt-BR'); }
 
 function renderizarCelulasPeriodo(registro, dimensao, vigenteIdx) {
+  var buckets = [['acumuladoAnterior', 'Acum. anterior'], ['mesVigente', 'Mês vigente'], ['m1', 'M+1'], ['m2', 'M+2'], ['m3', 'M+3'], ['acumuladoFuturo', 'Acum. futuro']];
+
+  if (dimensao === 'produtividade' || dimensao === 'ticketMedio') {
+    var numeradorCampo = dimensao === 'produtividade' ? 'volume' : 'financeiro';
+    var denominadorCampo = dimensao === 'produtividade' ? 'equipes' : 'volume';
+    var premissa = dimensao === 'produtividade'
+      ? (registro.previsto ? registro.previsto.equipesResumo.prod : null)
+      : (registro.previsto ? registro.previsto.volumeResumo.ticket : null);
+    var realizadoJanelas = registro.realizado
+      ? dividirJanelas(calcularJanelas(registro.realizado[numeradorCampo], vigenteIdx), calcularJanelas(registro.realizado[denominadorCampo], vigenteIdx))
+      : null;
+    var totalJanelas = registro.total
+      ? dividirJanelas(calcularJanelas(registro.total[numeradorCampo], vigenteIdx), calcularJanelas(registro.total[denominadorCampo], vigenteIdx))
+      : null;
+    return buckets.map(function (par) {
+      var chave = par[0];
+      var p = (premissa !== null && premissa !== undefined) ? formatarNumero(premissa) : '—';
+      var r = realizadoJanelas ? formatarNumero(realizadoJanelas[chave]) : '—';
+      var t = totalJanelas ? formatarNumero(totalJanelas[chave]) : '—';
+      return '<span class="periodo-cell" title="' + par[1] + '">P: ' + p + ' / R: ' + r + ' / T: ' + t + '</span>';
+    }).join('');
+  }
+
   var previsto = registro.previsto ? calcularJanelas(registro.previsto[dimensao], vigenteIdx) : null;
   var realizado = registro.realizado ? calcularJanelas(registro.realizado[dimensao], vigenteIdx) : null;
-  var buckets = [['acumuladoAnterior', 'Acum. anterior'], ['mesVigente', 'Mês vigente'], ['m1', 'M+1'], ['m2', 'M+2'], ['m3', 'M+3'], ['acumuladoFuturo', 'Acum. futuro']];
+  var total = registro.total ? calcularJanelas(registro.total[dimensao], vigenteIdx) : null;
   return buckets.map(function (par) {
     var chave = par[0];
     var p = previsto ? formatarNumero(previsto[chave]) : '—';
     var r = realizado ? formatarNumero(realizado[chave]) : '—';
-    return '<span class="periodo-cell" title="' + par[1] + '">P: ' + p + ' / R: ' + r + '</span>';
+    var t = total ? formatarNumero(total[chave]) : '—';
+    return '<span class="periodo-cell" title="' + par[1] + '">P: ' + p + ' / R: ' + r + ' / T: ' + t + '</span>';
   }).join('');
 }
 
@@ -141,7 +167,7 @@ function renderDashboard({ registros, periodos, generatedAt }) {
     ${renderSeletorDimensao()}
   </div>
   <table id="tabela-orcamento">
-    <thead><tr><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Previsto x Realizado por período</th></tr></thead>
+    <thead><tr><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Previsto x Realizado x Total por período</th></tr></thead>
     <tbody>${linhasTabela}</tbody>
   </table>
   <script>window.__REGISTROS__ = ${registrosJson};</script>

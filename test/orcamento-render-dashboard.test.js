@@ -1,8 +1,10 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const vm = require('node:vm');
 const { renderDashboard } = require('../tools/orcamento/render-dashboard.js');
 const { excelSerialParaData } = require('../tools/orcamento/datas.js');
+const { calcularJanelas: calcularJanelasNode, dividirJanelas: dividirJanelasNode } = require('../tools/orcamento/compute-orcamento.js');
 
 function registroExemplo() {
   return {
@@ -64,4 +66,52 @@ test('renderDashboard includes tipologia and contrato filter dropdowns populated
   assert.match(html, /<option value="ST">ST<\/option>/);
   assert.match(html, /<option value="PÁTRIA">PÁTRIA<\/option>/);
   assert.match(html, /<option value="SYSTRA">SYSTRA<\/option>/);
+});
+
+test('renderDashboard includes produtividade and ticket médio as dimension options', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  assert.match(html, /<option value="produtividade">Produtividade<\/option>/);
+  assert.match(html, /<option value="ticketMedio">Ticket médio<\/option>/);
+});
+
+test('renderDashboard header shows Previsto x Realizado x Total per período', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  assert.match(html, /Previsto x Realizado x Total por período/);
+});
+
+function extrairFuncoesClientScript(html) {
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptCliente = scripts[1][1]; // segundo <script> é o SCRIPT_CLIENTE (o primeiro é window.__REGISTROS__)
+  const sandbox = {
+    document: {
+      getElementById: () => ({ addEventListener: () => {}, value: '0' }),
+      querySelectorAll: () => [],
+    },
+    window: {},
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(scriptCliente + '\nthis.calcularJanelas = calcularJanelas; this.dividirJanelas = dividirJanelas; this.dividir = dividir;', sandbox);
+  return { calcularJanelas: sandbox.calcularJanelas, dividirJanelas: sandbox.dividirJanelas, dividir: sandbox.dividir };
+}
+
+// A função do cliente roda dentro de um vm.Context, ou seja, um realm
+// diferente do processo Node principal -- os objetos que ela devolve têm um
+// Object.prototype distinto, então assert.deepEqual (que no modo strict é um
+// alias de deepStrictEqual, sensível a protótipo) falsamente acusaria
+// divergência mesmo com os mesmos valores. JSON.parse(JSON.stringify(...))
+// normaliza pro protótipo do realm atual antes de comparar.
+function paraObjetoPlano(valor) {
+  return JSON.parse(JSON.stringify(valor));
+}
+
+test('the client-side script embedded in the rendered HTML computes calcularJanelas/dividirJanelas identically to compute-orcamento.js, for the same inputs (guards against the two hand-maintained copies drifting apart)', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const { calcularJanelas: calcularJanelasCliente, dividirJanelas: dividirJanelasCliente } = extrairFuncoesClientScript(html);
+
+  const mensal = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  assert.deepEqual(paraObjetoPlano(calcularJanelasCliente(mensal, 5)), paraObjetoPlano(calcularJanelasNode(mensal, 5)));
+
+  const financeiro = calcularJanelasNode([100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100], 5);
+  const volume = calcularJanelasNode([10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10], 5);
+  assert.deepEqual(paraObjetoPlano(dividirJanelasCliente(financeiro, volume)), paraObjetoPlano(dividirJanelasNode(financeiro, volume)));
 });
