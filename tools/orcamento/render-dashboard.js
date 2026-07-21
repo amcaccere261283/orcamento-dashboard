@@ -36,7 +36,7 @@ function renderSeletorDimensao() {
   return `<select id="seletor-dimensao">` +
     `<option value="equipes">Equipes</option>` +
     `<option value="volume">Volume</option>` +
-    `<option value="financeiro">Financeiro</option>` +
+    `<option value="financeiro" selected>Financeiro</option>` +
     `<option value="produtividade">Produtividade</option>` +
     `<option value="ticketMedio">Ticket médio</option>` +
     `</select>`;

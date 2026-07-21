@@ -111,6 +111,12 @@ test('renderDashboard includes a série filter (Previsto/Realizado/Tendência), 
   assert.match(html, /<button id="atualizar-dashboard" type="button">Atualizar dados<\/button>/);
 });
 
+test('renderDashboard defaults the dimension selector to "Financeiro", not "Equipes" -- the table must open showing money, not headcount', () => {
+  const html = renderComSenha([registroExemplo()]);
+  assert.match(html, /<option value="financeiro" selected>Financeiro<\/option>/);
+  assert.doesNotMatch(html, /<option value="equipes" selected>/);
+});
+
 // Todas as funções de montagem da tabela (linhas, cores, agregação) rodam
 // só no navegador, DEPOIS de decifrar -- por isso vivem dentro do 3º
 // <script> da página (SCRIPT_CLIENTE_TABELA), não no 2º (o gate, que só
