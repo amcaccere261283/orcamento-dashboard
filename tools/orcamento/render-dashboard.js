@@ -19,8 +19,8 @@ function renderCabecalhoMeses(periodos) {
 function renderFiltroTipologia() {
   return `<select id="filtro-tipologia"><option value="">Todas as tipologias</option></select>`;
 }
-function renderFiltroContrato() {
-  return `<select id="filtro-contrato"><option value="">Todos os contratos</option></select>`;
+function renderFiltroGrupo() {
+  return `<select id="filtro-grupo"><option value="">Todos os grupos</option></select>`;
 }
 function renderFiltroSup() {
   return `<select id="filtro-sup"><option value="">Todos os SUP</option></select>`;
@@ -335,46 +335,49 @@ function renderLinhaTotalGeral(totalRegistros) {
   var dataAttrs = 'data-registro-indices="' + todosIndices.join(',') + '" data-total-geral="1"';
   var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
   var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
+  var celulaTodos = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="Todos">Todos</td>'; };
   var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip tipologia-chip-total">TOTAL GERAL</span></td>';
   return '<tr class="linha-serie linha-previsto linha-total-geral" data-serie="previsto" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
+      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
     '<tr class="linha-serie linha-realizado linha-total-geral" data-serie="realizado" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
+      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
     '<tr class="linha-serie linha-total linha-total-geral" data-serie="total" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
+      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>';
 }
 
-// Total geral de UMA tipologia (soma através de TODOS os contratos/SUPs que
-// têm essa tipologia, não só um) -- SUP/Grupo/Tomador ficam em branco (como
-// o total geral) mas a Tipologia aparece de verdade e colorida, pra
+// Total geral de UMA tipologia (soma através de TODOS os grupos/SUPs que
+// têm essa tipologia, não só um) -- SUP fica em branco (como o total
+// geral), Grupo/Tomador mostram "Todos" (não há um grupo/tomador único pra
+// exibir aqui), mas a Tipologia aparece de verdade e colorida, pra
 // distinguir qual bloco é qual quando vários aparecem juntos no topo.
 function renderLinhaTotalGeralTipologia(tipologia, indices) {
   var chipColor = tipologiaColor(tipologia);
   var dataAttrs = 'data-tipologia="' + escapeHtml(tipologia) + '" data-registro-indices="' + indices.join(',') + '" data-total-geral-tipologia="1"';
   var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
   var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
+  var celulaTodos = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="Todos">Todos</td>'; };
   var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(tipologia) + '</span></td>';
   return '<tr class="linha-serie linha-previsto linha-total-geral linha-total-geral-tipologia" data-serie="previsto" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
+      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
     '<tr class="linha-serie linha-realizado linha-total-geral linha-total-geral-tipologia" data-serie="realizado" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
+      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>' +
     '<tr class="linha-serie linha-total linha-total-geral linha-total-geral-tipologia" data-serie="total" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') + celulaTipologia +
+      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
       '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
       celulasMesVazias() + celulaTotalLinha +
     '</tr>';
@@ -454,20 +457,20 @@ function popularSelect(id, valores) {
 
 function popularFiltros(registros) {
   popularSelect('filtro-tipologia', linhasDistintas(registros, 'tipologia'));
-  popularSelect('filtro-contrato', linhasDistintas(registros, 'grupo'));
+  popularSelect('filtro-grupo', linhasDistintas(registros, 'grupo'));
   popularSelect('filtro-sup', linhasDistintas(registros, 'sup'));
 }
 
 function recalcularTabela() {
   var dimensao = document.getElementById('seletor-dimensao').value;
   var filtroTipologia = document.getElementById('filtro-tipologia').value;
-  var filtroContrato = document.getElementById('filtro-contrato').value;
+  var filtroGrupo = document.getElementById('filtro-grupo').value;
   var filtroSup = document.getElementById('filtro-sup').value;
   var filtroSerie = document.getElementById('filtro-serie').value;
   var linhas = document.querySelectorAll('#tabela-orcamento tbody tr');
   linhas.forEach(function (linha) {
     var combinaSerie = !filtroSerie || linha.dataset.serie === filtroSerie;
-    var combinaGrupoSup = (!filtroContrato || linha.dataset.grupo === filtroContrato) &&
+    var combinaGrupoSup = (!filtroGrupo || linha.dataset.grupo === filtroGrupo) &&
       (!filtroSup || linha.dataset.sup === filtroSup);
     var ehTotalGeral = linha.dataset.totalGeral === '1';
     var ehTotalGeralTipologia = linha.dataset.totalGeralTipologia === '1';
@@ -477,14 +480,14 @@ function recalcularTabela() {
     if (ehTotalGeral) {
       // Total geral (a visão-resumo de TUDO): só aparece na visão sem
       // nenhum recorte -- some assim que qualquer filtro (tipologia,
-      // contrato ou SUP) restringe os dados, porque nesse ponto o total
+      // grupo ou SUP) restringe os dados, porque nesse ponto o total
       // por SUP (ou a própria linha do registro) já cobre o recorte atual.
-      mostra = !filtroContrato && !filtroSup && !filtroTipologia && combinaSerie;
+      mostra = !filtroGrupo && !filtroSup && !filtroTipologia && combinaSerie;
     } else if (ehTotalGeralTipologia) {
-      // Total de UMA tipologia através de todos os contratos/SUPs -- mesma
-      // regra do total geral (some com filtro de contrato/SUP), mas o
+      // Total de UMA tipologia através de todos os grupos/SUPs -- mesma
+      // regra do total geral (some com filtro de grupo/SUP), mas o
       // filtro de tipologia escolhe QUAL bloco aparece em vez de escondê-lo.
-      mostra = !filtroContrato && !filtroSup && (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) && combinaSerie;
+      mostra = !filtroGrupo && !filtroSup && (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) && combinaSerie;
     } else if (ehTotalSup) {
       mostra = combinaGrupoSup && !filtroTipologia && combinaSerie;
     } else {
@@ -501,7 +504,7 @@ function recalcularTabela() {
 
 function limparFiltros() {
   document.getElementById('filtro-tipologia').value = '';
-  document.getElementById('filtro-contrato').value = '';
+  document.getElementById('filtro-grupo').value = '';
   document.getElementById('filtro-sup').value = '';
   document.getElementById('filtro-serie').value = '';
   recalcularTabela();
@@ -512,7 +515,7 @@ function limparFiltros() {
 function montarDashboard(registros) {
   popularFiltros(registros);
   document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(registros);
-  ['seletor-dimensao', 'filtro-tipologia', 'filtro-contrato', 'filtro-sup', 'filtro-serie'].forEach(function (id) {
+  ['seletor-dimensao', 'filtro-tipologia', 'filtro-grupo', 'filtro-sup', 'filtro-serie'].forEach(function (id) {
     document.getElementById(id).addEventListener('change', recalcularTabela);
   });
   document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
@@ -678,7 +681,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   <div id="conteudo-protegido" style="display:none">
     <div class="filtros">
       ${renderFiltroTipologia()}
-      ${renderFiltroContrato()}
+      ${renderFiltroGrupo()}
       ${renderFiltroSup()}
       ${renderFiltroSerie()}
       ${renderSeletorDimensao()}

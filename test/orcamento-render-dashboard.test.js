@@ -89,7 +89,7 @@ test('renderDashboard includes the password gate UI (input + button), and the fi
   assert.match(html, /id="campo-senha"/);
   assert.match(html, /id="btn-desbloquear"/);
   assert.match(html, /<select id="filtro-tipologia"><option value="">Todas as tipologias<\/option><\/select>/);
-  assert.match(html, /<select id="filtro-contrato"><option value="">Todos os contratos<\/option><\/select>/);
+  assert.match(html, /<select id="filtro-grupo"><option value="">Todos os grupos<\/option><\/select>/);
   assert.match(html, /<select id="filtro-sup"><option value="">Todos os SUP<\/option><\/select>/);
   assert.match(html, /<tbody id="corpo-tabela"><\/tbody>/);
 });
@@ -169,6 +169,18 @@ test('renderCorpoTabela (extraído do HTML real gerado) monta o bloco TOTAL GERA
   assert.match(corpo, /<span class="tipologia-chip tipologia-chip-total">TOTAL<\/span>/);
   assert.match(corpo, /data-valor="SUP-7133-24"/);
   assert.match(corpo, /data-valor="PÁTRIA"/);
+});
+
+test('renderCorpoTabela shows "Todos" (not a blank dash) in Grupo and Tomador for both TOTAL GERAL and TOTAL GERAL POR TIPOLOGIA -- SUP still shows a dash, since there is no per-SUP breakdown at that level', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoTabela } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoTabela([registroExemplo()]);
+  const celulasTodos = corpo.match(/data-valor="Todos">Todos<\/td>/g) || [];
+  // 1 registro -> TOTAL GERAL (3 linhas) + 1 bloco de tipologia (3 linhas) =
+  // 6 linhas, cada uma com 2 células "Todos" (Grupo e Tomador) = 12.
+  assert.equal(celulasTodos.length, 12);
+  const celulasSupTraco = corpo.match(/class="col-mesclavel col-sup" data-valor="">—<\/td>/g) || [];
+  assert.equal(celulasSupTraco.length, 6);
 });
 
 test('renderCorpoTabela never uses rowspan for the Tipologia/badge column -- it must repeat on every P/R/T row so the filtro-serie filter can hide exactly one of the 3 rows without breaking the other 2 (real bug: rowspan="3" lived only on the Previsto row, so filtering to Realizado/Tendência made the whole column vanish)', () => {
