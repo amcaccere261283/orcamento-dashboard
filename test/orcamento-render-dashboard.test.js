@@ -3,7 +3,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const { renderDashboard } = require('../tools/orcamento/render-dashboard.js');
+const { decifrarComSenha } = require('../tools/orcamento/criptografia.js');
 const { excelSerialParaData } = require('../tools/orcamento/datas.js');
+
+const SENHA_TESTE = 'senha-fake-de-teste-abc';
 
 function registroExemplo(overrides) {
   return {
@@ -30,9 +33,6 @@ function registroExemplo(overrides) {
 function periodosExemplo() {
   // Gera o 1º dia de cada mês de 2026 como serial Excel real (46023 = Jan/2026,
   // 46357 = Dez/2026, os mesmos valores documentados em orcamento-datas.test.js).
-  // Um passo fixo de +30 dias por mês (como um cálculo ingênuo poderia sugerir)
-  // acumula deriva -- meses têm 28 a 31 dias -- e nunca alcança Dez/2026 dentro
-  // de 12 iterações; por isso computamos o serial real de cada 1º-do-mês.
   const periodos = [];
   for (let i = 0; i < 12; i++) {
     const serial = Math.round(Date.UTC(2026, i, 1) / 86400000) + 25569;
@@ -41,92 +41,68 @@ function periodosExemplo() {
   return periodos;
 }
 
-test('renderDashboard embeds one row per registro, with tipologia, contrato and sup as data attributes for filtering', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /data-tipologia="SM"/);
-  assert.match(html, /data-grupo="PÁTRIA"/);
-  assert.match(html, /data-sup="SUP-7133-24"/);
+function renderComSenha(registros, overrides) {
+  return renderDashboard({ registros, periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21), senha: SENHA_TESTE, ...overrides });
+}
+
+test('renderDashboard throws without a senha -- content must never be embeddable in plain text by accident', () => {
+  assert.throws(
+    () => renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) }),
+    /senha/
+  );
 });
 
-test('renderDashboard shows SUP/Grupo/Tomador as mesclável columns (data-valor, no rowspan) on every série row, including the SUP-total row', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  const celulasSup = html.match(/<td class="col-mesclavel col-sup" data-valor="SUP-7133-24">SUP-7133-24<\/td>/g) || [];
-  const celulasGrupo = html.match(/<td class="col-mesclavel col-grupo" data-valor="PÁTRIA">PÁTRIA<\/td>/g) || [];
-  const celulasTomador = html.match(/<td class="col-mesclavel col-tomador" data-valor="Via Araucária S\.A">Via Araucária S\.A<\/td>/g) || [];
-  // 3 linhas do registro (SM) + 3 linhas do total do SUP (só tem 1 tipologia aqui) = 6.
-  assert.equal(celulasSup.length, 6);
-  assert.equal(celulasGrupo.length, 6);
-  assert.equal(celulasTomador.length, 6);
-  assert.doesNotMatch(html, /rowspan="3">SUP-7133-24/);
+test('renderDashboard never leaks real contract/client names in plain text anywhere in the HTML -- only inside the encrypted blob', () => {
+  const html = renderComSenha([registroExemplo()]);
+  assert.doesNotMatch(html, /PÁTRIA/);
+  assert.doesNotMatch(html, /Via Araucária S\.A/);
+  assert.doesNotMatch(html, /SUP-7133-24/);
 });
 
-test('renderDashboard titles each of the 12 month columns with the real "Mês/Ano" label, plus a final Total column', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+function extrairPacoteCifrado(html) {
+  const match = html.match(/window\.__DADOS_CIFRADOS__\s*=\s*(\{[\s\S]*?\});/);
+  assert.ok(match, 'window.__DADOS_CIFRADOS__ not found in the rendered HTML');
+  return JSON.parse(match[1]);
+}
+
+test('renderDashboard embeds an encrypted blob (salt/iv/dados/iteracoes) that decrypts back to the original registros with the correct senha', () => {
+  const registro = registroExemplo();
+  const html = renderComSenha([registro]);
+  const pacote = extrairPacoteCifrado(html);
+  assert.ok(pacote.salt && pacote.iv && pacote.dados && pacote.iteracoes);
+  const registrosDecifrados = JSON.parse(decifrarComSenha(pacote, SENHA_TESTE));
+  assert.equal(registrosDecifrados[0].grupo, 'PÁTRIA');
+  assert.equal(registrosDecifrados[0].sup, 'SUP-7133-24');
+  assert.equal(registrosDecifrados[0].tomador, 'Via Araucária S.A');
+  assert.equal(registrosDecifrados[0].tipologia, 'SM');
+});
+
+test('renderDashboard\'s encrypted blob fails to decrypt with the wrong senha (never silently returns garbage)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const pacote = extrairPacoteCifrado(html);
+  assert.throws(() => decifrarComSenha(pacote, 'senha-errada'));
+});
+
+test('renderDashboard includes the password gate UI (input + button), and the filter/table shells start empty -- no options or rows pre-populated, since those come from JS only after decryption', () => {
+  const html = renderComSenha([registroExemplo()]);
+  assert.match(html, /id="gate-senha"/);
+  assert.match(html, /id="campo-senha"/);
+  assert.match(html, /id="btn-desbloquear"/);
+  assert.match(html, /<select id="filtro-tipologia"><option value="">Todas as tipologias<\/option><\/select>/);
+  assert.match(html, /<select id="filtro-contrato"><option value="">Todos os contratos<\/option><\/select>/);
+  assert.match(html, /<select id="filtro-sup"><option value="">Todos os SUP<\/option><\/select>/);
+  assert.match(html, /<tbody id="corpo-tabela"><\/tbody>/);
+});
+
+test('renderDashboard titles each of the 12 month columns with the real "Mês/Ano" label (calendar months are not sensitive, safe to render server-side), plus a final Total column', () => {
+  const html = renderComSenha([registroExemplo()]);
   assert.match(html, /<th>Jan\/2026<\/th>/);
   assert.match(html, /<th>Dez\/2026<\/th>/);
   assert.match(html, /<th>Total<\/th>/);
-  assert.doesNotMatch(html, /Acum\. anterior/);
-  assert.doesNotMatch(html, /Mês vigente/);
 });
 
-test('renderDashboard embeds the raw registros as JSON for the client-side recompute script', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /window\.__REGISTROS__\s*=\s*\[/);
-  assert.match(html, /"tipologia":"SM"/);
-});
-
-test('renderDashboard includes tipologia, contrato and SUP filter dropdowns populated from distinct registro values', () => {
-  const registros = [registroExemplo(), registroExemplo({ sup: 'SUP-9999-24', grupo: 'SYSTRA', tomador: 'Ecopistas', tipologia: 'ST' })];
-  const html = renderDashboard({ registros, periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /<option value="SM">SM<\/option>/);
-  assert.match(html, /<option value="ST">ST<\/option>/);
-  assert.match(html, /<option value="PÁTRIA">PÁTRIA<\/option>/);
-  assert.match(html, /<option value="SYSTRA">SYSTRA<\/option>/);
-  assert.match(html, /id="filtro-sup"[\s\S]*?<option value="SUP-7133-24">SUP-7133-24<\/option>/);
-  assert.match(html, /id="filtro-sup"[\s\S]*?<option value="SUP-9999-24">SUP-9999-24<\/option>/);
-});
-
-test('renderDashboard includes produtividade and ticket médio as dimension options', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /<option value="produtividade">Produtividade<\/option>/);
-  assert.match(html, /<option value="ticketMedio">Ticket médio<\/option>/);
-});
-
-test('renderDashboard renders Previsto/Realizado/Tendência as 3 separate rows per registro, each labeled and tagged with its série ("Total" is relabeled "Tendência" so it is never confused with the sum column/row)', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /<tr class="linha-serie linha-previsto" data-serie="previsto"/);
-  assert.match(html, /<tr class="linha-serie linha-realizado" data-serie="realizado"/);
-  assert.match(html, /<tr class="linha-serie linha-total" data-serie="total"/);
-  assert.match(html, /<td class="serie-label">Previsto<\/td>/);
-  assert.match(html, /<td class="serie-label">Realizado<\/td>/);
-  assert.match(html, /<td class="serie-label">Tendência<\/td>/);
-  assert.doesNotMatch(html, /<td class="serie-label">Total<\/td>/);
-});
-
-test('renderDashboard appends one SUP-total row-group (Previsto/Realizado/Tendência) after each SUP\'s tipologia rows, with a TOTAL badge instead of a tipologia chip and no data-tipologia (so it hides whenever a specific tipologia filter is active)', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /<tr class="linha-serie linha-previsto linha-total-sup" data-serie="previsto" data-grupo="PÁTRIA" data-sup="SUP-7133-24" data-registro-indices="0" data-total-sup="1">/);
-  assert.match(html, /<span class="tipologia-chip tipologia-chip-total">TOTAL<\/span>/);
-});
-
-test('renderDashboard renders exactly 12 empty month cells plus 1 empty Total cell per série row (1 total geral + 2 registros + 2 SUP-totals, 3 séries cada)', () => {
-  const registros = [registroExemplo(), registroExemplo({ sup: 'SUP-9999-24', grupo: 'SYSTRA', tomador: 'Ecopistas', tipologia: 'ST' })];
-  const html = renderDashboard({ registros, periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  const celulasMes = html.match(/<td class="celula-mes num"><\/td>/g) || [];
-  const celulasTotal = html.match(/<td class="celula-total-linha num"><\/td>/g) || [];
-  assert.equal(celulasMes.length, 12 * 3 * 5); // 1 total geral + 2 registros + 2 totais-por-sup, 3 séries cada
-  assert.equal(celulasTotal.length, 3 * 5);
-});
-
-test('renderDashboard places one "TOTAL GERAL" row-group first in the table body, aggregating every registro (indices 0..N-1)', () => {
-  const registros = [registroExemplo(), registroExemplo({ sup: 'SUP-9999-24', grupo: 'SYSTRA', tomador: 'Ecopistas', tipologia: 'ST' })];
-  const html = renderDashboard({ registros, periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /<tbody><tr class="linha-serie linha-previsto linha-total-geral" data-serie="previsto" data-registro-indices="0,1" data-total-geral="1">/);
-  assert.match(html, /<span class="tipologia-chip tipologia-chip-total">TOTAL GERAL<\/span>/);
-});
-
-test('renderDashboard includes a série filter (Previsto/Realizado/Tendência) and Limpar filtros / Atualizar dados buttons', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+test('renderDashboard includes a série filter (Previsto/Realizado/Tendência), and Limpar filtros / Atualizar dados buttons', () => {
+  const html = renderComSenha([registroExemplo()]);
   assert.match(html, /<select id="filtro-serie">/);
   assert.match(html, /<option value="previsto">Previsto<\/option>/);
   assert.match(html, /<option value="realizado">Realizado<\/option>/);
@@ -135,34 +111,35 @@ test('renderDashboard includes a série filter (Previsto/Realizado/Tendência) a
   assert.match(html, /<button id="atualizar-dashboard" type="button">Atualizar dados<\/button>/);
 });
 
-test('renderDashboard gives each série row a distinct color (P azul, R verde, Tendência amarelo) via CSS classes, applied to both month cells and the Total column', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /\.linha-previsto \.serie-label,\s*\.linha-previsto \.celula-mes,\s*\.linha-previsto \.celula-total-linha\s*\{\s*color:\s*#2f6ad0/);
-  assert.match(html, /\.linha-realizado \.serie-label,\s*\.linha-realizado \.celula-mes,\s*\.linha-realizado \.celula-total-linha\s*\{\s*color:\s*#7fd858/);
-  assert.match(html, /\.linha-total \.serie-label,\s*\.linha-total \.celula-mes,\s*\.linha-total \.celula-total-linha\s*\{\s*color:\s*#f6b53f/);
-});
-
-test('renderDashboard colors the tipologia chip using the same tipologia→cor mapping as the matriz de equipes dashboard (SM is blue #2f6ad0)', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /<span class="tipologia-chip" style="--chip-color:#2f6ad0">SM<\/span>/);
-});
-
+// Todas as funções de montagem da tabela (linhas, cores, agregação) rodam
+// só no navegador, DEPOIS de decifrar -- por isso vivem dentro do 3º
+// <script> da página (SCRIPT_CLIENTE_TABELA), não no 2º (o gate, que só
+// cuida da senha) nem no 1º (só o JSON cifrado). Extraídas via vm.Context
+// pros testes chamarem diretamente.
 function extrairFuncoesPuras(html) {
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptCliente = scripts[1][1]; // segundo <script> é o SCRIPT_CLIENTE (o primeiro é window.__REGISTROS__)
+  assert.equal(scripts.length, 3, 'esperava exatamente 3 <script> (dados cifrados, gate, tabela)');
+  const scriptTabela = scripts[2][1];
   const sandbox = {
     document: {
-      getElementById: () => ({ addEventListener: () => {}, value: '0' }),
+      getElementById: () => ({ addEventListener: () => {}, value: '0', options: [{}] }),
       querySelectorAll: () => [],
     },
     window: {},
   };
   vm.createContext(sandbox);
   vm.runInContext(
-    scriptCliente + '\nthis.calcularMensal = calcularMensal; this.calcularTotalAno = calcularTotalAno; this.mesclarConsecutivos = mesclarConsecutivos;',
+    scriptTabela +
+      '\nthis.calcularMensal = calcularMensal; this.calcularTotalAno = calcularTotalAno;' +
+      ' this.mesclarConsecutivos = mesclarConsecutivos; this.tipologiaColor = tipologiaColor;' +
+      ' this.renderCorpoTabela = renderCorpoTabela; this.escapeHtml = escapeHtml;',
     sandbox
   );
-  return { calcularMensal: sandbox.calcularMensal, calcularTotalAno: sandbox.calcularTotalAno, mesclarConsecutivos: sandbox.mesclarConsecutivos };
+  return {
+    calcularMensal: sandbox.calcularMensal, calcularTotalAno: sandbox.calcularTotalAno,
+    mesclarConsecutivos: sandbox.mesclarConsecutivos, tipologiaColor: sandbox.tipologiaColor,
+    renderCorpoTabela: sandbox.renderCorpoTabela, escapeHtml: sandbox.escapeHtml,
+  };
 }
 
 // As funções do cliente rodam dentro de um vm.Context (um realm diferente do
@@ -174,8 +151,28 @@ function paraPlano(valor) {
   return valor === null ? null : JSON.parse(JSON.stringify(valor));
 }
 
+test('tipologiaColor (extraído do HTML real gerado) usa o mesmo mapeamento da matriz de equipes (SM é azul #2f6ad0)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { tipologiaColor } = extrairFuncoesPuras(html);
+  assert.equal(tipologiaColor('SM'), '#2f6ad0');
+  assert.equal(tipologiaColor('SM / SM.F / SR'), '#2f6ad0');
+  assert.equal(tipologiaColor('ALGO-DESCONHECIDO'), '#898781');
+});
+
+test('renderCorpoTabela (extraído do HTML real gerado) monta o bloco TOTAL GERAL primeiro, depois cada registro com 3 linhas de série e um total por SUP ao fim de cada grupo', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoTabela } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoTabela([registroExemplo()]);
+  assert.match(corpo, /^<tr class="linha-serie linha-previsto linha-total-geral"/);
+  assert.match(corpo, /<span class="tipologia-chip tipologia-chip-total">TOTAL GERAL<\/span>/);
+  assert.match(corpo, /<span class="tipologia-chip" style="--chip-color:#2f6ad0">SM<\/span>/);
+  assert.match(corpo, /<span class="tipologia-chip tipologia-chip-total">TOTAL<\/span>/);
+  assert.match(corpo, /data-valor="SUP-7133-24"/);
+  assert.match(corpo, /data-valor="PÁTRIA"/);
+});
+
 test('calcularMensal (extraído do HTML real gerado), com uma lista de 1 item (caso normal de uma tipologia), devolve os 12 valores mensais crus pra equipes/volume/financeiro, sem agregação', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const html = renderComSenha([registroExemplo()]);
   const { calcularMensal } = extrairFuncoesPuras(html);
   const registro = registroExemplo();
   assert.deepEqual(paraPlano(calcularMensal([registro.previsto], 'previsto', 'equipes')), Array(12).fill(5));
@@ -185,9 +182,6 @@ test('calcularMensal (extraído do HTML real gerado), com uma lista de 1 item (c
 });
 
 test('calcularMensal computa produtividade como volume÷equipes e ticketMedio como financeiro÷volume, mês a mês, nunca o inverso (protege contra troca de numerador/denominador)', () => {
-  // Números deliberadamente assimétricos (volume≠equipes≠financeiro) pra que
-  // uma troca de numerador/denominador produza um valor bem diferente e
-  // fácil de distinguir do valor correto.
   const registro = registroExemplo({
     previsto: {
       equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 1.5, dias: 0 },
@@ -201,19 +195,16 @@ test('calcularMensal computa produtividade como volume÷equipes e ticketMedio co
     },
     total: null,
   });
-  const html = renderDashboard({ registros: [registro], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const html = renderComSenha([registro]);
   const { calcularMensal } = extrairFuncoesPuras(html);
 
-  // Produtividade Realizado = volume ÷ equipes = 200 ÷ 5 = 40 em todo mês (não 5/200=0,025).
   assert.deepEqual(paraPlano(calcularMensal([registro.realizado], 'realizado', 'produtividade')), Array(12).fill(40));
-  // Ticket médio Realizado = financeiro ÷ volume = 3000 ÷ 200 = 15 em todo mês (não 200/3000≈0,067).
   assert.deepEqual(paraPlano(calcularMensal([registro.realizado], 'realizado', 'ticketMedio')), Array(12).fill(15));
-  // Previsto (lista de 1 item) usa a premissa fixa da planilha, repetida nos 12 meses, não uma razão recalculada.
   assert.deepEqual(paraPlano(calcularMensal([registro.previsto], 'previsto', 'produtividade')), Array(12).fill(1.5));
   assert.deepEqual(paraPlano(calcularMensal([registro.previsto], 'previsto', 'ticketMedio')), Array(12).fill(1885.65));
 });
 
-test('calcularMensal, agregando VÁRIAS tipologias (caso da linha de total por SUP), soma volume/equipes/financeiro mês a mês e recalcula produtividade/ticketMedio a partir da soma agregada -- inclusive pro Previsto, que não tem premissa própria quando é um agregado de várias tipologias', () => {
+test('calcularMensal, agregando VÁRIAS tipologias (caso da linha de total por SUP/geral), soma volume/equipes/financeiro mês a mês e recalcula produtividade/ticketMedio a partir da soma agregada', () => {
   const tipologiaA = registroExemplo({ tipologia: 'SM' });
   const tipologiaB = registroExemplo({
     tipologia: 'ST',
@@ -223,12 +214,10 @@ test('calcularMensal, agregando VÁRIAS tipologias (caso da linha de total por S
       financeiro: Array(12).fill(500), financeiroResumo: { total: 0, totalInicial: 0 },
     },
   });
-  const html = renderDashboard({ registros: [tipologiaA, tipologiaB], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const html = renderComSenha([tipologiaA, tipologiaB]);
   const { calcularMensal } = extrairFuncoesPuras(html);
 
-  // equipes: 5 (SM) + 2 (ST) = 7 em todo mês.
   assert.deepEqual(paraPlano(calcularMensal([tipologiaA.previsto, tipologiaB.previsto], 'previsto', 'equipes')), Array(12).fill(7));
-  // produtividade agregada = Σvolume ÷ Σequipes = (100+50) ÷ (5+2) = 150/7, NUNCA a média das premissas (1,5 e 9).
   const produtividadeAgregada = calcularMensal([tipologiaA.previsto, tipologiaB.previsto], 'previsto', 'produtividade');
   assert.ok(Math.abs(produtividadeAgregada[0] - 150 / 7) < 1e-9);
   assert.notEqual(produtividadeAgregada[0], 1.5);
@@ -237,57 +226,32 @@ test('calcularMensal, agregando VÁRIAS tipologias (caso da linha de total por S
 
 test('calcularTotalAno soma os 12 meses de uma lista de 1 item, e recalcula a razão do ano inteiro (não a soma das razões mensais) pra produtividade/ticketMedio agregados', () => {
   const registro = registroExemplo();
-  const html = renderDashboard({ registros: [registro], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const html = renderComSenha([registro]);
   const { calcularTotalAno } = extrairFuncoesPuras(html);
 
   assert.equal(calcularTotalAno([registro.realizado], 'realizado', 'volume'), 80 * 12);
-  // Previsto (lista de 1 item): a coluna Total também usa a premissa fixa, não uma soma.
   assert.equal(calcularTotalAno([registro.previsto], 'previsto', 'produtividade'), 1.5);
-  // Realizado: razão do ano inteiro = Σfinanceiro ÷ Σvolume = (800*12) ÷ (80*12) = 10.
   assert.equal(calcularTotalAno([registro.realizado], 'realizado', 'ticketMedio'), 10);
 });
 
-test('mesclarConsecutivos marks repetido=true only when a value repeats the immediately previous entry, keeping the value itself always present (never blanked) -- the caller decides how to render "repetido"', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+test('mesclarConsecutivos marks repetido=true only when a value repeats the immediately previous entry, keeping the value itself always present (never blanked)', () => {
+  const html = renderComSenha([registroExemplo()]);
   const { mesclarConsecutivos } = extrairFuncoesPuras(html);
 
   assert.deepEqual(
-    paraPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-A', 'SUP-A', 'SUP-A', 'SUP-A'])),
+    paraPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-A'])),
     [
       { valor: 'SUP-A', repetido: false },
-      { valor: 'SUP-A', repetido: true },
-      { valor: 'SUP-A', repetido: true },
-      { valor: 'SUP-A', repetido: true },
       { valor: 'SUP-A', repetido: true },
       { valor: 'SUP-A', repetido: true },
     ]
   );
 });
 
-test('mesclarConsecutivos starts a new (non-repetido) visible block when the value actually changes (a different contract\'s SUP)', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+test('mesclarConsecutivos starts a new (non-repetido) visible block when the value actually changes', () => {
+  const html = renderComSenha([registroExemplo()]);
   const { mesclarConsecutivos } = extrairFuncoesPuras(html);
 
-  assert.deepEqual(
-    paraPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-A', 'SUP-B', 'SUP-B', 'SUP-B'])),
-    [
-      { valor: 'SUP-A', repetido: false },
-      { valor: 'SUP-A', repetido: true },
-      { valor: 'SUP-A', repetido: true },
-      { valor: 'SUP-B', repetido: false },
-      { valor: 'SUP-B', repetido: true },
-      { valor: 'SUP-B', repetido: true },
-    ]
-  );
-});
-
-test('mesclarConsecutivos re-marks a value as NOT repetido right after a hidden/filtered row removes it from the visible sequence (guards the exact bug rowspan would have)', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  const { mesclarConsecutivos } = extrairFuncoesPuras(html);
-
-  // Simula o filtro tendo escondido a 2ª linha do grupo "SUP-A" -- a
-  // sequência VISÍVEL passada pra função já vem sem ela. A 1ª linha
-  // remanescente do grupo continua precisando mostrar o valor (repetido=false).
   assert.deepEqual(
     paraPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-B'])),
     [
@@ -296,4 +260,26 @@ test('mesclarConsecutivos re-marks a value as NOT repetido right after a hidden/
       { valor: 'SUP-B', repetido: false },
     ]
   );
+});
+
+test('mesclarConsecutivos re-marks a value as NOT repetido right after a hidden/filtered row removes it from the visible sequence (guards the exact bug rowspan would have)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { mesclarConsecutivos } = extrairFuncoesPuras(html);
+
+  // Simula o filtro tendo escondido uma linha do meio do grupo "SUP-A" -- a
+  // sequência VISÍVEL passada pra função já vem sem ela.
+  assert.deepEqual(
+    paraPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-B'])),
+    [
+      { valor: 'SUP-A', repetido: false },
+      { valor: 'SUP-A', repetido: true },
+      { valor: 'SUP-B', repetido: false },
+    ]
+  );
+});
+
+test('escapeHtml (extraído do HTML real gerado) escapes the same 5 characters as the server-side helper, protecting against markup injection from spreadsheet text once rendered client-side', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { escapeHtml } = extrairFuncoesPuras(html);
+  assert.equal(escapeHtml('<script>&"'), '&lt;script&gt;&amp;&quot;');
 });

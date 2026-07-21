@@ -101,13 +101,27 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
   const { build } = require(buildPath);
 
   try {
-    build({ outPath, today: new Date(2026, 6, 21) });
+    const senha = 'senha-e2e-de-teste';
+    build({ outPath, today: new Date(2026, 6, 21), senha });
     const html = fs.readFileSync(outPath, 'utf8');
-    assert.match(html, /data-tipologia="SP"/);
-    assert.match(html, /data-tipologia="SM"/);
-    assert.doesNotMatch(html, /data-tipologia="MENSAL"/);
-    assert.doesNotMatch(html, /data-tipologia="ACUMULADO"/);
-    assert.doesNotMatch(html, /data-grupo="Todos"/);
+
+    // O conteúdo real (tipologia/grupo) fica cifrado no HTML -- decifra com
+    // node:crypto (via criptografia.js) pra verificar as mesmas regras de
+    // skip que antes eram checadas direto no HTML.
+    const { decifrarComSenha } = require('../tools/orcamento/criptografia.js');
+    const match = html.match(/window\.__DADOS_CIFRADOS__\s*=\s*(\{[\s\S]*?\});/);
+    assert.ok(match, 'window.__DADOS_CIFRADOS__ not found in the built HTML');
+    const registros = JSON.parse(decifrarComSenha(JSON.parse(match[1]), senha));
+    const tipologias = registros.map(r => r.tipologia);
+    const grupos = registros.map(r => r.grupo);
+    assert.ok(tipologias.includes('SP'));
+    assert.ok(tipologias.includes('SM'));
+    assert.ok(!tipologias.includes('MENSAL'));
+    assert.ok(!tipologias.includes('ACUMULADO'));
+    assert.ok(!grupos.includes('Todos'));
+
+    // Sem a senha certa, os dados continuam inacessíveis.
+    assert.throws(() => decifrarComSenha(JSON.parse(match[1]), 'senha-errada'));
   } finally {
     fs.unlinkSync(xlsxPath);
     if (fs.existsSync(outPath)) fs.unlinkSync(outPath);

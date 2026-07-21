@@ -17,7 +17,16 @@ function loadDataUri(filePath) {
   return `data:image/png;base64,${buf.toString('base64')}`;
 }
 
-function build({ outPath, today = new Date() } = {}) {
+// A senha nunca vem de um arquivo do repositório (nem daria pra usar uma
+// fixa, já que o próprio dist/orcamento-dashboard.html é publicado no
+// GitHub Pages) -- só de variável de ambiente, lida na hora do build e
+// descartada depois. Quem roda o build precisa saber a senha; ela nunca
+// fica escrita em nenhum lugar do código.
+function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
+  if (!senha) {
+    throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
+  }
+
   const grid = readXlsxSheet(config.caminhoArquivo, config.nomeAba);
   const registros = parseMatriz(grid);
 
@@ -26,7 +35,7 @@ function build({ outPath, today = new Date() } = {}) {
   const periodos = columns.equipesMeses.map(col => excelSerialParaData(headerRow[col]));
 
   const html = renderDashboard({
-    registros, periodos, generatedAt: today,
+    registros, periodos, generatedAt: today, senha,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
   });
 

@@ -1,36 +1,30 @@
 'use strict';
 const { formatarMesAno } = require('./datas.js');
+const { cifrarComSenha } = require('./criptografia.js');
 
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function linhasDistintas(registros, campo) {
-  return [...new Set(registros.map(r => r[campo]).filter(Boolean))].sort();
+function renderCabecalhoMeses(periodos) {
+  return periodos.map(data => `<th>${formatarMesAno(data)}</th>`).join('');
 }
 
-function renderFiltroTipologia(registros) {
-  const tipologias = linhasDistintas(registros, 'tipologia');
-  return `<select id="filtro-tipologia"><option value="">Todas as tipologias</option>` +
-    tipologias.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('') +
-    `</select>`;
+// A tabela é renderizada inteiramente no navegador, depois que a senha
+// certa decifra os registros -- ver o comentário grande antes de
+// SCRIPT_CLIENTE. Por isso as opções de filtro (que listariam tipologia,
+// grupo e SUP reais em texto puro) começam vazias aqui, só com o rótulo
+// padrão, e são preenchidas pelo próprio script depois de decifrar.
+function renderFiltroTipologia() {
+  return `<select id="filtro-tipologia"><option value="">Todas as tipologias</option></select>`;
 }
-
-function renderFiltroContrato(registros) {
-  const grupos = linhasDistintas(registros, 'grupo');
-  return `<select id="filtro-contrato"><option value="">Todos os contratos</option>` +
-    grupos.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('') +
-    `</select>`;
+function renderFiltroContrato() {
+  return `<select id="filtro-contrato"><option value="">Todos os contratos</option></select>`;
 }
-
-function renderFiltroSup(registros) {
-  const sups = linhasDistintas(registros, 'sup');
-  return `<select id="filtro-sup"><option value="">Todos os SUP</option>` +
-    sups.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('') +
-    `</select>`;
+function renderFiltroSup() {
+  return `<select id="filtro-sup"><option value="">Todos os SUP</option></select>`;
 }
-
 function renderFiltroSerie() {
   return `<select id="filtro-serie"><option value="">Todas as séries</option>` +
     `<option value="previsto">Previsto</option>` +
@@ -38,11 +32,6 @@ function renderFiltroSerie() {
     `<option value="total">Tendência</option>` +
     `</select>`;
 }
-
-function renderCabecalhoMeses(periodos) {
-  return periodos.map(data => `<th>${formatarMesAno(data)}</th>`).join('');
-}
-
 function renderSeletorDimensao() {
   return `<select id="seletor-dimensao">` +
     `<option value="equipes">Equipes</option>` +
@@ -53,179 +42,89 @@ function renderSeletorDimensao() {
     `</select>`;
 }
 
-// Mesmo mapeamento de cores por tipologia da matriz de equipes
-// (tools/matriz/render-dashboard.js's tipologiaColor) -- mantém os dois
-// dashboards consistentes entre si. Pequena extensão: quando a tipologia
-// vem como string composta sem parêntese (ex. "SM / SM.F / SR", formato
-// real da aba MATRIZ do orçamento -- a matriz de equipes só usa parêntese
-// pra isso), tenta o primeiro token antes da barra antes de cair no cinza
-// neutro.
-const TIPOLOGIA_COLOR = {
-  SP: '#3f851a', SM: '#2f6ad0', ST: '#8d6f00', PI: '#606060',
-  BL: '#4a3aa7', CPTU: '#db244e', SH: '#e87ba4', VT: '#eda100',
-  'SEGURANÇA': '#2775b8', ESPECIAIS: '#db244e', SSMA: '#2775b8',
-};
-const TIPOLOGIA_COMPOSTA_COLOR = {
-  'CPTU / VT / SH': TIPOLOGIA_COLOR.CPTU,
-  'SP/SM': TIPOLOGIA_COLOR.SP,
-};
-function tipologiaColor(tipologia) {
-  const raw = String(tipologia || '').trim();
-  const key = raw.toUpperCase();
-  if (TIPOLOGIA_COLOR[key]) return TIPOLOGIA_COLOR[key];
-  if (TIPOLOGIA_COMPOSTA_COLOR[key]) return TIPOLOGIA_COMPOSTA_COLOR[key];
-  const parenMatch = raw.match(/\(([^)]+)\)\s*$/);
-  if (parenMatch) {
-    const viaParen = TIPOLOGIA_COLOR[parenMatch[1].trim().toUpperCase()];
-    if (viaParen) return viaParen;
+// A tabela inteira (linhas, filtros, cores de tipologia) é montada no
+// navegador -- ver o comentário logo abaixo de SCRIPT_CLIENTE_INICIO. Este
+// script SEMPRE roda (não depende de senha): implementa só o gate e, uma
+// vez decifrado, delega pro segundo script (SCRIPT_CLIENTE_TABELA) que faz
+// o trabalho de fato. Separados em duas strings só por legibilidade -- os
+// dois rodam como um script só na página.
+const SCRIPT_CLIENTE_GATE = `
+function base64ParaBytes(base64) {
+  var binario = atob(base64);
+  var bytes = new Uint8Array(binario.length);
+  for (var i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  return bytes;
+}
+
+// Espelha tools/orcamento/criptografia.js's decifrarComSenha, usando
+// crypto.subtle (Web Crypto) no lugar de node:crypto -- mesmo algoritmo
+// (PBKDF2-SHA256 pra derivar a chave, AES-256-GCM pra decifrar), mesmo
+// formato de pacote (tag de autenticação concatenada no fim dos dados
+// cifrados, que é o que crypto.subtle.decrypt espera por padrão).
+async function decifrarComSenha(pacote, senha) {
+  var salt = base64ParaBytes(pacote.salt);
+  var iv = base64ParaBytes(pacote.iv);
+  var dados = base64ParaBytes(pacote.dados);
+  var chaveBase = await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
+  var chave = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: salt, iterations: pacote.iteracoes, hash: 'SHA-256' },
+    chaveBase,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  );
+  var textoPlanoBuffer = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, chave, dados);
+  return new TextDecoder().decode(textoPlanoBuffer);
+}
+
+function mostrarErroSenha(msg) {
+  var erro = document.getElementById('gate-senha-erro');
+  erro.textContent = msg;
+  erro.style.display = 'block';
+}
+
+async function tentarDesbloquear() {
+  var campo = document.getElementById('campo-senha');
+  var botao = document.getElementById('btn-desbloquear');
+  var senha = campo.value;
+  botao.disabled = true;
+  botao.textContent = 'Verificando…';
+  try {
+    var jsonTexto = await decifrarComSenha(window.__DADOS_CIFRADOS__, senha);
+    window.__REGISTROS__ = JSON.parse(jsonTexto);
+    document.getElementById('gate-senha').style.display = 'none';
+    document.getElementById('conteudo-protegido').style.display = '';
+    montarDashboard(window.__REGISTROS__);
+  } catch (e) {
+    mostrarErroSenha('Senha incorreta.');
+  } finally {
+    botao.disabled = false;
+    botao.textContent = 'Abrir';
   }
-  const primeiroToken = key.split('/')[0].trim();
-  if (TIPOLOGIA_COLOR[primeiroToken]) return TIPOLOGIA_COLOR[primeiroToken];
-  return '#898781';
 }
 
-const SERIE_LABELS = { previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência' };
+document.getElementById('btn-desbloquear').addEventListener('click', tentarDesbloquear);
+document.getElementById('campo-senha').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') tentarDesbloquear();
+});
+document.getElementById('campo-senha').focus();
+`;
 
-// SUP/Grupo/Tomador aparecem em TODA linha (nunca com rowspan de verdade --
-// rowspan quebra visualmente quando um filtro esconde uma linha no meio do
-// grupo mesclado). O efeito de "mesclado" vem do cliente: ele compara o
-// valor de cada linha com o da linha VISÍVEL anterior; quando são iguais,
-// mantém o texto visível mas esmaecido (cor quase transparente) em vez de
-// apagar -- recalculado toda vez que o filtro muda (ver
-// mesclarConsecutivos/mesclarColunasRepetidas). Tipologia continua com
-// rowspan="3" de verdade porque é seguro: as 3 linhas P/R/T de um mesmo
-// registro nunca são filtradas de forma independente uma da outra.
-//
-// "Total" (T, a série de tendência real da planilha -- Realizado até hoje +
-// Previsto pro resto do ano) chama-se "Tendência" na tela, pra não confundir
-// com a coluna/linha/bloco de Total (soma), que são somas de verdade.
-function renderLinhaTabela(registro, indice) {
-  const chipColor = tipologiaColor(registro.tipologia);
-  const dataAttrs = `data-tipologia="${escapeHtml(registro.tipologia)}" data-grupo="${escapeHtml(registro.grupo)}" data-sup="${escapeHtml(registro.sup)}" data-registro-indices="${indice}"`;
-  const celulasMes = Array.from({ length: 12 }, () => `<td class="celula-mes num"></td>`).join('');
-  const celulaTotalLinha = `<td class="celula-total-linha num"></td>`;
-  const celulaSup = `<td class="col-mesclavel col-sup" data-valor="${escapeHtml(registro.sup)}">${escapeHtml(registro.sup)}</td>`;
-  const celulaGrupo = `<td class="col-mesclavel col-grupo" data-valor="${escapeHtml(registro.grupo)}">${escapeHtml(registro.grupo)}</td>`;
-  const celulaTomador = `<td class="col-mesclavel col-tomador" data-valor="${escapeHtml(registro.tomador)}">${escapeHtml(registro.tomador)}</td>`;
-  return `<tr class="linha-serie linha-previsto" data-serie="previsto" ${dataAttrs}>` +
-      celulaSup + celulaGrupo + celulaTomador +
-      `<td rowspan="3"><span class="tipologia-chip" style="--chip-color:${chipColor}">${escapeHtml(registro.tipologia)}</span></td>` +
-      `<td class="serie-label">${SERIE_LABELS.previsto}</td>` +
-      celulasMes + celulaTotalLinha +
-    `</tr>` +
-    `<tr class="linha-serie linha-realizado" data-serie="realizado" ${dataAttrs}>` +
-      celulaSup + celulaGrupo + celulaTomador +
-      `<td class="serie-label">${SERIE_LABELS.realizado}</td>` +
-      celulasMes + celulaTotalLinha +
-    `</tr>` +
-    `<tr class="linha-serie linha-total" data-serie="total" ${dataAttrs}>` +
-      celulaSup + celulaGrupo + celulaTomador +
-      `<td class="serie-label">${SERIE_LABELS.total}</td>` +
-      celulasMes + celulaTotalLinha +
-    `</tr>`;
+// Roda só DEPOIS que a senha certa decifra os registros (chamado por
+// montarDashboard, no fim de SCRIPT_CLIENTE_GATE). Reimplementa em JS de
+// navegador (sem require, HTML estático sem bundler) a mesma montagem de
+// linhas/cores/filtros que antes rodava no servidor em
+// tools/orcamento/render-dashboard.js -- precisa ser assim porque os
+// PRÓPRIOS valores de SUP/Grupo/Tomador/Tipologia (não só os números
+// mensais) são dados protegidos pela senha; se a tabela viesse pronta do
+// servidor, esses nomes apareceriam em texto puro no código-fonte da
+// página mesmo sem a senha certa.
+const SCRIPT_CLIENTE_TABELA = `
+function escapeHtml(valor) {
+  return String(valor === null || valor === undefined ? '' : valor)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// Linha de total por SUP: soma as 3 séries de TODAS as tipologias daquele
-// contrato. Sem data-tipologia (nenhum valor real de tipologia bate com
-// ela), então some sozinha quando qualquer tipologia específica estiver
-// selecionada no filtro -- só faz sentido mostrar "total de todas as
-// tipologias" na visão sem esse filtro. data-registro-indices carrega os
-// índices de TODOS os registros do SUP, pro cliente agregar.
-function renderLinhaTotalSup(sup, grupo, tomador, indices) {
-  const dataAttrs = `data-grupo="${escapeHtml(grupo)}" data-sup="${escapeHtml(sup)}" data-registro-indices="${indices.join(',')}" data-total-sup="1"`;
-  const celulasMes = Array.from({ length: 12 }, () => `<td class="celula-mes num"></td>`).join('');
-  const celulaTotalLinha = `<td class="celula-total-linha num"></td>`;
-  const celulaSup = `<td class="col-mesclavel col-sup" data-valor="${escapeHtml(sup)}">${escapeHtml(sup)}</td>`;
-  const celulaGrupo = `<td class="col-mesclavel col-grupo" data-valor="${escapeHtml(grupo)}">${escapeHtml(grupo)}</td>`;
-  const celulaTomador = `<td class="col-mesclavel col-tomador" data-valor="${escapeHtml(tomador)}">${escapeHtml(tomador)}</td>`;
-  return `<tr class="linha-serie linha-previsto linha-total-sup" data-serie="previsto" ${dataAttrs}>` +
-      celulaSup + celulaGrupo + celulaTomador +
-      `<td rowspan="3"><span class="tipologia-chip tipologia-chip-total">TOTAL</span></td>` +
-      `<td class="serie-label">${SERIE_LABELS.previsto}</td>` +
-      celulasMes + celulaTotalLinha +
-    `</tr>` +
-    `<tr class="linha-serie linha-realizado linha-total-sup" data-serie="realizado" ${dataAttrs}>` +
-      celulaSup + celulaGrupo + celulaTomador +
-      `<td class="serie-label">${SERIE_LABELS.realizado}</td>` +
-      celulasMes + celulaTotalLinha +
-    `</tr>` +
-    `<tr class="linha-serie linha-total linha-total-sup" data-serie="total" ${dataAttrs}>` +
-      celulaSup + celulaGrupo + celulaTomador +
-      `<td class="serie-label">${SERIE_LABELS.total}</td>` +
-      celulasMes + celulaTotalLinha +
-    `</tr>`;
-}
-
-// Bloco de total geral, sempre a primeira coisa na tabela: soma as 3 séries
-// de TODOS os registros. Ao contrário do total por SUP (cujos índices são
-// fixos, um SUP nunca muda de grupo/sup), este precisa refiltrar os índices
-// pelos filtros de contrato/SUP em vigor toda vez que recalcula (ver
-// SCRIPT_CLIENTE) -- por isso carrega TODOS os índices em
-// data-registro-indices, não só os de um grupo. Some, como o total por SUP,
-// quando qualquer tipologia específica estiver selecionada.
-function renderLinhaTotalGeral(totalRegistros) {
-  const todosIndices = Array.from({ length: totalRegistros }, (_, i) => i).join(',');
-  const dataAttrs = `data-registro-indices="${todosIndices}" data-total-geral="1"`;
-  const celulasMes = Array.from({ length: 12 }, () => `<td class="celula-mes num"></td>`).join('');
-  const celulaTotalLinha = `<td class="celula-total-linha num"></td>`;
-  const celulaVazia = (classe) => `<td class="col-mesclavel ${classe}" data-valor="">—</td>`;
-  return `<tr class="linha-serie linha-previsto linha-total-geral" data-serie="previsto" ${dataAttrs}>` +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
-      `<td rowspan="3"><span class="tipologia-chip tipologia-chip-total">TOTAL GERAL</span></td>` +
-      `<td class="serie-label">${SERIE_LABELS.previsto}</td>` +
-      celulasMes + celulaTotalLinha +
-    `</tr>` +
-    `<tr class="linha-serie linha-realizado linha-total-geral" data-serie="realizado" ${dataAttrs}>` +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
-      `<td class="serie-label">${SERIE_LABELS.realizado}</td>` +
-      celulasMes + celulaTotalLinha +
-    `</tr>` +
-    `<tr class="linha-serie linha-total linha-total-geral" data-serie="total" ${dataAttrs}>` +
-      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
-      `<td class="serie-label">${SERIE_LABELS.total}</td>` +
-      celulasMes + celulaTotalLinha +
-    `</tr>`;
-}
-
-// Monta o corpo da tabela: o bloco de total geral primeiro, depois cada
-// registro na ordem em que já vem (a MATRIZ já traz as tipologias de um
-// mesmo contrato/SUP contíguas, ver parse-matriz.js -- essa contiguidade é
-// o que permite fechar o grupo de total assim que o SUP muda), seguido de
-// uma linha de total assim que o SUP muda ou a lista acaba.
-function renderCorpoTabela(registros) {
-  let html = renderLinhaTotalGeral(registros.length);
-  let supAtual = null;
-  let grupoAtual = null;
-  let tomadorAtual = null;
-  let indicesGrupoAtual = [];
-
-  function fecharGrupo() {
-    if (indicesGrupoAtual.length) {
-      html += renderLinhaTotalSup(supAtual, grupoAtual, tomadorAtual, indicesGrupoAtual);
-    }
-  }
-
-  registros.forEach((registro, indice) => {
-    if (supAtual !== null && registro.sup !== supAtual) {
-      fecharGrupo();
-      indicesGrupoAtual = [];
-    }
-    supAtual = registro.sup;
-    grupoAtual = registro.grupo;
-    tomadorAtual = registro.tomador;
-    indicesGrupoAtual.push(indice);
-    html += renderLinhaTabela(registro, indice);
-  });
-  fecharGrupo();
-  return html;
-}
-
-// A tabela é renderizada no servidor com os registros crus (previsto/
-// realizado/total mês a mês); o script embutido abaixo recalcula os 12
-// valores mensais + a coluna Total de cada linha sempre que a dimensão ou
-// os filtros mudarem, sem recarregar a página (HTML estático, sem bundler
-// -- não dá pra importar tools/orcamento/compute-orcamento.js aqui).
-const SCRIPT_CLIENTE = `
 function formatarNumero(v) { return v === null || v === undefined ? '—' : (Math.round(v * 100) / 100).toLocaleString('pt-BR'); }
 function somar(array) { return (array || []).reduce(function (a, b) { return a + (b || 0); }, 0); }
 function somarArraysMensais(arrays) {
@@ -314,11 +213,6 @@ function mesclarConsecutivos(valores) {
   return resultado;
 }
 
-// Aplica mesclarConsecutivos a cada coluna mesclável (SUP/Grupo/Tomador),
-// olhando só pras linhas atualmente visíveis (depois do filtro já ter
-// rodado) -- por isso precisa ser chamada de novo toda vez que o filtro
-// muda, nunca uma vez só. O valor repetido continua escrito na tela, só
-// fica com a cor quase transparente (classe .valor-repetido).
 function mesclarColunasRepetidas() {
   ['col-sup', 'col-grupo', 'col-tomador'].forEach(function (classe) {
     var linhasVisiveis = Array.prototype.filter.call(
@@ -337,6 +231,173 @@ function mesclarColunasRepetidas() {
   });
 }
 
+// Mesmo mapeamento de cores por tipologia da matriz de equipes
+// (tools/matriz/render-dashboard.js's tipologiaColor), reimplementado aqui
+// em JS de navegador pelo mesmo motivo do resto deste script: a própria
+// tipologia é dado protegido por senha, não pode vir pronta do servidor.
+var TIPOLOGIA_COLOR = {
+  SP: '#3f851a', SM: '#2f6ad0', ST: '#8d6f00', PI: '#606060',
+  BL: '#4a3aa7', CPTU: '#db244e', SH: '#e87ba4', VT: '#eda100',
+  'SEGURANÇA': '#2775b8', ESPECIAIS: '#db244e', SSMA: '#2775b8',
+};
+var TIPOLOGIA_COMPOSTA_COLOR = {
+  'CPTU / VT / SH': TIPOLOGIA_COLOR.CPTU,
+  'SP/SM': TIPOLOGIA_COLOR.SP,
+};
+function tipologiaColor(tipologia) {
+  var raw = String(tipologia || '').trim();
+  var key = raw.toUpperCase();
+  if (TIPOLOGIA_COLOR[key]) return TIPOLOGIA_COLOR[key];
+  if (TIPOLOGIA_COMPOSTA_COLOR[key]) return TIPOLOGIA_COMPOSTA_COLOR[key];
+  var parenMatch = raw.match(/\\(([^)]+)\\)\\s*$/);
+  if (parenMatch) {
+    var viaParen = TIPOLOGIA_COLOR[parenMatch[1].trim().toUpperCase()];
+    if (viaParen) return viaParen;
+  }
+  var primeiroToken = key.split('/')[0].trim();
+  if (TIPOLOGIA_COLOR[primeiroToken]) return TIPOLOGIA_COLOR[primeiroToken];
+  return '#898781';
+}
+
+var SERIE_LABELS = { previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência' };
+
+function celulasMesVazias() {
+  var html = '';
+  for (var i = 0; i < 12; i++) html += '<td class="celula-mes num"></td>';
+  return html;
+}
+
+function renderLinhaTabela(registro, indice) {
+  var chipColor = tipologiaColor(registro.tipologia);
+  var dataAttrs = 'data-tipologia="' + escapeHtml(registro.tipologia) + '" data-grupo="' + escapeHtml(registro.grupo) + '" data-sup="' + escapeHtml(registro.sup) + '" data-registro-indices="' + indice + '"';
+  var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
+  var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(registro.sup) + '">' + escapeHtml(registro.sup) + '</td>';
+  var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(registro.grupo) + '">' + escapeHtml(registro.grupo) + '</td>';
+  var celulaTomador = '<td class="col-mesclavel col-tomador" data-valor="' + escapeHtml(registro.tomador) + '">' + escapeHtml(registro.tomador) + '</td>';
+  return '<tr class="linha-serie linha-previsto" data-serie="previsto" ' + dataAttrs + '>' +
+      celulaSup + celulaGrupo + celulaTomador +
+      '<td rowspan="3"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(registro.tipologia) + '</span></td>' +
+      '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>' +
+    '<tr class="linha-serie linha-realizado" data-serie="realizado" ' + dataAttrs + '>' +
+      celulaSup + celulaGrupo + celulaTomador +
+      '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>' +
+    '<tr class="linha-serie linha-total" data-serie="total" ' + dataAttrs + '>' +
+      celulaSup + celulaGrupo + celulaTomador +
+      '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>';
+}
+
+function renderLinhaTotalSup(sup, grupo, tomador, indices) {
+  var dataAttrs = 'data-grupo="' + escapeHtml(grupo) + '" data-sup="' + escapeHtml(sup) + '" data-registro-indices="' + indices.join(',') + '" data-total-sup="1"';
+  var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
+  var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(sup) + '">' + escapeHtml(sup) + '</td>';
+  var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(grupo) + '">' + escapeHtml(grupo) + '</td>';
+  var celulaTomador = '<td class="col-mesclavel col-tomador" data-valor="' + escapeHtml(tomador) + '">' + escapeHtml(tomador) + '</td>';
+  return '<tr class="linha-serie linha-previsto linha-total-sup" data-serie="previsto" ' + dataAttrs + '>' +
+      celulaSup + celulaGrupo + celulaTomador +
+      '<td rowspan="3"><span class="tipologia-chip tipologia-chip-total">TOTAL</span></td>' +
+      '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>' +
+    '<tr class="linha-serie linha-realizado linha-total-sup" data-serie="realizado" ' + dataAttrs + '>' +
+      celulaSup + celulaGrupo + celulaTomador +
+      '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>' +
+    '<tr class="linha-serie linha-total linha-total-sup" data-serie="total" ' + dataAttrs + '>' +
+      celulaSup + celulaGrupo + celulaTomador +
+      '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>';
+}
+
+function renderLinhaTotalGeral(totalRegistros) {
+  var todosIndices = [];
+  for (var i = 0; i < totalRegistros; i++) todosIndices.push(i);
+  var dataAttrs = 'data-registro-indices="' + todosIndices.join(',') + '" data-total-geral="1"';
+  var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
+  var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
+  return '<tr class="linha-serie linha-previsto linha-total-geral" data-serie="previsto" ' + dataAttrs + '>' +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      '<td rowspan="3"><span class="tipologia-chip tipologia-chip-total">TOTAL GERAL</span></td>' +
+      '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>' +
+    '<tr class="linha-serie linha-realizado linha-total-geral" data-serie="realizado" ' + dataAttrs + '>' +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>' +
+    '<tr class="linha-serie linha-total linha-total-geral" data-serie="total" ' + dataAttrs + '>' +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
+      celulasMesVazias() + celulaTotalLinha +
+    '</tr>';
+}
+
+function renderCorpoTabela(registros) {
+  var html = renderLinhaTotalGeral(registros.length);
+  var supAtual = null;
+  var grupoAtual = null;
+  var tomadorAtual = null;
+  var indicesGrupoAtual = [];
+
+  function fecharGrupo() {
+    if (indicesGrupoAtual.length) {
+      html += renderLinhaTotalSup(supAtual, grupoAtual, tomadorAtual, indicesGrupoAtual);
+    }
+  }
+
+  registros.forEach(function (registro, indice) {
+    if (supAtual !== null && registro.sup !== supAtual) {
+      fecharGrupo();
+      indicesGrupoAtual = [];
+    }
+    supAtual = registro.sup;
+    grupoAtual = registro.grupo;
+    tomadorAtual = registro.tomador;
+    indicesGrupoAtual.push(indice);
+    html += renderLinhaTabela(registro, indice);
+  });
+  fecharGrupo();
+  return html;
+}
+
+function linhasDistintas(registros, campo) {
+  var vistos = {};
+  var resultado = [];
+  registros.forEach(function (r) {
+    var v = r[campo];
+    if (v && !vistos[v]) { vistos[v] = true; resultado.push(v); }
+  });
+  resultado.sort();
+  return resultado;
+}
+
+function popularSelect(id, valores) {
+  var select = document.getElementById(id);
+  var opcaoPadrao = select.options[0];
+  select.innerHTML = '';
+  select.appendChild(opcaoPadrao);
+  valores.forEach(function (v) {
+    var opcao = document.createElement('option');
+    opcao.value = v;
+    opcao.textContent = v;
+    select.appendChild(opcao);
+  });
+}
+
+function popularFiltros(registros) {
+  popularSelect('filtro-tipologia', linhasDistintas(registros, 'tipologia'));
+  popularSelect('filtro-contrato', linhasDistintas(registros, 'grupo'));
+  popularSelect('filtro-sup', linhasDistintas(registros, 'sup'));
+}
+
 function recalcularTabela() {
   var dimensao = document.getElementById('seletor-dimensao').value;
   var filtroTipologia = document.getElementById('filtro-tipologia').value;
@@ -353,8 +414,6 @@ function recalcularTabela() {
     var indices = linha.dataset.registroIndices.split(',').map(Number);
     var mostra;
     if (ehTotalGeral) {
-      // Refiltra os índices pelos filtros de contrato/SUP em vigor -- o
-      // total geral vira "total do que está filtrado", não um número fixo.
       indices = indices.filter(function (idx) {
         var r = window.__REGISTROS__[idx];
         return (!filtroContrato || r.grupo === filtroContrato) && (!filtroSup || r.sup === filtroSup);
@@ -382,20 +441,31 @@ function limparFiltros() {
   recalcularTabela();
 }
 
-['seletor-dimensao', 'filtro-tipologia', 'filtro-contrato', 'filtro-sup', 'filtro-serie'].forEach(function (id) {
-  document.getElementById(id).addEventListener('change', recalcularTabela);
-});
-document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
+// Chamado uma vez, pelo gate de senha, assim que a senha certa decifra os
+// registros -- monta a tabela inteira e liga os filtros/botões.
+function montarDashboard(registros) {
+  popularFiltros(registros);
+  document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(registros);
+  ['seletor-dimensao', 'filtro-tipologia', 'filtro-contrato', 'filtro-sup', 'filtro-serie'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', recalcularTabela);
+  });
+  document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
+  recalcularTabela();
+}
+
 document.getElementById('atualizar-dashboard').addEventListener('click', function () { location.reload(); });
-recalcularTabela();
 `;
 
-function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri }) {
-  const linhasTabela = renderCorpoTabela(registros);
+function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha }) {
+  if (!senha) {
+    throw new Error('renderDashboard requer "senha" -- o conteúdo (SUP/Grupo/Tomador/Tipologia/valores) é cifrado com ela antes de ir pro HTML.');
+  }
   const registrosJson = JSON.stringify(registros.map(r => ({
-    grupo: r.grupo, tomador: r.tomador, tipologia: r.tipologia,
+    sup: r.sup, grupo: r.grupo, tomador: r.tomador, tipologia: r.tipologia,
     previsto: r.previsto, realizado: r.realizado, total: r.total,
-  }))).replace(/<\/script/gi, '<\\/script');
+  })));
+  const dadosCifrados = cifrarComSenha(registrosJson, senha);
+  const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');
 
   const logoImg = logoDataUri ? `<img src="${logoDataUri}" alt="Suporte Infra">` : '';
   const watermarkImg = iconDataUri ? `<img class="watermark" src="${iconDataUri}" alt="">` : '';
@@ -404,9 +474,8 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   // matriz de equipes (tools/matriz/render-dashboard.js) -- cores, fonte e
   // classes principais copiadas de lá pra manter os dois dashboards
   // consistentes entre si. Diferença deliberada: o fundo da tabela aqui é
-  // translúcido (não var(--surface-1) sólido), pra a marca d'água central
-  // aparecer por trás -- pedido explícito do usuário, a matriz de equipes
-  // não faz isso.
+  // translúcido, pra a marca d'água central aparecer por trás -- pedido
+  // explícito do usuário, a matriz de equipes não faz isso.
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -445,6 +514,30 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   .header-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
   .header-bar img { height: 36px; width: auto; }
   .header-bar-title { flex: 1 1 200px; min-width: 0; }
+  .gate-senha {
+    position: relative; z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 40vh;
+  }
+  .gate-senha-box {
+    background: var(--surface-1); border: 2px solid #f6b53f; border-radius: 12px;
+    padding: 32px; max-width: 360px; width: 100%; text-align: center;
+  }
+  .gate-senha-box h2 { margin: 0 0 16px; font-size: 16px; }
+  .gate-senha-box input {
+    width: 100%; padding: 10px 12px; margin-bottom: 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--page); color: var(--text-primary); font-size: 14px;
+  }
+  .gate-senha-box button {
+    width: 100%; padding: 10px 16px;
+    border: 2px solid #f6b53f; border-radius: 8px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .gate-senha-box button:hover { background: rgba(246,181,63,0.1); }
+  .gate-senha-box button:disabled { opacity: 0.6; cursor: wait; }
+  .gate-senha-erro { color: #f0857a; font-size: 13px; margin-top: 10px; }
   .filtros { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
   .filtros select {
     padding: 8px 10px;
@@ -491,9 +584,6 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   .linha-total-sup td { background: rgba(0,0,0,0.32); }
   .linha-total-geral td { background: rgba(246,181,63,0.10); }
   tr.linha-total.linha-total-geral td { border-bottom: 2px solid #f6b53f; }
-  /* Texto repetido (mesmo SUP/Grupo/Tomador da linha visível anterior)
-     continua na tela -- só fica quase transparente, em vez de sumir, pra
-     não parecer célula vazia mas também não competir com o valor "novo". */
   .valor-repetido { color: rgba(255,255,255,0.14); }
 </style>
 </head>
@@ -507,24 +597,37 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
       <div class="generated">Gerado em ${escapeHtml(generatedAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}</div>
     </div>
   </div>
-  <div class="filtros">
-    ${renderFiltroTipologia(registros)}
-    ${renderFiltroContrato(registros)}
-    ${renderFiltroSup(registros)}
-    ${renderFiltroSerie()}
-    ${renderSeletorDimensao()}
-    <button id="limpar-filtros" type="button">Limpar filtros</button>
-    <button id="atualizar-dashboard" type="button">Atualizar dados</button>
+
+  <div id="gate-senha" class="gate-senha">
+    <div class="gate-senha-box">
+      <h2>Digite a senha para abrir o dashboard</h2>
+      <input type="password" id="campo-senha" autocomplete="off" placeholder="Senha">
+      <button id="btn-desbloquear" type="button">Abrir</button>
+      <div id="gate-senha-erro" class="gate-senha-erro" style="display:none"></div>
+    </div>
   </div>
-  <div class="table-scroll">
-  <table id="tabela-orcamento">
-    <thead><tr><th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th>${renderCabecalhoMeses(periodos)}<th>Total</th></tr></thead>
-    <tbody>${linhasTabela}</tbody>
-  </table>
+
+  <div id="conteudo-protegido" style="display:none">
+    <div class="filtros">
+      ${renderFiltroTipologia()}
+      ${renderFiltroContrato()}
+      ${renderFiltroSup()}
+      ${renderFiltroSerie()}
+      ${renderSeletorDimensao()}
+      <button id="limpar-filtros" type="button">Limpar filtros</button>
+      <button id="atualizar-dashboard" type="button">Atualizar dados</button>
+    </div>
+    <div class="table-scroll">
+    <table id="tabela-orcamento">
+      <thead><tr><th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th>${renderCabecalhoMeses(periodos)}<th>Total</th></tr></thead>
+      <tbody id="corpo-tabela"></tbody>
+    </table>
+    </div>
   </div>
   </main>
-  <script>window.__REGISTROS__ = ${registrosJson};</script>
-  <script>${SCRIPT_CLIENTE}</script>
+  <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
+  <script>${SCRIPT_CLIENTE_GATE}</script>
+  <script>${SCRIPT_CLIENTE_TABELA}</script>
 </body>
 </html>`;
 }
