@@ -24,10 +24,8 @@ function renderFiltroContrato(registros) {
     `</select>`;
 }
 
-function renderSeletorMesVigente(periodos) {
-  return `<select id="seletor-mes-vigente">` +
-    periodos.map((data, i) => `<option value="${i}">${formatarMesAno(data)}</option>`).join('') +
-    `</select>`;
+function renderCabecalhoMeses(periodos) {
+  return periodos.map(data => `<th>${formatarMesAno(data)}</th>`).join('');
 }
 
 function renderSeletorDimensao() {
@@ -71,92 +69,72 @@ function tipologiaColor(tipologia) {
   return '#898781';
 }
 
-// Previsto/Realizado/Total viram 3 linhas separadas (Grupo/Tomador/Tipologia
-// com rowspan) em vez de uma única linha combinada -- cada série colorida
-// (azul/verde/amarelo) via a classe .linha-<serie>, ver CSS.
+// Previsto/Realizado/Total viram 3 linhas separadas (SUP/Grupo/Tomador/
+// Tipologia com rowspan) em vez de uma única linha combinada -- cada série
+// colorida (azul/verde/amarelo) via a classe .linha-<serie>, ver CSS. Um
+// <td> por mês (12 ao todo), não mais janelas agregadas -- o cliente
+// preenche cada .celula-mes com o valor daquele mês quando a dimensão ou
+// os filtros mudarem (ver SCRIPT_CLIENTE).
 function renderLinhaTabela(registro) {
   const chipColor = tipologiaColor(registro.tipologia);
   const dataAttrs = `data-tipologia="${escapeHtml(registro.tipologia)}" data-grupo="${escapeHtml(registro.grupo)}"`;
+  const celulasMes = Array.from({ length: 12 }, () => `<td class="celula-mes num"></td>`).join('');
   return `<tr class="linha-serie linha-previsto" data-serie="previsto" ${dataAttrs}>` +
+      `<td rowspan="3">${escapeHtml(registro.sup)}</td>` +
       `<td rowspan="3">${escapeHtml(registro.grupo)}</td>` +
       `<td rowspan="3">${escapeHtml(registro.tomador)}</td>` +
       `<td rowspan="3"><span class="tipologia-chip" style="--chip-color:${chipColor}">${escapeHtml(registro.tipologia)}</span></td>` +
       `<td class="serie-label">Previsto</td>` +
-      `<td class="celula-periodos num" data-linha-periodos></td>` +
+      celulasMes +
     `</tr>` +
     `<tr class="linha-serie linha-realizado" data-serie="realizado" ${dataAttrs}>` +
       `<td class="serie-label">Realizado</td>` +
-      `<td class="celula-periodos num" data-linha-periodos></td>` +
+      celulasMes +
     `</tr>` +
     `<tr class="linha-serie linha-total" data-serie="total" ${dataAttrs}>` +
       `<td class="serie-label">Total</td>` +
-      `<td class="celula-periodos num" data-linha-periodos></td>` +
+      celulasMes +
     `</tr>`;
 }
 
 // A tabela é renderizada no servidor com os registros crus (previsto/
-// realizado/total mês a mês); o script embutido abaixo reimplementa as
-// mesmas fórmulas de tools/orcamento/compute-orcamento.js em JS de
-// navegador (sem require -- é HTML estático, sem bundler) pra recalcular
-// as janelas de período sempre que o mês vigente, a dimensão ou os filtros
-// mudarem, sem recarregar a página.
+// realizado/total mês a mês); o script embutido abaixo recalcula os 12
+// valores mensais de cada linha sempre que a dimensão ou os filtros
+// mudarem, sem recarregar a página (HTML estático, sem bundler -- não dá
+// pra importar tools/orcamento/compute-orcamento.js aqui).
 const SCRIPT_CLIENTE = `
-function somarMeses(mensal, inicioIdx, fimIdxExclusivo) {
-  let soma = 0;
-  for (let i = Math.max(0, inicioIdx); i < Math.min(mensal.length, fimIdxExclusivo); i++) soma += mensal[i] || 0;
-  return soma;
-}
-function valorMes(mensal, idx) { return (idx < 0 || idx >= mensal.length) ? null : (mensal[idx] || 0); }
-function calcularJanelas(mensal, vigenteIdx) {
-  return {
-    acumuladoAnterior: somarMeses(mensal, 0, vigenteIdx),
-    mesVigente: valorMes(mensal, vigenteIdx),
-    m1: valorMes(mensal, vigenteIdx + 1), m2: valorMes(mensal, vigenteIdx + 2), m3: valorMes(mensal, vigenteIdx + 3),
-    acumuladoFuturo: somarMeses(mensal, vigenteIdx + 4, mensal.length),
-  };
-}
-function dividir(n, d) { return d ? n / d : null; }
-function dividirJanelas(num, den) {
-  var buckets = ['acumuladoAnterior', 'mesVigente', 'm1', 'm2', 'm3', 'acumuladoFuturo'];
-  var r = {};
-  buckets.forEach(function (b) { r[b] = dividir(num[b], den[b]); });
-  return r;
-}
-function janelasConstante(valor) {
-  return { acumuladoAnterior: valor, mesVigente: valor, m1: valor, m2: valor, m3: valor, acumuladoFuturo: valor };
-}
 function formatarNumero(v) { return v === null || v === undefined ? '—' : (Math.round(v * 100) / 100).toLocaleString('pt-BR'); }
 
-// Calcula as 6 janelas de período pra UMA série (previsto/realizado/total)
-// de UMA linha, na dimensão escolhida. Previsto de produtividade/ticketMedio
-// é a premissa fixa da planilha (mesmo valor repetido nas 6 janelas, nunca
-// recalculado); Realizado/Total recalculam a razão por período (mesmas
-// fórmulas confirmadas de compute-orcamento.js).
-function calcularSerie(registro, serie, dimensao, vigenteIdx) {
+// Calcula os 12 valores mensais pra UMA série (previsto/realizado/total) de
+// UMA linha, na dimensão escolhida. Previsto de produtividade/ticketMedio é
+// a premissa fixa da planilha (mesmo valor repetido nos 12 meses, nunca
+// recalculado); Realizado/Total recalculam a razão mês a mês (produtividade
+// = volume ÷ equipes, ticketMedio = financeiro ÷ volume -- fórmulas
+// confirmadas com o usuário).
+function calcularSerieMensal(registro, serie, dimensao) {
   var valores = registro[serie];
   if (!valores) return null;
   if (dimensao === 'produtividade' || dimensao === 'ticketMedio') {
     if (serie === 'previsto') {
       var premissa = dimensao === 'produtividade' ? valores.equipesResumo.prod : valores.volumeResumo.ticket;
-      return janelasConstante((premissa === null || premissa === undefined) ? null : premissa);
+      var valorPremissa = (premissa === null || premissa === undefined) ? null : premissa;
+      return new Array(12).fill(valorPremissa);
     }
-    var numeradorCampo = dimensao === 'produtividade' ? 'volume' : 'financeiro';
-    var denominadorCampo = dimensao === 'produtividade' ? 'equipes' : 'volume';
-    return dividirJanelas(calcularJanelas(valores[numeradorCampo], vigenteIdx), calcularJanelas(valores[denominadorCampo], vigenteIdx));
+    var numerador = valores[dimensao === 'produtividade' ? 'volume' : 'financeiro'];
+    var denominador = valores[dimensao === 'produtividade' ? 'equipes' : 'volume'];
+    return numerador.map(function (v, i) { return denominador[i] ? v / denominador[i] : null; });
   }
-  return calcularJanelas(valores[dimensao], vigenteIdx);
+  return valores[dimensao];
 }
 
-function renderizarCelulasPeriodo(janelas) {
-  var buckets = [['acumuladoAnterior', 'Acum. anterior'], ['mesVigente', 'Mês vigente'], ['m1', 'M+1'], ['m2', 'M+2'], ['m3', 'M+3'], ['acumuladoFuturo', 'Acum. futuro']];
-  return buckets.map(function (par) {
-    var valor = janelas ? janelas[par[0]] : null;
-    return '<span class="periodo-cell" title="' + par[1] + '">' + formatarNumero(valor) + '</span>';
-  }).join('');
+function preencherCelulasMes(linha, valoresMensais) {
+  var celulas = linha.querySelectorAll('.celula-mes');
+  celulas.forEach(function (celula, idx) {
+    celula.textContent = formatarNumero(valoresMensais ? valoresMensais[idx] : null);
+  });
 }
 
 function recalcularTabela() {
-  var vigenteIdx = Number(document.getElementById('seletor-mes-vigente').value);
   var dimensao = document.getElementById('seletor-dimensao').value;
   var filtroTipologia = document.getElementById('filtro-tipologia').value;
   var filtroContrato = document.getElementById('filtro-contrato').value;
@@ -166,13 +144,11 @@ function recalcularTabela() {
     var mostra = (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) &&
       (!filtroContrato || linha.dataset.grupo === filtroContrato);
     linha.style.display = mostra ? '' : 'none';
-    var celula = linha.querySelector('[data-linha-periodos]');
-    var janelas = calcularSerie(registro, linha.dataset.serie, dimensao, vigenteIdx);
-    celula.innerHTML = renderizarCelulasPeriodo(janelas);
+    preencherCelulasMes(linha, calcularSerieMensal(registro, linha.dataset.serie, dimensao));
   });
 }
 
-['seletor-mes-vigente', 'seletor-dimensao', 'filtro-tipologia', 'filtro-contrato'].forEach(function (id) {
+['seletor-dimensao', 'filtro-tipologia', 'filtro-contrato'].forEach(function (id) {
   document.getElementById(id).addEventListener('change', recalcularTabela);
 });
 recalcularTabela();
@@ -248,16 +224,13 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     border-radius: 4px; padding: 2px 8px;
     font-size: 12px; font-weight: 600;
   }
-  .periodo-cell {
-    display: inline-block; margin-right: 10px; white-space: nowrap;
-    padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px;
-  }
-  .serie-label { font-weight: 700; border-left: 4px solid transparent; padding-left: 10px; }
-  .linha-previsto .serie-label, .linha-previsto .celula-periodos { color: #2f6ad0; }
+  .celula-mes { white-space: nowrap; }
+  .serie-label { font-weight: 700; border-left: 4px solid transparent; padding-left: 10px; white-space: nowrap; }
+  .linha-previsto .serie-label, .linha-previsto .celula-mes { color: #2f6ad0; }
   .linha-previsto .serie-label { border-left-color: #2f6ad0; }
-  .linha-realizado .serie-label, .linha-realizado .celula-periodos { color: #7fd858; }
+  .linha-realizado .serie-label, .linha-realizado .celula-mes { color: #7fd858; }
   .linha-realizado .serie-label { border-left-color: #7fd858; }
-  .linha-total .serie-label, .linha-total .celula-periodos { color: #f6b53f; }
+  .linha-total .serie-label, .linha-total .celula-mes { color: #f6b53f; }
   .linha-total .serie-label { border-left-color: #f6b53f; }
   tr.linha-total td { border-bottom: 2px solid var(--gridline); }
 </style>
@@ -275,12 +248,11 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   <div class="filtros">
     ${renderFiltroTipologia(registros)}
     ${renderFiltroContrato(registros)}
-    ${renderSeletorMesVigente(periodos)}
     ${renderSeletorDimensao()}
   </div>
   <div class="table-scroll">
   <table id="tabela-orcamento">
-    <thead><tr><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th><th>Valores por período (acumulado anterior · mês vigente · M+1 · M+2 · M+3 · acumulado futuro)</th></tr></thead>
+    <thead><tr><th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th>${renderCabecalhoMeses(periodos)}</tr></thead>
     <tbody>${linhasTabela}</tbody>
   </table>
   </div>

@@ -4,11 +4,10 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const { renderDashboard } = require('../tools/orcamento/render-dashboard.js');
 const { excelSerialParaData } = require('../tools/orcamento/datas.js');
-const { calcularJanelas: calcularJanelasNode, dividirJanelas: dividirJanelasNode } = require('../tools/orcamento/compute-orcamento.js');
 
 function registroExemplo() {
   return {
-    grupo: 'PÁTRIA', tomador: 'Via Araucária S.A', tipologia: 'SM', observacao: null,
+    sup: 'SUP-7133-24', grupo: 'PÁTRIA', tomador: 'Via Araucária S.A', tipologia: 'SM', observacao: null,
     previsto: {
       equipes: Array(12).fill(5), equipesResumo: { pico: 6, media: 5, prod: 1.5, dias: 25 },
       volume: Array(12).fill(100), volumeResumo: { total: 1200, totalInicial: 1000, ticket: 1885.65 },
@@ -47,10 +46,18 @@ test('renderDashboard embeds one row per registro, with tipologia and contrato a
   assert.match(html, /data-grupo="PÁTRIA"/);
 });
 
-test('renderDashboard includes a mês vigente dropdown with all 12 months formatted as "Mês/Ano"', () => {
+test('renderDashboard shows the SUP contract code as its own column, spanning the 3 série rows', () => {
   const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /Jan\/2026/);
-  assert.match(html, /Dez\/2026/);
+  assert.match(html, /<th>SUP<\/th>/);
+  assert.match(html, /<td rowspan="3">SUP-7133-24<\/td>/);
+});
+
+test('renderDashboard titles each of the 12 month columns with the real "Mês/Ano" label, not a generic period bucket', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  assert.match(html, /<th>Jan\/2026<\/th>/);
+  assert.match(html, /<th>Dez\/2026<\/th>/);
+  assert.doesNotMatch(html, /Acum\. anterior/);
+  assert.doesNotMatch(html, /Mês vigente/);
 });
 
 test('renderDashboard embeds the raw registros as JSON for the client-side recompute script', () => {
@@ -84,11 +91,17 @@ test('renderDashboard renders Previsto/Realizado/Total as 3 separate rows per re
   assert.match(html, /<td class="serie-label">Total<\/td>/);
 });
 
+test('renderDashboard renders exactly 12 empty month cells per série row, ready for the client script to fill in', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const celulas = html.match(/<td class="celula-mes num"><\/td>/g) || [];
+  assert.equal(celulas.length, 36); // 12 meses x 3 séries (Previsto/Realizado/Total)
+});
+
 test('renderDashboard gives each série row a distinct color (P azul, R verde, T amarelo) via CSS classes', () => {
   const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /\.linha-previsto \.serie-label,\s*\.linha-previsto \.celula-periodos\s*\{\s*color:\s*#2f6ad0/);
-  assert.match(html, /\.linha-realizado \.serie-label,\s*\.linha-realizado \.celula-periodos\s*\{\s*color:\s*#7fd858/);
-  assert.match(html, /\.linha-total \.serie-label,\s*\.linha-total \.celula-periodos\s*\{\s*color:\s*#f6b53f/);
+  assert.match(html, /\.linha-previsto \.serie-label,\s*\.linha-previsto \.celula-mes\s*\{\s*color:\s*#2f6ad0/);
+  assert.match(html, /\.linha-realizado \.serie-label,\s*\.linha-realizado \.celula-mes\s*\{\s*color:\s*#7fd858/);
+  assert.match(html, /\.linha-total \.serie-label,\s*\.linha-total \.celula-mes\s*\{\s*color:\s*#f6b53f/);
 });
 
 test('renderDashboard colors the tipologia chip using the same tipologia→cor mapping as the matriz de equipes dashboard (SM is blue #2f6ad0)', () => {
@@ -102,13 +115,7 @@ test('renderDashboard resolves a composite tipologia string without parentheses 
   assert.match(html, /<span class="tipologia-chip" style="--chip-color:#2f6ad0">SM \/ SM\.F \/ SR<\/span>/);
 });
 
-test('renderDashboard header shows a Série column and per-período values', () => {
-  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  assert.match(html, /<th>Série<\/th>/);
-  assert.match(html, /Valores por período/);
-});
-
-function extrairFuncoesClientScript(html) {
+function extrairCalcularSerieMensal(html) {
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   const scriptCliente = scripts[1][1]; // segundo <script> é o SCRIPT_CLIENTE (o primeiro é window.__REGISTROS__)
   const sandbox = {
@@ -119,46 +126,35 @@ function extrairFuncoesClientScript(html) {
     window: {},
   };
   vm.createContext(sandbox);
-  vm.runInContext(
-    scriptCliente +
-      '\nthis.calcularJanelas = calcularJanelas; this.dividirJanelas = dividirJanelas; this.dividir = dividir;' +
-      ' this.calcularSerie = calcularSerie; this.renderizarCelulasPeriodo = renderizarCelulasPeriodo;',
-    sandbox
-  );
-  return {
-    calcularJanelas: sandbox.calcularJanelas, dividirJanelas: sandbox.dividirJanelas, dividir: sandbox.dividir,
-    calcularSerie: sandbox.calcularSerie, renderizarCelulasPeriodo: sandbox.renderizarCelulasPeriodo,
-  };
+  vm.runInContext(scriptCliente + '\nthis.calcularSerieMensal = calcularSerieMensal;', sandbox);
+  return sandbox.calcularSerieMensal;
 }
 
-// A função do cliente roda dentro de um vm.Context, ou seja, um realm
-// diferente do processo Node principal -- os objetos que ela devolve têm um
-// Object.prototype distinto, então assert.deepEqual (que no modo strict é um
-// alias de deepStrictEqual, sensível a protótipo) falsamente acusaria
-// divergência mesmo com os mesmos valores. JSON.parse(JSON.stringify(...))
-// normaliza pro protótipo do realm atual antes de comparar.
-function paraObjetoPlano(valor) {
-  return JSON.parse(JSON.stringify(valor));
+// calcularSerieMensal roda dentro de um vm.Context (um realm diferente do
+// processo Node principal), então os arrays que ela devolve têm um
+// Array.prototype distinto -- assert.deepEqual (alias de deepStrictEqual,
+// sensível a protótipo) acusaria divergência mesmo com os mesmos valores.
+// JSON.parse(JSON.stringify(...)) normaliza pro protótipo do realm atual.
+function paraArrayPlano(valor) {
+  return valor === null ? null : JSON.parse(JSON.stringify(valor));
 }
 
-test('the client-side script embedded in the rendered HTML computes calcularJanelas/dividirJanelas identically to compute-orcamento.js, for the same inputs (guards against the two hand-maintained copies drifting apart)', () => {
+test('calcularSerieMensal (extraído do HTML real gerado) devolve os 12 valores mensais crus pra equipes/volume/financeiro, sem agregação', () => {
   const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  const { calcularJanelas: calcularJanelasCliente, dividirJanelas: dividirJanelasCliente } = extrairFuncoesClientScript(html);
-
-  const mensal = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-  assert.deepEqual(paraObjetoPlano(calcularJanelasCliente(mensal, 5)), paraObjetoPlano(calcularJanelasNode(mensal, 5)));
-
-  const financeiro = calcularJanelasNode([100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100], 5);
-  const volume = calcularJanelasNode([10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10], 5);
-  assert.deepEqual(paraObjetoPlano(dividirJanelasCliente(financeiro, volume)), paraObjetoPlano(dividirJanelasNode(financeiro, volume)));
+  const calcularSerieMensal = extrairCalcularSerieMensal(html);
+  const registro = registroExemplo();
+  assert.deepEqual(paraArrayPlano(calcularSerieMensal(registro, 'previsto', 'equipes')), Array(12).fill(5));
+  assert.deepEqual(paraArrayPlano(calcularSerieMensal(registro, 'realizado', 'volume')), Array(12).fill(80));
+  assert.deepEqual(paraArrayPlano(calcularSerieMensal(registro, 'total', 'financeiro')), Array(12).fill(900));
+  assert.equal(calcularSerieMensal({ previsto: null, realizado: null, total: null }, 'previsto', 'equipes'), null);
 });
 
-test('renderizarCelulasPeriodo (extracted from the real rendered HTML) computes produtividade as volume÷equipes and ticketMedio as financeiro÷volume, not the reverse (guards against a numerador/denominador swap in the dimension mapping)', () => {
+test('calcularSerieMensal (extraído do HTML real gerado) computa produtividade como volume÷equipes e ticketMedio como financeiro÷volume, mês a mês, nunca o inverso (protege contra troca de numerador/denominador)', () => {
   // Números deliberadamente assimétricos (volume≠equipes≠financeiro) pra que
   // uma troca de numerador/denominador produza um valor bem diferente e
   // fácil de distinguir do valor correto.
   const registro = {
-    grupo: 'X', tomador: 'Y', tipologia: 'Z', observacao: null,
+    sup: 'SUP-X', grupo: 'X', tomador: 'Y', tipologia: 'Z', observacao: null,
     previsto: {
       equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 1.5, dias: 0 },
       volume: Array(12).fill(100), volumeResumo: { total: 0, totalInicial: 0, ticket: 1885.65 },
@@ -172,19 +168,18 @@ test('renderizarCelulasPeriodo (extracted from the real rendered HTML) computes 
     total: null,
   };
   const html = renderDashboard({ registros: [registro], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
-  const { calcularSerie, renderizarCelulasPeriodo } = extrairFuncoesClientScript(html);
+  const calcularSerieMensal = extrairCalcularSerieMensal(html);
 
-  // Produtividade Realizado = volume ÷ equipes = 200 ÷ 5 = 40 (não 5/200=0,03).
-  const produtividadeRealizado = renderizarCelulasPeriodo(calcularSerie(registro, 'realizado', 'produtividade', 5));
-  assert.match(produtividadeRealizado, /^(?:<span[^>]*>40<\/span>)+$/);
+  // Produtividade Realizado = volume ÷ equipes = 200 ÷ 5 = 40 em todo mês (não 5/200=0,025).
+  assert.deepEqual(paraArrayPlano(calcularSerieMensal(registro, 'realizado', 'produtividade')), Array(12).fill(40));
 
-  // Ticket médio Realizado = financeiro ÷ volume = 3000 ÷ 200 = 15 (não 200/3000≈0,07).
-  const ticketRealizado = renderizarCelulasPeriodo(calcularSerie(registro, 'realizado', 'ticketMedio', 5));
-  assert.match(ticketRealizado, /^(?:<span[^>]*>15<\/span>)+$/);
+  // Ticket médio Realizado = financeiro ÷ volume = 3000 ÷ 200 = 15 em todo mês (não 200/3000≈0,067).
+  assert.deepEqual(paraArrayPlano(calcularSerieMensal(registro, 'realizado', 'ticketMedio')), Array(12).fill(15));
 
-  // Previsto usa a premissa fixa da planilha (PROD./TICKET), repetida nas 6 janelas, não uma razão recalculada.
-  const produtividadePrevisto = renderizarCelulasPeriodo(calcularSerie(registro, 'previsto', 'produtividade', 5));
-  assert.match(produtividadePrevisto, /^(?:<span[^>]*>1,5<\/span>)+$/);
-  const ticketPrevisto = renderizarCelulasPeriodo(calcularSerie(registro, 'previsto', 'ticketMedio', 5));
-  assert.match(ticketPrevisto, /^(?:<span[^>]*>1\.885,65<\/span>)+$/);
+  // Previsto usa a premissa fixa da planilha (PROD./TICKET), repetida nos 12 meses, não uma razão recalculada.
+  assert.deepEqual(paraArrayPlano(calcularSerieMensal(registro, 'previsto', 'produtividade')), Array(12).fill(1.5));
+  assert.deepEqual(paraArrayPlano(calcularSerieMensal(registro, 'previsto', 'ticketMedio')), Array(12).fill(1885.65));
+
+  // Total é null nesse registro -- não deve lançar, só devolver null.
+  assert.equal(calcularSerieMensal(registro, 'total', 'produtividade'), null);
 });
