@@ -24,6 +24,13 @@ function renderFiltroContrato(registros) {
     `</select>`;
 }
 
+function renderFiltroSup(registros) {
+  const sups = linhasDistintas(registros, 'sup');
+  return `<select id="filtro-sup"><option value="">Todos os SUP</option>` +
+    sups.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('') +
+    `</select>`;
+}
+
 function renderCabecalhoMeses(periodos) {
   return periodos.map(data => `<th>${formatarMesAno(data)}</th>`).join('');
 }
@@ -69,12 +76,8 @@ function tipologiaColor(tipologia) {
   return '#898781';
 }
 
-// Previsto/Realizado/Total viram 3 linhas separadas (SUP/Grupo/Tomador/
-// Tipologia com rowspan) em vez de uma única linha combinada -- cada série
-// colorida (azul/verde/amarelo) via a classe .linha-<serie>, ver CSS. Um
-// <td> por mês (12 ao todo), não mais janelas agregadas -- o cliente
-// preenche cada .celula-mes com o valor daquele mês quando a dimensão ou
-// os filtros mudarem (ver SCRIPT_CLIENTE).
+const SERIE_LABELS = { previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência' };
+
 // SUP/Grupo/Tomador aparecem em TODA linha (nunca com rowspan de verdade --
 // rowspan quebra visualmente quando um filtro esconde uma linha no meio do
 // grupo mesclado). O efeito de "mesclado" vem do cliente: ele compara o
@@ -83,66 +86,176 @@ function tipologiaColor(tipologia) {
 // o filtro muda (ver mesclarConsecutivos/mesclarColunasRepetidas). Tipologia
 // continua com rowspan="3" de verdade porque é seguro: as 3 linhas P/R/T de
 // um mesmo registro nunca são filtradas de forma independente uma da outra.
-function renderLinhaTabela(registro) {
+//
+// "Total" (T, a série de tendência real da planilha -- Realizado até hoje +
+// Previsto pro resto do ano) chama-se "Tendência" na tela, pra não confundir
+// com a nova coluna/linha de Total (soma), que são somas de verdade.
+function renderLinhaTabela(registro, indice) {
   const chipColor = tipologiaColor(registro.tipologia);
-  const dataAttrs = `data-tipologia="${escapeHtml(registro.tipologia)}" data-grupo="${escapeHtml(registro.grupo)}"`;
+  const dataAttrs = `data-tipologia="${escapeHtml(registro.tipologia)}" data-grupo="${escapeHtml(registro.grupo)}" data-sup="${escapeHtml(registro.sup)}" data-registro-indices="${indice}"`;
   const celulasMes = Array.from({ length: 12 }, () => `<td class="celula-mes num"></td>`).join('');
+  const celulaTotalLinha = `<td class="celula-total-linha num"></td>`;
   const celulaSup = `<td class="col-mesclavel col-sup" data-valor="${escapeHtml(registro.sup)}">${escapeHtml(registro.sup)}</td>`;
   const celulaGrupo = `<td class="col-mesclavel col-grupo" data-valor="${escapeHtml(registro.grupo)}">${escapeHtml(registro.grupo)}</td>`;
   const celulaTomador = `<td class="col-mesclavel col-tomador" data-valor="${escapeHtml(registro.tomador)}">${escapeHtml(registro.tomador)}</td>`;
   return `<tr class="linha-serie linha-previsto" data-serie="previsto" ${dataAttrs}>` +
       celulaSup + celulaGrupo + celulaTomador +
       `<td rowspan="3"><span class="tipologia-chip" style="--chip-color:${chipColor}">${escapeHtml(registro.tipologia)}</span></td>` +
-      `<td class="serie-label">Previsto</td>` +
-      celulasMes +
+      `<td class="serie-label">${SERIE_LABELS.previsto}</td>` +
+      celulasMes + celulaTotalLinha +
     `</tr>` +
     `<tr class="linha-serie linha-realizado" data-serie="realizado" ${dataAttrs}>` +
       celulaSup + celulaGrupo + celulaTomador +
-      `<td class="serie-label">Realizado</td>` +
-      celulasMes +
+      `<td class="serie-label">${SERIE_LABELS.realizado}</td>` +
+      celulasMes + celulaTotalLinha +
     `</tr>` +
     `<tr class="linha-serie linha-total" data-serie="total" ${dataAttrs}>` +
       celulaSup + celulaGrupo + celulaTomador +
-      `<td class="serie-label">Total</td>` +
-      celulasMes +
+      `<td class="serie-label">${SERIE_LABELS.total}</td>` +
+      celulasMes + celulaTotalLinha +
     `</tr>`;
+}
+
+// Linha de total por SUP: soma as 3 séries de TODAS as tipologias daquele
+// contrato. Sem data-tipologia (nenhum valor real de tipologia bate com
+// ela), então some sozinha quando qualquer tipologia específica estiver
+// selecionada no filtro -- só faz sentido mostrar "total de todas as
+// tipologias" na visão sem esse filtro. data-registro-indices carrega os
+// índices de TODOS os registros do SUP, pro cliente agregar.
+function renderLinhaTotalSup(sup, grupo, tomador, indices) {
+  const dataAttrs = `data-grupo="${escapeHtml(grupo)}" data-sup="${escapeHtml(sup)}" data-registro-indices="${indices.join(',')}" data-total-sup="1"`;
+  const celulasMes = Array.from({ length: 12 }, () => `<td class="celula-mes num"></td>`).join('');
+  const celulaTotalLinha = `<td class="celula-total-linha num"></td>`;
+  const celulaSup = `<td class="col-mesclavel col-sup" data-valor="${escapeHtml(sup)}">${escapeHtml(sup)}</td>`;
+  const celulaGrupo = `<td class="col-mesclavel col-grupo" data-valor="${escapeHtml(grupo)}">${escapeHtml(grupo)}</td>`;
+  const celulaTomador = `<td class="col-mesclavel col-tomador" data-valor="${escapeHtml(tomador)}">${escapeHtml(tomador)}</td>`;
+  return `<tr class="linha-serie linha-previsto linha-total-sup" data-serie="previsto" ${dataAttrs}>` +
+      celulaSup + celulaGrupo + celulaTomador +
+      `<td rowspan="3"><span class="tipologia-chip tipologia-chip-total">TOTAL</span></td>` +
+      `<td class="serie-label">${SERIE_LABELS.previsto}</td>` +
+      celulasMes + celulaTotalLinha +
+    `</tr>` +
+    `<tr class="linha-serie linha-realizado linha-total-sup" data-serie="realizado" ${dataAttrs}>` +
+      celulaSup + celulaGrupo + celulaTomador +
+      `<td class="serie-label">${SERIE_LABELS.realizado}</td>` +
+      celulasMes + celulaTotalLinha +
+    `</tr>` +
+    `<tr class="linha-serie linha-total linha-total-sup" data-serie="total" ${dataAttrs}>` +
+      celulaSup + celulaGrupo + celulaTomador +
+      `<td class="serie-label">${SERIE_LABELS.total}</td>` +
+      celulasMes + celulaTotalLinha +
+    `</tr>`;
+}
+
+// Monta o corpo da tabela: cada registro na ordem em que já vem (a MATRIZ já
+// traz as tipologias de um mesmo contrato/SUP contíguas, ver parse-matriz.js
+// -- essa contiguidade é o que permite fechar o grupo de total assim que o
+// SUP muda), seguido de uma linha de total assim que o SUP muda ou a lista
+// acaba.
+function renderCorpoTabela(registros) {
+  let html = '';
+  let supAtual = null;
+  let grupoAtual = null;
+  let tomadorAtual = null;
+  let indicesGrupoAtual = [];
+
+  function fecharGrupo() {
+    if (indicesGrupoAtual.length) {
+      html += renderLinhaTotalSup(supAtual, grupoAtual, tomadorAtual, indicesGrupoAtual);
+    }
+  }
+
+  registros.forEach((registro, indice) => {
+    if (supAtual !== null && registro.sup !== supAtual) {
+      fecharGrupo();
+      indicesGrupoAtual = [];
+    }
+    supAtual = registro.sup;
+    grupoAtual = registro.grupo;
+    tomadorAtual = registro.tomador;
+    indicesGrupoAtual.push(indice);
+    html += renderLinhaTabela(registro, indice);
+  });
+  fecharGrupo();
+  return html;
 }
 
 // A tabela é renderizada no servidor com os registros crus (previsto/
 // realizado/total mês a mês); o script embutido abaixo recalcula os 12
-// valores mensais de cada linha sempre que a dimensão ou os filtros
-// mudarem, sem recarregar a página (HTML estático, sem bundler -- não dá
-// pra importar tools/orcamento/compute-orcamento.js aqui).
+// valores mensais + a coluna Total de cada linha sempre que a dimensão ou
+// os filtros mudarem, sem recarregar a página (HTML estático, sem bundler
+// -- não dá pra importar tools/orcamento/compute-orcamento.js aqui).
 const SCRIPT_CLIENTE = `
 function formatarNumero(v) { return v === null || v === undefined ? '—' : (Math.round(v * 100) / 100).toLocaleString('pt-BR'); }
-
-// Calcula os 12 valores mensais pra UMA série (previsto/realizado/total) de
-// UMA linha, na dimensão escolhida. Previsto de produtividade/ticketMedio é
-// a premissa fixa da planilha (mesmo valor repetido nos 12 meses, nunca
-// recalculado); Realizado/Total recalculam a razão mês a mês (produtividade
-// = volume ÷ equipes, ticketMedio = financeiro ÷ volume -- fórmulas
-// confirmadas com o usuário).
-function calcularSerieMensal(registro, serie, dimensao) {
-  var valores = registro[serie];
-  if (!valores) return null;
-  if (dimensao === 'produtividade' || dimensao === 'ticketMedio') {
-    if (serie === 'previsto') {
-      var premissa = dimensao === 'produtividade' ? valores.equipesResumo.prod : valores.volumeResumo.ticket;
-      var valorPremissa = (premissa === null || premissa === undefined) ? null : premissa;
-      return new Array(12).fill(valorPremissa);
-    }
-    var numerador = valores[dimensao === 'produtividade' ? 'volume' : 'financeiro'];
-    var denominador = valores[dimensao === 'produtividade' ? 'equipes' : 'volume'];
-    return numerador.map(function (v, i) { return denominador[i] ? v / denominador[i] : null; });
-  }
-  return valores[dimensao];
+function somar(array) { return (array || []).reduce(function (a, b) { return a + (b || 0); }, 0); }
+function somarArraysMensais(arrays) {
+  var soma = new Array(12).fill(0);
+  arrays.forEach(function (arr) {
+    if (!arr) return;
+    for (var i = 0; i < 12; i++) soma[i] += arr[i] || 0;
+  });
+  return soma;
 }
 
-function preencherCelulasMes(linha, valoresMensais) {
-  var celulas = linha.querySelectorAll('.celula-mes');
-  celulas.forEach(function (celula, idx) {
-    celula.textContent = formatarNumero(valoresMensais ? valoresMensais[idx] : null);
+var CAMPOS_RATIO = {
+  produtividade: { numerador: 'volume', denominador: 'equipes' },
+  ticketMedio: { numerador: 'financeiro', denominador: 'volume' },
+};
+
+// valoresLista: array de "valores" de UMA série (previsto/realizado/total),
+// um item por registro agregado (lista de 1 item no caso normal de uma
+// única tipologia; vários itens na linha de total por SUP). Devolve os 12
+// valores mensais na dimensão escolhida. Previsto de produtividade/
+// ticketMedio, quando é UMA ÚNICA tipologia, usa a premissa fixa da
+// planilha (PROD./TICKET, nunca recalculada); quando agrega várias
+// tipologias (linha de total por SUP), não existe premissa própria do
+// agregado, então usa a mesma razão-a-partir-da-soma que Realizado/
+// Tendência (produtividade = Σvolume ÷ Σequipes, ticketMedio = Σfinanceiro
+// ÷ Σvolume -- fórmulas confirmadas com o usuário, estendidas aqui pra
+// somar através das tipologias, não só dos meses).
+function calcularMensal(valoresLista, serie, dimensao) {
+  var lista = valoresLista.filter(Boolean);
+  if (!lista.length) return null;
+  var ratio = CAMPOS_RATIO[dimensao];
+  if (ratio) {
+    if (serie === 'previsto' && lista.length === 1) {
+      var premissa = dimensao === 'produtividade' ? lista[0].equipesResumo.prod : lista[0].volumeResumo.ticket;
+      return new Array(12).fill((premissa === null || premissa === undefined) ? null : premissa);
+    }
+    var numeradorMensal = somarArraysMensais(lista.map(function (v) { return v[ratio.numerador]; }));
+    var denominadorMensal = somarArraysMensais(lista.map(function (v) { return v[ratio.denominador]; }));
+    return numeradorMensal.map(function (v, i) { return denominadorMensal[i] ? v / denominadorMensal[i] : null; });
+  }
+  return somarArraysMensais(lista.map(function (v) { return v[dimensao]; }));
+}
+
+// Coluna "Total" (soma do ano inteiro) da mesma linha -- soma os 12 meses
+// pras 3 dimensões brutas; produtividade/ticketMedio recalculam a razão a
+// partir da soma do numerador/denominador do ANO INTEIRO, nunca a soma das
+// razões mensais (somar "R$/m³" de 12 meses não seria um número válido).
+function calcularTotalAno(valoresLista, serie, dimensao) {
+  var lista = valoresLista.filter(Boolean);
+  if (!lista.length) return null;
+  var ratio = CAMPOS_RATIO[dimensao];
+  if (ratio) {
+    if (serie === 'previsto' && lista.length === 1) {
+      return dimensao === 'produtividade' ? lista[0].equipesResumo.prod : lista[0].volumeResumo.ticket;
+    }
+    var numeradorTotal = somar(lista.map(function (v) { return somar(v[ratio.numerador]); }));
+    var denominadorTotal = somar(lista.map(function (v) { return somar(v[ratio.denominador]); }));
+    return denominadorTotal ? numeradorTotal / denominadorTotal : null;
+  }
+  return somar(lista.map(function (v) { return somar(v[dimensao]); }));
+}
+
+function preencherLinha(linha, valoresLista, serie, dimensao) {
+  var mensal = calcularMensal(valoresLista, serie, dimensao);
+  var celulasMes = linha.querySelectorAll('.celula-mes');
+  celulasMes.forEach(function (celula, idx) {
+    celula.textContent = formatarNumero(mensal ? mensal[idx] : null);
   });
+  var celulaTotal = linha.querySelector('.celula-total-linha');
+  if (celulaTotal) celulaTotal.textContent = formatarNumero(calcularTotalAno(valoresLista, serie, dimensao));
 }
 
 // Dado um array de valores (na ordem das linhas visíveis de UMA coluna),
@@ -183,25 +296,33 @@ function recalcularTabela() {
   var dimensao = document.getElementById('seletor-dimensao').value;
   var filtroTipologia = document.getElementById('filtro-tipologia').value;
   var filtroContrato = document.getElementById('filtro-contrato').value;
+  var filtroSup = document.getElementById('filtro-sup').value;
   var linhas = document.querySelectorAll('#tabela-orcamento tbody tr');
-  linhas.forEach(function (linha, i) {
-    var registro = window.__REGISTROS__[Math.floor(i / 3)];
-    var mostra = (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) &&
-      (!filtroContrato || linha.dataset.grupo === filtroContrato);
+  linhas.forEach(function (linha) {
+    var combinaGrupoSup = (!filtroContrato || linha.dataset.grupo === filtroContrato) &&
+      (!filtroSup || linha.dataset.sup === filtroSup);
+    var ehTotalSup = linha.dataset.totalSup === '1';
+    var mostra = ehTotalSup
+      ? (combinaGrupoSup && !filtroTipologia)
+      : (combinaGrupoSup && (!filtroTipologia || linha.dataset.tipologia === filtroTipologia));
     linha.style.display = mostra ? '' : 'none';
-    preencherCelulasMes(linha, calcularSerieMensal(registro, linha.dataset.serie, dimensao));
+    if (mostra) {
+      var indices = linha.dataset.registroIndices.split(',').map(Number);
+      var valoresLista = indices.map(function (idx) { return window.__REGISTROS__[idx][linha.dataset.serie]; });
+      preencherLinha(linha, valoresLista, linha.dataset.serie, dimensao);
+    }
   });
   mesclarColunasRepetidas();
 }
 
-['seletor-dimensao', 'filtro-tipologia', 'filtro-contrato'].forEach(function (id) {
+['seletor-dimensao', 'filtro-tipologia', 'filtro-contrato', 'filtro-sup'].forEach(function (id) {
   document.getElementById(id).addEventListener('change', recalcularTabela);
 });
 recalcularTabela();
 `;
 
 function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri }) {
-  const linhasTabela = registros.map(renderLinhaTabela).join('');
+  const linhasTabela = renderCorpoTabela(registros);
   const registrosJson = JSON.stringify(registros.map(r => ({
     grupo: r.grupo, tomador: r.tomador, tipologia: r.tipologia,
     previsto: r.previsto, realizado: r.realizado, total: r.total,
@@ -270,15 +391,18 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     border-radius: 4px; padding: 2px 8px;
     font-size: 12px; font-weight: 600;
   }
+  .tipologia-chip-total { background: var(--surface-1); color: var(--text-primary); border: 2px solid var(--text-secondary); }
   .celula-mes { white-space: nowrap; }
+  .celula-total-linha { white-space: nowrap; font-weight: 700; border-left: 2px solid var(--border); }
   .serie-label { font-weight: 700; border-left: 4px solid transparent; padding-left: 10px; white-space: nowrap; }
-  .linha-previsto .serie-label, .linha-previsto .celula-mes { color: #2f6ad0; }
+  .linha-previsto .serie-label, .linha-previsto .celula-mes, .linha-previsto .celula-total-linha { color: #2f6ad0; }
   .linha-previsto .serie-label { border-left-color: #2f6ad0; }
-  .linha-realizado .serie-label, .linha-realizado .celula-mes { color: #7fd858; }
+  .linha-realizado .serie-label, .linha-realizado .celula-mes, .linha-realizado .celula-total-linha { color: #7fd858; }
   .linha-realizado .serie-label { border-left-color: #7fd858; }
-  .linha-total .serie-label, .linha-total .celula-mes { color: #f6b53f; }
+  .linha-total .serie-label, .linha-total .celula-mes, .linha-total .celula-total-linha { color: #f6b53f; }
   .linha-total .serie-label { border-left-color: #f6b53f; }
   tr.linha-total td { border-bottom: 2px solid var(--gridline); }
+  .linha-total-sup td { background: color-mix(in srgb, var(--surface-1) 60%, #000); }
 </style>
 </head>
 <body>
@@ -287,18 +411,19 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   <div class="header-bar">
     ${logoImg}
     <div class="header-bar-title">
-      <h1>ORÇAMENTO — Previsto x Realizado x Total</h1>
+      <h1>ORÇAMENTO — Previsto x Realizado x Tendência</h1>
       <div class="generated">Gerado em ${escapeHtml(generatedAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}</div>
     </div>
   </div>
   <div class="filtros">
     ${renderFiltroTipologia(registros)}
     ${renderFiltroContrato(registros)}
+    ${renderFiltroSup(registros)}
     ${renderSeletorDimensao()}
   </div>
   <div class="table-scroll">
   <table id="tabela-orcamento">
-    <thead><tr><th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th>${renderCabecalhoMeses(periodos)}</tr></thead>
+    <thead><tr><th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th>${renderCabecalhoMeses(periodos)}<th>Total</th></tr></thead>
     <tbody>${linhasTabela}</tbody>
   </table>
   </div>
