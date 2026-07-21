@@ -44,8 +44,8 @@ function renderLinhaTabela(registro) {
   return `<tr data-tipologia="${escapeHtml(registro.tipologia)}" data-grupo="${escapeHtml(registro.grupo)}">` +
     `<td>${escapeHtml(registro.grupo)}</td>` +
     `<td>${escapeHtml(registro.tomador)}</td>` +
-    `<td>${escapeHtml(registro.tipologia)}</td>` +
-    `<td colspan="6" class="celula-periodos" data-linha-periodos></td>` +
+    `<td><span class="tipologia-chip">${escapeHtml(registro.tipologia)}</span></td>` +
+    `<td colspan="6" class="celula-periodos num" data-linha-periodos></td>` +
     `</tr>`;
 }
 
@@ -137,39 +137,106 @@ function recalcularTabela() {
 recalcularTabela();
 `;
 
-function renderDashboard({ registros, periodos, generatedAt }) {
+function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri }) {
   const linhasTabela = registros.map(renderLinhaTabela).join('');
   const registrosJson = JSON.stringify(registros.map(r => ({
     grupo: r.grupo, tomador: r.tomador, tipologia: r.tipologia,
     previsto: r.previsto, realizado: r.realizado, total: r.total,
   }))).replace(/<\/script/gi, '<\\/script');
 
+  const logoImg = logoDataUri ? `<img src="${logoDataUri}" alt="Suporte Infra">` : '';
+  const watermarkImg = iconDataUri ? `<img class="watermark" src="${iconDataUri}" alt="">` : '';
+
+  // Mesmo sistema visual (tema escuro, header com logo, chips, tabela) da
+  // matriz de equipes (tools/matriz/render-dashboard.js) -- cores, fonte e
+  // classes principais copiadas de lá pra manter os dois dashboards
+  // consistentes entre si.
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <title>ORÇAMENTO — MATRIZ</title>
 <style>
-  body { font-family: Arial, sans-serif; padding: 16px; }
-  .filtros { display: flex; gap: 12px; margin-bottom: 16px; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #ccc; padding: 6px 8px; font-size: 13px; text-align: left; }
-  .periodo-cell { display: inline-block; margin-right: 10px; white-space: nowrap; }
+  :root {
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --muted: #898781;
+    --gridline: #2c2c2a;
+    --border: rgba(255,255,255,0.10);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--text-primary);
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .generated { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
+  .watermark {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(70vw, 900px);
+    height: auto;
+    opacity: 0.05;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .header-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .header-bar img { height: 36px; width: auto; }
+  .header-bar-title { flex: 1 1 200px; min-width: 0; }
+  .filtros { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filtros select {
+    padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-size: 13px;
+  }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; background: var(--surface-1); position: relative; z-index: 1; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--gridline); font-size: 13px; }
+  td.num { font-variant-numeric: tabular-nums; }
+  th { color: var(--text-secondary); font-weight: 600; }
+  .tipologia-chip {
+    display: inline-block;
+    background: #f6b53f; color: #1a1a19;
+    border-radius: 4px; padding: 2px 8px;
+    font-size: 12px; font-weight: 600;
+  }
+  .periodo-cell {
+    display: inline-block; margin-right: 10px; white-space: nowrap;
+    padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px;
+    color: var(--text-secondary);
+  }
 </style>
 </head>
 <body>
-  <h1>ORÇAMENTO — MATRIZ</h1>
-  <div class="generated">Gerado em ${escapeHtml(generatedAt.toLocaleString('pt-BR'))}</div>
+  ${watermarkImg}
+  <main>
+  <div class="header-bar">
+    ${logoImg}
+    <div class="header-bar-title">
+      <h1>ORÇAMENTO — Previsto x Realizado x Total</h1>
+      <div class="generated">Gerado em ${escapeHtml(generatedAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}</div>
+    </div>
+  </div>
   <div class="filtros">
     ${renderFiltroTipologia(registros)}
     ${renderFiltroContrato(registros)}
     ${renderSeletorMesVigente(periodos)}
     ${renderSeletorDimensao()}
   </div>
+  <div class="table-scroll">
   <table id="tabela-orcamento">
     <thead><tr><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Previsto x Realizado x Total por período</th></tr></thead>
     <tbody>${linhasTabela}</tbody>
   </table>
+  </div>
+  </main>
   <script>window.__REGISTROS__ = ${registrosJson};</script>
   <script>${SCRIPT_CLIENTE}</script>
 </body>
