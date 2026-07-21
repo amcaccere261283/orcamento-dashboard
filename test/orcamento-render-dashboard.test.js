@@ -109,13 +109,30 @@ test('renderDashboard appends one SUP-total row-group (Previsto/Realizado/Tendê
   assert.match(html, /<span class="tipologia-chip tipologia-chip-total">TOTAL<\/span>/);
 });
 
-test('renderDashboard renders exactly 12 empty month cells plus 1 empty Total cell per série row (2 registros x 3 séries + 2 SUP-totals x 3 séries)', () => {
+test('renderDashboard renders exactly 12 empty month cells plus 1 empty Total cell per série row (1 total geral + 2 registros + 2 SUP-totals, 3 séries cada)', () => {
   const registros = [registroExemplo(), registroExemplo({ sup: 'SUP-9999-24', grupo: 'SYSTRA', tomador: 'Ecopistas', tipologia: 'ST' })];
   const html = renderDashboard({ registros, periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
   const celulasMes = html.match(/<td class="celula-mes num"><\/td>/g) || [];
   const celulasTotal = html.match(/<td class="celula-total-linha num"><\/td>/g) || [];
-  assert.equal(celulasMes.length, 12 * 3 * 4); // 2 registros + 2 totais-por-sup, 3 séries cada
-  assert.equal(celulasTotal.length, 3 * 4);
+  assert.equal(celulasMes.length, 12 * 3 * 5); // 1 total geral + 2 registros + 2 totais-por-sup, 3 séries cada
+  assert.equal(celulasTotal.length, 3 * 5);
+});
+
+test('renderDashboard places one "TOTAL GERAL" row-group first in the table body, aggregating every registro (indices 0..N-1)', () => {
+  const registros = [registroExemplo(), registroExemplo({ sup: 'SUP-9999-24', grupo: 'SYSTRA', tomador: 'Ecopistas', tipologia: 'ST' })];
+  const html = renderDashboard({ registros, periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  assert.match(html, /<tbody><tr class="linha-serie linha-previsto linha-total-geral" data-serie="previsto" data-registro-indices="0,1" data-total-geral="1">/);
+  assert.match(html, /<span class="tipologia-chip tipologia-chip-total">TOTAL GERAL<\/span>/);
+});
+
+test('renderDashboard includes a série filter (Previsto/Realizado/Tendência) and Limpar filtros / Atualizar dados buttons', () => {
+  const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  assert.match(html, /<select id="filtro-serie">/);
+  assert.match(html, /<option value="previsto">Previsto<\/option>/);
+  assert.match(html, /<option value="realizado">Realizado<\/option>/);
+  assert.match(html, /<option value="total">Tendência<\/option>/);
+  assert.match(html, /<button id="limpar-filtros" type="button">Limpar filtros<\/button>/);
+  assert.match(html, /<button id="atualizar-dashboard" type="button">Atualizar dados<\/button>/);
 });
 
 test('renderDashboard gives each série row a distinct color (P azul, R verde, Tendência amarelo) via CSS classes, applied to both month cells and the Total column', () => {
@@ -230,35 +247,53 @@ test('calcularTotalAno soma os 12 meses de uma lista de 1 item, e recalcula a ra
   assert.equal(calcularTotalAno([registro.realizado], 'realizado', 'ticketMedio'), 10);
 });
 
-test('mesclarConsecutivos (extraído do HTML real gerado) blanks a value only when it repeats the immediately previous entry, keeping the first occurrence and any later re-appearance after a change', () => {
+test('mesclarConsecutivos marks repetido=true only when a value repeats the immediately previous entry, keeping the value itself always present (never blanked) -- the caller decides how to render "repetido"', () => {
   const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
   const { mesclarConsecutivos } = extrairFuncoesPuras(html);
 
   assert.deepEqual(
     paraPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-A', 'SUP-A', 'SUP-A', 'SUP-A'])),
-    ['SUP-A', '', '', '', '', '']
+    [
+      { valor: 'SUP-A', repetido: false },
+      { valor: 'SUP-A', repetido: true },
+      { valor: 'SUP-A', repetido: true },
+      { valor: 'SUP-A', repetido: true },
+      { valor: 'SUP-A', repetido: true },
+      { valor: 'SUP-A', repetido: true },
+    ]
   );
 });
 
-test('mesclarConsecutivos starts a new visible block when the value actually changes (a different contract\'s SUP)', () => {
+test('mesclarConsecutivos starts a new (non-repetido) visible block when the value actually changes (a different contract\'s SUP)', () => {
   const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
   const { mesclarConsecutivos } = extrairFuncoesPuras(html);
 
   assert.deepEqual(
     paraPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-A', 'SUP-B', 'SUP-B', 'SUP-B'])),
-    ['SUP-A', '', '', 'SUP-B', '', '']
+    [
+      { valor: 'SUP-A', repetido: false },
+      { valor: 'SUP-A', repetido: true },
+      { valor: 'SUP-A', repetido: true },
+      { valor: 'SUP-B', repetido: false },
+      { valor: 'SUP-B', repetido: true },
+      { valor: 'SUP-B', repetido: true },
+    ]
   );
 });
 
-test('mesclarConsecutivos re-shows the value right after a hidden/filtered row removes it from the visible sequence (guards the exact bug rowspan would have)', () => {
+test('mesclarConsecutivos re-marks a value as NOT repetido right after a hidden/filtered row removes it from the visible sequence (guards the exact bug rowspan would have)', () => {
   const html = renderDashboard({ registros: [registroExemplo()], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
   const { mesclarConsecutivos } = extrairFuncoesPuras(html);
 
   // Simula o filtro tendo escondido a 2ª linha do grupo "SUP-A" -- a
   // sequência VISÍVEL passada pra função já vem sem ela. A 1ª linha
-  // remanescente do grupo continua precisando mostrar o valor.
+  // remanescente do grupo continua precisando mostrar o valor (repetido=false).
   assert.deepEqual(
     paraPlano(mesclarConsecutivos(['SUP-A', 'SUP-A', 'SUP-B'])),
-    ['SUP-A', '', 'SUP-B']
+    [
+      { valor: 'SUP-A', repetido: false },
+      { valor: 'SUP-A', repetido: true },
+      { valor: 'SUP-B', repetido: false },
+    ]
   );
 });

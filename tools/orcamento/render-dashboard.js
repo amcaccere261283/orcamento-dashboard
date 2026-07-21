@@ -31,6 +31,14 @@ function renderFiltroSup(registros) {
     `</select>`;
 }
 
+function renderFiltroSerie() {
+  return `<select id="filtro-serie"><option value="">Todas as séries</option>` +
+    `<option value="previsto">Previsto</option>` +
+    `<option value="realizado">Realizado</option>` +
+    `<option value="total">Tendência</option>` +
+    `</select>`;
+}
+
 function renderCabecalhoMeses(periodos) {
   return periodos.map(data => `<th>${formatarMesAno(data)}</th>`).join('');
 }
@@ -81,15 +89,16 @@ const SERIE_LABELS = { previsto: 'Previsto', realizado: 'Realizado', total: 'Ten
 // SUP/Grupo/Tomador aparecem em TODA linha (nunca com rowspan de verdade --
 // rowspan quebra visualmente quando um filtro esconde uma linha no meio do
 // grupo mesclado). O efeito de "mesclado" vem do cliente: ele compara o
-// valor de cada linha com o da linha VISÍVEL anterior e apaga (mas nunca
-// remove -- fica em data-valor) quando são iguais, recalculado toda vez que
-// o filtro muda (ver mesclarConsecutivos/mesclarColunasRepetidas). Tipologia
-// continua com rowspan="3" de verdade porque é seguro: as 3 linhas P/R/T de
-// um mesmo registro nunca são filtradas de forma independente uma da outra.
+// valor de cada linha com o da linha VISÍVEL anterior; quando são iguais,
+// mantém o texto visível mas esmaecido (cor quase transparente) em vez de
+// apagar -- recalculado toda vez que o filtro muda (ver
+// mesclarConsecutivos/mesclarColunasRepetidas). Tipologia continua com
+// rowspan="3" de verdade porque é seguro: as 3 linhas P/R/T de um mesmo
+// registro nunca são filtradas de forma independente uma da outra.
 //
 // "Total" (T, a série de tendência real da planilha -- Realizado até hoje +
 // Previsto pro resto do ano) chama-se "Tendência" na tela, pra não confundir
-// com a nova coluna/linha de Total (soma), que são somas de verdade.
+// com a coluna/linha/bloco de Total (soma), que são somas de verdade.
 function renderLinhaTabela(registro, indice) {
   const chipColor = tipologiaColor(registro.tipologia);
   const dataAttrs = `data-tipologia="${escapeHtml(registro.tipologia)}" data-grupo="${escapeHtml(registro.grupo)}" data-sup="${escapeHtml(registro.sup)}" data-registro-indices="${indice}"`;
@@ -147,13 +156,44 @@ function renderLinhaTotalSup(sup, grupo, tomador, indices) {
     `</tr>`;
 }
 
-// Monta o corpo da tabela: cada registro na ordem em que já vem (a MATRIZ já
-// traz as tipologias de um mesmo contrato/SUP contíguas, ver parse-matriz.js
-// -- essa contiguidade é o que permite fechar o grupo de total assim que o
-// SUP muda), seguido de uma linha de total assim que o SUP muda ou a lista
-// acaba.
+// Bloco de total geral, sempre a primeira coisa na tabela: soma as 3 séries
+// de TODOS os registros. Ao contrário do total por SUP (cujos índices são
+// fixos, um SUP nunca muda de grupo/sup), este precisa refiltrar os índices
+// pelos filtros de contrato/SUP em vigor toda vez que recalcula (ver
+// SCRIPT_CLIENTE) -- por isso carrega TODOS os índices em
+// data-registro-indices, não só os de um grupo. Some, como o total por SUP,
+// quando qualquer tipologia específica estiver selecionada.
+function renderLinhaTotalGeral(totalRegistros) {
+  const todosIndices = Array.from({ length: totalRegistros }, (_, i) => i).join(',');
+  const dataAttrs = `data-registro-indices="${todosIndices}" data-total-geral="1"`;
+  const celulasMes = Array.from({ length: 12 }, () => `<td class="celula-mes num"></td>`).join('');
+  const celulaTotalLinha = `<td class="celula-total-linha num"></td>`;
+  const celulaVazia = (classe) => `<td class="col-mesclavel ${classe}" data-valor="">—</td>`;
+  return `<tr class="linha-serie linha-previsto linha-total-geral" data-serie="previsto" ${dataAttrs}>` +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      `<td rowspan="3"><span class="tipologia-chip tipologia-chip-total">TOTAL GERAL</span></td>` +
+      `<td class="serie-label">${SERIE_LABELS.previsto}</td>` +
+      celulasMes + celulaTotalLinha +
+    `</tr>` +
+    `<tr class="linha-serie linha-realizado linha-total-geral" data-serie="realizado" ${dataAttrs}>` +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      `<td class="serie-label">${SERIE_LABELS.realizado}</td>` +
+      celulasMes + celulaTotalLinha +
+    `</tr>` +
+    `<tr class="linha-serie linha-total linha-total-geral" data-serie="total" ${dataAttrs}>` +
+      celulaVazia('col-sup') + celulaVazia('col-grupo') + celulaVazia('col-tomador') +
+      `<td class="serie-label">${SERIE_LABELS.total}</td>` +
+      celulasMes + celulaTotalLinha +
+    `</tr>`;
+}
+
+// Monta o corpo da tabela: o bloco de total geral primeiro, depois cada
+// registro na ordem em que já vem (a MATRIZ já traz as tipologias de um
+// mesmo contrato/SUP contíguas, ver parse-matriz.js -- essa contiguidade é
+// o que permite fechar o grupo de total assim que o SUP muda), seguido de
+// uma linha de total assim que o SUP muda ou a lista acaba.
 function renderCorpoTabela(registros) {
-  let html = '';
+  let html = renderLinhaTotalGeral(registros.length);
   let supAtual = null;
   let grupoAtual = null;
   let tomadorAtual = null;
@@ -204,15 +244,15 @@ var CAMPOS_RATIO = {
 
 // valoresLista: array de "valores" de UMA série (previsto/realizado/total),
 // um item por registro agregado (lista de 1 item no caso normal de uma
-// única tipologia; vários itens na linha de total por SUP). Devolve os 12
-// valores mensais na dimensão escolhida. Previsto de produtividade/
+// única tipologia; vários itens nas linhas de total por SUP/geral). Devolve
+// os 12 valores mensais na dimensão escolhida. Previsto de produtividade/
 // ticketMedio, quando é UMA ÚNICA tipologia, usa a premissa fixa da
 // planilha (PROD./TICKET, nunca recalculada); quando agrega várias
-// tipologias (linha de total por SUP), não existe premissa própria do
-// agregado, então usa a mesma razão-a-partir-da-soma que Realizado/
-// Tendência (produtividade = Σvolume ÷ Σequipes, ticketMedio = Σfinanceiro
-// ÷ Σvolume -- fórmulas confirmadas com o usuário, estendidas aqui pra
-// somar através das tipologias, não só dos meses).
+// tipologias, não existe premissa própria do agregado, então usa a mesma
+// razão-a-partir-da-soma que Realizado/Tendência (produtividade = Σvolume ÷
+// Σequipes, ticketMedio = Σfinanceiro ÷ Σvolume -- fórmulas confirmadas com
+// o usuário, estendidas aqui pra somar através das tipologias, não só dos
+// meses).
 function calcularMensal(valoresLista, serie, dimensao) {
   var lista = valoresLista.filter(Boolean);
   if (!lista.length) return null;
@@ -259,15 +299,16 @@ function preencherLinha(linha, valoresLista, serie, dimensao) {
 }
 
 // Dado um array de valores (na ordem das linhas visíveis de UMA coluna),
-// devolve um array do mesmo tamanho onde cada valor igual ao da linha
-// visível anterior vira '' -- é o efeito visual de "mesclar" sem usar
-// rowspan de verdade, que quebra quando um filtro esconde uma linha no meio
-// do grupo. Função pura (sem DOM) pra poder testar sozinha.
+// devolve um array {valor, repetido} do mesmo tamanho -- repetido=true
+// quando o valor é igual ao da linha visível anterior. O texto continua
+// sempre visível (nunca vira '') -- quem decide como exibir isso (esmaecido
+// quando repetido) é mesclarColunasRepetidas, não esta função. Função pura
+// (sem DOM) pra poder testar sozinha.
 function mesclarConsecutivos(valores) {
   var resultado = [];
   var anterior = null;
   valores.forEach(function (valor, i) {
-    resultado.push(i > 0 && valor === anterior ? '' : valor);
+    resultado.push({ valor: valor, repetido: i > 0 && valor === anterior });
     anterior = valor;
   });
   return resultado;
@@ -276,7 +317,8 @@ function mesclarConsecutivos(valores) {
 // Aplica mesclarConsecutivos a cada coluna mesclável (SUP/Grupo/Tomador),
 // olhando só pras linhas atualmente visíveis (depois do filtro já ter
 // rodado) -- por isso precisa ser chamada de novo toda vez que o filtro
-// muda, nunca uma vez só.
+// muda, nunca uma vez só. O valor repetido continua escrito na tela, só
+// fica com a cor quase transparente (classe .valor-repetido).
 function mesclarColunasRepetidas() {
   ['col-sup', 'col-grupo', 'col-tomador'].forEach(function (classe) {
     var linhasVisiveis = Array.prototype.filter.call(
@@ -288,7 +330,10 @@ function mesclarColunasRepetidas() {
       .filter(Boolean);
     var valores = celulas.map(function (c) { return c.getAttribute('data-valor'); });
     var mesclados = mesclarConsecutivos(valores);
-    celulas.forEach(function (c, i) { c.textContent = mesclados[i]; });
+    celulas.forEach(function (c, i) {
+      c.textContent = mesclados[i].valor;
+      c.classList.toggle('valor-repetido', mesclados[i].repetido);
+    });
   });
 }
 
@@ -297,17 +342,31 @@ function recalcularTabela() {
   var filtroTipologia = document.getElementById('filtro-tipologia').value;
   var filtroContrato = document.getElementById('filtro-contrato').value;
   var filtroSup = document.getElementById('filtro-sup').value;
+  var filtroSerie = document.getElementById('filtro-serie').value;
   var linhas = document.querySelectorAll('#tabela-orcamento tbody tr');
   linhas.forEach(function (linha) {
+    var combinaSerie = !filtroSerie || linha.dataset.serie === filtroSerie;
     var combinaGrupoSup = (!filtroContrato || linha.dataset.grupo === filtroContrato) &&
       (!filtroSup || linha.dataset.sup === filtroSup);
+    var ehTotalGeral = linha.dataset.totalGeral === '1';
     var ehTotalSup = linha.dataset.totalSup === '1';
-    var mostra = ehTotalSup
-      ? (combinaGrupoSup && !filtroTipologia)
-      : (combinaGrupoSup && (!filtroTipologia || linha.dataset.tipologia === filtroTipologia));
+    var indices = linha.dataset.registroIndices.split(',').map(Number);
+    var mostra;
+    if (ehTotalGeral) {
+      // Refiltra os índices pelos filtros de contrato/SUP em vigor -- o
+      // total geral vira "total do que está filtrado", não um número fixo.
+      indices = indices.filter(function (idx) {
+        var r = window.__REGISTROS__[idx];
+        return (!filtroContrato || r.grupo === filtroContrato) && (!filtroSup || r.sup === filtroSup);
+      });
+      mostra = indices.length > 0 && !filtroTipologia && combinaSerie;
+    } else if (ehTotalSup) {
+      mostra = combinaGrupoSup && !filtroTipologia && combinaSerie;
+    } else {
+      mostra = combinaGrupoSup && (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) && combinaSerie;
+    }
     linha.style.display = mostra ? '' : 'none';
     if (mostra) {
-      var indices = linha.dataset.registroIndices.split(',').map(Number);
       var valoresLista = indices.map(function (idx) { return window.__REGISTROS__[idx][linha.dataset.serie]; });
       preencherLinha(linha, valoresLista, linha.dataset.serie, dimensao);
     }
@@ -315,9 +374,19 @@ function recalcularTabela() {
   mesclarColunasRepetidas();
 }
 
-['seletor-dimensao', 'filtro-tipologia', 'filtro-contrato', 'filtro-sup'].forEach(function (id) {
+function limparFiltros() {
+  document.getElementById('filtro-tipologia').value = '';
+  document.getElementById('filtro-contrato').value = '';
+  document.getElementById('filtro-sup').value = '';
+  document.getElementById('filtro-serie').value = '';
+  recalcularTabela();
+}
+
+['seletor-dimensao', 'filtro-tipologia', 'filtro-contrato', 'filtro-sup', 'filtro-serie'].forEach(function (id) {
   document.getElementById(id).addEventListener('change', recalcularTabela);
 });
+document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
+document.getElementById('atualizar-dashboard').addEventListener('click', function () { location.reload(); });
 recalcularTabela();
 `;
 
@@ -334,7 +403,10 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   // Mesmo sistema visual (tema escuro, header com logo, chips, tabela) da
   // matriz de equipes (tools/matriz/render-dashboard.js) -- cores, fonte e
   // classes principais copiadas de lá pra manter os dois dashboards
-  // consistentes entre si.
+  // consistentes entre si. Diferença deliberada: o fundo da tabela aqui é
+  // translúcido (não var(--surface-1) sólido), pra a marca d'água central
+  // aparecer por trás -- pedido explícito do usuário, a matriz de equipes
+  // não faz isso.
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -366,32 +438,46 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     transform: translate(-50%, -50%);
     width: min(70vw, 900px);
     height: auto;
-    opacity: 0.05;
+    opacity: 0.16;
     pointer-events: none;
     z-index: 0;
   }
   .header-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
   .header-bar img { height: 36px; width: auto; }
   .header-bar-title { flex: 1 1 200px; min-width: 0; }
-  .filtros { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filtros { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
   .filtros select {
     padding: 8px 10px;
     border: 1px solid var(--border); border-radius: 6px;
     background: var(--surface-1); color: var(--text-primary);
     font-size: 13px;
   }
-  .table-scroll { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; background: var(--surface-1); position: relative; z-index: 1; }
+  #limpar-filtros {
+    padding: 8px 14px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-size: 13px; cursor: pointer;
+  }
+  #limpar-filtros:hover { border-color: #f6b53f; }
+  #atualizar-dashboard {
+    padding: 10px 16px;
+    border: 2px solid #f6b53f; border-radius: 8px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  #atualizar-dashboard:hover { background: rgba(246,181,63,0.1); }
+  .table-scroll { overflow-x: auto; position: relative; z-index: 1; }
+  table { width: 100%; border-collapse: collapse; background: rgba(26,26,25,0.68); }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--gridline); font-size: 13px; }
   td.num { font-variant-numeric: tabular-nums; }
-  th { color: var(--text-secondary); font-weight: 600; }
+  th { color: var(--text-secondary); font-weight: 600; background: rgba(13,13,12,0.5); }
   .tipologia-chip {
     display: inline-block;
     background: var(--chip-color); color: #fff;
     border-radius: 4px; padding: 2px 8px;
     font-size: 12px; font-weight: 600;
   }
-  .tipologia-chip-total { background: var(--surface-1); color: var(--text-primary); border: 2px solid var(--text-secondary); }
+  .tipologia-chip-total { background: rgba(26,26,25,0.6); color: var(--text-primary); border: 2px solid var(--text-secondary); }
   .celula-mes { white-space: nowrap; }
   .celula-total-linha { white-space: nowrap; font-weight: 700; border-left: 2px solid var(--border); }
   .serie-label { font-weight: 700; border-left: 4px solid transparent; padding-left: 10px; white-space: nowrap; }
@@ -402,7 +488,13 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   .linha-total .serie-label, .linha-total .celula-mes, .linha-total .celula-total-linha { color: #f6b53f; }
   .linha-total .serie-label { border-left-color: #f6b53f; }
   tr.linha-total td { border-bottom: 2px solid var(--gridline); }
-  .linha-total-sup td { background: color-mix(in srgb, var(--surface-1) 60%, #000); }
+  .linha-total-sup td { background: rgba(0,0,0,0.32); }
+  .linha-total-geral td { background: rgba(246,181,63,0.10); }
+  tr.linha-total.linha-total-geral td { border-bottom: 2px solid #f6b53f; }
+  /* Texto repetido (mesmo SUP/Grupo/Tomador da linha visível anterior)
+     continua na tela -- só fica quase transparente, em vez de sumir, pra
+     não parecer célula vazia mas também não competir com o valor "novo". */
+  .valor-repetido { color: rgba(255,255,255,0.14); }
 </style>
 </head>
 <body>
@@ -419,7 +511,10 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     ${renderFiltroTipologia(registros)}
     ${renderFiltroContrato(registros)}
     ${renderFiltroSup(registros)}
+    ${renderFiltroSerie()}
     ${renderSeletorDimensao()}
+    <button id="limpar-filtros" type="button">Limpar filtros</button>
+    <button id="atualizar-dashboard" type="button">Atualizar dados</button>
   </div>
   <div class="table-scroll">
   <table id="tabela-orcamento">
