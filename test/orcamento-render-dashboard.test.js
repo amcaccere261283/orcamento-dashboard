@@ -90,8 +90,8 @@ function extrairFuncoesClientScript(html) {
     window: {},
   };
   vm.createContext(sandbox);
-  vm.runInContext(scriptCliente + '\nthis.calcularJanelas = calcularJanelas; this.dividirJanelas = dividirJanelas; this.dividir = dividir;', sandbox);
-  return { calcularJanelas: sandbox.calcularJanelas, dividirJanelas: sandbox.dividirJanelas, dividir: sandbox.dividir };
+  vm.runInContext(scriptCliente + '\nthis.calcularJanelas = calcularJanelas; this.dividirJanelas = dividirJanelas; this.dividir = dividir; this.renderizarCelulasPeriodo = renderizarCelulasPeriodo;', sandbox);
+  return { calcularJanelas: sandbox.calcularJanelas, dividirJanelas: sandbox.dividirJanelas, dividir: sandbox.dividir, renderizarCelulasPeriodo: sandbox.renderizarCelulasPeriodo };
 }
 
 // A função do cliente roda dentro de um vm.Context, ou seja, um realm
@@ -114,4 +114,40 @@ test('the client-side script embedded in the rendered HTML computes calcularJane
   const financeiro = calcularJanelasNode([100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100], 5);
   const volume = calcularJanelasNode([10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10], 5);
   assert.deepEqual(paraObjetoPlano(dividirJanelasCliente(financeiro, volume)), paraObjetoPlano(dividirJanelasNode(financeiro, volume)));
+});
+
+test('renderizarCelulasPeriodo (extracted from the real rendered HTML) computes produtividade as volume÷equipes and ticketMedio as financeiro÷volume, not the reverse (guards against a numerador/denominador swap in the dimension mapping)', () => {
+  // Números deliberadamente assimétricos (volume≠equipes≠financeiro) pra que
+  // uma troca de numerador/denominador produza um valor bem diferente e
+  // fácil de distinguir do valor correto.
+  const registro = {
+    grupo: 'X', tomador: 'Y', tipologia: 'Z', observacao: null,
+    previsto: {
+      equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 1.5, dias: 0 },
+      volume: Array(12).fill(100), volumeResumo: { total: 0, totalInicial: 0, ticket: 1885.65 },
+      financeiro: Array(12).fill(1000), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+    realizado: {
+      equipes: Array(12).fill(5), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(200), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(3000), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+    total: null,
+  };
+  const html = renderDashboard({ registros: [registro], periodos: periodosExemplo(), generatedAt: new Date(2026, 6, 21) });
+  const { renderizarCelulasPeriodo } = extrairFuncoesClientScript(html);
+
+  // Produtividade Realizado = volume ÷ equipes = 200 ÷ 5 = 40 (não 5/200=0,03).
+  const produtividadeHtml = renderizarCelulasPeriodo(registro, 'produtividade', 5);
+  assert.match(produtividadeHtml, /R: 40(?!\d)/);
+  assert.doesNotMatch(produtividadeHtml, /R: 0,03/);
+
+  // Ticket médio Realizado = financeiro ÷ volume = 3000 ÷ 200 = 15 (não 200/3000≈0,07).
+  const ticketHtml = renderizarCelulasPeriodo(registro, 'ticketMedio', 5);
+  assert.match(ticketHtml, /R: 15(?!\d)/);
+  assert.doesNotMatch(ticketHtml, /R: 0,07/);
+
+  // Previsto usa a premissa fixa da planilha (PROD./TICKET), não uma razão recalculada.
+  assert.match(produtividadeHtml, /P: 1,5/);
+  assert.match(ticketHtml, /P: 1\.885,65/);
 });
