@@ -7,22 +7,37 @@ function decodeXmlEntities(text) {
   return text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 }
 
+function extrairAtributo(tagXml, nomeAtributo) {
+  const match = new RegExp(`\\b${nomeAtributo}="([^"]*)"`).exec(tagXml);
+  return match ? match[1] : null;
+}
+
 function parseWorkbookSheets(workbookXml) {
   const sheets = [];
-  const sheetRe = /<sheet\b[^>]*\bname="([^"]*)"[^>]*\br:id="([^"]*)"[^>]*\/>/g;
-  let match;
-  while ((match = sheetRe.exec(workbookXml))) {
-    sheets.push({ name: decodeXmlEntities(match[1]), rId: match[2] });
+  const tagRe = /<sheet\b[^>]*\/>/g;
+  let tagMatch;
+  while ((tagMatch = tagRe.exec(workbookXml))) {
+    const tag = tagMatch[0];
+    const name = extrairAtributo(tag, 'name');
+    const rId = extrairAtributo(tag, 'r:id');
+    if (name !== null && rId !== null) {
+      sheets.push({ name: decodeXmlEntities(name), rId });
+    }
   }
   return sheets;
 }
 
 function parseWorkbookRels(relsXml) {
   const targets = new Map();
-  const relRe = /<Relationship\b[^>]*\bId="([^"]*)"[^>]*\bTarget="([^"]*)"[^>]*\/>/g;
-  let match;
-  while ((match = relRe.exec(relsXml))) {
-    targets.set(match[1], match[2]);
+  const tagRe = /<Relationship\b[^>]*\/>/g;
+  let tagMatch;
+  while ((tagMatch = tagRe.exec(relsXml))) {
+    const tag = tagMatch[0];
+    const id = extrairAtributo(tag, 'Id');
+    const target = extrairAtributo(tag, 'Target');
+    if (id !== null && target !== null) {
+      targets.set(id, target);
+    }
   }
   return targets;
 }
