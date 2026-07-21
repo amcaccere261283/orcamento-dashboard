@@ -187,6 +187,33 @@ function calcularTotalAno(valoresLista, serie, dimensao) {
   return somar(lista.map(function (v) { return somar(v[dimensao]); }));
 }
 
+// Soma corrida mês a mês -- acumulado[i] = mensal[0]+...+mensal[i]. Trata
+// null/undefined como 0 (não dá pra "acumular" um mês sem dado, mas
+// também não pode quebrar a soma corrida dos meses seguintes).
+function calcularAcumulado(mensal) {
+  var soma = 0;
+  return mensal.map(function (v) {
+    soma += v || 0;
+    return soma;
+  });
+}
+
+// Devolve os índices de \`registros\` que combinam com os filtros de
+// tipologia/grupo/SUP atuais (AND, não OR) -- mesma regra usada linha a
+// linha em recalcularTabela, calculada aqui direto sobre os registros
+// crus, sem depender de uma linha <tr> já renderizada, pra o gráfico
+// poder agregar o recorte atual sem precisar de uma linha "molde" no DOM.
+function indicesFiltrados(registros, filtroTipologia, filtroGrupo, filtroSup) {
+  var indices = [];
+  registros.forEach(function (registro, indice) {
+    if (filtroTipologia && registro.tipologia !== filtroTipologia) return;
+    if (filtroGrupo && registro.grupo !== filtroGrupo) return;
+    if (filtroSup && registro.sup !== filtroSup) return;
+    indices.push(indice);
+  });
+  return indices;
+}
+
 function preencherLinha(linha, valoresLista, serie, dimensao) {
   var mensal = calcularMensal(valoresLista, serie, dimensao);
   var celulasMes = linha.querySelectorAll('.celula-mes');

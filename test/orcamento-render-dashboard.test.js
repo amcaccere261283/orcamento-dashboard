@@ -138,13 +138,15 @@ function extrairFuncoesPuras(html) {
     scriptTabela +
       '\nthis.calcularMensal = calcularMensal; this.calcularTotalAno = calcularTotalAno;' +
       ' this.mesclarConsecutivos = mesclarConsecutivos; this.tipologiaColor = tipologiaColor;' +
-      ' this.renderCorpoTabela = renderCorpoTabela; this.escapeHtml = escapeHtml;',
+      ' this.renderCorpoTabela = renderCorpoTabela; this.escapeHtml = escapeHtml;' +
+      ' this.calcularAcumulado = calcularAcumulado; this.indicesFiltrados = indicesFiltrados;',
     sandbox
   );
   return {
     calcularMensal: sandbox.calcularMensal, calcularTotalAno: sandbox.calcularTotalAno,
     mesclarConsecutivos: sandbox.mesclarConsecutivos, tipologiaColor: sandbox.tipologiaColor,
     renderCorpoTabela: sandbox.renderCorpoTabela, escapeHtml: sandbox.escapeHtml,
+    calcularAcumulado: sandbox.calcularAcumulado, indicesFiltrados: sandbox.indicesFiltrados,
   };
 }
 
@@ -332,6 +334,49 @@ test('mesclarConsecutivos re-marks a value as NOT repetido right after a hidden/
       { valor: 'SUP-B', repetido: false },
     ]
   );
+});
+
+test('calcularAcumulado (extraído do HTML real gerado) returns the running sum month over month', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { calcularAcumulado } = extrairFuncoesPuras(html);
+  assert.deepEqual(paraPlano(calcularAcumulado([10, 20, 30])), [10, 30, 60]);
+});
+
+test('calcularAcumulado treats null/undefined months as 0 without breaking the running sum of the months after them', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { calcularAcumulado } = extrairFuncoesPuras(html);
+  assert.deepEqual(paraPlano(calcularAcumulado([10, null, 30])), [10, 10, 40]);
+});
+
+test('calcularAcumulado returns an empty array for an empty input', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { calcularAcumulado } = extrairFuncoesPuras(html);
+  assert.deepEqual(paraPlano(calcularAcumulado([])), []);
+});
+
+test('indicesFiltrados (extraído do HTML real gerado) returns every index when no filter is active', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { indicesFiltrados } = extrairFuncoesPuras(html);
+  const registros = [
+    { tipologia: 'SM', grupo: 'PÁTRIA', sup: 'SUP-A' },
+    { tipologia: 'ST', grupo: 'PÁTRIA', sup: 'SUP-B' },
+    { tipologia: 'SM', grupo: 'SYSTRA', sup: 'SUP-C' },
+  ];
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', '')), [0, 1, 2]);
+});
+
+test('indicesFiltrados combines tipologia/grupo/sup with AND semantics, not OR', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { indicesFiltrados } = extrairFuncoesPuras(html);
+  const registros = [
+    { tipologia: 'SM', grupo: 'PÁTRIA', sup: 'SUP-A' },
+    { tipologia: 'ST', grupo: 'PÁTRIA', sup: 'SUP-B' },
+    { tipologia: 'SM', grupo: 'SYSTRA', sup: 'SUP-C' },
+  ];
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, 'SM', '', '')), [0, 2]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'PÁTRIA', '')), [0, 1]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, 'SM', 'PÁTRIA', '')), [0]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', 'SUP-Z')), []);
 });
 
 test('escapeHtml (extraído do HTML real gerado) escapes the same 5 characters as the server-side helper, protecting against markup injection from spreadsheet text once rendered client-side', () => {
