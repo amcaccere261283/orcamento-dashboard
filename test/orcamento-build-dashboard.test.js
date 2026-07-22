@@ -82,19 +82,66 @@ function construirPlanilhaTeste() {
   ]);
 }
 
+// Aba "PROJ. GERAL - 110MM" sintética da linha de base -- cabeçalho na
+// linha 2 (não 1), sem coluna BASE, uma linha real (SUP-A / SP) que casa
+// com o registro sintético da MATRIZ acima.
+function construirPlanilhaLinhaBaseTeste() {
+  const sharedStrings = ['ORIGEM', 'GRUPO', 'TOMADOR', 'ESCOPO', 'APOIO', 'SUP', 'INICIO', 'TERMINO', 'SONDAGEM',
+    'PICO', 'FRENTES', 'PROD.', 'DIAS', 'TOTAL', 'TICKET', 'OBSERVAÇÃO',
+    'SP', 'CONTRATO VIGENTE', 'PÁTRIA', 'Via Araucária S.A', 'SUP-A'];
+  const idx = name => sharedStrings.indexOf(name);
+
+  function linhaHeaderXml() {
+    let cells = celulaStr(idx('ORIGEM'), 'B2') + celulaStr(idx('GRUPO'), 'C2') + celulaStr(idx('TOMADOR'), 'D2') +
+      celulaStr(idx('ESCOPO'), 'E2') + celulaStr(idx('APOIO'), 'F2') + celulaStr(idx('SUP'), 'G2') +
+      celulaStr(idx('INICIO'), 'H2') + celulaStr(idx('TERMINO'), 'I2') + celulaStr(idx('SONDAGEM'), 'J2');
+    const letras = ['K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V'];
+    letras.forEach((l, i) => { cells += celulaNum(`${l}2`, 46023 + i * 30); });
+    cells += celulaStr(idx('PICO'), 'W2') + celulaStr(idx('FRENTES'), 'X2') + celulaStr(idx('PROD.'), 'Y2') + celulaStr(idx('DIAS'), 'Z2');
+    const letras2 = ['AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL'];
+    letras2.forEach((l, i) => { cells += celulaNum(`${l}2`, 46023 + i * 30); });
+    cells += celulaStr(idx('TOTAL'), 'AM2') + celulaStr(idx('TICKET'), 'AN2');
+    const letras3 = ['AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV', 'AW', 'AX', 'AY', 'AZ'];
+    letras3.forEach((l, i) => { cells += celulaNum(`${l}2`, 46023 + i * 30); });
+    cells += celulaStr(idx('TOTAL'), 'BA2') + celulaStr(idx('OBSERVAÇÃO'), 'BB2');
+    return `<row r="2">${cells}</row>`;
+  }
+
+  const cellsLinha = celulaStr(idx('CONTRATO VIGENTE'), 'B3') + celulaStr(idx('PÁTRIA'), 'C3') +
+    celulaStr(idx('Via Araucária S.A'), 'D3') + celulaStr(idx('SUP-A'), 'G3') + celulaStr(idx('SP'), 'J3');
+  const rows = linhaHeaderXml() + `<row r="3">${cellsLinha}</row>`;
+
+  const sheetXml = `<worksheet><sheetData>${rows}</sheetData></worksheet>`;
+  const workbookXml = '<?xml version="1.0"?><workbook xmlns:r="rels"><sheets><sheet name="PROJ. GERAL - 110MM" sheetId="1" r:id="rId1"/></sheets></workbook>';
+  const relsXml = '<?xml version="1.0"?><Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>';
+  const sharedStringsXml = '<sst>' + sharedStrings.map(s => `<si><t>${s}</t></si>`).join('') + '</sst>';
+
+  return buildMinimalZip([
+    { name: 'xl/workbook.xml', data: Buffer.from(workbookXml, 'utf8'), method: 0 },
+    { name: 'xl/_rels/workbook.xml.rels', data: Buffer.from(relsXml, 'utf8'), method: 0 },
+    { name: 'xl/sharedStrings.xml', data: Buffer.from(sharedStringsXml, 'utf8'), method: 0 },
+    { name: 'xl/worksheets/sheet1.xml', data: Buffer.from(sheetXml, 'utf8'), method: 8 },
+  ]);
+}
+
 test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and writes a dashboard HTML with only the 2 real tipologia rows', () => {
   const xlsxPath = path.join(os.tmpdir(), `orcamento-e2e-${Date.now()}.xlsx`);
   fs.writeFileSync(xlsxPath, construirPlanilhaTeste());
+  const linhaBasePath = path.join(os.tmpdir(), `orcamento-linha-base-e2e-${Date.now()}.xlsx`);
+  fs.writeFileSync(linhaBasePath, construirPlanilhaLinhaBaseTeste());
   const outPath = path.join(os.tmpdir(), `orcamento-dashboard-e2e-${Date.now()}.html`);
 
-  // Troca a config real por uma apontando pra planilha sintética -- o
+  // Troca a config real por uma apontando pras planilhas sintéticas -- o
   // require cache garante que build-dashboard.js enxergue essa troca antes
   // de carregá-lo pela primeira vez neste processo de teste.
   const configPath = require.resolve('../tools/orcamento/config.js');
   delete require.cache[configPath];
   require.cache[configPath] = {
     id: configPath, filename: configPath, loaded: true,
-    exports: { caminhoArquivo: xlsxPath, nomeAba: 'MATRIZ' },
+    exports: {
+      caminhoArquivo: xlsxPath, nomeAba: 'MATRIZ',
+      caminhoLinhaBase: linhaBasePath, nomeAbaLinhaBase: 'PROJ. GERAL - 110MM',
+    },
   };
   const buildPath = require.resolve('../tools/orcamento/build-dashboard.js');
   delete require.cache[buildPath];
@@ -120,10 +167,19 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
     assert.ok(!tipologias.includes('ACUMULADO'));
     assert.ok(!grupos.includes('Todos'));
 
+    // O SUP-A/SP casa com a linha de base sintética -- ganha um
+    // previstoInicial de verdade; o SM (não existe na linha de base) fica
+    // com previstoInicial zerado, não null.
+    const registroSP = registros.find(r => r.tipologia === 'SP');
+    const registroSM = registros.find(r => r.tipologia === 'SM');
+    assert.ok(registroSP.previstoInicial, 'toda linha deve ganhar previstoInicial, mesmo sem casar com a linha de base');
+    assert.equal(registroSM.previstoInicial.financeiro[0], 0, 'sem casar SUP+tipologia na linha de base, fica zero (não null)');
+
     // Sem a senha certa, os dados continuam inacessíveis.
     assert.throws(() => decifrarComSenha(JSON.parse(match[1]), 'senha-errada'));
   } finally {
     fs.unlinkSync(xlsxPath);
+    fs.unlinkSync(linhaBasePath);
     if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
     delete require.cache[configPath];
     delete require.cache[buildPath];

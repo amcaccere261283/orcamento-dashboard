@@ -200,7 +200,7 @@ test('renderCorpoTabela (extraído do HTML real gerado) monta o bloco TOTAL GERA
   const html = renderComSenha([registroExemplo()]);
   const { renderCorpoTabela } = extrairFuncoesPuras(html);
   const corpo = renderCorpoTabela([registroExemplo()]);
-  assert.match(corpo, /^<tr class="linha-serie linha-previsto linha-total-geral"/);
+  assert.match(corpo, /^<tr class="linha-serie linha-previsto-inicial linha-total-geral"/);
   assert.match(corpo, /<span class="tipologia-chip tipologia-chip-total">TOTAL GERAL<\/span>/);
   assert.match(corpo, /<span class="tipologia-chip" style="--chip-color:#2f6ad0">SM<\/span>/);
   assert.match(corpo, /<span class="tipologia-chip tipologia-chip-total">TOTAL<\/span>/);
@@ -213,11 +213,12 @@ test('renderCorpoTabela shows "Todos" (not a blank dash) in Grupo and Tomador fo
   const { renderCorpoTabela } = extrairFuncoesPuras(html);
   const corpo = renderCorpoTabela([registroExemplo()]);
   const celulasTodos = corpo.match(/data-valor="Todos">Todos<\/td>/g) || [];
-  // 1 registro -> TOTAL GERAL (3 linhas) + 1 bloco de tipologia (3 linhas) =
-  // 6 linhas, cada uma com 2 células "Todos" (Grupo e Tomador) = 12.
-  assert.equal(celulasTodos.length, 12);
+  // 1 registro -> TOTAL GERAL (4 linhas: Previsto Inicial/Previsto/
+  // Realizado/Tendência) + 1 bloco de tipologia (4 linhas) = 8 linhas, cada
+  // uma com 2 células "Todos" (Grupo e Tomador) = 16.
+  assert.equal(celulasTodos.length, 16);
   const celulasSupTraco = corpo.match(/class="col-mesclavel col-sup" data-valor="">—<\/td>/g) || [];
-  assert.equal(celulasSupTraco.length, 6);
+  assert.equal(celulasSupTraco.length, 8);
 });
 
 test('renderCorpoTabela never uses rowspan for the Tipologia/badge column -- it must repeat on every P/R/T row so the filtro-serie filter can hide exactly one of the 3 rows without breaking the other 2 (real bug: rowspan="3" lived only on the Previsto row, so filtering to Realizado/Tendência made the whole column vanish)', () => {
@@ -225,11 +226,11 @@ test('renderCorpoTabela never uses rowspan for the Tipologia/badge column -- it 
   const { renderCorpoTabela } = extrairFuncoesPuras(html);
   const corpo = renderCorpoTabela([registroExemplo()]);
   assert.doesNotMatch(corpo, /rowspan/);
-  // 3 registro rows (P/R/T) + 3 total-sup rows + 3 total-geral rows + 3
-  // total-geral-tipologia rows (1 distinct tipologia here) = 12 rows total,
-  // each needs its own col-tipologia cell now.
+  // 4 registro rows (Previsto Inicial/P/R/T) + 4 total-sup rows + 4
+  // total-geral rows + 4 total-geral-tipologia rows (1 distinct tipologia
+  // here) = 16 rows total, each needs its own col-tipologia cell now.
   const celulasTipologia = corpo.match(/class="col-mesclavel col-tipologia"/g) || [];
-  assert.equal(celulasTipologia.length, 12);
+  assert.equal(celulasTipologia.length, 16);
 });
 
 test('renderCorpoTabela adds a "total geral por tipologia" block for each distinct tipologia (alphabetical), aggregating across ALL SUPs that have it, right after the overall TOTAL GERAL and before any per-contract row', () => {
@@ -304,7 +305,10 @@ test('calcularMensal computa produtividade como volume÷equipes e ticketMedio co
   const html = renderComSenha([registro]);
   const { calcularMensal } = extrairFuncoesPuras(html);
 
-  assert.deepEqual(paraPlano(calcularMensal([registro.realizado], 'realizado', 'produtividade')), Array(12).fill(40));
+  // Realizado (e Tendência) recalculam produtividade como volume ÷ (equipes × dias do
+  // mês) -- 15 dias em Jan/Dez, 30 nos demais -- não mais volume ÷ equipes puro.
+  const diasPremissa = [15, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 15];
+  assert.deepEqual(paraPlano(calcularMensal([registro.realizado], 'realizado', 'produtividade')), diasPremissa.map(d => 200 / (5 * d)));
   assert.deepEqual(paraPlano(calcularMensal([registro.realizado], 'realizado', 'ticketMedio')), Array(12).fill(15));
   assert.deepEqual(paraPlano(calcularMensal([registro.previsto], 'previsto', 'produtividade')), Array(12).fill(1.5));
   assert.deepEqual(paraPlano(calcularMensal([registro.previsto], 'previsto', 'ticketMedio')), Array(12).fill(1885.65));
@@ -325,7 +329,10 @@ test('calcularMensal, agregando VÁRIAS tipologias (caso da linha de total por S
 
   assert.deepEqual(paraPlano(calcularMensal([tipologiaA.previsto, tipologiaB.previsto], 'previsto', 'equipes')), Array(12).fill(7));
   const produtividadeAgregada = calcularMensal([tipologiaA.previsto, tipologiaB.previsto], 'previsto', 'produtividade');
-  assert.ok(Math.abs(produtividadeAgregada[0] - 150 / 7) < 1e-9);
+  // Mês 0 = Janeiro, dias=15 -- Previsto agregando várias tipologias cai na
+  // mesma fórmula com dias que Realizado/Tendência (só a premissa de UMA
+  // tipologia só, testada acima, escapa dessa conta).
+  assert.ok(Math.abs(produtividadeAgregada[0] - 150 / (7 * 15)) < 1e-9);
   assert.notEqual(produtividadeAgregada[0], 1.5);
   assert.notEqual(produtividadeAgregada[0], 9);
 });
