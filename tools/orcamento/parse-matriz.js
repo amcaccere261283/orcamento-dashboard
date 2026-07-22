@@ -109,40 +109,6 @@ function extrairValoresLinha(row, columns) {
   };
 }
 
-// A MATRIZ segue a regra "se tem R, não tem T" pros meses já fechados --
-// Tendência fica null nesses meses de propósito (Realizado sozinho já leva
-// o mês, sem duplicar a mesma informação numa segunda coluna). Só no mês
-// vigente (em andamento) é que a planilha costuma trazer os dois
-// preenchidos ao mesmo tempo: o Realizado parcial (o que já foi apurado
-// até agora) E a própria Tendência (projeção pro mês inteiro) -- nesse
-// caso, e SÓ nesse caso, Realizado vence. Por isso o merge só entra em
-// ação quando Tendência JÁ tinha um valor próprio pro mês -- meses onde
-// Tendência era null (meses fechados) continuam null, não é pra
-// "preencher" com o Realizado o que a própria planilha deixou em branco de
-// propósito.
-//
-// Mexe só em volume/financeiro, NÃO em equipes -- confirmado contra a
-// MATRIZ real que a coluna de Equipes do Realizado usa uma fórmula
-// (média/contagem) que devolve 0 pros meses futuros ainda não alcançados,
-// em vez de ficar em branco como Volume/Financeiro. Esse 0 não é um "mês
-// fechado com zero equipes" de verdade -- é só a fórmula sem nada pra
-// calcular ainda -- então deixar Equipes participar do merge apagava a
-// projeção real da Tendência pros meses futuros (trocando por 0) e, como
-// Produtividade divide Volume por Equipes, zerava o denominador e a
-// própria Produtividade sumia (ver CAMPOS_RATIO em render-dashboard.js).
-// Ticket médio (Financeiro/Volume) não tem esse problema, então continua
-// herdando a correção normalmente.
-function mesclarTotalComRealizado(total, realizado) {
-  ['volume', 'financeiro'].forEach(campo => {
-    total[campo] = total[campo].map((valorTotal, i) => {
-      if (valorTotal === null || valorTotal === undefined) return valorTotal;
-      const valorRealizado = realizado[campo][i];
-      return (valorRealizado === null || valorRealizado === undefined) ? valorTotal : valorRealizado;
-    });
-  });
-  return total;
-}
-
 // Linhas de resumo pré-calculadas pelo Excel (total geral com GRUPO="Todos"
 // no topo da aba, e os totais MENSAL/ACUMULADO no fim de cada contrato) não
 // são dados reais de contrato -- confirmado com o usuário, o dashboard
@@ -197,7 +163,6 @@ function parseMatriz(grid) {
       atual.realizado = extrairValoresLinha(row, columns);
     } else if (base === 'T' && atual) {
       atual.total = extrairValoresLinha(row, columns);
-      if (atual.realizado) mesclarTotalComRealizado(atual.total, atual.realizado);
       atual.observacao = row[columns.observacao] ?? null;
       if (deveIncluir(atual)) registros.push(atual);
       atual = null;
@@ -206,4 +171,4 @@ function parseMatriz(grid) {
   return registros;
 }
 
-module.exports = { parseMatriz, locateColumns, mesclarTotalComRealizado };
+module.exports = { parseMatriz, locateColumns };

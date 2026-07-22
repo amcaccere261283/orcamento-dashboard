@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseMatriz, mesclarTotalComRealizado } = require('../tools/orcamento/parse-matriz.js');
+const { parseMatriz } = require('../tools/orcamento/parse-matriz.js');
 
 // Posições reais confirmadas na MATRIZ (colunas B..BG, 0-based a partir de A=0):
 // B=1 ORIGEM, C=2 GRUPO, D=3 TOMADOR, E=4 SUP, F=5 ESCOPO, G=6 APOIO,
@@ -74,9 +74,7 @@ test('parseMatriz skips the top-of-sheet aggregate block (GRUPO="Todos") and par
   assert.equal(registros[0].tipologia, 'SM');
   assert.deepEqual(registros[0].previsto.equipes, Array(12).fill(5));
   assert.deepEqual(registros[0].realizado.volume, Array(12).fill(90));
-  // Realizado (900) tem valor em todos os 12 meses nessa fixture, então
-  // vence a Tendência (950) em todos eles -- ver mesclarTotalComRealizado.
-  assert.deepEqual(registros[0].total.financeiro, Array(12).fill(900));
+  assert.deepEqual(registros[0].total.financeiro, Array(12).fill(950));
   assert.equal(registros[0].observacao, 'Nota qualquer');
 });
 
@@ -147,60 +145,6 @@ test('parseMatriz preserves a blank monthly cell as null (not 0) -- "no data rep
   assert.equal(registros[0].realizado.equipes[6], 4);
   assert.equal(registros[0].realizado.financeiro[5], null);
   assert.equal(registros[0].realizado.volume[5], 80, 'só os meses de fato vazios na planilha viram null -- volume continuou preenchido nesse mês');
-});
-
-test('mesclarTotalComRealizado only lets Realizado win where Tendência ALREADY had its own value (o mês vigente) -- never backfills a month where Tendência was null on purpose (mês fechado, "se tem R não tem T"), even if Realizado has data there', () => {
-  const total = {
-    // mês 0: os dois têm valor (mês vigente) -- mês 1: Tendência é null,
-    // mas Realizado TEM dado (mês fechado -- não é pra reviver isso) --
-    // mês 2: nenhum tem -- mês 3: só Tendência tem (mês futuro).
-    equipes: [10, null, null, 10],
-    volume: [100, null, null, 100],
-    financeiro: [1000, null, null, 1000],
-  };
-  const realizado = {
-    equipes: [5, 7, null, null],
-    volume: [50, 70, null, null],
-    financeiro: [500, 700, null, null],
-  };
-  const resultado = mesclarTotalComRealizado(total, realizado);
-  assert.deepEqual(resultado.financeiro, [500, null, null, 1000], 'mês 0: Realizado (500) vence a Tendência própria (1000); mês 1: Tendência continua null -- NÃO vira 700 só porque Realizado tem dado ali, isso é um mês já fechado; mês 2: continua null; mês 3: mantém a projeção própria (1000, sem Realizado pra competir)');
-  assert.deepEqual(resultado.volume, [50, null, null, 100]);
-  assert.deepEqual(resultado.equipes, [10, null, null, 10], 'Equipes NUNCA participa do merge -- o Realizado de Equipes usa fórmula (0 nos meses futuros, não null/blank como Volume/Financeiro), então "Realizado tem valor" não é sinal confiável ali; a Tendência própria de Equipes sempre sobrevive intacta');
-});
-
-test('parseMatriz: no mês vigente (Realizado parcial e Tendência preenchidos ao mesmo tempo), Realizado vence em Financeiro/Volume -- reproduz o padrão real encontrado na MATRIZ (mês em andamento tem os dois valores; meses fechados só têm Realizado; meses futuros só têm Tendência). Equipes fica de fora do merge (ver mesclarTotalComRealizado) e mantém sua própria projeção mesmo no mês vigente.', () => {
-  const grid = construirGrid([
-    linha({ origem: 'CONTRATO VIGENTE', grupo: 'PÁTRIA', tomador: 'X', tipologia: 'SM', base: 'P', equipes: 5, volume: 100, financeiro: 1000 }),
-    linha({ base: 'R', equipes: 4, volume: 80, financeiro: 800 }),
-    linha({ base: 'T', equipes: 6, volume: 120, financeiro: 1200 }),
-  ]);
-  // Mês vigente (índice 6): Realizado parcial E Tendência (projeção do mês
-  // inteiro) chegam preenchidos juntos -- Realizado deve vencer em
-  // Volume/Financeiro; Equipes é deixado de fora de propósito.
-  grid[3][13 + 6] = 3.5; grid[4][13 + 6] = 3;
-  grid[3][29 + 6] = 90; grid[4][29 + 6] = 110;
-  grid[3][44 + 6] = 350000; grid[4][44 + 6] = 300000;
-
-  const registros = parseMatriz(grid);
-  assert.equal(registros[0].total.volume[6], 90, 'Volume: Tendência mostra o valor de Realizado (90), não o seu próprio (110)');
-  assert.equal(registros[0].total.financeiro[6], 350000, 'Financeiro: Tendência mostra o valor de Realizado (350000), não o seu próprio (300000)');
-  assert.equal(registros[0].total.equipes[6], 3, 'Equipes NÃO participa do merge -- mantém sua própria projeção (3) mesmo no mês vigente, mesmo com Realizado (3.5) também preenchido ali');
-});
-
-test('parseMatriz: mês futuro sem nenhum Realizado ainda -- Tendência mantém sua própria projeção sem interferência', () => {
-  const grid = construirGrid([
-    linha({ origem: 'CONTRATO VIGENTE', grupo: 'PÁTRIA', tomador: 'X', tipologia: 'SM', base: 'P', equipes: 5, volume: 100, financeiro: 1000 }),
-    linha({ base: 'R', equipes: 4, volume: 80, financeiro: 800 }),
-    linha({ base: 'T', equipes: 6, volume: 120, financeiro: 1200 }),
-  ]);
-  // Mês futuro (índice 9, Out): Realizado ainda não foi reportado (célula
-  // vazia na planilha real) -- Tendência deve manter sua própria projeção.
-  delete grid[3][13 + 9]; delete grid[3][44 + 9];
-
-  const registros = parseMatriz(grid);
-  assert.equal(registros[0].total.equipes[9], 6, 'sem Realizado nesse mês, Tendência não é sobrescrita');
-  assert.equal(registros[0].total.financeiro[9], 1200);
 });
 
 test('parseMatriz reads equipesResumo, volumeResumo and financeiroResumo per P/R/T row', () => {
