@@ -60,47 +60,117 @@
   .gate-senha-box button:hover { background: rgba(246,181,63,0.1); }
   .gate-senha-box button:disabled { opacity: 0.6; cursor: wait; }
   .gate-senha-erro { color: #f0857a; font-size: 13px; margin-top: 10px; }
-  .filtros { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
-  .filtros select {
-    padding: 8px 10px;
-    border: 1px solid var(--border); border-radius: 6px;
-    background: var(--surface-1); color: var(--text-primary);
-    font-size: 13px;
-  }
-  #limpar-filtros {
-    padding: 8px 14px;
-    border: 1px solid var(--border); border-radius: 6px;
-    background: var(--surface-1); color: var(--text-primary);
-    font-size: 13px; cursor: pointer;
-  }
-  #limpar-filtros:hover { border-color: #f6b53f; }
-  #atualizar-dashboard {
-    padding: 10px 16px;
-    border: 2px solid #f6b53f; border-radius: 8px;
-    background: var(--surface-1); color: var(--text-primary);
-    font-size: 13px; font-weight: 600; cursor: pointer;
-  }
-  #atualizar-dashboard:hover { background: rgba(246,181,63,0.1); }
-  .abas-visualizacao { display: flex; gap: 8px; }
+  .filtros { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .filtros-selecao { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .filtros-acoes { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .filtros select,
+  #limpar-filtros,
+  #atualizar-dashboard,
   .abas-visualizacao button {
-    padding: 8px 16px;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease, box-shadow 150ms ease;
+  }
+  .filtros select:focus-visible,
+  #limpar-filtros:focus-visible,
+  #atualizar-dashboard:focus-visible,
+  .abas-visualizacao button:focus-visible,
+  .gate-senha-box input:focus-visible,
+  .gate-senha-box button:focus-visible {
+    outline: 2px solid #f6b53f; outline-offset: 2px;
+  }
+  .filtros select {
+    padding: 8px 30px 8px 10px; height: 36px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23c3c2b7' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+    color: var(--text-primary);
+    font-size: 13px; cursor: pointer;
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  }
+  .filtros select:hover { border-color: rgba(246,181,63,0.5); }
+  #limpar-filtros,
+  #atualizar-dashboard,
+  .abas-visualizacao button {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  #limpar-filtros svg, #atualizar-dashboard svg, .abas-visualizacao button svg { flex: none; }
+  #limpar-filtros {
+    height: 36px; padding: 0 14px;
     border: 1px solid var(--border); border-radius: 6px;
     background: var(--surface-1); color: var(--text-secondary);
-    font-size: 13px; cursor: pointer;
   }
-  .abas-visualizacao button.aba-ativa { border-color: #f6b53f; color: var(--text-primary); font-weight: 600; }
+  #limpar-filtros:hover { border-color: #f6b53f; color: var(--text-primary); background: rgba(255,255,255,0.04); }
+  #limpar-filtros:active { transform: translateY(1px); }
+  #atualizar-dashboard {
+    height: 38px; padding: 0 18px;
+    border: 2px solid #f6b53f; border-radius: 8px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 2px 6px rgba(0,0,0,0.35);
+  }
+  #atualizar-dashboard:hover { background: rgba(246,181,63,0.14); box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 4px 10px rgba(0,0,0,0.4); transform: translateY(-1px); }
+  #atualizar-dashboard:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(0,0,0,0.3) inset; }
+  #atualizar-dashboard:active svg { transform: rotate(70deg); }
+  #atualizar-dashboard svg { transition: transform 300ms ease; }
+  .abas-visualizacao {
+    display: flex; gap: 2px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 3px;
+  }
+  .abas-visualizacao button {
+    height: 30px; padding: 0 14px;
+    border: none; border-radius: 6px;
+    background: transparent; color: var(--text-secondary);
+  }
+  .abas-visualizacao button:hover { color: var(--text-primary); }
+  .abas-visualizacao button:active { transform: translateY(1px); }
+  .abas-visualizacao button.aba-ativa {
+    background: var(--surface-1); color: var(--text-primary); font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(246,181,63,0.4) inset;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .filtros select, #limpar-filtros, #atualizar-dashboard, .abas-visualizacao button, #atualizar-dashboard svg { transition: none; }
+  }
   #secao-grafico {
     background: rgba(26,26,25,0.68); border-radius: 8px; padding: 16px 8px;
     position: relative; z-index: 1;
   }
   .grafico-svg { width: 100%; height: auto; display: block; }
-  .grafico-eixo-texto { fill: var(--text-secondary); font-size: 11px; }
-  .grafico-gridline { stroke: var(--gridline); stroke-width: 1; }
-  .table-scroll { overflow-x: auto; position: relative; z-index: 1; }
+  .grafico-painel { margin-bottom: 28px; }
+  .grafico-painel:last-child { margin-bottom: 0; }
+  .grafico-titulo { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .grafico-eixo-texto { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .grafico-gridline, .grafico-linha-guia { stroke: var(--gridline); stroke-width: 1; }
+  .grafico-linha { stroke-linecap: round; stroke-linejoin: round; }
+  .grafico-rotulo { fill: var(--text-secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .grafico-rotulo-final { fill: var(--text-primary); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
+  .grafico-rotulo { paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
+  .grafico-hit { cursor: pointer; pointer-events: all; }
+  .grafico-marcador { pointer-events: none; }
+  .grafico-tooltip {
+    position: absolute; pointer-events: none;
+    background: #0d0d0d; border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; color: var(--text-primary);
+    white-space: nowrap; z-index: 5; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .table-scroll { overflow-x: auto; border-radius: 8px; position: relative; z-index: 1; }
   table { width: 100%; border-collapse: collapse; background: rgba(26,26,25,0.68); }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--gridline); font-size: 13px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--gridline); font-size: 13px; }
   td.num { font-variant-numeric: tabular-nums; }
-  th { color: var(--text-secondary); font-weight: 600; background: rgba(13,13,12,0.5); }
+  th {
+    color: var(--text-secondary); font-weight: 600; background: #141412;
+    position: sticky; top: 0; z-index: 1;
+    box-shadow: 0 1px 0 var(--gridline), 0 2px 6px rgba(0,0,0,0.3);
+  }
+  /* Primeira coluna (SUP) fixa ao rolar a tabela pro lado -- especificidade
+     igual à das regras de fundo por tipo de linha (.linha-total-sup td etc.)
+     abaixo, então essas continuam ganhando por ordem (vêm depois no CSS) e
+     a coluna fixa herda o tom certo em cada tipo de linha, em vez de travar
+     num fundo genérico. */
+  td:first-child, th:first-child { position: sticky; left: 0; z-index: 1; }
+  td:first-child { background: var(--surface-1); }
+  th:first-child { z-index: 2; }
+  #corpo-tabela tr:hover { filter: brightness(1.14); }
   .tipologia-chip {
     display: inline-block;
     background: var(--chip-color); color: #fff;
@@ -148,17 +218,21 @@
 
   <div id="conteudo-protegido" style="display:none">
     <div class="filtros">
-      <select id="filtro-tipologia"><option value="">Todas as tipologias</option></select>
-      <select id="filtro-grupo"><option value="">Todos os grupos</option></select>
-      <select id="filtro-sup"><option value="">Todos os SUP</option></select>
-      <select id="filtro-serie"><option value="">Todas as séries</option><option value="previsto">Previsto</option><option value="realizado">Realizado</option><option value="total">Tendência</option></select>
-      <select id="seletor-dimensao"><option value="equipes">Equipes</option><option value="volume">Volume</option><option value="financeiro" selected>Financeiro</option><option value="produtividade">Produtividade</option><option value="ticketMedio">Ticket médio</option></select>
-      <div class="abas-visualizacao">
-        <button id="aba-tabela" type="button" class="aba-ativa">Tabela</button>
-        <button id="aba-grafico" type="button">Gráfico</button>
+      <div class="filtros-selecao">
+        <select id="filtro-tipologia"><option value="">Todas as tipologias</option></select>
+        <select id="filtro-grupo"><option value="">Todos os grupos</option></select>
+        <select id="filtro-sup"><option value="">Todos os SUP</option></select>
+        <select id="filtro-serie"><option value="">Todas as séries</option><option value="previsto">Previsto</option><option value="realizado">Realizado</option><option value="total">Tendência</option></select>
+        <select id="seletor-dimensao"><option value="equipes">Equipes</option><option value="volume">Volume</option><option value="financeiro" selected>Financeiro</option><option value="produtividade">Produtividade</option><option value="ticketMedio">Ticket médio</option></select>
+        <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
       </div>
-      <button id="limpar-filtros" type="button">Limpar filtros</button>
-      <button id="atualizar-dashboard" type="button">Atualizar dados</button>
+      <div class="filtros-acoes">
+        <div class="abas-visualizacao">
+          <button id="aba-tabela" type="button" class="aba-ativa"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Tabela</button>
+          <button id="aba-grafico" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Gráfico</button>
+        </div>
+        <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
+      </div>
     </div>
     <div id="secao-tabela">
     <div class="table-scroll">
@@ -169,7 +243,15 @@
     </div>
     </div>
     <div id="secao-grafico" style="display:none">
-      <div id="grafico-svg-container"></div>
+      <div class="grafico-painel">
+        <div class="grafico-titulo" id="grafico-titulo-mensal">Mensal</div>
+        <div id="grafico-mensal-container"></div>
+      </div>
+      <div class="grafico-painel" id="grafico-painel-acumulado">
+        <div class="grafico-titulo" id="grafico-titulo-acumulado">Acumulado no ano</div>
+        <div id="grafico-acumulado-container"></div>
+      </div>
+      <div id="grafico-tooltip" class="grafico-tooltip" style="display:none"></div>
     </div>
   </div>
   </main>
@@ -331,12 +413,27 @@ function indicesFiltrados(registros, filtroTipologia, filtroGrupo, filtroSup) {
 }
 
 var SERIE_COR = { previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f' };
+// Tracejado por série além da cor -- segunda camada de identidade (não só
+// hue) pra sobreviver a daltonismo/impressão P&B: previsto sólido,
+// realizado pontilhado fino, tendência tracejado longo.
+var SERIE_TRACEJADO = { previsto: '', realizado: '1,5', total: '9,5' };
 var DIMENSOES_RAZAO = ['produtividade', 'ticketMedio'];
 var MESES_ABREVIADOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 var GRAFICO_LARGURA = 1000;
-var GRAFICO_ALTURA = 380;
-var GRAFICO_MARGEM = { topo: 24, baixo: 36, esquerda: 64, direita: 64 };
+var GRAFICO_ALTURA_BARRAS = 320;
+var GRAFICO_ALTURA_LINHA = 280;
+// Dois painéis, eixo único cada -- direita só precisa de espaço pro rótulo
+// do último mês não vazar da borda (não tem mais 2º eixo do lado direito).
+var GRAFICO_MARGEM_BARRAS = { topo: 36, baixo: 36, esquerda: 68, direita: 28 };
+var GRAFICO_MARGEM_LINHA = { topo: 36, baixo: 36, esquerda: 68, direita: 36 };
+var GRAFICO_NUM_TICKS = 4;
+var GRAFICO_BARRA_MAX = 24;
+var GRAFICO_BARRA_GAP = 2;
+// Acima desse valor bruto (não escalado) o gráfico passa a exibir em
+// milhares -- assim um recorte pequeno (poucas centenas) não vira "0"
+// depois de dividido, e o eixo/rótulos ganham "(em milhares)" no título.
+var GRAFICO_LIMIAR_MILHARES = 1000;
 
 // Mapeia um valor pra uma distância em pixels dentro de [0, pixelMax],
 // proporcional a valorMax -- 0 quando valorMax é 0 (evita divisão por
@@ -346,100 +443,237 @@ function escalaLinear(valor, valorMax, pixelMax) {
   return (valor / valorMax) * pixelMax;
 }
 
-function construirEixoXSvg(larguraMes, alturaPlot) {
+// Arredonda o teto do eixo Y pro próximo passo "limpo" (1/2/5 x 10^n), do
+// jeito que uma pessoa desenharia à mão -- os ticks caem em números
+// redondos (0 / 500 / 1.000...) em vez de frações arbitrárias do máximo.
+function calcularEscalaEixo(valorMax) {
+  if (!valorMax || valorMax <= 0) return { max: 1, passo: 0.25 };
+  var passoBruto = valorMax / GRAFICO_NUM_TICKS;
+  var magnitude = Math.pow(10, Math.floor(Math.log10(passoBruto)));
+  var normalizado = passoBruto / magnitude;
+  var passoNormalizado = normalizado <= 1 ? 1 : normalizado <= 2 ? 2 : normalizado <= 5 ? 5 : 10;
+  var passo = passoNormalizado * magnitude;
+  return { max: passo * GRAFICO_NUM_TICKS, passo: passo };
+}
+
+// Formata um valor pro que aparece NO gráfico (eixo, rótulo de coluna/linha)
+// -- em milhares quando o recorte é grande o bastante pra fazer sentido.
+// O tooltip usa formatarNumero puro (valor exato), nunca esta função: hover
+// é onde a pessoa vai quando quer o número completo, não o arredondado.
+function formatarValorGrafico(valor, usarMilhares) {
+  if (valor === null || valor === undefined) return '—';
+  var base = usarMilhares ? valor / 1000 : valor;
+  return (Math.round(base * 100) / 100).toLocaleString('pt-BR');
+}
+
+function construirEixoXSvg(larguraMes, alturaPlot, margem) {
   var svg = '';
   for (var mes = 0; mes < 12; mes++) {
-    var x = GRAFICO_MARGEM.esquerda + mes * larguraMes + larguraMes / 2;
-    var y = GRAFICO_MARGEM.topo + alturaPlot + 18;
+    var x = margem.esquerda + mes * larguraMes + larguraMes / 2;
+    var y = margem.topo + alturaPlot + 20;
     svg += '<text class="grafico-eixo-texto" x="' + x.toFixed(1) + '" y="' + y + '" text-anchor="middle">' + MESES_ABREVIADOS[mes] + '</text>';
   }
   return svg;
 }
 
-var GRAFICO_NUM_TICKS = 4;
-function construirTicksEixoY(valorMax, alturaPlot, ladoDireita) {
+function construirEixoYSvg(escala, alturaPlot, margem, ladoDireita, usarMilhares) {
   var svg = '';
   for (var i = 0; i <= GRAFICO_NUM_TICKS; i++) {
-    var fracao = i / GRAFICO_NUM_TICKS;
-    var y = GRAFICO_MARGEM.topo + alturaPlot - fracao * alturaPlot;
-    var valor = fracao * valorMax;
-    var x = ladoDireita ? (GRAFICO_LARGURA - GRAFICO_MARGEM.direita + 8) : (GRAFICO_MARGEM.esquerda - 8);
+    var valor = i * escala.passo;
+    var y = margem.topo + alturaPlot - (valor / escala.max) * alturaPlot;
+    var x = ladoDireita ? (GRAFICO_LARGURA - margem.direita + 10) : (margem.esquerda - 10);
     var ancora = ladoDireita ? 'start' : 'end';
-    svg += '<text class="grafico-eixo-texto" x="' + x + '" y="' + (y + 4) + '" text-anchor="' + ancora + '">' + formatarNumero(valor) + '</text>';
+    svg += '<text class="grafico-eixo-texto" x="' + x + '" y="' + (y + 4).toFixed(1) + '" text-anchor="' + ancora + '">' + formatarValorGrafico(valor, usarMilhares) + '</text>';
     if (!ladoDireita) {
-      svg += '<line class="grafico-gridline" x1="' + GRAFICO_MARGEM.esquerda + '" y1="' + y + '" x2="' + (GRAFICO_LARGURA - GRAFICO_MARGEM.direita) + '" y2="' + y + '"/>';
+      svg += '<line class="grafico-gridline" x1="' + margem.esquerda + '" y1="' + y.toFixed(1) + '" x2="' + (GRAFICO_LARGURA - margem.direita) + '" y2="' + y.toFixed(1) + '"/>';
     }
   }
   return svg;
 }
 
-function construirLegendaSvg(dadosPorSerie) {
+// Legenda só entra com 2+ séries -- com uma série só, o título do painel já
+// diz o que é. O traço da legenda repete o tracejado da série, então o
+// canal secundário (não só a cor) já aparece ali.
+function construirLegendaSvg(dadosPorSerie, margem) {
+  if (dadosPorSerie.length < 2) return '';
   var svg = '';
+  var y = 14;
   dadosPorSerie.forEach(function (d, i) {
-    var x = GRAFICO_MARGEM.esquerda + i * 130;
-    var y = 10;
-    svg += '<circle cx="' + x + '" cy="' + y + '" r="5" fill="' + SERIE_COR[d.serie] + '"/>';
-    svg += '<text class="grafico-eixo-texto" x="' + (x + 10) + '" y="' + (y + 4) + '" text-anchor="start">' + SERIE_LABELS[d.serie] + '</text>';
+    var x = margem.esquerda + i * 140;
+    var traco = SERIE_TRACEJADO[d.serie] ? ' stroke-dasharray="' + SERIE_TRACEJADO[d.serie] + '"' : '';
+    svg += '<line x1="' + x + '" y1="' + y + '" x2="' + (x + 20) + '" y2="' + y + '" stroke="' + SERIE_COR[d.serie] + '" stroke-width="3" stroke-linecap="round"' + traco + '/>';
+    svg += '<text class="grafico-eixo-texto" x="' + (x + 28) + '" y="' + (y + 4) + '" text-anchor="start">' + SERIE_LABELS[d.serie] + '</text>';
   });
   return svg;
+}
+
+// Desenha uma barra/coluna com topo arredondado (4px) e base quadrada,
+// ancorada na baseline -- nunca um <rect> puro com cantos vivos nos 4 lados.
+function desenharBarraArredondada(x, y, w, h, cor) {
+  if (h <= 0) return '';
+  var r = Math.min(4, w / 2, h);
+  var d = 'M' + x.toFixed(1) + ',' + (y + h).toFixed(1) +
+    ' L' + x.toFixed(1) + ',' + (y + r).toFixed(1) +
+    ' Q' + x.toFixed(1) + ',' + y.toFixed(1) + ' ' + (x + r).toFixed(1) + ',' + y.toFixed(1) +
+    ' L' + (x + w - r).toFixed(1) + ',' + y.toFixed(1) +
+    ' Q' + (x + w).toFixed(1) + ',' + y.toFixed(1) + ' ' + (x + w).toFixed(1) + ',' + (y + r).toFixed(1) +
+    ' L' + (x + w).toFixed(1) + ',' + (y + h).toFixed(1) + ' Z';
+  return '<path class="grafico-barra" d="' + d + '" fill="' + cor + '"/>';
+}
+
+// Empurra rótulos que colidem (caixa estimada pela largura do texto) pra
+// baixo do que colidiram, na ordem de cima pra baixo -- usado tanto pros
+// rótulos de coluna quanto de linha JUNTOS, porque num eixo duplo os dois
+// grupos têm escalas diferentes e podem convergir na mesma faixa vertical
+// num mês onde ambas as séries estão perto do teto do seu próprio eixo
+// (ex.: o último mês, que costuma ser o maior tanto no valor do mês quanto
+// no acumulado). Empurrar só dentro do próprio grupo não pega esse caso.
+function resolverColisoesRotulos(rotulos) {
+  rotulos.sort(function (a, b) { return a.y - b.y; });
+  var posicionados = [];
+  rotulos.forEach(function (r) {
+    var largura = r.texto.length * 6.5 + 6;
+    var y = r.y;
+    var tentativas = 0;
+    var colidiu = true;
+    while (colidiu && tentativas < 60) {
+      colidiu = posicionados.some(function (p) {
+        return Math.abs(p.x - r.x) < (largura + p.largura) / 2 && Math.abs(p.y - y) < 13;
+      });
+      if (colidiu) { y += 2; tentativas++; }
+    }
+    posicionados.push({ x: r.x, y: y, largura: largura });
+    r.y = y;
+  });
+  return rotulos;
+}
+
+// Colunas agrupadas por mês, largura travada em <=24px com um respiro de
+// 2px entre colunas vizinhas (nunca encostadas). Rótulo sempre visível em
+// cada coluna (a pedido) -- fica denso com 3 séries, mas o valor exato
+// também mora no tooltip (hover/foco) e na aba Tabela. Os candidatos a
+// rótulo são só ACUMULADOS em `rotulos` -- desenhados depois, junto com os
+// da linha, numa única passada de anti-colisão (ver construirGraficoSvg).
+function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos) {
+  var svg = '';
+  var numSeries = dadosPorSerie.length;
+  var slot = larguraMes * 0.72;
+  var larguraColuna = Math.min(GRAFICO_BARRA_MAX, (slot - GRAFICO_BARRA_GAP * (numSeries - 1)) / numSeries);
+  var slotOcupado = larguraColuna * numSeries + GRAFICO_BARRA_GAP * (numSeries - 1);
+
+  for (var mes = 0; mes < 12; mes++) {
+    var inicioSlot = margem.esquerda + mes * larguraMes + (larguraMes - slotOcupado) / 2;
+    dadosPorSerie.forEach(function (d, i) {
+      var valor = d.mensal[mes];
+      var alturaColuna = escalaLinear(valor, escala.max, alturaPlot);
+      var x = inicioSlot + i * (larguraColuna + GRAFICO_BARRA_GAP);
+      var y = margem.topo + alturaPlot - alturaColuna;
+      svg += desenharBarraArredondada(x, y, larguraColuna, alturaColuna, SERIE_COR[d.serie]);
+      svg += '<rect class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor) + '" x="' + x.toFixed(1) + '" y="' + margem.topo + '" width="' + Math.max(larguraColuna, GRAFICO_BARRA_GAP).toFixed(1) + '" height="' + alturaPlot + '" fill="transparent"/>';
+      if (valor !== null && valor !== undefined) {
+        rotulos.push({ x: x + larguraColuna / 2, y: y - 6, texto: formatarValorGrafico(valor, usarMilhares), classe: 'grafico-rotulo' });
+      }
+    });
+  }
+  return svg;
+}
+
+// Linhas (usadas pro acumulado, e pro mensal das dimensões-razão) --
+// marcador de 8px com anel na cor da superfície (fica legível cruzando
+// outra linha ou uma coluna). Rótulo em CADA ponto (a pedido), também só
+// acumulado em `rotulos` -- ver construirColunasSvg acima pro porquê.
+function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos) {
+  var svg = '';
+  dadosPorSerie.forEach(function (d) {
+    var pontos = d[campo].map(function (valor, mes) {
+      var x = margem.esquerda + mes * larguraMes + larguraMes / 2;
+      var y = margem.topo + alturaPlot - escalaLinear(valor, escala.max, alturaPlot);
+      return { x: x, y: y, valor: valor };
+    });
+    var pontosStr = pontos.map(function (p) { return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
+    var traco = SERIE_TRACEJADO[d.serie] ? ' stroke-dasharray="' + SERIE_TRACEJADO[d.serie] + '"' : '';
+    svg += '<polyline class="grafico-linha" points="' + pontosStr + '" fill="none" stroke="' + SERIE_COR[d.serie] + '" stroke-width="2"' + traco + '/>';
+    pontos.forEach(function (p, mes) {
+      svg += '<circle class="grafico-marcador" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="4" fill="' + SERIE_COR[d.serie] + '" stroke="var(--surface-1)" stroke-width="2"/>';
+      svg += '<circle class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(p.valor) + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="10" fill="transparent"/>';
+      if (p.valor !== null && p.valor !== undefined) {
+        rotulos.push({ x: p.x, y: p.y - 10, texto: formatarValorGrafico(p.valor, usarMilhares), classe: 'grafico-rotulo-final' });
+      }
+    });
+  });
+  return svg;
+}
+
+// Monta o SVG final de um painel a partir das marcas (colunas OU linhas,
+// já em `svgMarcas`) + candidatos a rótulo acumulados em `rotulos` --
+// resolve a colisão uma vez, no conjunto inteiro do painel, e desenha os
+// <text> por último (por cima de tudo, incluindo o halo).
+function finalizarPainelSvg(svgMarcas, rotulos, altura) {
+  var svg = svgMarcas;
+  resolverColisoesRotulos(rotulos).forEach(function (r) {
+    svg += '<text class="' + r.classe + '" x="' + r.x.toFixed(1) + '" y="' + r.y.toFixed(1) + '" text-anchor="middle">' + r.texto + '</text>';
+  });
+  return '<svg viewBox="0 0 ' + GRAFICO_LARGURA + ' ' + altura + '" class="grafico-svg">' + svg + '</svg>';
 }
 
 // dadosPorSerie: [{ serie, mensal: number[12], acumulado: number[12]|null }],
 // já filtrado só com as séries visíveis (respeita filtro-serie) e com
-// valores mensais nunca-nulos (null já virou 0 antes de chegar aqui --
-// ver montarGrafico). ehRazao=true pras dimensões Produtividade/Ticket
-// médio: nesse caso não faz sentido "acumular" uma razão, então só a
-// linha do valor mensal aparece, sem barras e sem eixo secundário.
-function construirGraficoSvg(dadosPorSerie, ehRazao) {
-  var larguraPlot = GRAFICO_LARGURA - GRAFICO_MARGEM.esquerda - GRAFICO_MARGEM.direita;
-  var alturaPlot = GRAFICO_ALTURA - GRAFICO_MARGEM.topo - GRAFICO_MARGEM.baixo;
+// valores mensais nunca-nulos (null já virou 0 antes de chegar aqui -- ver
+// montarGrafico). ehRazao=true pras dimensões Produtividade/Ticket médio:
+// nesse caso não faz sentido "acumular" uma razão, então só a linha do
+// valor mensal aparece (painel único, sem colunas).
+function construirGraficoMensalSvg(dadosPorSerie, ehRazao) {
+  var margem = ehRazao ? GRAFICO_MARGEM_LINHA : GRAFICO_MARGEM_BARRAS;
+  var altura = ehRazao ? GRAFICO_ALTURA_LINHA : GRAFICO_ALTURA_BARRAS;
+  var larguraPlot = GRAFICO_LARGURA - margem.esquerda - margem.direita;
+  var alturaPlot = altura - margem.topo - margem.baixo;
   var larguraMes = larguraPlot / 12;
-  var numSeries = dadosPorSerie.length;
 
   var maxMensal = 0;
   dadosPorSerie.forEach(function (d) { d.mensal.forEach(function (v) { if (v > maxMensal) maxMensal = v; }); });
-  var maxAcumulado = 0;
-  if (!ehRazao) {
-    dadosPorSerie.forEach(function (d) { d.acumulado.forEach(function (v) { if (v > maxAcumulado) maxAcumulado = v; }); });
-  }
+  var escala = calcularEscalaEixo(maxMensal);
+  var usarMilhares = maxMensal >= GRAFICO_LIMIAR_MILHARES;
 
   var svg = '';
-  svg += construirTicksEixoY(maxMensal, alturaPlot, false);
-  if (!ehRazao) svg += construirTicksEixoY(maxAcumulado, alturaPlot, true);
-  svg += construirEixoXSvg(larguraMes, alturaPlot);
+  svg += construirEixoYSvg(escala, alturaPlot, margem, false, usarMilhares);
+  svg += construirEixoXSvg(larguraMes, alturaPlot, margem);
 
-  if (!ehRazao) {
-    var larguraBarra = (larguraMes * 0.7) / (numSeries || 1);
-    for (var mes = 0; mes < 12; mes++) {
-      var inicioMes = GRAFICO_MARGEM.esquerda + mes * larguraMes + larguraMes * 0.15;
-      dadosPorSerie.forEach(function (d, i) {
-        var valor = d.mensal[mes];
-        var alturaBarra = escalaLinear(valor, maxMensal, alturaPlot);
-        var x = inicioMes + i * larguraBarra;
-        var y = GRAFICO_MARGEM.topo + alturaPlot - alturaBarra;
-        svg += '<rect class="grafico-barra" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + larguraBarra.toFixed(1) + '" height="' + alturaBarra.toFixed(1) + '" fill="' + SERIE_COR[d.serie] + '"><title>' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor) + '</title></rect>';
-      });
-    }
-  }
+  var rotulos = [];
+  svg += ehRazao
+    ? construirLinhasSvg(dadosPorSerie, 'mensal', escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos)
+    : construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos);
+  svg += construirLegendaSvg(dadosPorSerie, margem);
 
-  dadosPorSerie.forEach(function (d) {
-    var serieValores = ehRazao ? d.mensal : d.acumulado;
-    var maxEixo = ehRazao ? maxMensal : maxAcumulado;
-    var pontos = serieValores.map(function (valor, mes) {
-      var x = GRAFICO_MARGEM.esquerda + mes * larguraMes + larguraMes / 2;
-      var y = GRAFICO_MARGEM.topo + alturaPlot - escalaLinear(valor, maxEixo, alturaPlot);
-      return x.toFixed(1) + ',' + y.toFixed(1);
-    });
-    var tracejado = ehRazao ? '' : ' stroke-dasharray="5,4"';
-    svg += '<polyline class="grafico-linha" points="' + pontos.join(' ') + '" fill="none" stroke="' + SERIE_COR[d.serie] + '" stroke-width="2"' + tracejado + '/>';
-  });
-
-  svg += construirLegendaSvg(dadosPorSerie);
-
-  return '<svg viewBox="0 0 ' + GRAFICO_LARGURA + ' ' + GRAFICO_ALTURA + '" class="grafico-svg">' + svg + '</svg>';
+  return { svg: finalizarPainelSvg(svg, rotulos, altura), milhares: usarMilhares };
 }
 
-// Recalcula e redesenha o gráfico a partir dos MESMOS filtros/dimensão da
+// Painel separado, eixo único, pro acumulado no ano -- mensal e acumulado
+// nunca compartilham escala (dezembro acumulado é ~12x um mês típico), um
+// eixo duplo no mesmo plot inventaria uma correlação visual que não existe.
+function construirGraficoAcumuladoSvg(dadosPorSerie) {
+  var margem = GRAFICO_MARGEM_LINHA;
+  var altura = GRAFICO_ALTURA_LINHA;
+  var larguraPlot = GRAFICO_LARGURA - margem.esquerda - margem.direita;
+  var alturaPlot = altura - margem.topo - margem.baixo;
+  var larguraMes = larguraPlot / 12;
+
+  var maxAcumulado = 0;
+  dadosPorSerie.forEach(function (d) { d.acumulado.forEach(function (v) { if (v > maxAcumulado) maxAcumulado = v; }); });
+  var escala = calcularEscalaEixo(maxAcumulado);
+  var usarMilhares = maxAcumulado >= GRAFICO_LIMIAR_MILHARES;
+
+  var svg = '';
+  svg += construirEixoYSvg(escala, alturaPlot, margem, false, usarMilhares);
+  svg += construirEixoXSvg(larguraMes, alturaPlot, margem);
+
+  var rotulos = [];
+  svg += construirLinhasSvg(dadosPorSerie, 'acumulado', escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos);
+  svg += construirLegendaSvg(dadosPorSerie, margem);
+
+  return { svg: finalizarPainelSvg(svg, rotulos, altura), milhares: usarMilhares };
+}
+
+// Recalcula e redesenha os gráficos a partir dos MESMOS filtros/dimensão da
 // tabela -- chamado toda vez que recalcularTabela roda, então nunca fica
 // desatualizado mesmo se o usuário estiver na aba Tabela quando muda um
 // filtro e só depois troca pra aba Gráfico.
@@ -456,7 +690,44 @@ function montarGrafico(registros, filtroTipologia, filtroGrupo, filtroSup, filtr
     return { serie: serie, mensal: mensal, acumulado: ehRazao ? null : calcularAcumulado(mensal) };
   });
 
-  document.getElementById('grafico-svg-container').innerHTML = construirGraficoSvg(dadosPorSerie, ehRazao);
+  var opcaoDimensao = document.getElementById('seletor-dimensao').selectedOptions[0];
+  var rotuloDimensao = opcaoDimensao ? opcaoDimensao.textContent : '';
+
+  var mensalResultado = construirGraficoMensalSvg(dadosPorSerie, ehRazao);
+  var tituloMensal = (ehRazao ? 'Evolução mensal — ' : 'Mensal — ') + rotuloDimensao + (mensalResultado.milhares ? ' (em milhares)' : '');
+  document.getElementById('grafico-titulo-mensal').textContent = tituloMensal;
+  document.getElementById('grafico-mensal-container').innerHTML = mensalResultado.svg;
+
+  var painelAcumulado = document.getElementById('grafico-painel-acumulado');
+  if (ehRazao) {
+    painelAcumulado.style.display = 'none';
+  } else {
+    painelAcumulado.style.display = '';
+    var acumuladoResultado = construirGraficoAcumuladoSvg(dadosPorSerie);
+    var tituloAcumulado = 'Acumulado no ano — ' + rotuloDimensao + (acumuladoResultado.milhares ? ' (em milhares)' : '');
+    document.getElementById('grafico-titulo-acumulado').textContent = tituloAcumulado;
+    document.getElementById('grafico-acumulado-container').innerHTML = acumuladoResultado.svg;
+  }
+}
+
+// Tooltip único, delegado (os SVGs são recriados via innerHTML a cada
+// recalcularTabela, então um listener por elemento seria descartado toda
+// hora) -- qualquer elemento com [data-tooltip] dentro da seção de
+// gráficos aciona o balão, com foco/teclado cobrindo o mesmo caso via
+// mouseover que já borbulha de um :focus programático.
+function inicializarTooltipGrafico() {
+  var secao = document.getElementById('secao-grafico');
+  var tooltip = document.getElementById('grafico-tooltip');
+  secao.addEventListener('mousemove', function (e) {
+    var alvo = e.target.closest ? e.target.closest('[data-tooltip]') : null;
+    if (!alvo) { tooltip.style.display = 'none'; return; }
+    var rectSecao = secao.getBoundingClientRect();
+    tooltip.textContent = alvo.getAttribute('data-tooltip');
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX - rectSecao.left + 14) + 'px';
+    tooltip.style.top = (e.clientY - rectSecao.top - 12) + 'px';
+  });
+  secao.addEventListener('mouseleave', function () { tooltip.style.display = 'none'; });
 }
 
 function alternarAba(aba) {
@@ -820,6 +1091,7 @@ function montarDashboard(registros) {
   document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
   document.getElementById('aba-tabela').addEventListener('click', function () { alternarAba('tabela'); });
   document.getElementById('aba-grafico').addEventListener('click', function () { alternarAba('grafico'); });
+  inicializarTooltipGrafico();
   recalcularTabela();
 }
 
