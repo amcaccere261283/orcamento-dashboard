@@ -1450,10 +1450,12 @@ function extrairValoresLinhaClient(row, columns) {
 // Réplica de mesclarTotalComRealizado (parse-matriz.js) -- ver o comentário
 // lá pro porquê: no mês vigente a MATRIZ costuma trazer Realizado parcial
 // e Tendência (projeção do mês inteiro) preenchidos juntos, e Realizado
-// sempre vence quando os dois existem no mesmo mês.
+// vence só quando os dois JÁ existem no mesmo mês -- meses fechados, onde
+// Tendência é null de propósito, continuam null (nada a preencher).
 function mesclarTotalComRealizadoClient(total, realizado) {
   ['equipes', 'volume', 'financeiro'].forEach(function (campo) {
     total[campo] = total[campo].map(function (valorTotal, i) {
+      if (valorTotal === null || valorTotal === undefined) return valorTotal;
       var valorRealizado = realizado[campo][i];
       return (valorRealizado === null || valorRealizado === undefined) ? valorTotal : valorRealizado;
     });

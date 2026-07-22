@@ -109,19 +109,23 @@ function extrairValoresLinha(row, columns) {
   };
 }
 
-// A MATRIZ segue a regra "se tem R, não tem T" pros meses já fechados
-// (Realizado sozinho leva o mês) -- mas no mês vigente (em andamento), é
-// comum a planilha trazer os dois preenchidos ao mesmo tempo: o Realizado
-// parcial (o que já foi de fato apurado até agora) E a Tendência (projeção
-// pro mês inteiro). Sem esse merge, Tendência mostraria a projeção mesmo
-// quando já existe o valor real reportado -- Realizado sempre vence
-// Tendência quando os dois existem no mesmo mês. Mexe só nas 3 séries
-// brutas (equipes/volume/financeiro); Produtividade/Ticket médio herdam a
-// correção de graça, já que são calculadas a partir delas (ver
-// CAMPOS_RATIO em render-dashboard.js).
+// A MATRIZ segue a regra "se tem R, não tem T" pros meses já fechados --
+// Tendência fica null nesses meses de propósito (Realizado sozinho já leva
+// o mês, sem duplicar a mesma informação numa segunda coluna). Só no mês
+// vigente (em andamento) é que a planilha costuma trazer os dois
+// preenchidos ao mesmo tempo: o Realizado parcial (o que já foi apurado
+// até agora) E a própria Tendência (projeção pro mês inteiro) -- nesse
+// caso, e SÓ nesse caso, Realizado vence. Por isso o merge só entra em
+// ação quando Tendência JÁ tinha um valor próprio pro mês -- meses onde
+// Tendência era null (meses fechados) continuam null, não é pra
+// "preencher" com o Realizado o que a própria planilha deixou em branco de
+// propósito. Mexe só nas 3 séries brutas (equipes/volume/financeiro);
+// Produtividade/Ticket médio herdam a correção de graça, já que são
+// calculadas a partir delas (ver CAMPOS_RATIO em render-dashboard.js).
 function mesclarTotalComRealizado(total, realizado) {
   ['equipes', 'volume', 'financeiro'].forEach(campo => {
     total[campo] = total[campo].map((valorTotal, i) => {
+      if (valorTotal === null || valorTotal === undefined) return valorTotal;
       const valorRealizado = realizado[campo][i];
       return (valorRealizado === null || valorRealizado === undefined) ? valorTotal : valorRealizado;
     });

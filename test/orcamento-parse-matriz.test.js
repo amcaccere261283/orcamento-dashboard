@@ -149,21 +149,24 @@ test('parseMatriz preserves a blank monthly cell as null (not 0) -- "no data rep
   assert.equal(registros[0].realizado.volume[5], 80, 'só os meses de fato vazios na planilha viram null -- volume continuou preenchido nesse mês');
 });
 
-test('mesclarTotalComRealizado lets Realizado win over Tendência in any month where both have a value, keeps Tendência where Realizado is null', () => {
+test('mesclarTotalComRealizado only lets Realizado win where Tendência ALREADY had its own value (o mês vigente) -- never backfills a month where Tendência was null on purpose (mês fechado, "se tem R não tem T"), even if Realizado has data there', () => {
   const total = {
-    equipes: [10, 10, null, 10],
-    volume: [100, 100, null, 100],
-    financeiro: [1000, 1000, null, 1000],
+    // mês 0: os dois têm valor (mês vigente) -- mês 1: Tendência é null,
+    // mas Realizado TEM dado (mês fechado -- não é pra reviver isso) --
+    // mês 2: nenhum tem -- mês 3: só Tendência tem (mês futuro).
+    equipes: [10, null, null, 10],
+    volume: [100, null, null, 100],
+    financeiro: [1000, null, null, 1000],
   };
   const realizado = {
-    equipes: [5, null, null, null],
-    volume: [50, null, null, null],
-    financeiro: [500, null, null, null],
+    equipes: [5, 7, null, null],
+    volume: [50, 70, null, null],
+    financeiro: [500, 700, null, null],
   };
   const resultado = mesclarTotalComRealizado(total, realizado);
-  assert.deepEqual(resultado.financeiro, [500, 1000, null, 1000], 'mês 0: os dois têm valor -- Realizado (500) vence Tendência (1000); mês 1: só Tendência tem -- mantém; mês 2: nenhum tem -- continua null; mês 3: só Tendência tem -- mantém');
-  assert.deepEqual(resultado.equipes, [5, 10, null, 10]);
-  assert.deepEqual(resultado.volume, [50, 100, null, 100]);
+  assert.deepEqual(resultado.financeiro, [500, null, null, 1000], 'mês 0: Realizado (500) vence a Tendência própria (1000); mês 1: Tendência continua null -- NÃO vira 700 só porque Realizado tem dado ali, isso é um mês já fechado; mês 2: continua null; mês 3: mantém a projeção própria (1000, sem Realizado pra competir)');
+  assert.deepEqual(resultado.equipes, [5, null, null, 10]);
+  assert.deepEqual(resultado.volume, [50, null, null, 100]);
 });
 
 test('parseMatriz: no mês vigente (Realizado parcial e Tendência preenchidos ao mesmo tempo), Realizado vence -- reproduz o padrão real encontrado na MATRIZ (mês em andamento tem os dois valores; meses fechados só têm Realizado; meses futuros só têm Tendência)', () => {
