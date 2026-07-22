@@ -111,8 +111,7 @@ test('renderDashboard includes a série filter (Previsto/Realizado/Tendência) a
 
 test('renderDashboard defaults the dimension selector to "Financeiro", not "Equipes" -- the table must open showing money, not headcount', () => {
   const html = renderComSenha([registroExemplo()]);
-  assert.match(html, /<option value="financeiro" selected>Financeiro<\/option>/);
-  assert.doesNotMatch(html, /<option value="equipes" selected>/);
+  assert.match(html, /<div class="filtro-multi" id="seletor-dimensao"><button type="button" class="filtro-multi-trigger">Financeiro/);
 });
 
 test('renderDashboard includes Tabela/Gráfico tab buttons and both view sections (Gráfico hidden by default)', () => {
@@ -159,7 +158,8 @@ function extrairFuncoesPuras(html) {
       ' this.formatarNumero = formatarNumero; this.formatarValorGrafico = formatarValorGrafico;' +
       ' this.categoriaTipologia = categoriaTipologia;' +
       ' this.cortarAcumuladoNoUltimoDado = cortarAcumuladoNoUltimoDado;' +
-      ' this.preservarPrevistoInicial = preservarPrevistoInicial;',
+      ' this.preservarPrevistoInicial = preservarPrevistoInicial;' +
+      ' this.dimensoesEmOrdem = dimensoesEmOrdem;',
     sandbox
   );
   return {
@@ -178,6 +178,7 @@ function extrairFuncoesPuras(html) {
     categoriaTipologia: sandbox.categoriaTipologia,
     cortarAcumuladoNoUltimoDado: sandbox.cortarAcumuladoNoUltimoDado,
     preservarPrevistoInicial: sandbox.preservarPrevistoInicial,
+    dimensoesEmOrdem: sandbox.dimensoesEmOrdem,
   };
 }
 
@@ -196,6 +197,33 @@ test('tipologiaColor (extraído do HTML real gerado) usa o mesmo mapeamento da m
   assert.equal(tipologiaColor('SM'), '#2f6ad0');
   assert.equal(tipologiaColor('SM / SM.F / SR'), '#2f6ad0');
   assert.equal(tipologiaColor('ALGO-DESCONHECIDO'), '#898781');
+});
+
+test('renderCorpoTabela with multiple dimensões selected emits one full 4-row série block PER dimension, in the order given by the caller, each with its own data-dimensao and a "Série — Dimensão" label -- not just the default single Financeiro block', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoTabela, dimensoesEmOrdem } = extrairFuncoesPuras(html);
+
+  // renderCorpoTabela em si NÃO reordena -- quem garante a ordem canônica é
+  // dimensoesEmOrdem, chamada pelo client antes de montar a tabela (ver
+  // recalcularTabela/montarDashboard/atualizarDadosAoVivo). Aqui simula
+  // exatamente esse fluxo: pede fora de ordem, normaliza, só então renderiza.
+  const dimensoes = dimensoesEmOrdem(new Set(['financeiro', 'equipes']));
+  assert.deepEqual(paraPlano(dimensoes), ['equipes', 'financeiro'], 'dimensoesEmOrdem devolve a ordem canônica (Equipes antes de Financeiro), não a ordem em que foram marcadas');
+
+  const corpo = renderCorpoTabela([registroExemplo()], dimensoes);
+
+  const todasAsLinhas = corpo.match(/<tr class="linha-serie[^>]*>/g) || [];
+  const linhasRegistro = todasAsLinhas.filter(tr =>
+    tr.includes('data-registro-indices="0"') &&
+    !tr.includes('data-total-sup') && !tr.includes('data-total-geral'));
+  assert.equal(linhasRegistro.length, 8, '4 linhas (Previsto Inicial/Previsto/Realizado/Tendência) x 2 dimensões = 8, só pro registro real (exclui os blocos de total, que também casam com data-registro-indices="0" quando só há um registro)');
+
+  const primeiroBlocoEquipes = corpo.indexOf('data-dimensao="equipes"');
+  const primeiroBlocoFinanceiro = corpo.indexOf('data-dimensao="financeiro"');
+  assert.ok(primeiroBlocoEquipes < primeiroBlocoFinanceiro, 'Equipes vem antes de Financeiro na ordem canônica');
+
+  assert.match(corpo, /<td class="serie-label">Previsto Inicial — Equipes<\/td>/);
+  assert.match(corpo, /<td class="serie-label">Realizado — Financeiro<\/td>/);
 });
 
 test('renderCorpoTabela (extraído do HTML real gerado) monta o bloco TOTAL GERAL primeiro, depois cada registro com 3 linhas de série e um total por SUP ao fim de cada grupo', () => {

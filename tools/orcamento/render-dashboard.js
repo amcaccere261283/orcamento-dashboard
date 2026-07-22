@@ -622,8 +622,7 @@ function montarGrafico(registros, filtroTipologia, filtroCategoria, filtroGrupo,
     return { serie: serie, mensal: mensal, acumulado: acumulado };
   });
 
-  var opcaoDimensao = document.getElementById('seletor-dimensao').selectedOptions[0];
-  var rotuloDimensao = opcaoDimensao ? opcaoDimensao.textContent : '';
+  var rotuloDimensao = DIMENSOES_ROTULO[dimensao] || '';
   var casasDecimais = dimensao === 'equipes' ? 0 : 2;
 
   var mensalResultado = construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais);
@@ -793,6 +792,29 @@ function categoriaTipologia(tipologia) {
 }
 
 var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência' };
+var ORDEM_SERIES = ['previstoInicial', 'previsto', 'realizado', 'total'];
+var CLASSE_SERIE = { previstoInicial: 'previsto-inicial', previsto: 'previsto', realizado: 'realizado', total: 'total' };
+
+// Ordem fixa e canônica das dimensões -- quando várias estão marcadas, os
+// blocos na tabela sempre aparecem nesta ordem, não na ordem que a pessoa
+// marcou os checkboxes (previsibilidade).
+var DIMENSOES_CONFIG = [
+  { valor: 'equipes', rotulo: 'Equipes' },
+  { valor: 'volume', rotulo: 'Volume' },
+  { valor: 'financeiro', rotulo: 'Financeiro' },
+  { valor: 'produtividade', rotulo: 'Produtividade' },
+  { valor: 'ticketMedio', rotulo: 'Ticket médio' },
+];
+var DIMENSOES_ROTULO = {};
+DIMENSOES_CONFIG.forEach(function (d) { DIMENSOES_ROTULO[d.valor] = d.rotulo; });
+
+// Devolve as dimensões marcadas (Set), na ordem canônica -- nunca vazio na
+// prática (o checkbox de dimensão nunca deixa desmarcar a última, ver
+// montarFiltroMulti), mas cai pra Financeiro se por algum motivo estiver.
+function dimensoesEmOrdem(selecionadas) {
+  var ordenadas = DIMENSOES_CONFIG.filter(function (d) { return selecionadas.has(d.valor); }).map(function (d) { return d.valor; });
+  return ordenadas.length ? ordenadas : ['financeiro'];
+}
 
 function celulasMesVazias() {
   var html = '';
@@ -800,93 +822,58 @@ function celulasMesVazias() {
   return html;
 }
 
-function renderLinhaTabela(registro, indice) {
-  var chipColor = tipologiaColor(registro.tipologia);
-  var dataAttrs = 'data-tipologia="' + escapeHtml(registro.tipologia) + '" data-categoria="' + categoriaTipologia(registro.tipologia) + '" data-grupo="' + escapeHtml(registro.grupo) + '" data-sup="' + escapeHtml(registro.sup) + '" data-registro-indices="' + indice + '"';
+// Gera o bloco de 4 linhas (Previsto Inicial/Previsto/Realizado/Tendência)
+// pra CADA dimensão marcada, reaproveitando as mesmas células fixas
+// (SUP/Grupo/Tomador/Tipologia) em todos os blocos -- só o rótulo da série
+// ganha o nome da dimensão junto (" — Financeiro" etc.), pra diferenciar
+// os blocos quando várias dimensões estão marcadas ao mesmo tempo. Usado
+// pelos 4 tipos de linha (registro normal, total por SUP, total geral,
+// total geral por tipologia), que só diferem nas células fixas em si.
+function renderBlocosDimensao(classesExtra, dataAttrsBase, celulaSup, celulaGrupo, celulaTomador, celulaTipologia, dimensoes) {
+  var sufixoClasse = classesExtra ? ' ' + classesExtra : '';
   var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
+  var html = '';
+  dimensoes.forEach(function (dim) {
+    var rotuloDim = DIMENSOES_ROTULO[dim];
+    var dataAttrs = dataAttrsBase + ' data-dimensao="' + dim + '"';
+    ORDEM_SERIES.forEach(function (serie) {
+      html += '<tr class="linha-serie linha-' + CLASSE_SERIE[serie] + sufixoClasse + '" data-serie="' + serie + '" ' + dataAttrs + '>' +
+          celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
+          '<td class="serie-label">' + SERIE_LABELS[serie] + ' — ' + rotuloDim + '</td>' +
+          celulasMesVazias() + celulaTotalLinha +
+        '</tr>';
+    });
+  });
+  return html;
+}
+
+function renderLinhaTabela(registro, indice, dimensoes) {
+  var chipColor = tipologiaColor(registro.tipologia);
+  var dataAttrsBase = 'data-tipologia="' + escapeHtml(registro.tipologia) + '" data-categoria="' + categoriaTipologia(registro.tipologia) + '" data-grupo="' + escapeHtml(registro.grupo) + '" data-sup="' + escapeHtml(registro.sup) + '" data-registro-indices="' + indice + '"';
   var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(registro.sup) + '">' + escapeHtml(registro.sup) + '</td>';
   var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(registro.grupo) + '">' + escapeHtml(registro.grupo) + '</td>';
   var celulaTomador = '<td class="col-mesclavel col-tomador" data-valor="' + escapeHtml(registro.tomador) + '">' + escapeHtml(registro.tomador) + '</td>';
   var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(registro.tipologia) + '</span></td>';
-  return '<tr class="linha-serie linha-previsto-inicial" data-serie="previstoInicial" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.previstoInicial + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-previsto" data-serie="previsto" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-realizado" data-serie="realizado" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-total" data-serie="total" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>';
+  return renderBlocosDimensao('', dataAttrsBase, celulaSup, celulaGrupo, celulaTomador, celulaTipologia, dimensoes);
 }
 
-function renderLinhaTotalSup(sup, grupo, tomador, indices) {
-  var dataAttrs = 'data-grupo="' + escapeHtml(grupo) + '" data-sup="' + escapeHtml(sup) + '" data-registro-indices="' + indices.join(',') + '" data-total-sup="1"';
-  var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
+function renderLinhaTotalSup(sup, grupo, tomador, indices, dimensoes) {
+  var dataAttrsBase = 'data-grupo="' + escapeHtml(grupo) + '" data-sup="' + escapeHtml(sup) + '" data-registro-indices="' + indices.join(',') + '" data-total-sup="1"';
   var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(sup) + '">' + escapeHtml(sup) + '</td>';
   var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(grupo) + '">' + escapeHtml(grupo) + '</td>';
   var celulaTomador = '<td class="col-mesclavel col-tomador" data-valor="' + escapeHtml(tomador) + '">' + escapeHtml(tomador) + '</td>';
   var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip tipologia-chip-total">TOTAL</span></td>';
-  return '<tr class="linha-serie linha-previsto-inicial linha-total-sup" data-serie="previstoInicial" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.previstoInicial + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-previsto linha-total-sup" data-serie="previsto" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-realizado linha-total-sup" data-serie="realizado" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-total linha-total-sup" data-serie="total" ' + dataAttrs + '>' +
-      celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>';
+  return renderBlocosDimensao('linha-total-sup', dataAttrsBase, celulaSup, celulaGrupo, celulaTomador, celulaTipologia, dimensoes);
 }
 
-function renderLinhaTotalGeral(totalRegistros) {
+function renderLinhaTotalGeral(totalRegistros, dimensoes) {
   var todosIndices = [];
   for (var i = 0; i < totalRegistros; i++) todosIndices.push(i);
-  var dataAttrs = 'data-registro-indices="' + todosIndices.join(',') + '" data-total-geral="1"';
-  var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
+  var dataAttrsBase = 'data-registro-indices="' + todosIndices.join(',') + '" data-total-geral="1"';
   var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
   var celulaTodos = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="Todos">Todos</td>'; };
   var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip tipologia-chip-total">TOTAL GERAL</span></td>';
-  return '<tr class="linha-serie linha-previsto-inicial linha-total-geral" data-serie="previstoInicial" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.previstoInicial + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-previsto linha-total-geral" data-serie="previsto" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-realizado linha-total-geral" data-serie="realizado" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-total linha-total-geral" data-serie="total" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>';
+  return renderBlocosDimensao('linha-total-geral', dataAttrsBase, celulaVazia('col-sup'), celulaTodos('col-grupo'), celulaTodos('col-tomador'), celulaTipologia, dimensoes);
 }
 
 // Total geral de UMA tipologia (soma através de TODOS os grupos/SUPs que
@@ -894,37 +881,18 @@ function renderLinhaTotalGeral(totalRegistros) {
 // geral), Grupo/Tomador mostram "Todos" (não há um grupo/tomador único pra
 // exibir aqui), mas a Tipologia aparece de verdade e colorida, pra
 // distinguir qual bloco é qual quando vários aparecem juntos no topo.
-function renderLinhaTotalGeralTipologia(tipologia, indices) {
+function renderLinhaTotalGeralTipologia(tipologia, indices, dimensoes) {
   var chipColor = tipologiaColor(tipologia);
-  var dataAttrs = 'data-tipologia="' + escapeHtml(tipologia) + '" data-categoria="' + categoriaTipologia(tipologia) + '" data-registro-indices="' + indices.join(',') + '" data-total-geral-tipologia="1"';
-  var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
+  var dataAttrsBase = 'data-tipologia="' + escapeHtml(tipologia) + '" data-categoria="' + categoriaTipologia(tipologia) + '" data-registro-indices="' + indices.join(',') + '" data-total-geral-tipologia="1"';
   var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
   var celulaTodos = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="Todos">Todos</td>'; };
   var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(tipologia) + '</span></td>';
-  return '<tr class="linha-serie linha-previsto-inicial linha-total-geral linha-total-geral-tipologia" data-serie="previstoInicial" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.previstoInicial + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-previsto linha-total-geral linha-total-geral-tipologia" data-serie="previsto" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.previsto + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-realizado linha-total-geral linha-total-geral-tipologia" data-serie="realizado" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.realizado + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>' +
-    '<tr class="linha-serie linha-total linha-total-geral linha-total-geral-tipologia" data-serie="total" ' + dataAttrs + '>' +
-      celulaVazia('col-sup') + celulaTodos('col-grupo') + celulaTodos('col-tomador') + celulaTipologia +
-      '<td class="serie-label">' + SERIE_LABELS.total + '</td>' +
-      celulasMesVazias() + celulaTotalLinha +
-    '</tr>';
+  return renderBlocosDimensao('linha-total-geral linha-total-geral-tipologia', dataAttrsBase, celulaVazia('col-sup'), celulaTodos('col-grupo'), celulaTodos('col-tomador'), celulaTipologia, dimensoes);
 }
 
-function renderCorpoTabela(registros) {
-  var html = renderLinhaTotalGeral(registros.length);
+function renderCorpoTabela(registros, dimensoes) {
+  dimensoes = dimensoes && dimensoes.length ? dimensoes : ['financeiro'];
+  var html = renderLinhaTotalGeral(registros.length, dimensoes);
 
   // Um total geral por tipologia, logo depois do total geral -- agrega
   // todos os registros daquela tipologia através de TODOS os SUPs (não só
@@ -942,7 +910,7 @@ function renderCorpoTabela(registros) {
   });
   ordemTipologias.sort();
   ordemTipologias.forEach(function (tipologia) {
-    html += renderLinhaTotalGeralTipologia(tipologia, indicesPorTipologia[tipologia]);
+    html += renderLinhaTotalGeralTipologia(tipologia, indicesPorTipologia[tipologia], dimensoes);
   });
 
   var supAtual = null;
@@ -952,7 +920,7 @@ function renderCorpoTabela(registros) {
 
   function fecharGrupo() {
     if (indicesGrupoAtual.length) {
-      html += renderLinhaTotalSup(supAtual, grupoAtual, tomadorAtual, indicesGrupoAtual);
+      html += renderLinhaTotalSup(supAtual, grupoAtual, tomadorAtual, indicesGrupoAtual, dimensoes);
     }
   }
 
@@ -965,7 +933,7 @@ function renderCorpoTabela(registros) {
     grupoAtual = registro.grupo;
     tomadorAtual = registro.tomador;
     indicesGrupoAtual.push(indice);
-    html += renderLinhaTabela(registro, indice);
+    html += renderLinhaTabela(registro, indice, dimensoes);
   });
   fecharGrupo();
   return html;
@@ -1008,12 +976,19 @@ var FILTROS_CONFIG = [
     { valor: 'realizado', rotulo: 'Realizado' },
     { valor: 'total', rotulo: 'Tendência' },
   ] },
+  // Diferente dos outros -- não é um FILTRO que estreita quais linhas
+  // aparecem, decide qual(is) valor(es) elas mostram, então nunca pode
+  // ficar vazio (ver montarFiltroMulti, que trava a última desmarcação) e
+  // começa com Financeiro já marcado, não vazio como os demais.
+  { id: 'seletor-dimensao', chave: 'dimensao', rotuloPadrao: 'Selecione ao menos 1', opcoesFixas: DIMENSOES_CONFIG, minimoUm: true },
 ];
 
 // chave -> Set dos valores marcados -- Set vazio tem a MESMA semântica que
-// o <select> de valor único tinha com "" (nenhum filtro, mostra tudo).
+// o <select> de valor único tinha com "" (nenhum filtro, mostra tudo) --
+// exceto "dimensao", que começa com Financeiro marcado (ver FILTROS_CONFIG).
 var filtrosSelecionados = {};
 FILTROS_CONFIG.forEach(function (cfg) { filtrosSelecionados[cfg.chave] = new Set(); });
+filtrosSelecionados.dimensao.add('financeiro');
 
 function opcoesFiltro(cfg, registros) {
   if (cfg.opcoesFixas) return cfg.opcoesFixas;
@@ -1080,6 +1055,13 @@ function montarFiltroMulti(cfg, registros) {
     : '<div class="filtro-multi-vazio">Nenhuma opção</div>';
   painel.querySelectorAll('input[type="checkbox"]').forEach(function (checkbox) {
     checkbox.addEventListener('change', function () {
+      // Dimensão nunca pode ficar sem nenhuma marcada -- não faz sentido
+      // mostrar uma tabela sem nenhum valor. Trava a desmarcação da
+      // última em vez de deixar o Set esvaziar.
+      if (cfg.minimoUm && !checkbox.checked && filtrosSelecionados[cfg.chave].size === 1) {
+        checkbox.checked = true;
+        return;
+      }
       if (checkbox.checked) filtrosSelecionados[cfg.chave].add(checkbox.value);
       else filtrosSelecionados[cfg.chave].delete(checkbox.value);
       atualizarRotuloFiltro(cfg, opcoes);
@@ -1089,6 +1071,12 @@ function montarFiltroMulti(cfg, registros) {
       if (cfg.chave === 'categoria') {
         var cfgTipologia = FILTROS_CONFIG.filter(function (c) { return c.chave === 'tipologia'; })[0];
         montarFiltroMulti(cfgTipologia, registros);
+      }
+      // Dimensão mudou -- a quantidade de linhas por registro depende de
+      // quantas estão marcadas, então a estrutura da tabela (não só os
+      // valores) precisa ser remontada antes do preenchimento normal.
+      if (cfg.chave === 'dimensao') {
+        document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
       }
       recalcularTabela();
     });
@@ -1137,9 +1125,8 @@ function configurarAberturaFiltrosMulti() {
 }
 
 function recalcularTabela() {
-  var dimensao = document.getElementById('seletor-dimensao').value;
   var notaPremissa = document.getElementById('nota-premissa-produtividade');
-  notaPremissa.style.display = dimensao === 'produtividade' ? '' : 'none';
+  notaPremissa.style.display = filtrosSelecionados.dimensao.has('produtividade') ? '' : 'none';
   var filtroTipologia = filtrosSelecionados.tipologia;
   var filtroCategoria = filtrosSelecionados.categoria;
   var filtroGrupo = filtrosSelecionados.grupo;
@@ -1178,18 +1165,24 @@ function recalcularTabela() {
     linha.style.display = mostra ? '' : 'none';
     if (mostra) {
       var valoresLista = indices.map(function (idx) { return window.__REGISTROS__[idx][linha.dataset.serie]; });
-      preencherLinha(linha, valoresLista, linha.dataset.serie, dimensao);
+      preencherLinha(linha, valoresLista, linha.dataset.serie, linha.dataset.dimensao);
     }
   });
   mesclarColunasRepetidas();
-  montarGrafico(window.__REGISTROS__, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensao);
+  // O gráfico só entende UMA dimensão por vez (eixos/escala não fazem
+  // sentido misturando, por exemplo, Equipes e Financeiro no mesmo
+  // painel) -- usa a primeira da ordem canônica entre as marcadas.
+  var dimensaoGrafico = dimensoesEmOrdem(filtrosSelecionados.dimensao)[0];
+  montarGrafico(window.__REGISTROS__, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensaoGrafico);
 }
 
 function limparFiltros() {
   FILTROS_CONFIG.forEach(function (cfg) {
     filtrosSelecionados[cfg.chave].clear();
   });
+  filtrosSelecionados.dimensao.add('financeiro');
   montarTodosFiltrosMulti(window.__REGISTROS__);
+  document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
   recalcularTabela();
 }
 
@@ -1198,8 +1191,7 @@ function limparFiltros() {
 function montarDashboard(registros) {
   montarTodosFiltrosMulti(registros);
   configurarAberturaFiltrosMulti();
-  document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(registros);
-  document.getElementById('seletor-dimensao').addEventListener('change', recalcularTabela);
+  document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(registros, dimensoesEmOrdem(filtrosSelecionados.dimensao));
   document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
   document.getElementById('aba-tabela').addEventListener('click', function () { alternarAba('tabela'); });
   document.getElementById('aba-grafico').addEventListener('click', function () { alternarAba('grafico'); });
@@ -1461,7 +1453,7 @@ function atualizarDadosAoVivo() {
       preservarPrevistoInicial(window.__REGISTROS__, registrosNovos);
       window.__REGISTROS__ = registrosNovos;
       montarTodosFiltrosMulti(window.__REGISTROS__);
-      document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__);
+      document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
       recalcularTabela();
 
       var agora = new Date();
@@ -1762,7 +1754,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
         <div class="filtro-multi" id="filtro-grupo"><button type="button" class="filtro-multi-trigger">Todos os grupos<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         <div class="filtro-multi" id="filtro-sup"><button type="button" class="filtro-multi-trigger">Todos os SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         <div class="filtro-multi" id="filtro-serie"><button type="button" class="filtro-multi-trigger">Todas as séries<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-        <select id="seletor-dimensao"><option value="equipes">Equipes</option><option value="volume">Volume</option><option value="financeiro" selected>Financeiro</option><option value="produtividade">Produtividade</option><option value="ticketMedio">Ticket médio</option></select>
+        <div class="filtro-multi" id="seletor-dimensao"><button type="button" class="filtro-multi-trigger">Financeiro<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
       </div>
       <div class="filtros-acoes">
