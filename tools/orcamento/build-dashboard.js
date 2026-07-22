@@ -13,15 +13,35 @@ const config = require('./config.js');
 // linha de base (mesma tradução usada em toda a integração com arquivos
 // externos deste projeto -- ver o Apps Script e a análise da MATRIZ real).
 const TIP_MAP_LINHA_BASE = { 'LAB.C': 'LAB.', 'LAB.E': 'LAB. ESPECIAL' };
+
+// SUP da MATRIZ viva -> nome/código correspondente na linha de base --
+// preenchido cruzando manualmente com o usuário os 70 pares SUP+tipologia
+// que não bateram por conta de renomeação/renovação de contrato desde o
+// estudo original, ou porque a linha de base usa um nome descritivo em vez
+// de um código SUP-nnnn-aa. Só entra em uso como FALLBACK (ver
+// anexarPrevistoInicial) -- nenhum destes tinha uma chave direta própria
+// na linha de base, confirmado antes de mapear, então não existe risco de
+// sobrescrever um match correto que já existisse.
+const SUP_MAP_LINHA_BASE = {
+  'SUP-8437-26': 'EPR - Iguaçu',
+  'SUP-6830-23': 'SUP-6830-24',
+  'SUP-8370-25': 'SUP-8224-25 (SR)',
+  'SUP-8224-25': 'MOTIVA - BID 2.0',
+  'Diversos': 'DIVERSOS',
+  'SUP-8276-25': 'ECOVIAS - Nova Raposo - Lote 04',
+  'SUP-8413-26': 'ECOVIAS - Nova Raposo - Pacote 02',
+};
+
 const RESUMO_ZERO = { pico: 0, media: 0, prod: 0, dias: 0 };
 
 // Anexa previstoInicial em cada registro, casando por SUP+tipologia com a
-// linha de base -- se não achar o SUP (ou a tipologia) lá, fica tudo zero
+// linha de base -- tenta o SUP da própria MATRIZ primeiro; se não achar
+// (nem com a tipologia traduzida), tenta o nome mapeado em
+// SUP_MAP_LINHA_BASE antes de desistir. Sem match nenhum, fica tudo zero
 // (não null: "não fazia parte do estudo original" é uma resposta certa,
 // diferente de "não tinha dado reportado ainda" nas outras séries).
 // Devolve também as chaves da linha de base que NINGUÉM na MATRIZ atual
-// reivindicou (SUP renomeado/renovado desde o estudo original, ou usando
-// nome descritivo em vez de código SUP-nnnn-aa lá) -- essa soma nunca
+// reivindicou (mesmo depois do mapeamento manual) -- essa soma nunca
 // aparece na coluna Previsto Inicial da tabela hoje, então é informação
 // que build() deve logar pra quem for reconciliar os ~110MM não ficar sem
 // saber que uma fatia ficou de fora por não casar, não por ser zero de verdade.
@@ -30,9 +50,15 @@ function anexarPrevistoInicial(registros, baseline) {
   const chavesUsadas = new Set();
   registros.forEach(registro => {
     const tipologiaBaseline = TIP_MAP_LINHA_BASE[registro.tipologia] || registro.tipologia;
-    const chave = `${registro.sup}||${tipologiaBaseline}`;
-    chavesUsadas.add(chave);
-    const dados = baseline.porChave.get(chave);
+    const chaveDireta = `${registro.sup}||${tipologiaBaseline}`;
+    let dados = baseline.porChave.get(chaveDireta);
+    let chaveUsada = chaveDireta;
+    if (!dados && SUP_MAP_LINHA_BASE[registro.sup]) {
+      const chaveMapeada = `${SUP_MAP_LINHA_BASE[registro.sup]}||${tipologiaBaseline}`;
+      dados = baseline.porChave.get(chaveMapeada);
+      if (dados) chaveUsada = chaveMapeada;
+    }
+    chavesUsadas.add(chaveUsada);
     registro.previstoInicial = {
       equipes: dados ? dados.equipes : zero12(),
       equipesResumo: RESUMO_ZERO,
@@ -108,4 +134,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build };
+module.exports = { build, anexarPrevistoInicial };
