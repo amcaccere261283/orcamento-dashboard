@@ -152,7 +152,8 @@ function extrairFuncoesPuras(html) {
       ' this.renderCorpoTabela = renderCorpoTabela; this.escapeHtml = escapeHtml;' +
       ' this.calcularAcumulado = calcularAcumulado; this.indicesFiltrados = indicesFiltrados;' +
       ' this.construirGraficoMensalSvg = construirGraficoMensalSvg;' +
-      ' this.construirGraficoAcumuladoSvg = construirGraficoAcumuladoSvg;',
+      ' this.construirGraficoAcumuladoSvg = construirGraficoAcumuladoSvg;' +
+      ' this.calcularEscalaEixo = calcularEscalaEixo;',
     sandbox
   );
   return {
@@ -162,6 +163,7 @@ function extrairFuncoesPuras(html) {
     calcularAcumulado: sandbox.calcularAcumulado, indicesFiltrados: sandbox.indicesFiltrados,
     construirGraficoMensalSvg: sandbox.construirGraficoMensalSvg,
     construirGraficoAcumuladoSvg: sandbox.construirGraficoAcumuladoSvg,
+    calcularEscalaEixo: sandbox.calcularEscalaEixo,
   };
 }
 
@@ -444,6 +446,30 @@ test('construirGraficoMensalSvg only draws columns for the séries actually pass
   const { svg } = construirGraficoMensalSvg(dados, false);
   assert.equal((svg.match(/<path class="grafico-barra"/g) || []).length, 12);
   assert.match(svg, /fill="#7fd858"/); // Realizado's color, confirming the right série was drawn
+});
+
+test('construirGraficoMensalSvg and construirGraficoAcumuladoSvg emit no numeric label for a zero-value point (real "no data yet" case, e.g. Realizado before any month has actuals) -- a labeled "0" on every empty point is visual clutter, not signal', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoMensalSvg, construirGraficoAcumuladoSvg } = extrairFuncoesPuras(html);
+  const mensalComZeros = [100, 0, 0, 200, 0, 0, 0, 0, 0, 0, 0, 0];
+  const dados = [{ serie: 'previsto', mensal: mensalComZeros, acumulado: mensalComZeros }];
+
+  const mensal = construirGraficoMensalSvg(dados, false);
+  assert.equal((mensal.svg.match(/class="grafico-rotulo"/g) || []).length, 2, 'só os 2 meses com valor real (100 e 200) devem ganhar rótulo');
+
+  const acumulado = construirGraficoAcumuladoSvg(dados);
+  assert.equal((acumulado.svg.match(/class="grafico-rotulo-final"/g) || []).length, 2, 'mesma regra pro acumulado -- só pontos com valor real ganham rótulo');
+});
+
+test('calcularEscalaEixo (extraído do HTML real gerado) rounds the axis max to a tight "nice number" -- must not overshoot to double the real max when an intermediate step (2.5x) already fits it', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { calcularEscalaEixo } = extrairFuncoesPuras(html);
+  // Caso real: acumulado de dezembro ~85.372,98 -- o degrau ingênuo (1/2/5/10)
+  // pula de 2x pra 5x e deixa o eixo em 200.000 (menos da metade do gráfico
+  // usada); com o degrau intermediário de 2,5x, o teto fica em 100.000.
+  const escala = calcularEscalaEixo(85372.98);
+  assert.equal(escala.max, 100000);
+  assert.equal(escala.passo, 25000);
 });
 
 test('escapeHtml (extraído do HTML real gerado) escapes the same 5 characters as the server-side helper, protecting against markup injection from spreadsheet text once rendered client-side', () => {

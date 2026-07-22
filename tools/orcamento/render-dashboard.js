@@ -253,7 +253,7 @@ function calcularEscalaEixo(valorMax) {
   var passoBruto = valorMax / GRAFICO_NUM_TICKS;
   var magnitude = Math.pow(10, Math.floor(Math.log10(passoBruto)));
   var normalizado = passoBruto / magnitude;
-  var passoNormalizado = normalizado <= 1 ? 1 : normalizado <= 2 ? 2 : normalizado <= 5 ? 5 : 10;
+  var passoNormalizado = normalizado <= 1 ? 1 : normalizado <= 2 ? 2 : normalizado <= 2.5 ? 2.5 : normalizado <= 5 ? 5 : 10;
   var passo = passoNormalizado * magnitude;
   return { max: passo * GRAFICO_NUM_TICKS, passo: passo };
 }
@@ -372,7 +372,7 @@ function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, marg
       var y = margem.topo + alturaPlot - alturaColuna;
       svg += desenharBarraArredondada(x, y, larguraColuna, alturaColuna, SERIE_COR[d.serie]);
       svg += '<rect class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor) + '" x="' + x.toFixed(1) + '" y="' + margem.topo + '" width="' + Math.max(larguraColuna, GRAFICO_BARRA_GAP).toFixed(1) + '" height="' + alturaPlot + '" fill="transparent"/>';
-      if (valor !== null && valor !== undefined) {
+      if (valor) {
         rotulos.push({ x: x + larguraColuna / 2, y: y - 6, texto: formatarValorGrafico(valor, usarMilhares), classe: 'grafico-rotulo' });
       }
     });
@@ -398,7 +398,7 @@ function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraMes
     pontos.forEach(function (p, mes) {
       svg += '<circle class="grafico-marcador" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="4" fill="' + SERIE_COR[d.serie] + '" stroke="var(--surface-1)" stroke-width="2"/>';
       svg += '<circle class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(p.valor) + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="10" fill="transparent"/>';
-      if (p.valor !== null && p.valor !== undefined) {
+      if (p.valor) {
         rotulos.push({ x: p.x, y: p.y - 10, texto: formatarValorGrafico(p.valor, usarMilhares), classe: 'grafico-rotulo-final' });
       }
     });
