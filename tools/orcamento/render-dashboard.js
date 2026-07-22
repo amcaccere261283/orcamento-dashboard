@@ -11,37 +11,6 @@ function renderCabecalhoMeses(periodos) {
   return periodos.map(data => `<th>${formatarMesAno(data)}</th>`).join('');
 }
 
-// A tabela é renderizada inteiramente no navegador, depois que a senha
-// certa decifra os registros -- ver o comentário grande antes de
-// SCRIPT_CLIENTE. Por isso as opções de filtro (que listariam tipologia,
-// grupo e SUP reais em texto puro) começam vazias aqui, só com o rótulo
-// padrão, e são preenchidas pelo próprio script depois de decifrar.
-function renderFiltroTipologia() {
-  return `<select id="filtro-tipologia"><option value="">Todas as tipologias</option></select>`;
-}
-function renderFiltroGrupo() {
-  return `<select id="filtro-grupo"><option value="">Todos os grupos</option></select>`;
-}
-function renderFiltroSup() {
-  return `<select id="filtro-sup"><option value="">Todos os SUP</option></select>`;
-}
-function renderFiltroSerie() {
-  return `<select id="filtro-serie"><option value="">Todas as séries</option>` +
-    `<option value="previsto">Previsto</option>` +
-    `<option value="realizado">Realizado</option>` +
-    `<option value="total">Tendência</option>` +
-    `</select>`;
-}
-function renderSeletorDimensao() {
-  return `<select id="seletor-dimensao">` +
-    `<option value="equipes">Equipes</option>` +
-    `<option value="volume">Volume</option>` +
-    `<option value="financeiro" selected>Financeiro</option>` +
-    `<option value="produtividade">Produtividade</option>` +
-    `<option value="ticketMedio">Ticket médio</option>` +
-    `</select>`;
-}
-
 // A tabela inteira (linhas, filtros, cores de tipologia) é montada no
 // navegador -- ver o comentário logo abaixo de SCRIPT_CLIENTE_INICIO. Este
 // script SEMPRE roda (não depende de senha): implementa só o gate e, uma
@@ -288,17 +257,18 @@ function filtroExclui(filtro, valor) {
 }
 
 // Devolve os índices de \`registros\` que combinam com os filtros de
-// tipologia/categoria/grupo/SUP atuais, calculada aqui direto sobre os
-// registros crus, sem depender de uma linha <tr> já renderizada, pra o
+// tipologia/categoria/grupo/SUP/origem atuais, calculada aqui direto sobre
+// os registros crus, sem depender de uma linha <tr> já renderizada, pra o
 // gráfico poder agregar o recorte atual sem precisar de uma linha "molde"
 // no DOM.
-function indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup) {
+function indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem) {
   var indices = [];
   registros.forEach(function (registro, indice) {
     if (filtroExclui(filtroTipologia, registro.tipologia)) return;
     if (filtroExclui(filtroCategoria, categoriaTipologia(registro.tipologia))) return;
     if (filtroExclui(filtroGrupo, registro.grupo)) return;
     if (filtroExclui(filtroSup, registro.sup)) return;
+    if (filtroExclui(filtroOrigem, registro.origem)) return;
     indices.push(indice);
   });
   return indices;
@@ -649,8 +619,8 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
 // filtro e só depois troca pra aba Gráfico. Uma dimensão marcada = um par
 // de painéis; várias marcadas = vários pares, um abaixo do outro (nunca
 // somados entre si).
-function montarGraficos(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensoes) {
-  var indices = indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup);
+function montarGraficos(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem, filtroSerie, dimensoes) {
+  var indices = indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem);
   var html = dimensoes.map(function (dimensao) {
     return '<div class="grafico-bloco-dimensao">' + construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) + '</div>';
   }).join('');
@@ -871,7 +841,7 @@ function renderBlocosDimensao(classesExtra, dataAttrsBase, celulaSup, celulaGrup
 
 function renderLinhaTabela(registro, indice, dimensoes) {
   var chipColor = tipologiaColor(registro.tipologia);
-  var dataAttrsBase = 'data-tipologia="' + escapeHtml(registro.tipologia) + '" data-categoria="' + categoriaTipologia(registro.tipologia) + '" data-grupo="' + escapeHtml(registro.grupo) + '" data-sup="' + escapeHtml(registro.sup) + '" data-registro-indices="' + indice + '"';
+  var dataAttrsBase = 'data-tipologia="' + escapeHtml(registro.tipologia) + '" data-categoria="' + categoriaTipologia(registro.tipologia) + '" data-grupo="' + escapeHtml(registro.grupo) + '" data-sup="' + escapeHtml(registro.sup) + '" data-origem="' + escapeHtml(registro.origem) + '" data-registro-indices="' + indice + '"';
   var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(registro.sup) + '">' + escapeHtml(registro.sup) + '</td>';
   var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(registro.grupo) + '">' + escapeHtml(registro.grupo) + '</td>';
   var celulaTomador = '<td class="col-mesclavel col-tomador" data-valor="' + escapeHtml(registro.tomador) + '">' + escapeHtml(registro.tomador) + '</td>';
@@ -879,8 +849,12 @@ function renderLinhaTabela(registro, indice, dimensoes) {
   return renderBlocosDimensao('', dataAttrsBase, celulaSup, celulaGrupo, celulaTomador, celulaTipologia, dimensoes);
 }
 
-function renderLinhaTotalSup(sup, grupo, tomador, indices, dimensoes) {
-  var dataAttrsBase = 'data-grupo="' + escapeHtml(grupo) + '" data-sup="' + escapeHtml(sup) + '" data-registro-indices="' + indices.join(',') + '" data-total-sup="1"';
+// origem: sempre uniforme dentro de um SUP (confirmado contra a MATRIZ
+// real -- nenhum SUP mistura CONTRATO VIGENTE e NOVOS NEGÓCIOS entre suas
+// tipologias), então o total do SUP pode levar um único data-origem sem
+// risco de esconder/mostrar errado quando o filtro de Origem for aplicado.
+function renderLinhaTotalSup(sup, grupo, tomador, origem, indices, dimensoes) {
+  var dataAttrsBase = 'data-grupo="' + escapeHtml(grupo) + '" data-sup="' + escapeHtml(sup) + '" data-origem="' + escapeHtml(origem) + '" data-registro-indices="' + indices.join(',') + '" data-total-sup="1"';
   var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(sup) + '">' + escapeHtml(sup) + '</td>';
   var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(grupo) + '">' + escapeHtml(grupo) + '</td>';
   var celulaTomador = '<td class="col-mesclavel col-tomador" data-valor="' + escapeHtml(tomador) + '">' + escapeHtml(tomador) + '</td>';
@@ -938,11 +912,12 @@ function renderCorpoTabela(registros, dimensoes) {
   var supAtual = null;
   var grupoAtual = null;
   var tomadorAtual = null;
+  var origemAtual = null;
   var indicesGrupoAtual = [];
 
   function fecharGrupo() {
     if (indicesGrupoAtual.length) {
-      html += renderLinhaTotalSup(supAtual, grupoAtual, tomadorAtual, indicesGrupoAtual, dimensoes);
+      html += renderLinhaTotalSup(supAtual, grupoAtual, tomadorAtual, origemAtual, indicesGrupoAtual, dimensoes);
     }
   }
 
@@ -954,6 +929,7 @@ function renderCorpoTabela(registros, dimensoes) {
     supAtual = registro.sup;
     grupoAtual = registro.grupo;
     tomadorAtual = registro.tomador;
+    origemAtual = registro.origem;
     indicesGrupoAtual.push(indice);
     html += renderLinhaTabela(registro, indice, dimensoes);
   });
@@ -972,11 +948,18 @@ function linhasDistintas(registros, campo) {
   return resultado;
 }
 
-// Os 5 filtros (Tipologia/Categoria/Grupo/SUP/Série) são todos seleção
-// múltipla, num dropdown de checkboxes -- Tipologia/Grupo/SUP têm opções
-// dinâmicas (dependem dos registros decifrados); Categoria/Série têm
+// Os filtros (Origem/Tipologia/Categoria/Grupo/SUP/Série) são todos seleção
+// múltipla, num dropdown de checkboxes -- Origem/Tipologia/Grupo/SUP têm
+// opções dinâmicas (dependem dos registros decifrados); Categoria/Série têm
 // opções fixas (rótulos genéricos, sem dado protegido, podem ir hardcoded).
 var FILTROS_CONFIG = [
+  // Origem vem direto da coluna ORIGEM da MATRIZ (CONTRATO VIGENTE /
+  // NOVOS NEGÓCIOS hoje) -- dinâmico como tipologia/grupo/SUP, não fixo
+  // como categoria/série, porque é texto cru da planilha, não uma
+  // classificação computada pelo dashboard (ver capitalizarPalavras pro
+  // rótulo bonito; o VALOR do checkbox continua sendo o texto original,
+  // já que é isso que os registros carregam).
+  { id: 'filtro-origem', chave: 'origem', rotuloPadrao: 'Todas as origens', campo: 'origem', rotuloCapitalizado: true },
   { id: 'filtro-categoria', chave: 'categoria', rotuloPadrao: 'Todas as categorias', opcoesFixas: [
     { valor: 'labConvencional', rotulo: 'Lab. Convencional' },
     { valor: 'labEspecial', rotulo: 'Lab. Especial' },
@@ -1014,6 +997,19 @@ FILTROS_CONFIG.forEach(function (cfg) { filtrosSelecionados[cfg.chave] = new Set
 filtrosSelecionados.dimensao.add('financeiro');
 SERIES_PADRAO_ATIVAS.forEach(function (s) { filtrosSelecionados.serie.add(s); });
 
+// "CONTRATO VIGENTE" -> "Contrato Vigente" -- só cosmético pro rótulo do
+// checkbox (o VALOR que efetivamente filtra continua o texto original em
+// caixa alta, exatamente como vem da coluna ORIGEM da MATRIZ). Sem regex
+// com \\s/\\S de propósito -- esses escapes viram "s"/"S" literal depois
+// de atravessar o template literal externo deste arquivo (mesma pegadinha
+// de \\r/\\n/\\. documentada nas outras funções client-side), então
+// split/join simples é mais seguro que arriscar o regex sair errado.
+function capitalizarPalavras(texto) {
+  return (texto || '').toString().toLowerCase().split(' ').map(function (palavra) {
+    return palavra ? palavra.charAt(0).toUpperCase() + palavra.slice(1) : palavra;
+  }).join(' ');
+}
+
 function opcoesFiltro(cfg, registros) {
   if (cfg.opcoesFixas) return cfg.opcoesFixas;
 
@@ -1035,6 +1031,10 @@ function opcoesFiltro(cfg, registros) {
     });
     opcoes.sort(function (a, b) { return a.valor < b.valor ? -1 : a.valor > b.valor ? 1 : 0; });
     return opcoes;
+  }
+
+  if (cfg.rotuloCapitalizado) {
+    return linhasDistintas(registros, cfg.campo).map(function (v) { return { valor: v, rotulo: capitalizarPalavras(v) }; });
   }
 
   return linhasDistintas(registros, cfg.campo).map(function (v) { return { valor: v, rotulo: v }; });
@@ -1204,12 +1204,17 @@ function recalcularTabela() {
   var filtroCategoria = filtrosSelecionados.categoria;
   var filtroGrupo = filtrosSelecionados.grupo;
   var filtroSup = filtrosSelecionados.sup;
+  var filtroOrigem = filtrosSelecionados.origem;
   var filtroSerie = filtrosSelecionados.serie;
   var linhas = document.querySelectorAll('#tabela-orcamento tbody tr');
   linhas.forEach(function (linha) {
     var combinaSerie = !filtroExclui(filtroSerie, linha.dataset.serie);
+    // Origem nunca mistura dentro de um SUP (ver renderLinhaTotalSup), então
+    // entra no mesmo grupo de combinação que Grupo/SUP -- filtrar por ela é
+    // equivalente a escolher um subconjunto de SUPs.
     var combinaGrupoSup = !filtroExclui(filtroGrupo, linha.dataset.grupo) &&
-      !filtroExclui(filtroSup, linha.dataset.sup);
+      !filtroExclui(filtroSup, linha.dataset.sup) &&
+      !filtroExclui(filtroOrigem, linha.dataset.origem);
     var combinaTipologiaCategoria = !filtroExclui(filtroTipologia, linha.dataset.tipologia) &&
       !filtroExclui(filtroCategoria, linha.dataset.categoria);
     var ehTotalGeral = linha.dataset.totalGeral === '1';
@@ -1220,16 +1225,17 @@ function recalcularTabela() {
     if (ehTotalGeral) {
       // Total geral (a visão-resumo de TUDO): só aparece na visão sem
       // nenhum recorte -- some assim que qualquer filtro (tipologia,
-      // categoria, grupo ou SUP) restringe os dados, porque nesse ponto o
-      // total por SUP (ou a própria linha do registro) já cobre o recorte
-      // atual.
-      mostra = filtroGrupo.size === 0 && filtroSup.size === 0 && filtroTipologia.size === 0 && filtroCategoria.size === 0 && combinaSerie;
+      // categoria, grupo, SUP ou origem) restringe os dados, porque nesse
+      // ponto o total por SUP (ou a própria linha do registro) já cobre o
+      // recorte atual.
+      mostra = filtroGrupo.size === 0 && filtroSup.size === 0 && filtroOrigem.size === 0 && filtroTipologia.size === 0 && filtroCategoria.size === 0 && combinaSerie;
     } else if (ehTotalGeralTipologia) {
-      // Total de UMA tipologia através de todos os grupos/SUPs -- mesma
-      // regra do total geral (some com filtro de grupo/SUP), mas os
-      // filtros de tipologia/categoria escolhem QUAIS blocos aparecem em
-      // vez de escondê-los.
-      mostra = filtroGrupo.size === 0 && filtroSup.size === 0 && combinaTipologiaCategoria && combinaSerie;
+      // Total de UMA tipologia através de TODOS os grupos/SUPs/origens --
+      // mesma regra do total geral (some com filtro de grupo/SUP/origem,
+      // já que uma tipologia pode aparecer em SUPs de origens diferentes,
+      // ao contrário do total por SUP), mas os filtros de tipologia/
+      // categoria escolhem QUAIS blocos aparecem em vez de escondê-los.
+      mostra = filtroGrupo.size === 0 && filtroSup.size === 0 && filtroOrigem.size === 0 && combinaTipologiaCategoria && combinaSerie;
     } else if (ehTotalSup) {
       mostra = combinaGrupoSup && filtroTipologia.size === 0 && filtroCategoria.size === 0 && combinaSerie;
     } else {
@@ -1246,7 +1252,7 @@ function recalcularTabela() {
   // sentido misturando, por exemplo, Equipes e Financeiro no mesmo
   // painel) -- mas com várias marcadas, monta um par de painéis POR
   // dimensão, na ordem canônica, em vez de somar ou descartar as demais.
-  montarGraficos(window.__REGISTROS__, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensoesEmOrdem(filtrosSelecionados.dimensao));
+  montarGraficos(window.__REGISTROS__, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem, filtroSerie, dimensoesEmOrdem(filtrosSelecionados.dimensao));
 }
 
 function limparFiltros() {
@@ -1546,7 +1552,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     throw new Error('renderDashboard requer "senha" -- o conteúdo (SUP/Grupo/Tomador/Tipologia/valores) é cifrado com ela antes de ir pro HTML.');
   }
   const registrosJson = JSON.stringify(registros.map(r => ({
-    sup: r.sup, grupo: r.grupo, tomador: r.tomador, escopo: r.escopo, tipologia: r.tipologia,
+    sup: r.sup, grupo: r.grupo, tomador: r.tomador, escopo: r.escopo, tipologia: r.tipologia, origem: r.origem,
     previstoInicial: r.previstoInicial, previsto: r.previsto, realizado: r.realizado, total: r.total,
   })));
   const dadosCifrados = cifrarComSenha(registrosJson, senha);
@@ -1833,6 +1839,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   <div id="conteudo-protegido" style="display:none">
     <div class="filtros">
       <div class="filtros-selecao">
+        <div class="filtro-multi" id="filtro-origem"><button type="button" class="filtro-multi-trigger">Todas as origens<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         <div class="filtro-multi" id="filtro-categoria"><button type="button" class="filtro-multi-trigger">Todas as categorias<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         <div class="filtro-multi" id="filtro-tipologia"><button type="button" class="filtro-multi-trigger">Todas as tipologias<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         <div class="filtro-multi" id="filtro-grupo"><button type="button" class="filtro-multi-trigger">Todos os grupos<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>

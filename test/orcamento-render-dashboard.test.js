@@ -10,7 +10,7 @@ const SENHA_TESTE = 'senha-fake-de-teste-abc';
 
 function registroExemplo(overrides) {
   return {
-    sup: 'SUP-7133-24', grupo: 'PÁTRIA', tomador: 'Via Araucária S.A', tipologia: 'SM', observacao: null,
+    sup: 'SUP-7133-24', grupo: 'PÁTRIA', tomador: 'Via Araucária S.A', tipologia: 'SM', origem: 'CONTRATO VIGENTE', observacao: null,
     previsto: {
       equipes: Array(12).fill(5), equipesResumo: { pico: 6, media: 5, prod: 1.5, dias: 25 },
       volume: Array(12).fill(100), volumeResumo: { total: 1200, totalInicial: 1000, ticket: 1885.65 },
@@ -544,6 +544,20 @@ test('indicesFiltrados treats multiple values within the SAME filter as OR (Tipo
   ];
   assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(['SM', 'ST']), new Set(), new Set(), new Set())), [0, 1, 3]);
   assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(['SM', 'ST']), new Set(), new Set(['PÁTRIA']), new Set())), [0, 1], 'OR dentro de tipologia, AND com grupo -- exclui o SM de SYSTRA');
+});
+
+test('indicesFiltrados filters by origem (CONTRATO VIGENTE / NOVOS NEGÓCIOS, straight from the MATRIZ\'s ORIGEM column) with the same AND semantics as tipologia/categoria/grupo/sup', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { indicesFiltrados } = extrairFuncoesPuras(html);
+  const registros = [
+    { tipologia: 'SM', grupo: 'PÁTRIA', sup: 'SUP-A', origem: 'CONTRATO VIGENTE' },
+    { tipologia: 'ST', grupo: 'PÁTRIA', sup: 'SUP-B', origem: 'NOVOS NEGÓCIOS' },
+    { tipologia: 'SM', grupo: 'SYSTRA', sup: 'SUP-C', origem: 'CONTRATO VIGENTE' },
+  ];
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(), new Set(), new Set(), new Set(), new Set(['CONTRATO VIGENTE']))), [0, 2]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(), new Set(), new Set(), new Set(), new Set(['NOVOS NEGÓCIOS']))), [1]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(['SM']), new Set(), new Set(), new Set(), new Set(['CONTRATO VIGENTE']))), [0, 2], 'AND com tipologia continua funcionando junto com origem');
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(['ST']), new Set(), new Set(), new Set(), new Set(['CONTRATO VIGENTE']))), [], 'ST só existe em NOVOS NEGÓCIOS -- filtrar os dois juntos não bate em nada');
 });
 
 test('categoriaTipologia (extraído do HTML real gerado) classifies LAB.C/LAB.E as their own categories, CPTu/BL/SH/VT as sondagemEspecial, and everything else (SP, SM, ST, PI, unknown values) as sondagemConvencional', () => {
