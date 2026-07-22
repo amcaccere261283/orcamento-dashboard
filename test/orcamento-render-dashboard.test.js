@@ -157,7 +157,8 @@ function extrairFuncoesPuras(html) {
       ' this.ultimoIndiceComDado = ultimoIndiceComDado;' +
       ' this.calcularAcumuladoTendencia = calcularAcumuladoTendencia;' +
       ' this.parseCsvGrid = parseCsvGrid; this.numeroPtBr = numeroPtBr;' +
-      ' this.parseMatrizClient = parseMatrizClient;',
+      ' this.parseMatrizClient = parseMatrizClient;' +
+      ' this.formatarNumero = formatarNumero; this.formatarValorGrafico = formatarValorGrafico;',
     sandbox
   );
   return {
@@ -172,6 +173,7 @@ function extrairFuncoesPuras(html) {
     calcularAcumuladoTendencia: sandbox.calcularAcumuladoTendencia,
     parseCsvGrid: sandbox.parseCsvGrid, numeroPtBr: sandbox.numeroPtBr,
     parseMatrizClient: sandbox.parseMatrizClient,
+    formatarNumero: sandbox.formatarNumero, formatarValorGrafico: sandbox.formatarValorGrafico,
   };
 }
 
@@ -594,6 +596,38 @@ test('escapeHtml (extraído do HTML real gerado) escapes the same 5 characters a
   const html = renderComSenha([registroExemplo()]);
   const { escapeHtml } = extrairFuncoesPuras(html);
   assert.equal(escapeHtml('<script>&"'), '&lt;script&gt;&amp;&quot;');
+});
+
+test('formatarNumero (extraído do HTML real gerado) rounds to 2 decimal places by default (unchanged behavior for callers that don\'t pass casasDecimais), and to the given number of places when passed explicitly -- 0 for Equipes, which must always show as a whole number', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { formatarNumero } = extrairFuncoesPuras(html);
+  assert.equal(formatarNumero(4.567), '4,57');
+  assert.equal(formatarNumero(4.567, 0), '5');
+  assert.equal(formatarNumero(4.4, 0), '4');
+  assert.equal(formatarNumero(null, 0), '—');
+  assert.equal(formatarNumero(0, 0), '0');
+});
+
+test('formatarValorGrafico (extraído do HTML real gerado) rounds to the given casasDecimais the same way as formatarNumero, on top of the milhares scaling', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { formatarValorGrafico } = extrairFuncoesPuras(html);
+  assert.equal(formatarValorGrafico(4.567, false), '4,57');
+  assert.equal(formatarValorGrafico(4.567, false, 0), '5');
+  assert.equal(formatarValorGrafico(4500, true, 0), '5', 'em milhares, 4500 -> 4,5 mil -> arredondado a 0 casas -> "5"');
+});
+
+test('construirGraficoMensalSvg rounds column/axis/tooltip labels to 0 decimal places for Equipes (casasDecimais=0), while a dimension without it passed keeps the default 2 decimals', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoMensalSvg } = extrairFuncoesPuras(html);
+  const mensal = [4.567, 3.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const dados = [{ serie: 'previsto', mensal: mensal, acumulado: mensal }];
+
+  const comCasasZero = construirGraficoMensalSvg(dados, false, 0);
+  assert.match(comCasasZero.svg, /class="grafico-rotulo"[^>]*>5</, 'rótulo da coluna de Jan (4,567) arredondado pra "5", não "4,57"');
+  assert.match(comCasasZero.svg, /data-tooltip="Jan · Previsto: 5"/, 'tooltip também arredonda pra inteiro em Equipes -- não faz sentido revelar fração de equipe nem no hover');
+
+  const semArgumento = construirGraficoMensalSvg(dados, false);
+  assert.match(semArgumento.svg, /class="grafico-rotulo"[^>]*>4,57</, 'sem casasDecimais, mantém o comportamento de sempre (2 casas)');
 });
 
 test('parseCsvGrid (extraído do HTML real gerado) splits a simple CSV into rows/cells, and keeps a comma inside a quoted field from splitting it (real case: quoted numbers/fields in the published mirror CSV)', () => {

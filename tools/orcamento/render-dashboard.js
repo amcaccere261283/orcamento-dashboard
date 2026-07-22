@@ -125,7 +125,15 @@ function escapeHtml(valor) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function formatarNumero(v) { return v === null || v === undefined ? '—' : (Math.round(v * 100) / 100).toLocaleString('pt-BR'); }
+// casasDecimais default 2 (mantém o comportamento de sempre pra quem já
+// chama sem o argumento) -- Equipes usa 0 (arredonda pra inteiro: "número
+// de equipes" não existe fracionado na prática, mesmo a planilha de origem
+// tendo médias/frações internamente).
+function formatarNumero(v, casasDecimais) {
+  if (v === null || v === undefined) return '—';
+  var fator = Math.pow(10, casasDecimais === undefined ? 2 : casasDecimais);
+  return (Math.round(v * fator) / fator).toLocaleString('pt-BR');
+}
 function somar(array) { return (array || []).reduce(function (a, b) { return a + (b || 0); }, 0); }
 // null num mês = nenhum registro que contribui pra essa soma tem dado
 // digitado ali ainda (ver render-dashboard: R/P ficam em branco, não 0,
@@ -300,10 +308,11 @@ function calcularEscalaEixo(valorMax) {
 // -- em milhares quando o recorte é grande o bastante pra fazer sentido.
 // O tooltip usa formatarNumero puro (valor exato), nunca esta função: hover
 // é onde a pessoa vai quando quer o número completo, não o arredondado.
-function formatarValorGrafico(valor, usarMilhares) {
+function formatarValorGrafico(valor, usarMilhares, casasDecimais) {
   if (valor === null || valor === undefined) return '—';
   var base = usarMilhares ? valor / 1000 : valor;
-  return (Math.round(base * 100) / 100).toLocaleString('pt-BR');
+  var fator = Math.pow(10, casasDecimais === undefined ? 2 : casasDecimais);
+  return (Math.round(base * fator) / fator).toLocaleString('pt-BR');
 }
 
 function construirEixoXSvg(larguraMes, alturaPlot, margem) {
@@ -316,14 +325,14 @@ function construirEixoXSvg(larguraMes, alturaPlot, margem) {
   return svg;
 }
 
-function construirEixoYSvg(escala, alturaPlot, margem, ladoDireita, usarMilhares) {
+function construirEixoYSvg(escala, alturaPlot, margem, ladoDireita, usarMilhares, casasDecimais) {
   var svg = '';
   for (var i = 0; i <= GRAFICO_NUM_TICKS; i++) {
     var valor = i * escala.passo;
     var y = margem.topo + alturaPlot - (valor / escala.max) * alturaPlot;
     var x = ladoDireita ? (GRAFICO_LARGURA - margem.direita + 10) : (margem.esquerda - 10);
     var ancora = ladoDireita ? 'start' : 'end';
-    svg += '<text class="grafico-eixo-texto" x="' + x + '" y="' + (y + 4).toFixed(1) + '" text-anchor="' + ancora + '">' + formatarValorGrafico(valor, usarMilhares) + '</text>';
+    svg += '<text class="grafico-eixo-texto" x="' + x + '" y="' + (y + 4).toFixed(1) + '" text-anchor="' + ancora + '">' + formatarValorGrafico(valor, usarMilhares, casasDecimais) + '</text>';
     if (!ladoDireita) {
       svg += '<line class="grafico-gridline" x1="' + margem.esquerda + '" y1="' + y.toFixed(1) + '" x2="' + (GRAFICO_LARGURA - margem.direita) + '" y2="' + y.toFixed(1) + '"/>';
     }
@@ -394,7 +403,7 @@ function resolverColisoesRotulos(rotulos) {
 // também mora no tooltip (hover/foco) e na aba Tabela. Os candidatos a
 // rótulo são só ACUMULADOS em \`rotulos\` -- desenhados depois, junto com os
 // da linha, numa única passada de anti-colisão (ver construirGraficoSvg).
-function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos) {
+function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais) {
   var svg = '';
   var numSeries = dadosPorSerie.length;
   var slot = larguraMes * 0.72;
@@ -413,9 +422,9 @@ function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, marg
       var x = inicioSlot + i * (larguraColuna + GRAFICO_BARRA_GAP);
       var y = margem.topo + alturaPlot - alturaColuna;
       svg += desenharBarraArredondada(x, y, larguraColuna, alturaColuna, SERIE_COR[d.serie]);
-      svg += '<rect class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor) + '" x="' + x.toFixed(1) + '" y="' + margem.topo + '" width="' + Math.max(larguraColuna, GRAFICO_BARRA_GAP).toFixed(1) + '" height="' + alturaPlot + '" fill="transparent"/>';
+      svg += '<rect class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor, casasDecimais) + '" x="' + x.toFixed(1) + '" y="' + margem.topo + '" width="' + Math.max(larguraColuna, GRAFICO_BARRA_GAP).toFixed(1) + '" height="' + alturaPlot + '" fill="transparent"/>';
       if (valor) {
-        rotulos.push({ x: x + larguraColuna / 2, y: y - 6, texto: formatarValorGrafico(valor, usarMilhares), classe: 'grafico-rotulo' });
+        rotulos.push({ x: x + larguraColuna / 2, y: y - 6, texto: formatarValorGrafico(valor, usarMilhares, casasDecimais), classe: 'grafico-rotulo' });
       }
     });
   }
@@ -429,7 +438,7 @@ function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, marg
 // Um mês null (sem dado reportado ainda, ver somarArraysMensais) quebra a
 // linha em vez de "cair" até a base -- desenha um <polyline> por trecho
 // contínuo de meses com dado, não um só ligando os 12 pontos.
-function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos) {
+function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais) {
   var svg = '';
   dadosPorSerie.forEach(function (d) {
     var traco = SERIE_TRACEJADO[d.serie] ? ' stroke-dasharray="' + SERIE_TRACEJADO[d.serie] + '"' : '';
@@ -447,9 +456,9 @@ function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraMes
       var y = margem.topo + alturaPlot - escalaLinear(valor, escala.max, alturaPlot);
       trecho.push({ x: x, y: y });
       svg += '<circle class="grafico-marcador" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4" fill="' + SERIE_COR[d.serie] + '" stroke="var(--surface-1)" stroke-width="2"/>';
-      svg += '<circle class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor) + '" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="10" fill="transparent"/>';
+      svg += '<circle class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor, casasDecimais) + '" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="10" fill="transparent"/>';
       if (valor) {
-        rotulos.push({ x: x, y: y - 10, texto: formatarValorGrafico(valor, usarMilhares), classe: 'grafico-rotulo-final' });
+        rotulos.push({ x: x, y: y - 10, texto: formatarValorGrafico(valor, usarMilhares, casasDecimais), classe: 'grafico-rotulo-final' });
       }
     });
     fecharTrecho();
@@ -475,7 +484,7 @@ function finalizarPainelSvg(svgMarcas, rotulos, altura) {
 // montarGrafico). ehRazao=true pras dimensões Produtividade/Ticket médio:
 // nesse caso não faz sentido "acumular" uma razão, então só a linha do
 // valor mensal aparece (painel único, sem colunas).
-function construirGraficoMensalSvg(dadosPorSerie, ehRazao) {
+function construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais) {
   var margem = ehRazao ? GRAFICO_MARGEM_LINHA : GRAFICO_MARGEM_BARRAS;
   var altura = ehRazao ? GRAFICO_ALTURA_LINHA : GRAFICO_ALTURA_BARRAS;
   var larguraPlot = GRAFICO_LARGURA - margem.esquerda - margem.direita;
@@ -488,13 +497,13 @@ function construirGraficoMensalSvg(dadosPorSerie, ehRazao) {
   var usarMilhares = maxMensal >= GRAFICO_LIMIAR_MILHARES;
 
   var svg = '';
-  svg += construirEixoYSvg(escala, alturaPlot, margem, false, usarMilhares);
+  svg += construirEixoYSvg(escala, alturaPlot, margem, false, usarMilhares, casasDecimais);
   svg += construirEixoXSvg(larguraMes, alturaPlot, margem);
 
   var rotulos = [];
   svg += ehRazao
-    ? construirLinhasSvg(dadosPorSerie, 'mensal', escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos)
-    : construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos);
+    ? construirLinhasSvg(dadosPorSerie, 'mensal', escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais)
+    : construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais);
   svg += construirLegendaSvg(dadosPorSerie, margem);
 
   return { svg: finalizarPainelSvg(svg, rotulos, altura), milhares: usarMilhares };
@@ -503,7 +512,7 @@ function construirGraficoMensalSvg(dadosPorSerie, ehRazao) {
 // Painel separado, eixo único, pro acumulado no ano -- mensal e acumulado
 // nunca compartilham escala (dezembro acumulado é ~12x um mês típico), um
 // eixo duplo no mesmo plot inventaria uma correlação visual que não existe.
-function construirGraficoAcumuladoSvg(dadosPorSerie) {
+function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
   var margem = GRAFICO_MARGEM_LINHA;
   var altura = GRAFICO_ALTURA_LINHA;
   var larguraPlot = GRAFICO_LARGURA - margem.esquerda - margem.direita;
@@ -516,11 +525,11 @@ function construirGraficoAcumuladoSvg(dadosPorSerie) {
   var usarMilhares = maxAcumulado >= GRAFICO_LIMIAR_MILHARES;
 
   var svg = '';
-  svg += construirEixoYSvg(escala, alturaPlot, margem, false, usarMilhares);
+  svg += construirEixoYSvg(escala, alturaPlot, margem, false, usarMilhares, casasDecimais);
   svg += construirEixoXSvg(larguraMes, alturaPlot, margem);
 
   var rotulos = [];
-  svg += construirLinhasSvg(dadosPorSerie, 'acumulado', escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos);
+  svg += construirLinhasSvg(dadosPorSerie, 'acumulado', escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais);
   svg += construirLegendaSvg(dadosPorSerie, margem);
 
   return { svg: finalizarPainelSvg(svg, rotulos, altura), milhares: usarMilhares };
@@ -567,8 +576,9 @@ function montarGrafico(registros, filtroTipologia, filtroGrupo, filtroSup, filtr
 
   var opcaoDimensao = document.getElementById('seletor-dimensao').selectedOptions[0];
   var rotuloDimensao = opcaoDimensao ? opcaoDimensao.textContent : '';
+  var casasDecimais = dimensao === 'equipes' ? 0 : 2;
 
-  var mensalResultado = construirGraficoMensalSvg(dadosPorSerie, ehRazao);
+  var mensalResultado = construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais);
   var tituloMensal = (ehRazao ? 'Evolução mensal — ' : 'Mensal — ') + rotuloDimensao + (mensalResultado.milhares ? ' (em milhares)' : '');
   document.getElementById('grafico-titulo-mensal').textContent = tituloMensal;
   document.getElementById('grafico-mensal-container').innerHTML = mensalResultado.svg;
@@ -578,7 +588,7 @@ function montarGrafico(registros, filtroTipologia, filtroGrupo, filtroSup, filtr
     painelAcumulado.style.display = 'none';
   } else {
     painelAcumulado.style.display = '';
-    var acumuladoResultado = construirGraficoAcumuladoSvg(dadosPorSerie);
+    var acumuladoResultado = construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais);
     var tituloAcumulado = 'Acumulado no ano — ' + rotuloDimensao + (acumuladoResultado.milhares ? ' (em milhares)' : '');
     document.getElementById('grafico-titulo-acumulado').textContent = tituloAcumulado;
     document.getElementById('grafico-acumulado-container').innerHTML = acumuladoResultado.svg;
@@ -613,13 +623,14 @@ function alternarAba(aba) {
 }
 
 function preencherLinha(linha, valoresLista, serie, dimensao) {
+  var casasDecimais = dimensao === 'equipes' ? 0 : 2;
   var mensal = calcularMensal(valoresLista, serie, dimensao);
   var celulasMes = linha.querySelectorAll('.celula-mes');
   celulasMes.forEach(function (celula, idx) {
-    celula.textContent = formatarNumero(mensal ? mensal[idx] : null);
+    celula.textContent = formatarNumero(mensal ? mensal[idx] : null, casasDecimais);
   });
   var celulaTotal = linha.querySelector('.celula-total-linha');
-  if (celulaTotal) celulaTotal.textContent = formatarNumero(calcularTotalAno(valoresLista, serie, dimensao));
+  if (celulaTotal) celulaTotal.textContent = formatarNumero(calcularTotalAno(valoresLista, serie, dimensao), casasDecimais);
 }
 
 // Dado um array de valores (na ordem das linhas visíveis de UMA coluna),
