@@ -120,8 +120,10 @@ test('renderDashboard includes Tabela/Gráfico tab buttons and both view section
   assert.match(html, /<button id="aba-grafico" type="button"><svg[\s\S]*?<\/svg>Gráfico<\/button>/);
   assert.match(html, /<div id="secao-tabela">/);
   assert.match(html, /<div id="secao-grafico" style="display:none">/);
-  assert.match(html, /<div id="grafico-mensal-container"><\/div>/);
-  assert.match(html, /<div id="grafico-acumulado-container"><\/div>/);
+  // Os painéis Mensal/Acumulado em si são montados no cliente (um par POR
+  // dimensão marcada, ver montarGraficos) -- o HTML gerado no servidor só
+  // tem o container vazio que recebe esse conteúdo dinamicamente.
+  assert.match(html, /<div id="graficos-container"><\/div>/);
   assert.match(html, /<div id="grafico-tooltip" class="grafico-tooltip" style="display:none"><\/div>/);
 });
 
@@ -159,7 +161,8 @@ function extrairFuncoesPuras(html) {
       ' this.categoriaTipologia = categoriaTipologia;' +
       ' this.cortarAcumuladoNoUltimoDado = cortarAcumuladoNoUltimoDado;' +
       ' this.preservarPrevistoInicial = preservarPrevistoInicial;' +
-      ' this.dimensoesEmOrdem = dimensoesEmOrdem;',
+      ' this.dimensoesEmOrdem = dimensoesEmOrdem;' +
+      ' this.construirPainelGraficoHtml = construirPainelGraficoHtml;',
     sandbox
   );
   return {
@@ -179,6 +182,7 @@ function extrairFuncoesPuras(html) {
     cortarAcumuladoNoUltimoDado: sandbox.cortarAcumuladoNoUltimoDado,
     preservarPrevistoInicial: sandbox.preservarPrevistoInicial,
     dimensoesEmOrdem: sandbox.dimensoesEmOrdem,
+    construirPainelGraficoHtml: sandbox.construirPainelGraficoHtml,
   };
 }
 
@@ -729,6 +733,36 @@ test('construirGraficoMensalSvg rounds column/axis/tooltip labels to 0 decimal p
 
   const semArgumento = construirGraficoMensalSvg(dados, false);
   assert.match(semArgumento.svg, /class="grafico-rotulo"[^>]*>4,57</, 'sem casasDecimais, mantém o comportamento de sempre (2 casas)');
+});
+
+test('construirPainelGraficoHtml keeps each dimension fully independent -- Financeiro and Equipes never get combined/summed into a single chart, each renders its own self-contained Mensal(+Acumulado) block with its own title and rounding', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const registros = [registroExemplo()];
+  const indices = [0];
+  const semFiltroSerie = new Set();
+
+  const painelFinanceiro = construirPainelGraficoHtml(registros, indices, semFiltroSerie, 'financeiro');
+  const painelEquipes = construirPainelGraficoHtml(registros, indices, semFiltroSerie, 'equipes');
+
+  assert.match(painelFinanceiro, /Mensal — Financeiro/);
+  assert.match(painelEquipes, /Mensal — Equipes/);
+  // Nenhum dos dois HTMLs deve mencionar a outra dimensão -- são blocos
+  // totalmente separados, não um único gráfico combinando as duas.
+  assert.doesNotMatch(painelFinanceiro, /Equipes/);
+  assert.doesNotMatch(painelEquipes, /Financeiro/);
+
+  assert.equal((painelFinanceiro.match(/class="grafico-titulo"/g) || []).length, 2, 'Financeiro mostra Mensal + Acumulado (2 painéis)');
+  assert.equal((painelEquipes.match(/class="grafico-titulo"/g) || []).length, 1, 'Equipes some com o Acumulado (não tem leitura de negócio) -- só 1 painel (Mensal)');
+
+  // Simula o que montarGraficos monta quando as duas dimensões estão
+  // marcadas: os dois blocos aparecem um abaixo do outro, "sobrepostos" na
+  // página -- nunca um terceiro bloco com um valor somado das duas.
+  const combinado =
+    '<div class="grafico-bloco-dimensao">' + painelFinanceiro + '</div>' +
+    '<div class="grafico-bloco-dimensao">' + painelEquipes + '</div>';
+  assert.equal((combinado.match(/class="grafico-bloco-dimensao"/g) || []).length, 2);
+  assert.equal((combinado.match(/class="grafico-titulo"/g) || []).length, 3, '2 painéis do Financeiro + 1 do Equipes = 3 títulos ao todo, cada valor aparecendo só na sua própria dimensão');
 });
 
 test('parseCsvGrid (extraído do HTML real gerado) splits a simple CSV into rows/cells, and keeps a comma inside a quoted field from splitting it (real case: quoted numbers/fields in the published mirror CSV)', () => {

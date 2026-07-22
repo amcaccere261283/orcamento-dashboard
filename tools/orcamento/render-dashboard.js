@@ -241,7 +241,7 @@ function calcularAcumulado(mensal) {
 // Índice (0=Jan..11=Dez) do último mês com dado real em \`mensal\` -- -1 se
 // nenhum mês tem dado. Usado pra achar onde Realizado "parou" de ser
 // reportado, tanto pra parar de desenhar Realizado dali em diante quanto
-// pra saber onde a Tendência deve começar (ver montarGrafico).
+// pra saber onde a Tendência deve começar (ver construirPainelGraficoHtml).
 function ultimoIndiceComDado(mensal) {
   for (var i = mensal.length - 1; i >= 0; i--) {
     if (mensal[i] !== null && mensal[i] !== undefined) return i;
@@ -528,7 +528,7 @@ function finalizarPainelSvg(svgMarcas, rotulos, altura) {
 // dadosPorSerie: [{ serie, mensal: number[12], acumulado: number[12]|null }],
 // já filtrado só com as séries visíveis (respeita filtro-serie) e com
 // valores mensais nunca-nulos (null já virou 0 antes de chegar aqui -- ver
-// montarGrafico). ehRazao=true pras dimensões Produtividade/Ticket médio:
+// construirPainelGraficoHtml). ehRazao=true pras dimensões Produtividade/Ticket médio:
 // nesse caso não faz sentido "acumular" uma razão, então só a linha do
 // valor mensal aparece (painel único, sem colunas).
 function construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais) {
@@ -582,12 +582,13 @@ function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
   return { svg: finalizarPainelSvg(svg, rotulos, altura), milhares: usarMilhares };
 }
 
-// Recalcula e redesenha os gráficos a partir dos MESMOS filtros/dimensão da
-// tabela -- chamado toda vez que recalcularTabela roda, então nunca fica
-// desatualizado mesmo se o usuário estiver na aba Tabela quando muda um
-// filtro e só depois troca pra aba Gráfico.
-function montarGrafico(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensao) {
-  var indices = indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup);
+// Monta o par Mensal + Acumulado de UMA dimensão (HTML pronto, não toca o
+// DOM diretamente) -- reaproveitado por montarGraficos pra cada dimensão
+// marcada, uma abaixo da outra. As dimensões nunca se somam entre si (não
+// faz sentido somar Equipes com Financeiro): cada uma sempre ganha seu
+// próprio par de painéis, "sobrepostos" na página em vez de combinados num
+// único número -- o mesmo princípio já usado nas linhas da tabela.
+function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
   var seriesVisiveis = ORDEM_SERIES.filter(function (s) { return !filtroExclui(filtroSerie, s); });
   var ehRazao = DIMENSOES_RAZAO.indexOf(dimensao) !== -1;
 
@@ -629,22 +630,31 @@ function montarGrafico(registros, filtroTipologia, filtroCategoria, filtroGrupo,
 
   var mensalResultado = construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais);
   var tituloMensal = (ehRazao ? 'Evolução mensal — ' : 'Mensal — ') + rotuloDimensao + (mensalResultado.milhares ? ' (em milhares)' : '');
-  document.getElementById('grafico-titulo-mensal').textContent = tituloMensal;
-  document.getElementById('grafico-mensal-container').innerHTML = mensalResultado.svg;
+  var html = '<div class="grafico-painel"><div class="grafico-titulo">' + escapeHtml(tituloMensal) + '</div><div>' + mensalResultado.svg + '</div></div>';
 
-  var painelAcumulado = document.getElementById('grafico-painel-acumulado');
   // Acumulado de Equipes não tem leitura de negócio (não existe "total de
   // equipes acumulado no ano") -- some junto com as dimensões-razão, que já
   // não mostravam esse painel por um motivo parecido.
-  if (ehRazao || dimensao === 'equipes') {
-    painelAcumulado.style.display = 'none';
-  } else {
-    painelAcumulado.style.display = '';
+  if (!(ehRazao || dimensao === 'equipes')) {
     var acumuladoResultado = construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais);
     var tituloAcumulado = 'Acumulado no ano — ' + rotuloDimensao + (acumuladoResultado.milhares ? ' (em milhares)' : '');
-    document.getElementById('grafico-titulo-acumulado').textContent = tituloAcumulado;
-    document.getElementById('grafico-acumulado-container').innerHTML = acumuladoResultado.svg;
+    html += '<div class="grafico-painel"><div class="grafico-titulo">' + escapeHtml(tituloAcumulado) + '</div><div>' + acumuladoResultado.svg + '</div></div>';
   }
+  return html;
+}
+
+// Recalcula e redesenha os gráficos a partir dos MESMOS filtros/dimensões da
+// tabela -- chamado toda vez que recalcularTabela roda, então nunca fica
+// desatualizado mesmo se o usuário estiver na aba Tabela quando muda um
+// filtro e só depois troca pra aba Gráfico. Uma dimensão marcada = um par
+// de painéis; várias marcadas = vários pares, um abaixo do outro (nunca
+// somados entre si).
+function montarGraficos(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensoes) {
+  var indices = indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup);
+  var html = dimensoes.map(function (dimensao) {
+    return '<div class="grafico-bloco-dimensao">' + construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) + '</div>';
+  }).join('');
+  document.getElementById('graficos-container').innerHTML = html;
 }
 
 // Tooltip único, delegado (os SVGs são recriados via innerHTML a cada
@@ -1171,11 +1181,11 @@ function recalcularTabela() {
     }
   });
   mesclarColunasRepetidas();
-  // O gráfico só entende UMA dimensão por vez (eixos/escala não fazem
+  // Cada painel só entende UMA dimensão por vez (eixos/escala não fazem
   // sentido misturando, por exemplo, Equipes e Financeiro no mesmo
-  // painel) -- usa a primeira da ordem canônica entre as marcadas.
-  var dimensaoGrafico = dimensoesEmOrdem(filtrosSelecionados.dimensao)[0];
-  montarGrafico(window.__REGISTROS__, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensaoGrafico);
+  // painel) -- mas com várias marcadas, monta um par de painéis POR
+  // dimensão, na ordem canônica, em vez de somar ou descartar as demais.
+  montarGraficos(window.__REGISTROS__, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensoesEmOrdem(filtrosSelecionados.dimensao));
 }
 
 function limparFiltros() {
@@ -1668,6 +1678,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   .grafico-svg { width: 100%; height: auto; display: block; }
   .grafico-painel { margin-bottom: 28px; }
   .grafico-painel:last-child { margin-bottom: 0; }
+  .grafico-bloco-dimensao + .grafico-bloco-dimensao { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--border); }
   .grafico-titulo { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
   .grafico-eixo-texto { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
   .grafico-gridline, .grafico-linha-guia { stroke: var(--gridline); stroke-width: 1; }
@@ -1778,14 +1789,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     </div>
     </div>
     <div id="secao-grafico" style="display:none">
-      <div class="grafico-painel">
-        <div class="grafico-titulo" id="grafico-titulo-mensal">Mensal</div>
-        <div id="grafico-mensal-container"></div>
-      </div>
-      <div class="grafico-painel" id="grafico-painel-acumulado">
-        <div class="grafico-titulo" id="grafico-titulo-acumulado">Acumulado no ano</div>
-        <div id="grafico-acumulado-container"></div>
-      </div>
+      <div id="graficos-container"></div>
       <div id="grafico-tooltip" class="grafico-tooltip" style="display:none"></div>
     </div>
   </div>
