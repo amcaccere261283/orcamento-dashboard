@@ -304,11 +304,14 @@ function indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGru
   return indices;
 }
 
-var SERIE_COR = { previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f' };
+// Mesmo cinza claro usado na linha "Previsto Inicial" da tabela (.linha-previsto-inicial),
+// pra não inventar uma cor nova pra mesma série.
+var SERIE_COR = { previstoInicial: '#8b8a82', previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f' };
 // Tracejado por série além da cor -- segunda camada de identidade (não só
-// hue) pra sobreviver a daltonismo/impressão P&B: previsto sólido,
+// hue) pra sobreviver a daltonismo/impressão P&B: previsto inicial pontilhado
+// esparso (mais discreto, é a referência de fundo), previsto sólido,
 // realizado pontilhado fino, tendência tracejado longo.
-var SERIE_TRACEJADO = { previsto: '', realizado: '1,5', total: '9,5' };
+var SERIE_TRACEJADO = { previstoInicial: '2,4', previsto: '', realizado: '1,5', total: '9,5' };
 var DIMENSOES_RAZAO = ['produtividade', 'ticketMedio'];
 var MESES_ABREVIADOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -585,8 +588,7 @@ function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
 // filtro e só depois troca pra aba Gráfico.
 function montarGrafico(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensao) {
   var indices = indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup);
-  var seriesTodas = ['previsto', 'realizado', 'total'];
-  var seriesVisiveis = seriesTodas.filter(function (s) { return !filtroExclui(filtroSerie, s); });
+  var seriesVisiveis = ORDEM_SERIES.filter(function (s) { return !filtroExclui(filtroSerie, s); });
   var ehRazao = DIMENSOES_RAZAO.indexOf(dimensao) !== -1;
 
   var mensalPorSerie = {};
