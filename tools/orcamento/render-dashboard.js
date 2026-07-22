@@ -254,19 +254,27 @@ function cortarAcumuladoNoUltimoDado(acumulado, mensal) {
   return acumulado.map(function (v, i) { return i <= ultimo ? v : null; });
 }
 
+// Um filtro é um Set de valores selecionados -- Set vazio (ou ausente)
+// significa "sem filtro" (não exclui nada), igual ao "" do <select> antigo.
+// Com o filtro ativo, um valor passa se estiver em QUALQUER um dos
+// selecionados (OR dentro do mesmo filtro -- "Tipologia = SP ou ST"),
+// combinando com AND entre filtros diferentes (mesmo esquema de sempre).
+function filtroExclui(filtro, valor) {
+  return !!(filtro && filtro.size > 0 && !filtro.has(valor));
+}
+
 // Devolve os índices de \`registros\` que combinam com os filtros de
-// tipologia/categoria/grupo/SUP atuais (AND, não OR) -- mesma regra usada
-// linha a linha em recalcularTabela, calculada aqui direto sobre os
+// tipologia/categoria/grupo/SUP atuais, calculada aqui direto sobre os
 // registros crus, sem depender de uma linha <tr> já renderizada, pra o
 // gráfico poder agregar o recorte atual sem precisar de uma linha "molde"
 // no DOM.
 function indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup) {
   var indices = [];
   registros.forEach(function (registro, indice) {
-    if (filtroTipologia && registro.tipologia !== filtroTipologia) return;
-    if (filtroCategoria && categoriaTipologia(registro.tipologia) !== filtroCategoria) return;
-    if (filtroGrupo && registro.grupo !== filtroGrupo) return;
-    if (filtroSup && registro.sup !== filtroSup) return;
+    if (filtroExclui(filtroTipologia, registro.tipologia)) return;
+    if (filtroExclui(filtroCategoria, categoriaTipologia(registro.tipologia))) return;
+    if (filtroExclui(filtroGrupo, registro.grupo)) return;
+    if (filtroExclui(filtroSup, registro.sup)) return;
     indices.push(indice);
   });
   return indices;
@@ -554,7 +562,7 @@ function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
 function montarGrafico(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensao) {
   var indices = indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup);
   var seriesTodas = ['previsto', 'realizado', 'total'];
-  var seriesVisiveis = seriesTodas.filter(function (s) { return !filtroSerie || filtroSerie === s; });
+  var seriesVisiveis = seriesTodas.filter(function (s) { return !filtroExclui(filtroSerie, s); });
   var ehRazao = DIMENSOES_RAZAO.indexOf(dimensao) !== -1;
 
   var mensalPorSerie = {};
@@ -927,39 +935,139 @@ function linhasDistintas(registros, campo) {
   return resultado;
 }
 
-function popularSelect(id, valores) {
-  var select = document.getElementById(id);
-  var opcaoPadrao = select.options[0];
-  select.innerHTML = '';
-  select.appendChild(opcaoPadrao);
-  valores.forEach(function (v) {
-    var opcao = document.createElement('option');
-    opcao.value = v;
-    opcao.textContent = v;
-    select.appendChild(opcao);
-  });
+// Os 5 filtros (Tipologia/Categoria/Grupo/SUP/Série) são todos seleção
+// múltipla, num dropdown de checkboxes -- Tipologia/Grupo/SUP têm opções
+// dinâmicas (dependem dos registros decifrados); Categoria/Série têm
+// opções fixas (rótulos genéricos, sem dado protegido, podem ir hardcoded).
+var FILTROS_CONFIG = [
+  { id: 'filtro-tipologia', chave: 'tipologia', rotuloPadrao: 'Todas as tipologias', campo: 'tipologia' },
+  { id: 'filtro-categoria', chave: 'categoria', rotuloPadrao: 'Todas as categorias', opcoesFixas: [
+    { valor: 'labConvencional', rotulo: 'Lab. Convencional' },
+    { valor: 'labEspecial', rotulo: 'Lab. Especial' },
+    { valor: 'sondagemConvencional', rotulo: 'Sondagem Convencional' },
+    { valor: 'sondagemEspecial', rotulo: 'Sondagem Especial' },
+  ] },
+  { id: 'filtro-grupo', chave: 'grupo', rotuloPadrao: 'Todos os grupos', campo: 'grupo' },
+  { id: 'filtro-sup', chave: 'sup', rotuloPadrao: 'Todos os SUP', campo: 'sup' },
+  { id: 'filtro-serie', chave: 'serie', rotuloPadrao: 'Todas as séries', opcoesFixas: [
+    { valor: 'previsto', rotulo: 'Previsto' },
+    { valor: 'realizado', rotulo: 'Realizado' },
+    { valor: 'total', rotulo: 'Tendência' },
+  ] },
+];
+
+// chave -> Set dos valores marcados -- Set vazio tem a MESMA semântica que
+// o <select> de valor único tinha com "" (nenhum filtro, mostra tudo).
+var filtrosSelecionados = {};
+FILTROS_CONFIG.forEach(function (cfg) { filtrosSelecionados[cfg.chave] = new Set(); });
+
+function opcoesFiltro(cfg, registros) {
+  if (cfg.opcoesFixas) return cfg.opcoesFixas;
+  return linhasDistintas(registros, cfg.campo).map(function (v) { return { valor: v, rotulo: v }; });
 }
 
-function popularFiltros(registros) {
-  popularSelect('filtro-tipologia', linhasDistintas(registros, 'tipologia'));
-  popularSelect('filtro-grupo', linhasDistintas(registros, 'grupo'));
-  popularSelect('filtro-sup', linhasDistintas(registros, 'sup'));
+function atualizarRotuloFiltro(cfg, opcoes) {
+  var trigger = document.querySelector('#' + cfg.id + ' .filtro-multi-trigger');
+  var seta = trigger.querySelector('.filtro-multi-seta');
+  var selecionados = filtrosSelecionados[cfg.chave];
+  var texto;
+  if (selecionados.size === 0) {
+    texto = cfg.rotuloPadrao;
+  } else if (selecionados.size === 1) {
+    var valor = selecionados.values().next().value;
+    var opcao = opcoes.filter(function (o) { return o.valor === valor; })[0];
+    texto = opcao ? opcao.rotulo : valor;
+  } else {
+    texto = selecionados.size + ' selecionadas';
+  }
+  trigger.textContent = texto;
+  trigger.appendChild(seta);
+}
+
+// Monta (ou remonta, ex.: depois de um refresh ao vivo com dados novos) o
+// painel de checkboxes de UM filtro -- descarta seleções que não existem
+// mais nas opções atuais em vez de deixá-las "fantasma" (marcadas mas sem
+// checkbox visível pra desmarcar).
+function montarFiltroMulti(cfg, registros) {
+  var opcoes = opcoesFiltro(cfg, registros);
+  var valoresValidos = {};
+  opcoes.forEach(function (o) { valoresValidos[o.valor] = true; });
+  filtrosSelecionados[cfg.chave].forEach(function (v) {
+    if (!valoresValidos[v]) filtrosSelecionados[cfg.chave].delete(v);
+  });
+
+  var painel = document.querySelector('#' + cfg.id + ' .filtro-multi-painel');
+  painel.innerHTML = opcoes.length
+    ? opcoes.map(function (o) {
+        var marcado = filtrosSelecionados[cfg.chave].has(o.valor) ? ' checked' : '';
+        return '<label class="filtro-multi-item"><input type="checkbox" value="' + escapeHtml(o.valor) + '"' + marcado + '>' + escapeHtml(o.rotulo) + '</label>';
+      }).join('')
+    : '<div class="filtro-multi-vazio">Nenhuma opção</div>';
+  painel.querySelectorAll('input[type="checkbox"]').forEach(function (checkbox) {
+    checkbox.addEventListener('change', function () {
+      if (checkbox.checked) filtrosSelecionados[cfg.chave].add(checkbox.value);
+      else filtrosSelecionados[cfg.chave].delete(checkbox.value);
+      atualizarRotuloFiltro(cfg, opcoes);
+      recalcularTabela();
+    });
+  });
+  atualizarRotuloFiltro(cfg, opcoes);
+}
+
+function montarTodosFiltrosMulti(registros) {
+  FILTROS_CONFIG.forEach(function (cfg) { montarFiltroMulti(cfg, registros); });
+}
+
+// Abre/fecha o painel ao clicar no botão-gatilho (fechando qualquer outro
+// que já estivesse aberto) e fecha ao clicar fora -- ligado uma vez só, no
+// carregamento (os botões-gatilho são fixos; só o CONTEÚDO do painel é
+// remontado por montarFiltroMulti).
+function configurarAberturaFiltrosMulti() {
+  document.querySelectorAll('.filtro-multi-trigger').forEach(function (trigger) {
+    trigger.addEventListener('click', function (evento) {
+      evento.stopPropagation();
+      var container = trigger.closest('.filtro-multi');
+      var jaAberto = container.classList.contains('aberto');
+      document.querySelectorAll('.filtro-multi.aberto').forEach(function (el) {
+        el.classList.remove('aberto');
+        el.querySelector('.filtro-multi-painel').hidden = true;
+      });
+      if (!jaAberto) {
+        container.classList.add('aberto');
+        container.querySelector('.filtro-multi-painel').hidden = false;
+      }
+    });
+  });
+  // O painel (container fixo -- só o conteúdo dos checkboxes é remontado
+  // por montarFiltroMulti) para a propagação de qualquer clique dentro
+  // dele, senão marcar um checkbox borbulharia até o listener do document
+  // logo abaixo e fecharia o painel a cada clique, impedindo marcar mais
+  // de uma opção.
+  document.querySelectorAll('.filtro-multi-painel').forEach(function (painel) {
+    painel.addEventListener('click', function (evento) { evento.stopPropagation(); });
+  });
+  document.addEventListener('click', function () {
+    document.querySelectorAll('.filtro-multi.aberto').forEach(function (el) {
+      el.classList.remove('aberto');
+      el.querySelector('.filtro-multi-painel').hidden = true;
+    });
+  });
 }
 
 function recalcularTabela() {
   var dimensao = document.getElementById('seletor-dimensao').value;
-  var filtroTipologia = document.getElementById('filtro-tipologia').value;
-  var filtroCategoria = document.getElementById('filtro-categoria').value;
-  var filtroGrupo = document.getElementById('filtro-grupo').value;
-  var filtroSup = document.getElementById('filtro-sup').value;
-  var filtroSerie = document.getElementById('filtro-serie').value;
+  var filtroTipologia = filtrosSelecionados.tipologia;
+  var filtroCategoria = filtrosSelecionados.categoria;
+  var filtroGrupo = filtrosSelecionados.grupo;
+  var filtroSup = filtrosSelecionados.sup;
+  var filtroSerie = filtrosSelecionados.serie;
   var linhas = document.querySelectorAll('#tabela-orcamento tbody tr');
   linhas.forEach(function (linha) {
-    var combinaSerie = !filtroSerie || linha.dataset.serie === filtroSerie;
-    var combinaGrupoSup = (!filtroGrupo || linha.dataset.grupo === filtroGrupo) &&
-      (!filtroSup || linha.dataset.sup === filtroSup);
-    var combinaTipologiaCategoria = (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) &&
-      (!filtroCategoria || linha.dataset.categoria === filtroCategoria);
+    var combinaSerie = !filtroExclui(filtroSerie, linha.dataset.serie);
+    var combinaGrupoSup = !filtroExclui(filtroGrupo, linha.dataset.grupo) &&
+      !filtroExclui(filtroSup, linha.dataset.sup);
+    var combinaTipologiaCategoria = !filtroExclui(filtroTipologia, linha.dataset.tipologia) &&
+      !filtroExclui(filtroCategoria, linha.dataset.categoria);
     var ehTotalGeral = linha.dataset.totalGeral === '1';
     var ehTotalGeralTipologia = linha.dataset.totalGeralTipologia === '1';
     var ehTotalSup = linha.dataset.totalSup === '1';
@@ -971,15 +1079,15 @@ function recalcularTabela() {
       // categoria, grupo ou SUP) restringe os dados, porque nesse ponto o
       // total por SUP (ou a própria linha do registro) já cobre o recorte
       // atual.
-      mostra = !filtroGrupo && !filtroSup && !filtroTipologia && !filtroCategoria && combinaSerie;
+      mostra = filtroGrupo.size === 0 && filtroSup.size === 0 && filtroTipologia.size === 0 && filtroCategoria.size === 0 && combinaSerie;
     } else if (ehTotalGeralTipologia) {
       // Total de UMA tipologia através de todos os grupos/SUPs -- mesma
       // regra do total geral (some com filtro de grupo/SUP), mas os
       // filtros de tipologia/categoria escolhem QUAIS blocos aparecem em
       // vez de escondê-los.
-      mostra = !filtroGrupo && !filtroSup && combinaTipologiaCategoria && combinaSerie;
+      mostra = filtroGrupo.size === 0 && filtroSup.size === 0 && combinaTipologiaCategoria && combinaSerie;
     } else if (ehTotalSup) {
-      mostra = combinaGrupoSup && !filtroTipologia && !filtroCategoria && combinaSerie;
+      mostra = combinaGrupoSup && filtroTipologia.size === 0 && filtroCategoria.size === 0 && combinaSerie;
     } else {
       mostra = combinaGrupoSup && combinaTipologiaCategoria && combinaSerie;
     }
@@ -994,22 +1102,20 @@ function recalcularTabela() {
 }
 
 function limparFiltros() {
-  document.getElementById('filtro-tipologia').value = '';
-  document.getElementById('filtro-categoria').value = '';
-  document.getElementById('filtro-grupo').value = '';
-  document.getElementById('filtro-sup').value = '';
-  document.getElementById('filtro-serie').value = '';
+  FILTROS_CONFIG.forEach(function (cfg) {
+    filtrosSelecionados[cfg.chave].clear();
+  });
+  montarTodosFiltrosMulti(window.__REGISTROS__);
   recalcularTabela();
 }
 
 // Chamado uma vez, pelo gate de senha, assim que a senha certa decifra os
 // registros -- monta a tabela inteira e liga os filtros/botões.
 function montarDashboard(registros) {
-  popularFiltros(registros);
+  montarTodosFiltrosMulti(registros);
+  configurarAberturaFiltrosMulti();
   document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(registros);
-  ['seletor-dimensao', 'filtro-tipologia', 'filtro-categoria', 'filtro-grupo', 'filtro-sup', 'filtro-serie'].forEach(function (id) {
-    document.getElementById(id).addEventListener('change', recalcularTabela);
-  });
+  document.getElementById('seletor-dimensao').addEventListener('change', recalcularTabela);
   document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
   document.getElementById('aba-tabela').addEventListener('click', function () { alternarAba('tabela'); });
   document.getElementById('aba-grafico').addEventListener('click', function () { alternarAba('grafico'); });
@@ -1243,7 +1349,7 @@ function atualizarDadosAoVivo() {
       if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho -- confira se o Apps Script já rodou pelo menos uma vez');
 
       window.__REGISTROS__ = registrosNovos;
-      popularFiltros(window.__REGISTROS__);
+      montarTodosFiltrosMulti(window.__REGISTROS__);
       document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__);
       recalcularTabela();
 
@@ -1366,6 +1472,37 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     appearance: none; -webkit-appearance: none; -moz-appearance: none;
   }
   .filtros select:hover { border-color: rgba(246,181,63,0.5); }
+  .filtro-multi { position: relative; }
+  .filtro-multi-trigger {
+    display: inline-flex; align-items: center; gap: 8px;
+    max-width: 190px;
+    padding: 8px 10px; height: 36px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .filtro-multi-trigger span,
+  .filtro-multi-trigger { overflow: hidden; text-overflow: ellipsis; }
+  .filtro-multi-seta { flex: none; margin-left: auto; color: #c3c2b7; transition: transform 150ms ease; }
+  .filtro-multi-trigger:hover { border-color: rgba(246,181,63,0.5); }
+  .filtro-multi.aberto .filtro-multi-trigger { border-color: #f6b53f; }
+  .filtro-multi.aberto .filtro-multi-seta { transform: rotate(180deg); }
+  .filtro-multi-painel {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
+    min-width: 210px; max-width: 300px; max-height: 260px; overflow-y: auto;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    padding: 6px;
+  }
+  .filtro-multi-painel[hidden] { display: none; }
+  .filtro-multi-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 8px; border-radius: 4px; cursor: pointer;
+    font-size: 13px; color: var(--text-primary); white-space: nowrap;
+  }
+  .filtro-multi-item:hover { background: rgba(255,255,255,0.05); }
+  .filtro-multi-item input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; flex: none; }
+  .filtro-multi-vazio { padding: 7px 8px; font-size: 13px; color: var(--text-secondary); }
   #limpar-filtros,
   #atualizar-dashboard,
   .abas-visualizacao button {
@@ -1501,11 +1638,11 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   <div id="conteudo-protegido" style="display:none">
     <div class="filtros">
       <div class="filtros-selecao">
-        <select id="filtro-tipologia"><option value="">Todas as tipologias</option></select>
-        <select id="filtro-categoria"><option value="">Todas as categorias</option><option value="labConvencional">Lab. Convencional</option><option value="labEspecial">Lab. Especial</option><option value="sondagemConvencional">Sondagem Convencional</option><option value="sondagemEspecial">Sondagem Especial</option></select>
-        <select id="filtro-grupo"><option value="">Todos os grupos</option></select>
-        <select id="filtro-sup"><option value="">Todos os SUP</option></select>
-        <select id="filtro-serie"><option value="">Todas as séries</option><option value="previsto">Previsto</option><option value="realizado">Realizado</option><option value="total">Tendência</option></select>
+        <div class="filtro-multi" id="filtro-tipologia"><button type="button" class="filtro-multi-trigger">Todas as tipologias<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-categoria"><button type="button" class="filtro-multi-trigger">Todas as categorias<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-grupo"><button type="button" class="filtro-multi-trigger">Todos os grupos<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-sup"><button type="button" class="filtro-multi-trigger">Todos os SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-serie"><button type="button" class="filtro-multi-trigger">Todas as séries<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         <select id="seletor-dimensao"><option value="equipes">Equipes</option><option value="volume">Volume</option><option value="financeiro" selected>Financeiro</option><option value="produtividade">Produtividade</option><option value="ticketMedio">Ticket médio</option></select>
         <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
       </div>

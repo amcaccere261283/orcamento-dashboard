@@ -88,9 +88,9 @@ test('renderDashboard includes the password gate UI (input + button), and the fi
   assert.match(html, /id="gate-senha"/);
   assert.match(html, /id="campo-senha"/);
   assert.match(html, /id="btn-desbloquear"/);
-  assert.match(html, /<select id="filtro-tipologia"><option value="">Todas as tipologias<\/option><\/select>/);
-  assert.match(html, /<select id="filtro-grupo"><option value="">Todos os grupos<\/option><\/select>/);
-  assert.match(html, /<select id="filtro-sup"><option value="">Todos os SUP<\/option><\/select>/);
+  assert.match(html, /<div class="filtro-multi" id="filtro-tipologia"><button type="button" class="filtro-multi-trigger">Todas as tipologias[\s\S]*?<\/button><div class="filtro-multi-painel" hidden><\/div><\/div>/, 'painel de checkboxes começa vazio -- as tipologias reais só existem depois de decifrar no navegador');
+  assert.match(html, /<div class="filtro-multi" id="filtro-grupo"><button type="button" class="filtro-multi-trigger">Todos os grupos[\s\S]*?<\/button><div class="filtro-multi-painel" hidden><\/div><\/div>/);
+  assert.match(html, /<div class="filtro-multi" id="filtro-sup"><button type="button" class="filtro-multi-trigger">Todos os SUP[\s\S]*?<\/button><div class="filtro-multi-painel" hidden><\/div><\/div>/);
   assert.match(html, /<tbody id="corpo-tabela"><\/tbody>/);
 });
 
@@ -101,12 +101,10 @@ test('renderDashboard titles each of the 12 month columns with the real "Mês/An
   assert.match(html, /<th>Total<\/th>/);
 });
 
-test('renderDashboard includes a série filter (Previsto/Realizado/Tendência), and Limpar filtros / Atualizar dados buttons', () => {
+test('renderDashboard includes a série filter (Previsto/Realizado/Tendência) and a categoria filter (fixed, non-sensitive labels, safe to render server-side unlike tipologia/grupo/SUP), and Limpar filtros / Atualizar dados buttons', () => {
   const html = renderComSenha([registroExemplo()]);
-  assert.match(html, /<select id="filtro-serie">/);
-  assert.match(html, /<option value="previsto">Previsto<\/option>/);
-  assert.match(html, /<option value="realizado">Realizado<\/option>/);
-  assert.match(html, /<option value="total">Tendência<\/option>/);
+  assert.match(html, /<div class="filtro-multi" id="filtro-serie">/);
+  assert.match(html, /<div class="filtro-multi" id="filtro-categoria">/);
   assert.match(html, /<button id="limpar-filtros" type="button"><svg[\s\S]*?<\/svg>Limpar filtros<\/button>/);
   assert.match(html, /<button id="atualizar-dashboard" type="button"><svg[\s\S]*?<\/svg>Atualizar dados<\/button>/);
 });
@@ -477,7 +475,7 @@ test('indicesFiltrados (extraído do HTML real gerado) returns every index when 
     { tipologia: 'ST', grupo: 'PÁTRIA', sup: 'SUP-B' },
     { tipologia: 'SM', grupo: 'SYSTRA', sup: 'SUP-C' },
   ];
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', '', '')), [0, 1, 2]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(), new Set(), new Set(), new Set())), [0, 1, 2]);
 });
 
 test('indicesFiltrados combines tipologia/categoria/grupo/sup with AND semantics, not OR', () => {
@@ -488,10 +486,23 @@ test('indicesFiltrados combines tipologia/categoria/grupo/sup with AND semantics
     { tipologia: 'ST', grupo: 'PÁTRIA', sup: 'SUP-B' },
     { tipologia: 'SM', grupo: 'SYSTRA', sup: 'SUP-C' },
   ];
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, 'SM', '', '', '')), [0, 2]);
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', 'PÁTRIA', '')), [0, 1]);
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, 'SM', '', 'PÁTRIA', '')), [0]);
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', '', 'SUP-Z')), []);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(['SM']), new Set(), new Set(), new Set())), [0, 2]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(), new Set(), new Set(['PÁTRIA']), new Set())), [0, 1]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(['SM']), new Set(), new Set(['PÁTRIA']), new Set())), [0]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(), new Set(), new Set(), new Set(['SUP-Z']))), []);
+});
+
+test('indicesFiltrados treats multiple values within the SAME filter as OR (Tipologia = SM or ST matches both), while still AND-ing across different filters', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { indicesFiltrados } = extrairFuncoesPuras(html);
+  const registros = [
+    { tipologia: 'SM', grupo: 'PÁTRIA', sup: 'SUP-A' },
+    { tipologia: 'ST', grupo: 'PÁTRIA', sup: 'SUP-B' },
+    { tipologia: 'PI', grupo: 'PÁTRIA', sup: 'SUP-C' },
+    { tipologia: 'SM', grupo: 'SYSTRA', sup: 'SUP-D' },
+  ];
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(['SM', 'ST']), new Set(), new Set(), new Set())), [0, 1, 3]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(['SM', 'ST']), new Set(), new Set(['PÁTRIA']), new Set())), [0, 1], 'OR dentro de tipologia, AND com grupo -- exclui o SM de SYSTRA');
 });
 
 test('categoriaTipologia (extraído do HTML real gerado) classifies LAB.C/LAB.E as their own categories, CPTu/BL/SH/VT as sondagemEspecial, and everything else (SP, SM, ST, PI, unknown values) as sondagemConvencional', () => {
@@ -536,11 +547,11 @@ test('indicesFiltrados filters by categoria (a derived grouping of tipologia, no
     { tipologia: 'LAB.C', grupo: 'SYSTRA', sup: 'SUP-C' }, // labConvencional
     { tipologia: 'LAB.E', grupo: 'SYSTRA', sup: 'SUP-D' }, // labEspecial
   ];
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'sondagemConvencional', '', '')), [0]);
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'sondagemEspecial', '', '')), [1]);
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'labConvencional', '', '')), [2]);
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'labEspecial', '', '')), [3]);
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'labEspecial', 'PÁTRIA', '')), [], 'AND com grupo -- nenhum registro de PÁTRIA é labEspecial');
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(), new Set(['sondagemConvencional']), new Set(), new Set())), [0]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(), new Set(['sondagemEspecial']), new Set(), new Set())), [1]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(), new Set(['labConvencional']), new Set(), new Set())), [2]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(), new Set(['labEspecial']), new Set(), new Set())), [3]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, new Set(), new Set(['labEspecial']), new Set(['PÁTRIA']), new Set())), [], 'AND com grupo -- nenhum registro de PÁTRIA é labEspecial');
 });
 
 test('construirGraficoMensalSvg draws 12 columns per série (soma dimension, ehRazao=false) as rounded-top paths, no line in the monthly panel; construirGraficoAcumuladoSvg draws 1 line per série', () => {
