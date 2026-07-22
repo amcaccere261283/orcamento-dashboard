@@ -235,7 +235,7 @@ test('renderCorpoTabela (extraído do HTML real gerado) monta o bloco TOTAL GERA
   const { renderCorpoTabela } = extrairFuncoesPuras(html);
   const corpo = renderCorpoTabela([registroExemplo()]);
   assert.match(corpo, /^<tr class="linha-serie linha-previsto-inicial linha-total-geral"/);
-  assert.match(corpo, /<span class="tipologia-chip tipologia-chip-total">TOTAL GERAL<\/span>/);
+  assert.match(corpo, /<span class="tipologia-chip tipologia-chip-total chip-total-geral">TOTAL GERAL<\/span>/);
   assert.match(corpo, /<span class="tipologia-chip" style="--chip-color:#2f6ad0">SM<\/span>/);
   assert.match(corpo, /<span class="tipologia-chip tipologia-chip-total">TOTAL<\/span>/);
   assert.match(corpo, /data-valor="SUP-7133-24"/);

@@ -862,13 +862,21 @@ function renderLinhaTotalSup(sup, grupo, tomador, origem, indices, dimensoes) {
   return renderBlocosDimensao('linha-total-sup', dataAttrsBase, celulaSup, celulaGrupo, celulaTomador, celulaTipologia, dimensoes);
 }
 
+// O bloco do topo da tabela -- ao contrário de TOTAL SUP/TOTAL GERAL POR
+// TIPOLOGIA (que somem quando um filtro de recorte estreita os dados,
+// porque os índices que eles somam foram fixados na hora da montagem),
+// este NUNCA some: recalcularTabela recalcula os índices a cada chamada a
+// partir dos filtros atuais (ver indicesFiltrados), então o "TOTAL GERAL"
+// vira "SUBTOTAL" (rótulo trocado em tempo real, ver .chip-total-geral) e
+// mostra a soma exata do que está filtrado no momento -- sempre visível,
+// sempre correto, no topo da tabela onde é mais fácil de achar.
 function renderLinhaTotalGeral(totalRegistros, dimensoes) {
   var todosIndices = [];
   for (var i = 0; i < totalRegistros; i++) todosIndices.push(i);
   var dataAttrsBase = 'data-registro-indices="' + todosIndices.join(',') + '" data-total-geral="1"';
   var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
   var celulaTodos = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="Todos">Todos</td>'; };
-  var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip tipologia-chip-total">TOTAL GERAL</span></td>';
+  var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip tipologia-chip-total chip-total-geral">TOTAL GERAL</span></td>';
   return renderBlocosDimensao('linha-total-geral', dataAttrsBase, celulaVazia('col-sup'), celulaTodos('col-grupo'), celulaTodos('col-tomador'), celulaTipologia, dimensoes);
 }
 
@@ -1206,6 +1214,18 @@ function recalcularTabela() {
   var filtroSup = filtrosSelecionados.sup;
   var filtroOrigem = filtrosSelecionados.origem;
   var filtroSerie = filtrosSelecionados.serie;
+  // O bloco TOTAL GERAL/SUBTOTAL nunca some -- recalcula sempre a partir do
+  // recorte atual (mesma função que o gráfico usa) em vez de usar os
+  // índices fixados na hora da montagem, então continua correto qualquer
+  // que seja a combinação de filtros marcada. Vira "SUBTOTAL" (rótulo
+  // trocado abaixo) assim que QUALQUER filtro que recorta linhas -- não
+  // Série/Dimensão, que só escolhem o que aparece, não o que é somado --
+  // estiver ativo.
+  var indicesSubtotal = indicesFiltrados(window.__REGISTROS__, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem);
+  var algumFiltroDeRecorteAtivo = filtroTipologia.size > 0 || filtroCategoria.size > 0 || filtroGrupo.size > 0 || filtroSup.size > 0 || filtroOrigem.size > 0;
+  document.querySelectorAll('.chip-total-geral').forEach(function (chip) {
+    chip.textContent = algumFiltroDeRecorteAtivo ? 'SUBTOTAL' : 'TOTAL GERAL';
+  });
   var linhas = document.querySelectorAll('#tabela-orcamento tbody tr');
   linhas.forEach(function (linha) {
     var combinaSerie = !filtroExclui(filtroSerie, linha.dataset.serie);
@@ -1220,15 +1240,10 @@ function recalcularTabela() {
     var ehTotalGeral = linha.dataset.totalGeral === '1';
     var ehTotalGeralTipologia = linha.dataset.totalGeralTipologia === '1';
     var ehTotalSup = linha.dataset.totalSup === '1';
-    var indices = linha.dataset.registroIndices.split(',').map(Number);
+    var indices = ehTotalGeral ? indicesSubtotal : linha.dataset.registroIndices.split(',').map(Number);
     var mostra;
     if (ehTotalGeral) {
-      // Total geral (a visão-resumo de TUDO): só aparece na visão sem
-      // nenhum recorte -- some assim que qualquer filtro (tipologia,
-      // categoria, grupo, SUP ou origem) restringe os dados, porque nesse
-      // ponto o total por SUP (ou a própria linha do registro) já cobre o
-      // recorte atual.
-      mostra = filtroGrupo.size === 0 && filtroSup.size === 0 && filtroOrigem.size === 0 && filtroTipologia.size === 0 && filtroCategoria.size === 0 && combinaSerie;
+      mostra = combinaSerie;
     } else if (ehTotalGeralTipologia) {
       // Total de UMA tipologia através de TODOS os grupos/SUPs/origens --
       // mesma regra do total geral (some com filtro de grupo/SUP/origem,
