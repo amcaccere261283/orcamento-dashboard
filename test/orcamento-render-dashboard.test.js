@@ -158,7 +158,9 @@ function extrairFuncoesPuras(html) {
       ' this.calcularAcumuladoTendencia = calcularAcumuladoTendencia;' +
       ' this.parseCsvGrid = parseCsvGrid; this.numeroPtBr = numeroPtBr;' +
       ' this.parseMatrizClient = parseMatrizClient;' +
-      ' this.formatarNumero = formatarNumero; this.formatarValorGrafico = formatarValorGrafico;',
+      ' this.formatarNumero = formatarNumero; this.formatarValorGrafico = formatarValorGrafico;' +
+      ' this.categoriaTipologia = categoriaTipologia;' +
+      ' this.cortarAcumuladoNoUltimoDado = cortarAcumuladoNoUltimoDado;',
     sandbox
   );
   return {
@@ -174,6 +176,8 @@ function extrairFuncoesPuras(html) {
     parseCsvGrid: sandbox.parseCsvGrid, numeroPtBr: sandbox.numeroPtBr,
     parseMatrizClient: sandbox.parseMatrizClient,
     formatarNumero: sandbox.formatarNumero, formatarValorGrafico: sandbox.formatarValorGrafico,
+    categoriaTipologia: sandbox.categoriaTipologia,
+    cortarAcumuladoNoUltimoDado: sandbox.cortarAcumuladoNoUltimoDado,
   };
 }
 
@@ -251,7 +255,7 @@ test('renderCorpoTabela adds a "total geral por tipologia" block for each distin
 
   // O bloco de total geral de "SM" reúne os índices das DUAS tipologias SM
   // (SUP-A e SUP-B), não só a primeira.
-  const matchIndicesSM = corpo.match(/data-tipologia="SM" data-registro-indices="([\d,]*)" data-total-geral-tipologia="1"/);
+  const matchIndicesSM = corpo.match(/data-tipologia="SM"[^>]*data-registro-indices="([\d,]*)" data-total-geral-tipologia="1"/);
   assert.ok(matchIndicesSM);
   assert.deepEqual(matchIndicesSM[1].split(',').map(Number).sort(), [0, 2]);
 });
@@ -473,10 +477,10 @@ test('indicesFiltrados (extraído do HTML real gerado) returns every index when 
     { tipologia: 'ST', grupo: 'PÁTRIA', sup: 'SUP-B' },
     { tipologia: 'SM', grupo: 'SYSTRA', sup: 'SUP-C' },
   ];
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', '')), [0, 1, 2]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', '', '')), [0, 1, 2]);
 });
 
-test('indicesFiltrados combines tipologia/grupo/sup with AND semantics, not OR', () => {
+test('indicesFiltrados combines tipologia/categoria/grupo/sup with AND semantics, not OR', () => {
   const html = renderComSenha([registroExemplo()]);
   const { indicesFiltrados } = extrairFuncoesPuras(html);
   const registros = [
@@ -484,10 +488,59 @@ test('indicesFiltrados combines tipologia/grupo/sup with AND semantics, not OR',
     { tipologia: 'ST', grupo: 'PÁTRIA', sup: 'SUP-B' },
     { tipologia: 'SM', grupo: 'SYSTRA', sup: 'SUP-C' },
   ];
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, 'SM', '', '')), [0, 2]);
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'PÁTRIA', '')), [0, 1]);
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, 'SM', 'PÁTRIA', '')), [0]);
-  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', 'SUP-Z')), []);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, 'SM', '', '', '')), [0, 2]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', 'PÁTRIA', '')), [0, 1]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, 'SM', '', 'PÁTRIA', '')), [0]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', '', '', 'SUP-Z')), []);
+});
+
+test('categoriaTipologia (extraído do HTML real gerado) classifies LAB.C/LAB.E as their own categories, CPTu/BL/SH/VT as sondagemEspecial, and everything else (SP, SM, ST, PI, unknown values) as sondagemConvencional', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { categoriaTipologia } = extrairFuncoesPuras(html);
+  assert.equal(categoriaTipologia('LAB.C'), 'labConvencional');
+  assert.equal(categoriaTipologia('LAB.E'), 'labEspecial');
+  assert.equal(categoriaTipologia('CPTu'), 'sondagemEspecial');
+  assert.equal(categoriaTipologia('BL'), 'sondagemEspecial');
+  assert.equal(categoriaTipologia('SH'), 'sondagemEspecial');
+  assert.equal(categoriaTipologia('VT'), 'sondagemEspecial');
+  assert.equal(categoriaTipologia('SP'), 'sondagemConvencional');
+  assert.equal(categoriaTipologia('SM / SM.F / SR'), 'sondagemConvencional');
+  assert.equal(categoriaTipologia('ST'), 'sondagemConvencional');
+  assert.equal(categoriaTipologia('PI'), 'sondagemConvencional');
+  assert.equal(categoriaTipologia('algo-desconhecido'), 'sondagemConvencional', 'tipologia não mapeada cai no catch-all "todo o resto", não fica sem categoria');
+});
+
+test('cortarAcumuladoNoUltimoDado (extraído do HTML real gerado) nulls out the accumulated Realizado line past the last month with real monthly data, instead of it continuing flat to December', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { cortarAcumuladoNoUltimoDado, calcularAcumulado } = extrairFuncoesPuras(html);
+  const mensal = [10, 10, 10, null, null, null, null, null, null, null, null, null];
+  const acumulado = calcularAcumulado(mensal); // [10,20,30,30,30,30,...] -- reto até dezembro
+  const resultado = cortarAcumuladoNoUltimoDado(acumulado, mensal);
+  assert.deepEqual(paraPlano(resultado), [10, 20, 30, null, null, null, null, null, null, null, null, null]);
+});
+
+test('cortarAcumuladoNoUltimoDado returns an all-null array when the underlying mensal series has no data at all', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { cortarAcumuladoNoUltimoDado, calcularAcumulado } = extrairFuncoesPuras(html);
+  const mensal = Array(12).fill(null);
+  const resultado = cortarAcumuladoNoUltimoDado(calcularAcumulado(mensal), mensal);
+  assert.deepEqual(paraPlano(resultado), Array(12).fill(null));
+});
+
+test('indicesFiltrados filters by categoria (a derived grouping of tipologia, not a stored field) with the same AND semantics', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { indicesFiltrados } = extrairFuncoesPuras(html);
+  const registros = [
+    { tipologia: 'SP', grupo: 'PÁTRIA', sup: 'SUP-A' }, // sondagemConvencional
+    { tipologia: 'CPTu', grupo: 'PÁTRIA', sup: 'SUP-B' }, // sondagemEspecial
+    { tipologia: 'LAB.C', grupo: 'SYSTRA', sup: 'SUP-C' }, // labConvencional
+    { tipologia: 'LAB.E', grupo: 'SYSTRA', sup: 'SUP-D' }, // labEspecial
+  ];
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'sondagemConvencional', '', '')), [0]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'sondagemEspecial', '', '')), [1]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'labConvencional', '', '')), [2]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'labEspecial', '', '')), [3]);
+  assert.deepEqual(paraPlano(indicesFiltrados(registros, '', 'labEspecial', 'PÁTRIA', '')), [], 'AND com grupo -- nenhum registro de PÁTRIA é labEspecial');
 });
 
 test('construirGraficoMensalSvg draws 12 columns per série (soma dimension, ehRazao=false) as rounded-top paths, no line in the monthly panel; construirGraficoAcumuladoSvg draws 1 line per série', () => {

@@ -244,15 +244,27 @@ function calcularAcumuladoTendencia(mensalTotal, acumuladoRealizado, ultimoMesRe
   return resultado;
 }
 
+// Acumulado de Realizado não continua reto (flat) até dezembro depois do
+// último mês reportado -- corta ali (null dali em diante), igual ao painel
+// Mensal, pra não parecer que o total "parou de crescer" já sabendo de
+// verdade, quando na real é só que ainda não tem dado. É a partir desse
+// mesmo ponto de corte que calcularAcumuladoTendencia continua a linha.
+function cortarAcumuladoNoUltimoDado(acumulado, mensal) {
+  var ultimo = ultimoIndiceComDado(mensal);
+  return acumulado.map(function (v, i) { return i <= ultimo ? v : null; });
+}
+
 // Devolve os índices de \`registros\` que combinam com os filtros de
-// tipologia/grupo/SUP atuais (AND, não OR) -- mesma regra usada linha a
-// linha em recalcularTabela, calculada aqui direto sobre os registros
-// crus, sem depender de uma linha <tr> já renderizada, pra o gráfico
-// poder agregar o recorte atual sem precisar de uma linha "molde" no DOM.
-function indicesFiltrados(registros, filtroTipologia, filtroGrupo, filtroSup) {
+// tipologia/categoria/grupo/SUP atuais (AND, não OR) -- mesma regra usada
+// linha a linha em recalcularTabela, calculada aqui direto sobre os
+// registros crus, sem depender de uma linha <tr> já renderizada, pra o
+// gráfico poder agregar o recorte atual sem precisar de uma linha "molde"
+// no DOM.
+function indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup) {
   var indices = [];
   registros.forEach(function (registro, indice) {
     if (filtroTipologia && registro.tipologia !== filtroTipologia) return;
+    if (filtroCategoria && categoriaTipologia(registro.tipologia) !== filtroCategoria) return;
     if (filtroGrupo && registro.grupo !== filtroGrupo) return;
     if (filtroSup && registro.sup !== filtroSup) return;
     indices.push(indice);
@@ -539,8 +551,8 @@ function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
 // tabela -- chamado toda vez que recalcularTabela roda, então nunca fica
 // desatualizado mesmo se o usuário estiver na aba Tabela quando muda um
 // filtro e só depois troca pra aba Gráfico.
-function montarGrafico(registros, filtroTipologia, filtroGrupo, filtroSup, filtroSerie, dimensao) {
-  var indices = indicesFiltrados(registros, filtroTipologia, filtroGrupo, filtroSup);
+function montarGrafico(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensao) {
+  var indices = indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup);
   var seriesTodas = ['previsto', 'realizado', 'total'];
   var seriesVisiveis = seriesTodas.filter(function (s) { return !filtroSerie || filtroSerie === s; });
   var ehRazao = DIMENSOES_RAZAO.indexOf(dimensao) !== -1;
@@ -567,9 +579,13 @@ function montarGrafico(registros, filtroTipologia, filtroGrupo, filtroSup, filtr
     var mensal = mensalPorSerie[serie];
     var acumulado = null;
     if (!ehRazao) {
-      acumulado = serie === 'total'
-        ? calcularAcumuladoTendencia(mensal, calcularAcumulado(mensalPorSerie.realizado || []), ultimoMesRealizado)
-        : calcularAcumulado(mensal);
+      if (serie === 'total') {
+        acumulado = calcularAcumuladoTendencia(mensal, calcularAcumulado(mensalPorSerie.realizado || []), ultimoMesRealizado);
+      } else if (serie === 'realizado') {
+        acumulado = cortarAcumuladoNoUltimoDado(calcularAcumulado(mensal), mensal);
+      } else {
+        acumulado = calcularAcumulado(mensal);
+      }
     }
     return { serie: serie, mensal: mensal, acumulado: acumulado };
   });
@@ -727,6 +743,20 @@ function tipologiaColor(tipologia) {
   return '#898781';
 }
 
+// Agrupamento fixo das 8 tipologias reais em 4 categorias -- Lab.
+// Convencional (LAB.C) e Lab. Especial (LAB.E) são suas próprias
+// categorias; entre as sondagens, CPTu/BL/SH/VT são "Especial" e todo o
+// resto (SP, SM/SM.F/SR, ST, PI) é "Convencional" -- regra confirmada com
+// o usuário, não uma inferência.
+var TIPOLOGIAS_SONDAGEM_ESPECIAL = { CPTU: true, BL: true, SH: true, VT: true };
+function categoriaTipologia(tipologia) {
+  var key = String(tipologia || '').trim().toUpperCase();
+  if (key === 'LAB.C') return 'labConvencional';
+  if (key === 'LAB.E') return 'labEspecial';
+  if (TIPOLOGIAS_SONDAGEM_ESPECIAL[key]) return 'sondagemEspecial';
+  return 'sondagemConvencional';
+}
+
 var SERIE_LABELS = { previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência' };
 
 function celulasMesVazias() {
@@ -737,7 +767,7 @@ function celulasMesVazias() {
 
 function renderLinhaTabela(registro, indice) {
   var chipColor = tipologiaColor(registro.tipologia);
-  var dataAttrs = 'data-tipologia="' + escapeHtml(registro.tipologia) + '" data-grupo="' + escapeHtml(registro.grupo) + '" data-sup="' + escapeHtml(registro.sup) + '" data-registro-indices="' + indice + '"';
+  var dataAttrs = 'data-tipologia="' + escapeHtml(registro.tipologia) + '" data-categoria="' + categoriaTipologia(registro.tipologia) + '" data-grupo="' + escapeHtml(registro.grupo) + '" data-sup="' + escapeHtml(registro.sup) + '" data-registro-indices="' + indice + '"';
   var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
   var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(registro.sup) + '">' + escapeHtml(registro.sup) + '</td>';
   var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(registro.grupo) + '">' + escapeHtml(registro.grupo) + '</td>';
@@ -816,7 +846,7 @@ function renderLinhaTotalGeral(totalRegistros) {
 // distinguir qual bloco é qual quando vários aparecem juntos no topo.
 function renderLinhaTotalGeralTipologia(tipologia, indices) {
   var chipColor = tipologiaColor(tipologia);
-  var dataAttrs = 'data-tipologia="' + escapeHtml(tipologia) + '" data-registro-indices="' + indices.join(',') + '" data-total-geral-tipologia="1"';
+  var dataAttrs = 'data-tipologia="' + escapeHtml(tipologia) + '" data-categoria="' + categoriaTipologia(tipologia) + '" data-registro-indices="' + indices.join(',') + '" data-total-geral-tipologia="1"';
   var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
   var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
   var celulaTodos = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="Todos">Todos</td>'; };
@@ -919,6 +949,7 @@ function popularFiltros(registros) {
 function recalcularTabela() {
   var dimensao = document.getElementById('seletor-dimensao').value;
   var filtroTipologia = document.getElementById('filtro-tipologia').value;
+  var filtroCategoria = document.getElementById('filtro-categoria').value;
   var filtroGrupo = document.getElementById('filtro-grupo').value;
   var filtroSup = document.getElementById('filtro-sup').value;
   var filtroSerie = document.getElementById('filtro-serie').value;
@@ -927,6 +958,8 @@ function recalcularTabela() {
     var combinaSerie = !filtroSerie || linha.dataset.serie === filtroSerie;
     var combinaGrupoSup = (!filtroGrupo || linha.dataset.grupo === filtroGrupo) &&
       (!filtroSup || linha.dataset.sup === filtroSup);
+    var combinaTipologiaCategoria = (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) &&
+      (!filtroCategoria || linha.dataset.categoria === filtroCategoria);
     var ehTotalGeral = linha.dataset.totalGeral === '1';
     var ehTotalGeralTipologia = linha.dataset.totalGeralTipologia === '1';
     var ehTotalSup = linha.dataset.totalSup === '1';
@@ -935,18 +968,20 @@ function recalcularTabela() {
     if (ehTotalGeral) {
       // Total geral (a visão-resumo de TUDO): só aparece na visão sem
       // nenhum recorte -- some assim que qualquer filtro (tipologia,
-      // grupo ou SUP) restringe os dados, porque nesse ponto o total
-      // por SUP (ou a própria linha do registro) já cobre o recorte atual.
-      mostra = !filtroGrupo && !filtroSup && !filtroTipologia && combinaSerie;
+      // categoria, grupo ou SUP) restringe os dados, porque nesse ponto o
+      // total por SUP (ou a própria linha do registro) já cobre o recorte
+      // atual.
+      mostra = !filtroGrupo && !filtroSup && !filtroTipologia && !filtroCategoria && combinaSerie;
     } else if (ehTotalGeralTipologia) {
       // Total de UMA tipologia através de todos os grupos/SUPs -- mesma
-      // regra do total geral (some com filtro de grupo/SUP), mas o
-      // filtro de tipologia escolhe QUAL bloco aparece em vez de escondê-lo.
-      mostra = !filtroGrupo && !filtroSup && (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) && combinaSerie;
+      // regra do total geral (some com filtro de grupo/SUP), mas os
+      // filtros de tipologia/categoria escolhem QUAIS blocos aparecem em
+      // vez de escondê-los.
+      mostra = !filtroGrupo && !filtroSup && combinaTipologiaCategoria && combinaSerie;
     } else if (ehTotalSup) {
-      mostra = combinaGrupoSup && !filtroTipologia && combinaSerie;
+      mostra = combinaGrupoSup && !filtroTipologia && !filtroCategoria && combinaSerie;
     } else {
-      mostra = combinaGrupoSup && (!filtroTipologia || linha.dataset.tipologia === filtroTipologia) && combinaSerie;
+      mostra = combinaGrupoSup && combinaTipologiaCategoria && combinaSerie;
     }
     linha.style.display = mostra ? '' : 'none';
     if (mostra) {
@@ -955,11 +990,12 @@ function recalcularTabela() {
     }
   });
   mesclarColunasRepetidas();
-  montarGrafico(window.__REGISTROS__, filtroTipologia, filtroGrupo, filtroSup, filtroSerie, dimensao);
+  montarGrafico(window.__REGISTROS__, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroSerie, dimensao);
 }
 
 function limparFiltros() {
   document.getElementById('filtro-tipologia').value = '';
+  document.getElementById('filtro-categoria').value = '';
   document.getElementById('filtro-grupo').value = '';
   document.getElementById('filtro-sup').value = '';
   document.getElementById('filtro-serie').value = '';
@@ -971,7 +1007,7 @@ function limparFiltros() {
 function montarDashboard(registros) {
   popularFiltros(registros);
   document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(registros);
-  ['seletor-dimensao', 'filtro-tipologia', 'filtro-grupo', 'filtro-sup', 'filtro-serie'].forEach(function (id) {
+  ['seletor-dimensao', 'filtro-tipologia', 'filtro-categoria', 'filtro-grupo', 'filtro-sup', 'filtro-serie'].forEach(function (id) {
     document.getElementById(id).addEventListener('change', recalcularTabela);
   });
   document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
@@ -1466,6 +1502,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     <div class="filtros">
       <div class="filtros-selecao">
         <select id="filtro-tipologia"><option value="">Todas as tipologias</option></select>
+        <select id="filtro-categoria"><option value="">Todas as categorias</option><option value="labConvencional">Lab. Convencional</option><option value="labEspecial">Lab. Especial</option><option value="sondagemConvencional">Sondagem Convencional</option><option value="sondagemEspecial">Sondagem Especial</option></select>
         <select id="filtro-grupo"><option value="">Todos os grupos</option></select>
         <select id="filtro-sup"><option value="">Todos os SUP</option></select>
         <select id="filtro-serie"><option value="">Todas as séries</option><option value="previsto">Previsto</option><option value="realizado">Realizado</option><option value="total">Tendência</option></select>
