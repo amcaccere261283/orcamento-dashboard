@@ -685,7 +685,12 @@ function alternarAba(aba) {
 }
 
 function preencherLinha(linha, valoresLista, serie, dimensao) {
-  var casasDecimais = dimensao === 'equipes' ? 0 : 2;
+  // Toda a tabela principal mostra número inteiro, sem vírgula, em
+  // qualquer dimensão -- diferente do gráfico, que continua com 2 casas
+  // pra Financeiro/Volume/Produtividade/Ticket médio (só Equipes já tinha 0
+  // lá, por não existir "meia equipe" -- na tabela isso agora vale igual
+  // pra todas).
+  var casasDecimais = 0;
   var mensal = calcularMensal(valoresLista, serie, dimensao);
   var celulasMes = linha.querySelectorAll('.celula-mes');
   celulasMes.forEach(function (celula, idx) {
@@ -806,6 +811,11 @@ function categoriaTipologia(tipologia) {
 var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência' };
 var ORDEM_SERIES = ['previstoInicial', 'previsto', 'realizado', 'total'];
 var CLASSE_SERIE = { previstoInicial: 'previsto-inicial', previsto: 'previsto', realizado: 'realizado', total: 'total' };
+// Estado inicial do filtro de série: Previsto Inicial começa DESMARCADO (é
+// a referência de fundo, não o dado do dia a dia) -- as outras 3 começam
+// marcadas. Precisa ser um Set não-vazio logo de cara pra excluir Previsto
+// Inicial (Set vazio = "sem filtro" = mostra tudo, ver filtroExclui).
+var SERIES_PADRAO_ATIVAS = ['previsto', 'realizado', 'total'];
 
 // Ordem fixa e canônica das dimensões -- quando várias estão marcadas, os
 // blocos na tabela sempre aparecem nesta ordem, não na ordem que a pessoa
@@ -997,10 +1007,12 @@ var FILTROS_CONFIG = [
 
 // chave -> Set dos valores marcados -- Set vazio tem a MESMA semântica que
 // o <select> de valor único tinha com "" (nenhum filtro, mostra tudo) --
-// exceto "dimensao", que começa com Financeiro marcado (ver FILTROS_CONFIG).
+// exceto "dimensao" (começa com Financeiro marcado, ver FILTROS_CONFIG) e
+// "serie" (começa com tudo MENOS Previsto Inicial marcado, ver SERIES_PADRAO_ATIVAS).
 var filtrosSelecionados = {};
 FILTROS_CONFIG.forEach(function (cfg) { filtrosSelecionados[cfg.chave] = new Set(); });
 filtrosSelecionados.dimensao.add('financeiro');
+SERIES_PADRAO_ATIVAS.forEach(function (s) { filtrosSelecionados.serie.add(s); });
 
 function opcoesFiltro(cfg, registros) {
   if (cfg.opcoesFixas) return cfg.opcoesFixas;
@@ -1046,10 +1058,28 @@ function atualizarRotuloFiltro(cfg, opcoes) {
   trigger.appendChild(seta);
 }
 
+// Normaliza texto pra comparação de busca -- minúsculas e sem acento, pra
+// "iguacu" achar "Iguaçu" e "sao" achar "São" sem o usuário precisar
+// digitar o acento certo. Filtra por código Unicode em vez de regex com
+// \\uNNNN pra evitar o problema de escapes sendo "comidos" pelo template
+// literal externo deste arquivo antes de virar código do cliente (mesma
+// pegadinha de \\r/\\n/\\. documentada nas outras funções client-side).
+function normalizarBusca(texto) {
+  var normalizado = (texto || '').toString().toLowerCase().normalize('NFD');
+  var resultado = '';
+  for (var i = 0; i < normalizado.length; i++) {
+    var codigo = normalizado.charCodeAt(i);
+    if (codigo < 768 || codigo > 879) resultado += normalizado[i];
+  }
+  return resultado;
+}
+
 // Monta (ou remonta, ex.: depois de um refresh ao vivo com dados novos) o
 // painel de checkboxes de UM filtro -- descarta seleções que não existem
 // mais nas opções atuais em vez de deixá-las "fantasma" (marcadas mas sem
-// checkbox visível pra desmarcar).
+// checkbox visível pra desmarcar). Painéis com opção têm um campo de busca
+// fixo no topo (útil sobretudo em SUP/Grupo/Tipologia, que podem ter muitas
+// opções) pra filtrar a lista por texto digitado, sem afetar a seleção.
 function montarFiltroMulti(cfg, registros) {
   var opcoes = opcoesFiltro(cfg, registros);
   var valoresValidos = {};
@@ -1059,12 +1089,31 @@ function montarFiltroMulti(cfg, registros) {
   });
 
   var painel = document.querySelector('#' + cfg.id + ' .filtro-multi-painel');
-  painel.innerHTML = opcoes.length
+  var listaHtml = opcoes.length
     ? opcoes.map(function (o) {
         var marcado = filtrosSelecionados[cfg.chave].has(o.valor) ? ' checked' : '';
         return '<label class="filtro-multi-item"><input type="checkbox" value="' + escapeHtml(o.valor) + '"' + marcado + '>' + escapeHtml(o.rotulo) + '</label>';
       }).join('')
     : '<div class="filtro-multi-vazio">Nenhuma opção</div>';
+  painel.innerHTML =
+    (opcoes.length ? '<input type="text" class="filtro-multi-busca" placeholder="Buscar..." autocomplete="off">' : '') +
+    listaHtml +
+    '<div class="filtro-multi-vazio filtro-multi-vazio-busca" hidden>Nenhum resultado</div>';
+
+  var busca = painel.querySelector('.filtro-multi-busca');
+  if (busca) {
+    busca.addEventListener('input', function () {
+      var termo = normalizarBusca(busca.value);
+      var algumVisivel = false;
+      painel.querySelectorAll('.filtro-multi-item').forEach(function (item) {
+        var combina = normalizarBusca(item.textContent).indexOf(termo) !== -1;
+        item.style.display = combina ? '' : 'none';
+        if (combina) algumVisivel = true;
+      });
+      painel.querySelector('.filtro-multi-vazio-busca').hidden = algumVisivel || termo === '';
+    });
+  }
+
   painel.querySelectorAll('input[type="checkbox"]').forEach(function (checkbox) {
     checkbox.addEventListener('change', function () {
       // Dimensão nunca pode ficar sem nenhuma marcada -- não faz sentido
@@ -1116,7 +1165,19 @@ function configurarAberturaFiltrosMulti() {
       });
       if (!jaAberto) {
         container.classList.add('aberto');
-        container.querySelector('.filtro-multi-painel').hidden = false;
+        var painelAberto = container.querySelector('.filtro-multi-painel');
+        painelAberto.hidden = false;
+        // Reabrir sempre limpo -- se o usuário buscou algo da última vez
+        // que abriu esse painel, não faz sentido a lista continuar
+        // filtrada (ou o campo continuar com texto) numa abertura nova.
+        var buscaAberto = painelAberto.querySelector('.filtro-multi-busca');
+        if (buscaAberto) {
+          buscaAberto.value = '';
+          painelAberto.querySelectorAll('.filtro-multi-item').forEach(function (item) { item.style.display = ''; });
+          var vazioBusca = painelAberto.querySelector('.filtro-multi-vazio-busca');
+          if (vazioBusca) vazioBusca.hidden = true;
+          buscaAberto.focus();
+        }
       }
     });
   });
@@ -1193,6 +1254,7 @@ function limparFiltros() {
     filtrosSelecionados[cfg.chave].clear();
   });
   filtrosSelecionados.dimensao.add('financeiro');
+  SERIES_PADRAO_ATIVAS.forEach(function (s) { filtrosSelecionados.serie.add(s); });
   montarTodosFiltrosMulti(window.__REGISTROS__);
   document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
   recalcularTabela();
@@ -1610,6 +1672,15 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     padding: 6px;
   }
   .filtro-multi-painel[hidden] { display: none; }
+  .filtro-multi-busca {
+    position: sticky; top: 0; z-index: 1;
+    display: block; width: 100%; box-sizing: border-box;
+    margin-bottom: 6px; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface-1); color: var(--text-primary); font-size: 13px;
+  }
+  .filtro-multi-busca::placeholder { color: var(--text-secondary); }
+  .filtro-multi-busca:focus-visible { outline: 2px solid #f6b53f; outline-offset: 1px; }
   .filtro-multi-item {
     display: flex; align-items: center; gap: 8px;
     padding: 7px 8px; border-radius: 4px; cursor: pointer;
@@ -1768,13 +1839,13 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
         <div class="filtro-multi" id="filtro-sup"><button type="button" class="filtro-multi-trigger">Todos os SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         <div class="filtro-multi" id="filtro-serie"><button type="button" class="filtro-multi-trigger">Todas as séries<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         <div class="filtro-multi" id="seletor-dimensao"><button type="button" class="filtro-multi-trigger">Financeiro<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-        <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
       </div>
       <div class="filtros-acoes">
         <div class="abas-visualizacao">
           <button id="aba-tabela" type="button" class="aba-ativa"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Tabela</button>
           <button id="aba-grafico" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Gráfico</button>
         </div>
+        <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
         <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
         <span id="status-atualizacao" class="status-atualizacao"></span>
       </div>
