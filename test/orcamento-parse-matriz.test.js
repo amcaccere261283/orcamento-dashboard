@@ -126,6 +126,27 @@ test('parseMatriz skips the MENSAL/ACUMULADO trailer rows at the end of a real c
   assert.equal(registros[0].tipologia, 'SM');
 });
 
+test('parseMatriz preserves a blank monthly cell as null (not 0) -- "no data reported yet" for that month must survive parsing, since the dashboard (table and gráfico) needs to tell it apart from a real reported zero', () => {
+  const grid = construirGrid([
+    linha({ origem: 'CONTRATO VIGENTE', grupo: 'PÁTRIA', tomador: 'X', tipologia: 'SM', base: 'P', equipes: 5, volume: 100, financeiro: 1000 }),
+    linha({ base: 'R', equipes: 4, volume: 80, financeiro: 800 }),
+    linha({ base: 'T' }),
+  ]);
+  // Deixa o mês de índice 5 (Jun) em branco de propósito na linha R, tanto
+  // pra equipes quanto financeiro -- simula a célula real vazia na planilha
+  // (delete, não undefined explícito via campos, pra bater com como uma
+  // célula nunca escrita aparece na grade real).
+  delete grid[3][13 + 5];
+  delete grid[3][44 + 5];
+
+  const registros = parseMatriz(grid);
+  assert.equal(registros[0].realizado.equipes[5], null);
+  assert.equal(registros[0].realizado.equipes[4], 4);
+  assert.equal(registros[0].realizado.equipes[6], 4);
+  assert.equal(registros[0].realizado.financeiro[5], null);
+  assert.equal(registros[0].realizado.volume[5], 80, 'só os meses de fato vazios na planilha viram null -- volume continuou preenchido nesse mês');
+});
+
 test('parseMatriz reads equipesResumo, volumeResumo and financeiroResumo per P/R/T row', () => {
   const grid = construirGrid([
     linha({

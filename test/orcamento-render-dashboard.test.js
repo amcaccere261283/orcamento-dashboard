@@ -153,7 +153,9 @@ function extrairFuncoesPuras(html) {
       ' this.calcularAcumulado = calcularAcumulado; this.indicesFiltrados = indicesFiltrados;' +
       ' this.construirGraficoMensalSvg = construirGraficoMensalSvg;' +
       ' this.construirGraficoAcumuladoSvg = construirGraficoAcumuladoSvg;' +
-      ' this.calcularEscalaEixo = calcularEscalaEixo;',
+      ' this.calcularEscalaEixo = calcularEscalaEixo;' +
+      ' this.ultimoIndiceComDado = ultimoIndiceComDado;' +
+      ' this.calcularAcumuladoTendencia = calcularAcumuladoTendencia;',
     sandbox
   );
   return {
@@ -164,6 +166,8 @@ function extrairFuncoesPuras(html) {
     construirGraficoMensalSvg: sandbox.construirGraficoMensalSvg,
     construirGraficoAcumuladoSvg: sandbox.construirGraficoAcumuladoSvg,
     calcularEscalaEixo: sandbox.calcularEscalaEixo,
+    ultimoIndiceComDado: sandbox.ultimoIndiceComDado,
+    calcularAcumuladoTendencia: sandbox.calcularAcumuladoTendencia,
   };
 }
 
@@ -256,6 +260,25 @@ test('calcularMensal (extraído do HTML real gerado), com uma lista de 1 item (c
   assert.equal(calcularMensal([null], 'previsto', 'equipes'), null);
 });
 
+test('calcularMensal preserves null for a month with no data reported yet (never coerces it to 0) -- real case: R/P left blank for a month the source spreadsheet had no value for', () => {
+  const registro = registroExemplo({
+    realizado: {
+      equipes: [4, 4, 4, 4, 4, null, 4, 4, 4, 4, 4, 4],
+      equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(800).map((v, i) => i === 5 ? null : v), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const html = renderComSenha([registro]);
+  const { calcularMensal } = extrairFuncoesPuras(html);
+  const equipes = calcularMensal([registro.realizado], 'realizado', 'equipes');
+  assert.equal(equipes[5], null);
+  assert.equal(equipes[4], 4);
+  assert.equal(equipes[6], 4);
+  const financeiro = calcularMensal([registro.realizado], 'realizado', 'financeiro');
+  assert.equal(financeiro[5], null);
+});
+
 test('calcularMensal computa produtividade como volume÷equipes e ticketMedio como financeiro÷volume, mês a mês, nunca o inverso (protege contra troca de numerador/denominador)', () => {
   const registro = registroExemplo({
     previsto: {
@@ -297,6 +320,37 @@ test('calcularMensal, agregando VÁRIAS tipologias (caso da linha de total por S
   assert.ok(Math.abs(produtividadeAgregada[0] - 150 / 7) < 1e-9);
   assert.notEqual(produtividadeAgregada[0], 1.5);
   assert.notEqual(produtividadeAgregada[0], 9);
+});
+
+test('calcularMensal, aggregating multiple tipologias, sums whatever contributors DO have data for a month (does not zero out just because one contributor is still blank that month) -- but stays null when EVERY contributor is blank', () => {
+  const tipologiaA = registroExemplo({
+    tipologia: 'SM',
+    realizado: {
+      equipes: Array(12).fill(4).map((v, i) => i === 5 ? null : v), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(800).map((v, i) => i === 5 ? null : v), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const tipologiaB = registroExemplo({
+    tipologia: 'ST',
+    realizado: {
+      equipes: Array(12).fill(2).map((v, i) => i === 5 ? null : v), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(30), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(300), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const html = renderComSenha([tipologiaA, tipologiaB]);
+  const { calcularMensal } = extrairFuncoesPuras(html);
+
+  // Mês 5: as duas tipologias estão sem equipes -- o agregado continua null.
+  const equipes = calcularMensal([tipologiaA.realizado, tipologiaB.realizado], 'realizado', 'equipes');
+  assert.equal(equipes[5], null);
+  assert.equal(equipes[4], 6);
+
+  // Mês 5: só tipologiaA está sem financeiro -- o agregado soma só o que tem (tipologiaB).
+  const financeiro = calcularMensal([tipologiaA.realizado, tipologiaB.realizado], 'realizado', 'financeiro');
+  assert.equal(financeiro[5], 300);
+  assert.equal(financeiro[4], 1100);
 });
 
 test('calcularTotalAno soma os 12 meses de uma lista de 1 item, e recalcula a razão do ano inteiro (não a soma das razões mensais) pra produtividade/ticketMedio agregados', () => {
@@ -369,6 +423,40 @@ test('calcularAcumulado returns an empty array for an empty input', () => {
   const html = renderComSenha([registroExemplo()]);
   const { calcularAcumulado } = extrairFuncoesPuras(html);
   assert.deepEqual(paraPlano(calcularAcumulado([])), []);
+});
+
+test('ultimoIndiceComDado (extraído do HTML real gerado) finds the last non-null month, ignoring trailing nulls', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { ultimoIndiceComDado } = extrairFuncoesPuras(html);
+  assert.equal(ultimoIndiceComDado([10, 20, 30, null, null, null, null, null, null, null, null, null]), 2);
+  assert.equal(ultimoIndiceComDado(Array(12).fill(null)), -1);
+  assert.equal(ultimoIndiceComDado(Array(12).fill(5)), 11);
+});
+
+test('ultimoIndiceComDado ignores a null gap followed by more real data (a hole in the middle does not count as "the end")', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { ultimoIndiceComDado } = extrairFuncoesPuras(html);
+  assert.equal(ultimoIndiceComDado([10, null, 30, null, null, null, null, null, null, null, null, null]), 2);
+});
+
+test('calcularAcumuladoTendencia (extraído do HTML real gerado) picks up Tendência\'s running total exactly where Realizado\'s accumulated total left off, not from zero', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { calcularAcumuladoTendencia, calcularAcumulado } = extrairFuncoesPuras(html);
+  const mensalRealizado = [10, 10, 10, null, null, null, null, null, null, null, null, null];
+  const acumuladoRealizado = calcularAcumulado(mensalRealizado); // [10,20,30,30,30,...]
+  const ultimoMesRealizado = 2;
+  const mensalTendencia = [null, null, null, 5, 5, 5, null, null, null, null, null, null];
+  const resultado = calcularAcumuladoTendencia(mensalTendencia, acumuladoRealizado, ultimoMesRealizado);
+  assert.deepEqual(paraPlano(resultado.slice(0, 2)), [null, null], 'antes do último Realizado, Tendência não desenha nada -- quem cobre esses meses é o Realizado');
+  assert.equal(resultado[2], 30, 'no mês de conexão, o acumulado de Tendência é o mesmo do acumulado de Realizado ali');
+  assert.deepEqual(paraPlano(resultado.slice(3, 6)), [35, 40, 45], 'dali em diante, soma só a própria contribuição mensal da Tendência em cima do acumulado herdado');
+});
+
+test('calcularAcumuladoTendencia falls back to accumulating Tendência alone from Jan when there is no Realizado month at all', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { calcularAcumuladoTendencia } = extrairFuncoesPuras(html);
+  const resultado = calcularAcumuladoTendencia([5, 5, 5], [], -1);
+  assert.deepEqual(paraPlano(resultado), [5, 10, 15]);
 });
 
 test('indicesFiltrados (extraído do HTML real gerado) returns every index when no filter is active', () => {
@@ -446,6 +534,32 @@ test('construirGraficoMensalSvg only draws columns for the séries actually pass
   const { svg } = construirGraficoMensalSvg(dados, false);
   assert.equal((svg.match(/<path class="grafico-barra"/g) || []).length, 12);
   assert.match(svg, /fill="#7fd858"/); // Realizado's color, confirming the right série was drawn
+});
+
+test('construirGraficoMensalSvg draws no column and no hoverable hit-rect for a null month (no data reported), unlike a real reported 0 which still gets a hit-rect', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoMensalSvg } = extrairFuncoesPuras(html);
+  // Jan=100 (real), Fev=0 (real reported zero), Mar..Dez=null (not reported yet)
+  const mensal = [100, 0, null, null, null, null, null, null, null, null, null, null];
+  const dados = [{ serie: 'realizado', mensal: mensal, acumulado: mensal }];
+  const { svg } = construirGraficoMensalSvg(dados, false);
+  assert.equal((svg.match(/<path class="grafico-barra"/g) || []).length, 1, 'só Jan (100) desenha uma barra visível -- Fev é 0 (altura 0) e Mar+ é null');
+  assert.equal((svg.match(/<rect class="grafico-hit"/g) || []).length, 2, 'Jan e Fev têm ponto de dado real (hover mostra o valor, inclusive 0) -- os meses null não têm hit-rect nenhum');
+});
+
+test('construirGraficoMensalSvg (razão dimension, linha) and construirGraficoAcumuladoSvg break the polyline at a null month instead of drawing a phantom point at the baseline', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoMensalSvg, construirGraficoAcumuladoSvg } = extrairFuncoesPuras(html);
+  // Dois trechos contínuos de dado real (Jan-Mar e Ago-Set), com um buraco no meio.
+  const mensal = [10, 12, 11, null, null, null, null, 9, 10, null, null, null];
+  const dados = [{ serie: 'previsto', mensal: mensal, acumulado: mensal }];
+
+  const razao = construirGraficoMensalSvg(dados, true);
+  assert.equal((razao.svg.match(/<polyline class="grafico-linha"/g) || []).length, 2, 'um <polyline> por trecho contínuo, não um só ligando todos os 12 meses');
+  assert.equal((razao.svg.match(/<circle class="grafico-marcador"/g) || []).length, 5, 'um marcador por mês com dado real (3 + 2), nenhum nos meses null');
+
+  const acumulado = construirGraficoAcumuladoSvg(dados);
+  assert.equal((acumulado.svg.match(/<polyline class="grafico-linha"/g) || []).length, 2);
 });
 
 test('construirGraficoMensalSvg and construirGraficoAcumuladoSvg emit no numeric label for a zero-value point (real "no data yet" case, e.g. Realizado before any month has actuals) -- a labeled "0" on every empty point is visual clutter, not signal', () => {

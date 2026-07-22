@@ -81,20 +81,27 @@ function locateColumns(grid) {
 
 function extrairValoresLinha(row, columns) {
   return {
-    equipes: columns.equipesMeses.map(col => row[col] ?? 0),
+    // Meses ficam null (não 0) quando a célula da MATRIZ está em branco --
+    // "sem dado reportado ainda" é diferente de "reportado como zero", e o
+    // dashboard (tabela e gráfico) precisa distinguir os dois (ver
+    // somarArraysMensais em render-dashboard.js). Os campos-resumo abaixo
+    // (pico/média/total/ticket etc.) continuam 0 por padrão -- são valores
+    // anuais/agregados já calculados pela própria planilha, não a série
+    // mês a mês que motivou essa distinção.
+    equipes: columns.equipesMeses.map(col => row[col] ?? null),
     equipesResumo: {
       pico: row[columns.equipesResumo.pico] ?? 0,
       media: row[columns.equipesResumo.media] ?? 0,
       prod: row[columns.equipesResumo.prod] ?? 0,
       dias: row[columns.equipesResumo.dias] ?? 0,
     },
-    volume: columns.volumeMeses.map(col => row[col] ?? 0),
+    volume: columns.volumeMeses.map(col => row[col] ?? null),
     volumeResumo: {
       total: row[columns.volumeResumo.total] ?? 0,
       totalInicial: row[columns.volumeResumo.totalInicial] ?? 0,
       ticket: row[columns.volumeResumo.ticket] ?? 0,
     },
-    financeiro: columns.financeiroMeses.map(col => row[col] ?? 0),
+    financeiro: columns.financeiroMeses.map(col => row[col] ?? null),
     financeiroResumo: {
       total: row[columns.financeiroResumo.total] ?? 0,
       totalInicial: row[columns.financeiroResumo.totalInicial] ?? 0,

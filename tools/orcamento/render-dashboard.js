@@ -127,11 +127,19 @@ function escapeHtml(valor) {
 
 function formatarNumero(v) { return v === null || v === undefined ? '—' : (Math.round(v * 100) / 100).toLocaleString('pt-BR'); }
 function somar(array) { return (array || []).reduce(function (a, b) { return a + (b || 0); }, 0); }
+// null num mês = nenhum registro que contribui pra essa soma tem dado
+// digitado ali ainda (ver render-dashboard: R/P ficam em branco, não 0,
+// quando a planilha de origem não tinha valor pro mês) -- soma[i] só vira
+// número quando ALGUM dos arrays tem valor real naquele mês; um contribuinte
+// em branco simplesmente não participa da soma, não vira 0 nela.
 function somarArraysMensais(arrays) {
-  var soma = new Array(12).fill(0);
+  var soma = new Array(12).fill(null);
   arrays.forEach(function (arr) {
     if (!arr) return;
-    for (var i = 0; i < 12; i++) soma[i] += arr[i] || 0;
+    for (var i = 0; i < 12; i++) {
+      if (arr[i] === null || arr[i] === undefined) continue;
+      soma[i] = (soma[i] || 0) + arr[i];
+    }
   });
   return soma;
 }
@@ -163,7 +171,7 @@ function calcularMensal(valoresLista, serie, dimensao) {
     }
     var numeradorMensal = somarArraysMensais(lista.map(function (v) { return v[ratio.numerador]; }));
     var denominadorMensal = somarArraysMensais(lista.map(function (v) { return v[ratio.denominador]; }));
-    return numeradorMensal.map(function (v, i) { return denominadorMensal[i] ? v / denominadorMensal[i] : null; });
+    return numeradorMensal.map(function (v, i) { return (v === null || v === undefined || !denominadorMensal[i]) ? null : v / denominadorMensal[i]; });
   }
   return somarArraysMensais(lista.map(function (v) { return v[dimensao]; }));
 }
@@ -196,6 +204,36 @@ function calcularAcumulado(mensal) {
     soma += v || 0;
     return soma;
   });
+}
+
+// Índice (0=Jan..11=Dez) do último mês com dado real em \`mensal\` -- -1 se
+// nenhum mês tem dado. Usado pra achar onde Realizado "parou" de ser
+// reportado, tanto pra parar de desenhar Realizado dali em diante quanto
+// pra saber onde a Tendência deve começar (ver montarGrafico).
+function ultimoIndiceComDado(mensal) {
+  for (var i = mensal.length - 1; i >= 0; i--) {
+    if (mensal[i] !== null && mensal[i] !== undefined) return i;
+  }
+  return -1;
+}
+
+// Acumulado da série Tendência nunca recomeça do zero em Jan -- ele
+// continua exatamente de onde o acumulado de Realizado parou (mesmo ponto
+// de conexão usado no painel mensal, ver montarGrafico), somando dali em
+// diante só a própria contribuição mensal da Tendência. Antes desse mês,
+// null (nada desenhado -- quem cobre esses meses é a linha de Realizado).
+// Sem nenhum mês de Realizado (ultimoMesRealizado -1), a Tendência acumula
+// sozinha desde Jan, do jeito usual.
+function calcularAcumuladoTendencia(mensalTotal, acumuladoRealizado, ultimoMesRealizado) {
+  if (ultimoMesRealizado === -1) return calcularAcumulado(mensalTotal);
+  var resultado = new Array(mensalTotal.length).fill(null);
+  var soma = acumuladoRealizado[ultimoMesRealizado] || 0;
+  resultado[ultimoMesRealizado] = soma;
+  for (var i = ultimoMesRealizado + 1; i < mensalTotal.length; i++) {
+    soma += mensalTotal[i] || 0;
+    resultado[i] = soma;
+  }
+  return resultado;
 }
 
 // Devolve os índices de \`registros\` que combinam com os filtros de
@@ -367,6 +405,10 @@ function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, marg
     var inicioSlot = margem.esquerda + mes * larguraMes + (larguraMes - slotOcupado) / 2;
     dadosPorSerie.forEach(function (d, i) {
       var valor = d.mensal[mes];
+      // null = mês sem dado reportado ainda (nunca 0 -- ver
+      // somarArraysMensais) -- não desenha nada pra essa série nesse mês,
+      // em vez de uma coluna fantasma na base do eixo.
+      if (valor === null || valor === undefined) return;
       var alturaColuna = escalaLinear(valor, escala.max, alturaPlot);
       var x = inicioSlot + i * (larguraColuna + GRAFICO_BARRA_GAP);
       var y = margem.topo + alturaPlot - alturaColuna;
@@ -384,24 +426,33 @@ function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, marg
 // marcador de 8px com anel na cor da superfície (fica legível cruzando
 // outra linha ou uma coluna). Rótulo em CADA ponto (a pedido), também só
 // acumulado em \`rotulos\` -- ver construirColunasSvg acima pro porquê.
+// Um mês null (sem dado reportado ainda, ver somarArraysMensais) quebra a
+// linha em vez de "cair" até a base -- desenha um <polyline> por trecho
+// contínuo de meses com dado, não um só ligando os 12 pontos.
 function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos) {
   var svg = '';
   dadosPorSerie.forEach(function (d) {
-    var pontos = d[campo].map(function (valor, mes) {
+    var traco = SERIE_TRACEJADO[d.serie] ? ' stroke-dasharray="' + SERIE_TRACEJADO[d.serie] + '"' : '';
+    var trecho = [];
+    function fecharTrecho() {
+      if (trecho.length > 1) {
+        var pontosStr = trecho.map(function (p) { return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
+        svg += '<polyline class="grafico-linha" points="' + pontosStr + '" fill="none" stroke="' + SERIE_COR[d.serie] + '" stroke-width="2"' + traco + '/>';
+      }
+      trecho = [];
+    }
+    d[campo].forEach(function (valor, mes) {
+      if (valor === null || valor === undefined) { fecharTrecho(); return; }
       var x = margem.esquerda + mes * larguraMes + larguraMes / 2;
       var y = margem.topo + alturaPlot - escalaLinear(valor, escala.max, alturaPlot);
-      return { x: x, y: y, valor: valor };
-    });
-    var pontosStr = pontos.map(function (p) { return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
-    var traco = SERIE_TRACEJADO[d.serie] ? ' stroke-dasharray="' + SERIE_TRACEJADO[d.serie] + '"' : '';
-    svg += '<polyline class="grafico-linha" points="' + pontosStr + '" fill="none" stroke="' + SERIE_COR[d.serie] + '" stroke-width="2"' + traco + '/>';
-    pontos.forEach(function (p, mes) {
-      svg += '<circle class="grafico-marcador" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="4" fill="' + SERIE_COR[d.serie] + '" stroke="var(--surface-1)" stroke-width="2"/>';
-      svg += '<circle class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(p.valor) + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="10" fill="transparent"/>';
-      if (p.valor) {
-        rotulos.push({ x: p.x, y: p.y - 10, texto: formatarValorGrafico(p.valor, usarMilhares), classe: 'grafico-rotulo-final' });
+      trecho.push({ x: x, y: y });
+      svg += '<circle class="grafico-marcador" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4" fill="' + SERIE_COR[d.serie] + '" stroke="var(--surface-1)" stroke-width="2"/>';
+      svg += '<circle class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor) + '" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="10" fill="transparent"/>';
+      if (valor) {
+        rotulos.push({ x: x, y: y - 10, texto: formatarValorGrafico(valor, usarMilhares), classe: 'grafico-rotulo-final' });
       }
     });
+    fecharTrecho();
   });
   return svg;
 }
@@ -485,11 +536,33 @@ function montarGrafico(registros, filtroTipologia, filtroGrupo, filtroSup, filtr
   var seriesVisiveis = seriesTodas.filter(function (s) { return !filtroSerie || filtroSerie === s; });
   var ehRazao = DIMENSOES_RAZAO.indexOf(dimensao) !== -1;
 
-  var dadosPorSerie = seriesVisiveis.map(function (serie) {
+  var mensalPorSerie = {};
+  seriesVisiveis.forEach(function (serie) {
     var valoresLista = indices.map(function (idx) { return registros[idx][serie]; });
-    var mensalBruto = calcularMensal(valoresLista, serie, dimensao) || new Array(12).fill(null);
-    var mensal = mensalBruto.map(function (v) { return v === null ? 0 : v; });
-    return { serie: serie, mensal: mensal, acumulado: ehRazao ? null : calcularAcumulado(mensal) };
+    mensalPorSerie[serie] = calcularMensal(valoresLista, serie, dimensao) || new Array(12).fill(null);
+  });
+
+  // Tendência sempre parte do último Realizado -- se as duas séries estão
+  // visíveis e a Tendência ainda não tem valor próprio nesse mês (regra "se
+  // tem R não tem T"), usa o valor de Realizado ali como ponto de conexão,
+  // pra Tendência nunca aparecer "flutuando" desconectada de onde o
+  // Realizado parou.
+  var ultimoMesRealizado = -1;
+  if (mensalPorSerie.realizado) ultimoMesRealizado = ultimoIndiceComDado(mensalPorSerie.realizado);
+  if (mensalPorSerie.total && ultimoMesRealizado !== -1 &&
+      (mensalPorSerie.total[ultimoMesRealizado] === null || mensalPorSerie.total[ultimoMesRealizado] === undefined)) {
+    mensalPorSerie.total[ultimoMesRealizado] = mensalPorSerie.realizado[ultimoMesRealizado];
+  }
+
+  var dadosPorSerie = seriesVisiveis.map(function (serie) {
+    var mensal = mensalPorSerie[serie];
+    var acumulado = null;
+    if (!ehRazao) {
+      acumulado = serie === 'total'
+        ? calcularAcumuladoTendencia(mensal, calcularAcumulado(mensalPorSerie.realizado || []), ultimoMesRealizado)
+        : calcularAcumulado(mensal);
+    }
+    return { serie: serie, mensal: mensal, acumulado: acumulado };
   });
 
   var opcaoDimensao = document.getElementById('seletor-dimensao').selectedOptions[0];
