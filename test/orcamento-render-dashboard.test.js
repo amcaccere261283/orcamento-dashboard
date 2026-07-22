@@ -155,7 +155,9 @@ function extrairFuncoesPuras(html) {
       ' this.construirGraficoAcumuladoSvg = construirGraficoAcumuladoSvg;' +
       ' this.calcularEscalaEixo = calcularEscalaEixo;' +
       ' this.ultimoIndiceComDado = ultimoIndiceComDado;' +
-      ' this.calcularAcumuladoTendencia = calcularAcumuladoTendencia;',
+      ' this.calcularAcumuladoTendencia = calcularAcumuladoTendencia;' +
+      ' this.parseCsvGrid = parseCsvGrid; this.numeroPtBr = numeroPtBr;' +
+      ' this.parseMatrizClient = parseMatrizClient;',
     sandbox
   );
   return {
@@ -168,6 +170,8 @@ function extrairFuncoesPuras(html) {
     calcularEscalaEixo: sandbox.calcularEscalaEixo,
     ultimoIndiceComDado: sandbox.ultimoIndiceComDado,
     calcularAcumuladoTendencia: sandbox.calcularAcumuladoTendencia,
+    parseCsvGrid: sandbox.parseCsvGrid, numeroPtBr: sandbox.numeroPtBr,
+    parseMatrizClient: sandbox.parseMatrizClient,
   };
 }
 
@@ -590,4 +594,79 @@ test('escapeHtml (extraído do HTML real gerado) escapes the same 5 characters a
   const html = renderComSenha([registroExemplo()]);
   const { escapeHtml } = extrairFuncoesPuras(html);
   assert.equal(escapeHtml('<script>&"'), '&lt;script&gt;&amp;&quot;');
+});
+
+test('parseCsvGrid (extraído do HTML real gerado) splits a simple CSV into rows/cells, and keeps a comma inside a quoted field from splitting it (real case: quoted numbers/fields in the published mirror CSV)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { parseCsvGrid } = extrairFuncoesPuras(html);
+  const grid = parseCsvGrid('a,b,c\n"1,5",d,"has ""quotes"" inside"\n');
+  assert.deepEqual(paraPlano(grid[0]), ['a', 'b', 'c']);
+  assert.deepEqual(paraPlano(grid[1]), ['1,5', 'd', 'has "quotes" inside']);
+});
+
+test('parseCsvGrid handles \\r\\n line endings and a final line with no trailing newline', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { parseCsvGrid } = extrairFuncoesPuras(html);
+  const grid = parseCsvGrid('a,b\r\nc,d');
+  assert.deepEqual(paraPlano(grid), [['a', 'b'], ['c', 'd']]);
+});
+
+test('numeroPtBr (extraído do HTML real gerado) parses a pt-BR comma-decimal number, and treats blank/formula-error/n-a cells as null -- never as 0 (real case: the mirror Sheet\'s CSV export uses "," for decimals and shows "#NAME?" where an Excel formula didn\'t convert cleanly to Sheets)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { numeroPtBr } = extrairFuncoesPuras(html);
+  assert.equal(numeroPtBr('11,79377778'), 11.79377778);
+  assert.equal(numeroPtBr('815729,9525'), 815729.9525);
+  assert.equal(numeroPtBr(''), null);
+  assert.equal(numeroPtBr(null), null);
+  assert.equal(numeroPtBr(undefined), null);
+  assert.equal(numeroPtBr('#NAME?'), null);
+  assert.equal(numeroPtBr('#REF!'), null);
+  assert.equal(numeroPtBr('n/a'), null);
+  assert.equal(numeroPtBr('0'), 0);
+});
+
+test('parseMatrizClient (extraído do HTML real gerado) parses a CSV grid shaped like the real mirror export (pt-BR comma-decimals quoted, P/R/T triad, Todos block skipped) into the same registro shape as the server-side parseMatriz', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { parseMatrizClient, parseCsvGrid } = extrairFuncoesPuras(html);
+
+  // Uma célula com vírgula decimal precisa vir entre aspas na linha CSV
+  // (senão a vírgula quebra o campo em dois) -- igual à exportação real.
+  function celula(v) { return String(v).indexOf(',') === -1 ? v : '"' + v + '"'; }
+  function linha(campos) { return campos.map(celula).join(','); }
+
+  const cabecalho = linha(
+    ['', 'ORIGEM', 'GRUPO', 'TOMADOR', 'SUP', 'ESCOPO', 'APOIO', 'INICIO', 'TERMINO', 'SONDAGEM', 'Demanda à cadastrar', 'Demanda Cadastrada', 'BASE']
+      .concat(Array(12).fill('01/01/2026'))
+      .concat(['PICO', 'MÉDIA', 'PROD.', 'DIAS'])
+      .concat(Array(12).fill('01/01/2026'))
+      .concat(['TOTAL', 'TOTAL INICIAL', 'TICKET'])
+      .concat(Array(12).fill('01/01/2026'))
+      .concat(['TOTAL', 'TOTAL INICIAL', 'OBSERVAÇÃO'])
+  );
+  const linhaTodos = linha(
+    ['', 'CONTRATO VIGENTE', 'Todos', 'Todos', 'Todos', 'Todos', 'Todos', 'Todos', 'Todos', 'SP', '', '0', 'P']
+      .concat(Array(46).fill('99'))
+  );
+  function linhaContrato(base, equipesValor) {
+    return linha(
+      ['', 'CONTRATO VIGENTE', 'PÁTRIA', 'Via Araucária', 'SUP-1', 'Bloco 1', 'Apoio', '27/05/2024', '27/05/2029', 'SP', '', '0', base]
+        .concat(Array(12).fill(equipesValor)) // equipesMeses
+        .concat([equipesValor, '0', '0', '25']) // PICO/MÉDIA/PROD./DIAS
+        .concat(Array(12).fill('10')) // volumeMeses
+        .concat(['120', '0', '1885']) // volume TOTAL/TOTAL INICIAL/TICKET
+        .concat(Array(12).fill(equipesValor)) // financeiroMeses
+        .concat(['999', '0', 'Nota']) // financeiro TOTAL/TOTAL INICIAL/OBSERVAÇÃO
+    );
+  }
+  const texto = [cabecalho, linhaTodos, linhaContrato('P', '4,5'), linhaContrato('R', '3,2'), linhaContrato('T', '0')].join('\n');
+  const grid = parseCsvGrid(texto);
+  const registros = parseMatrizClient(grid);
+
+  assert.equal(registros.length, 1, 'a linha Todos deve ser ignorada, sobrando só o contrato real');
+  assert.equal(registros[0].grupo, 'PÁTRIA');
+  assert.equal(registros[0].sup, 'SUP-1');
+  assert.equal(registros[0].tipologia, 'SP');
+  assert.deepEqual(paraPlano(registros[0].previsto.equipes), Array(12).fill(4.5));
+  assert.deepEqual(paraPlano(registros[0].realizado.equipes), Array(12).fill(3.2));
+  assert.equal(registros[0].observacao, 'Nota');
 });

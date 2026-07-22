@@ -970,7 +970,245 @@ function montarDashboard(registros) {
   recalcularTabela();
 }
 
-document.getElementById('atualizar-dashboard').addEventListener('click', function () { location.reload(); });
+// ---- Atualização ao vivo (busca a Sheet espelho publicada, sem tocar no
+// .xlsx original) ----------------------------------------------------------
+// A Sheet espelho é mantida em dia por um Apps Script separado (ver
+// tools/orcamento/apps-script-espelho-matriz.gs) que roda a cada 30 min:
+// converte o .xlsx real numa cópia Sheets temporária pra ler os valores
+// calculados, copia a aba MATRIZ pra dentro da própria Sheet espelho, e
+// apaga a cópia. O botão aqui só busca o CSV publicado dessa Sheet -- o
+// arquivo .xlsx que você edita nunca é tocado por este fluxo.
+var URL_ESPELHO_MATRIZ = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRaOjGxPYWKj-as9RwErptIND7PE_zxsND19PReV1MdOup1ZY3iAu_DGrQ0gatPyYFEy3hg-LWE2esw/pub?gid=609773455&single=true&output=csv';
+
+// Parser CSV RFC4180 simples (aspas duplicadas escapam aspas, vírgula/quebra
+// de linha dentro de aspas não terminam o campo) -- suficiente pro que o
+// Google Sheets exporta, sem precisar de nenhuma lib externa.
+function parseCsvGrid(texto) {
+  var linhas = [];
+  var linha = [];
+  var campo = '';
+  var dentroAspas = false;
+  for (var i = 0; i < texto.length; i++) {
+    var c = texto[i];
+    if (dentroAspas) {
+      if (c === '"') {
+        if (texto[i + 1] === '"') { campo += '"'; i++; }
+        else dentroAspas = false;
+      } else {
+        campo += c;
+      }
+    } else if (c === '"') {
+      dentroAspas = true;
+    } else if (c === ',') {
+      linha.push(campo); campo = '';
+    } else if (c === '\\r') {
+      // ignora -- o \\n logo em seguida já fecha a linha
+    } else if (c === '\\n') {
+      linha.push(campo); campo = '';
+      linhas.push(linha); linha = [];
+    } else {
+      campo += c;
+    }
+  }
+  if (campo !== '' || linha.length) { linha.push(campo); linhas.push(linha); }
+  return linhas;
+}
+
+// Converte uma célula do CSV pra número, ou null. Trata string vazia, erro
+// de fórmula (#NAME?/#REF!/#VALUE!/#N/A, que aparecem quando o Apps Script
+// converte o .xlsx pro formato Sheets e alguma fórmula específica do Excel
+// não tem equivalente direto lá) e "n/a" como "sem dado" -- nunca como 0,
+// pelo mesmo motivo de somarArraysMensais não confundir os dois.
+function numeroPtBr(valor) {
+  if (valor === undefined || valor === null) return null;
+  var texto = String(valor).trim();
+  if (texto === '' || texto.charAt(0) === '#' || texto.toLowerCase() === 'n/a') return null;
+  var numero = parseFloat(texto.replace(/\\./g, '').replace(',', '.'));
+  return isNaN(numero) ? null : numero;
+}
+
+function celulaTexto(v) {
+  var t = (v === undefined || v === null) ? '' : String(v).trim();
+  return t === '' ? null : t;
+}
+
+// Réplica em JS de parse-matriz.js (locateColumns) -- acha cada coluna pelo
+// próprio rótulo da linha de cabeçalho, nunca por posição fixa, igual ao
+// lado servidor. Lançar erro cedo aqui evita ler dado desalinhado em
+// silêncio se a Sheet espelho mudar de forma.
+function acharColunaClient(headerRow, rotulo) {
+  for (var col = 0; col < headerRow.length; col++) {
+    if (String(headerRow[col] || '').trim() === rotulo) return col;
+  }
+  throw new Error('Coluna "' + rotulo + '" não encontrada no cabeçalho do espelho ao vivo');
+}
+function proximasNColunasClient(colunaAncora, quantidade) {
+  var cols = [];
+  for (var i = 0; i < quantidade; i++) cols.push(colunaAncora + 1 + i);
+  return cols;
+}
+function exigirRotuloClient(headerRow, col, esperado) {
+  var encontrado = String(headerRow[col] || '').trim();
+  if (encontrado !== esperado) {
+    throw new Error('Esperava a coluna "' + esperado + '" na posição ' + col + ' do espelho ao vivo, encontrei "' + encontrado + '" -- a forma da planilha pode ter mudado');
+  }
+}
+function locateColumnsClient(headerRow) {
+  var origem = acharColunaClient(headerRow, 'ORIGEM');
+  var grupo = acharColunaClient(headerRow, 'GRUPO');
+  var tomador = acharColunaClient(headerRow, 'TOMADOR');
+  var sup = acharColunaClient(headerRow, 'SUP');
+  var escopo = acharColunaClient(headerRow, 'ESCOPO');
+  var apoio = acharColunaClient(headerRow, 'APOIO');
+  var inicio = acharColunaClient(headerRow, 'INICIO');
+  var termino = acharColunaClient(headerRow, 'TERMINO');
+  var sondagem = acharColunaClient(headerRow, 'SONDAGEM');
+  var base = acharColunaClient(headerRow, 'BASE');
+
+  var equipesMeses = proximasNColunasClient(base, 12);
+  var pico = equipesMeses[11] + 1;
+  exigirRotuloClient(headerRow, pico, 'PICO');
+  var media = pico + 1;
+  exigirRotuloClient(headerRow, media, 'MÉDIA');
+  var prod = media + 1;
+  exigirRotuloClient(headerRow, prod, 'PROD.');
+  var dias = prod + 1;
+  exigirRotuloClient(headerRow, dias, 'DIAS');
+
+  var volumeMeses = proximasNColunasClient(dias, 12);
+  var volumeTotal = volumeMeses[11] + 1;
+  exigirRotuloClient(headerRow, volumeTotal, 'TOTAL');
+  var volumeTotalInicial = volumeTotal + 1;
+  var ticket = volumeTotalInicial + 1;
+  exigirRotuloClient(headerRow, ticket, 'TICKET');
+
+  var financeiroMeses = proximasNColunasClient(ticket, 12);
+  var financeiroTotal = financeiroMeses[11] + 1;
+  exigirRotuloClient(headerRow, financeiroTotal, 'TOTAL');
+  var financeiroTotalInicial = financeiroTotal + 1;
+
+  return {
+    origem: origem, grupo: grupo, tomador: tomador, sup: sup, escopo: escopo, apoio: apoio,
+    inicio: inicio, termino: termino, sondagem: sondagem, base: base,
+    equipesMeses: equipesMeses, equipesResumo: { pico: pico, media: media, prod: prod, dias: dias },
+    volumeMeses: volumeMeses, volumeResumo: { total: volumeTotal, totalInicial: volumeTotalInicial, ticket: ticket },
+    financeiroMeses: financeiroMeses, financeiroResumo: { total: financeiroTotal, totalInicial: financeiroTotalInicial },
+    observacao: financeiroTotalInicial + 1,
+  };
+}
+
+function extrairValoresLinhaClient(row, columns) {
+  return {
+    equipes: columns.equipesMeses.map(function (col) { return numeroPtBr(row[col]); }),
+    equipesResumo: {
+      pico: numeroPtBr(row[columns.equipesResumo.pico]) || 0,
+      media: numeroPtBr(row[columns.equipesResumo.media]) || 0,
+      prod: numeroPtBr(row[columns.equipesResumo.prod]) || 0,
+      dias: numeroPtBr(row[columns.equipesResumo.dias]) || 0,
+    },
+    volume: columns.volumeMeses.map(function (col) { return numeroPtBr(row[col]); }),
+    volumeResumo: {
+      total: numeroPtBr(row[columns.volumeResumo.total]) || 0,
+      totalInicial: numeroPtBr(row[columns.volumeResumo.totalInicial]) || 0,
+      ticket: numeroPtBr(row[columns.volumeResumo.ticket]) || 0,
+    },
+    financeiro: columns.financeiroMeses.map(function (col) { return numeroPtBr(row[col]); }),
+    financeiroResumo: {
+      total: numeroPtBr(row[columns.financeiroResumo.total]) || 0,
+      totalInicial: numeroPtBr(row[columns.financeiroResumo.totalInicial]) || 0,
+    },
+  };
+}
+
+var TIPOLOGIAS_RESUMO_CLIENTE = { MENSAL: true, ACUMULADO: true };
+function deveIncluirClient(registro) {
+  if (!registro.grupo || registro.grupo === 'Todos') return false;
+  if (!registro.tipologia || TIPOLOGIAS_RESUMO_CLIENTE[registro.tipologia]) return false;
+  return true;
+}
+
+// Réplica em JS de parse-matriz.js (parseMatriz) -- mesmo esquema de 3
+// linhas físicas por combinação (contrato, tipologia) identificadas pela
+// coluna BASE (P/R/T) e preenchimento "sticky" dos campos identificadores.
+// grid[0] é o cabeçalho (a exportação CSV não tem a linha 0 vazia que o
+// .xlsx real tem antes da linha 1).
+function parseMatrizClient(grid) {
+  var columns = locateColumnsClient(grid[0]);
+  var registros = [];
+  var estado = {
+    origem: null, grupo: null, tomador: null, sup: null, escopo: null,
+    apoio: null, inicio: null, termino: null, tipologia: null,
+  };
+  var atual = null;
+
+  for (var rowNum = 1; rowNum < grid.length; rowNum++) {
+    var row = grid[rowNum];
+    if (!row) continue;
+    var base = celulaTexto(row[columns.base]);
+    if (base === null) continue;
+
+    estado.origem = celulaTexto(row[columns.origem]) || estado.origem;
+    estado.grupo = celulaTexto(row[columns.grupo]) || estado.grupo;
+    estado.tomador = celulaTexto(row[columns.tomador]) || estado.tomador;
+    estado.sup = celulaTexto(row[columns.sup]) || estado.sup;
+    estado.escopo = celulaTexto(row[columns.escopo]) || estado.escopo;
+    estado.apoio = celulaTexto(row[columns.apoio]) || estado.apoio;
+    estado.inicio = celulaTexto(row[columns.inicio]) || estado.inicio;
+    estado.termino = celulaTexto(row[columns.termino]) || estado.termino;
+    estado.tipologia = celulaTexto(row[columns.sondagem]) || estado.tipologia;
+
+    if (base === 'P') {
+      atual = {
+        origem: estado.origem, grupo: estado.grupo, tomador: estado.tomador, sup: estado.sup,
+        escopo: estado.escopo, apoio: estado.apoio, inicio: estado.inicio, termino: estado.termino,
+        tipologia: estado.tipologia, observacao: null,
+        previsto: extrairValoresLinhaClient(row, columns), realizado: null, total: null,
+      };
+    } else if (base === 'R' && atual) {
+      atual.realizado = extrairValoresLinhaClient(row, columns);
+    } else if (base === 'T' && atual) {
+      atual.total = extrairValoresLinhaClient(row, columns);
+      atual.observacao = celulaTexto(row[columns.observacao]);
+      if (deveIncluirClient(atual)) registros.push(atual);
+      atual = null;
+    }
+  }
+  return registros;
+}
+
+function definirStatusAtualizacao(texto, ehErro) {
+  var el = document.getElementById('status-atualizacao');
+  if (!el) return;
+  el.textContent = texto;
+  el.classList.toggle('status-erro', !!ehErro);
+}
+
+function atualizarDadosAoVivo() {
+  definirStatusAtualizacao('Atualizando…', false);
+  fetch(URL_ESPELHO_MATRIZ + (URL_ESPELHO_MATRIZ.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now())
+    .then(function (resposta) {
+      if (!resposta.ok) throw new Error('HTTP ' + resposta.status);
+      return resposta.text();
+    })
+    .then(function (texto) {
+      var grid = parseCsvGrid(texto);
+      var registrosNovos = parseMatrizClient(grid);
+      if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho -- confira se o Apps Script já rodou pelo menos uma vez');
+
+      window.__REGISTROS__ = registrosNovos;
+      popularFiltros(window.__REGISTROS__);
+      document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__);
+      recalcularTabela();
+
+      var agora = new Date();
+      definirStatusAtualizacao('Atualizado às ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), false);
+    })
+    .catch(function (erro) {
+      definirStatusAtualizacao('Falha ao atualizar: ' + erro.message, true);
+    });
+}
+
+document.getElementById('atualizar-dashboard').addEventListener('click', atualizarDadosAoVivo);
 `;
 
 function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha }) {
@@ -1106,6 +1344,8 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   #atualizar-dashboard:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(0,0,0,0.3) inset; }
   #atualizar-dashboard:active svg { transform: rotate(70deg); }
   #atualizar-dashboard svg { transition: transform 300ms ease; }
+  .status-atualizacao { font-size: 12px; color: var(--text-secondary); margin-left: 8px; }
+  .status-atualizacao.status-erro { color: #e0684f; }
   .abas-visualizacao {
     display: flex; gap: 2px;
     background: rgba(0,0,0,0.3);
@@ -1227,6 +1467,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
           <button id="aba-grafico" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Gráfico</button>
         </div>
         <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
+        <span id="status-atualizacao" class="status-atualizacao"></span>
       </div>
     </div>
     <div id="secao-tabela">
