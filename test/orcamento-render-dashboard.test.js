@@ -158,7 +158,8 @@ function extrairFuncoesPuras(html) {
       ' this.parseMatrizClient = parseMatrizClient;' +
       ' this.formatarNumero = formatarNumero; this.formatarValorGrafico = formatarValorGrafico;' +
       ' this.categoriaTipologia = categoriaTipologia;' +
-      ' this.cortarAcumuladoNoUltimoDado = cortarAcumuladoNoUltimoDado;',
+      ' this.cortarAcumuladoNoUltimoDado = cortarAcumuladoNoUltimoDado;' +
+      ' this.preservarPrevistoInicial = preservarPrevistoInicial;',
     sandbox
   );
   return {
@@ -176,6 +177,7 @@ function extrairFuncoesPuras(html) {
     formatarNumero: sandbox.formatarNumero, formatarValorGrafico: sandbox.formatarValorGrafico,
     categoriaTipologia: sandbox.categoriaTipologia,
     cortarAcumuladoNoUltimoDado: sandbox.cortarAcumuladoNoUltimoDado,
+    preservarPrevistoInicial: sandbox.preservarPrevistoInicial,
   };
 }
 
@@ -774,4 +776,20 @@ test('parseMatrizClient (extraído do HTML real gerado) parses a CSV grid shaped
   assert.deepEqual(paraPlano(registros[0].previsto.equipes), Array(12).fill(4.5));
   assert.deepEqual(paraPlano(registros[0].realizado.equipes), Array(12).fill(3.2));
   assert.equal(registros[0].observacao, 'Nota');
+});
+
+test('preservarPrevistoInicial (extraído do HTML real gerado) transplants the OLD previstoInicial onto the freshly-fetched registros, matched by SUP+tipologia -- the live-refresh CSV never carries it, since it comes from a separate, unchanging baseline file read only at build time', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { preservarPrevistoInicial } = extrairFuncoesPuras(html);
+  const previstoInicialReal = {
+    equipes: Array(12).fill(1), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+    volume: Array(12).fill(2), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+    financeiro: Array(12).fill(3), financeiroResumo: { total: 0, totalInicial: 0 },
+  };
+  const antigos = [{ sup: 'SUP-A', tipologia: 'SP', previstoInicial: previstoInicialReal }];
+  const novos = [{ sup: 'SUP-A', tipologia: 'SP' }, { sup: 'SUP-NOVO', tipologia: 'ST' }];
+  preservarPrevistoInicial(antigos, novos);
+
+  assert.deepEqual(paraPlano(novos[0].previstoInicial.financeiro), Array(12).fill(3), 'SUP+tipologia que já existia antes recupera o previstoInicial de verdade, não fica em branco');
+  assert.deepEqual(paraPlano(novos[1].previstoInicial.financeiro), Array(12).fill(0), 'SUP novo (não existia antes do refresh) fica zerado, igual ao build-dashboard.js zera quando não acha na linha de base -- nunca fica ausente/undefined');
 });

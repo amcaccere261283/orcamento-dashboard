@@ -1420,6 +1420,32 @@ function definirStatusAtualizacao(texto, ehErro) {
   el.classList.toggle('status-erro', !!ehErro);
 }
 
+// previstoInicial vem de um arquivo separado (o estudo original de linha
+// de base), lido só no build no servidor -- nunca da Sheet espelho/CSV que
+// o refresh ao vivo busca, e não tem por quê: é uma foto fixa, não muda
+// junto com a MATRIZ viva. Sem isso, os registros recém-buscados vêm sem
+// o campo (não zerado -- AUSENTE), e a linha Previsto Inicial ficaria em
+// branco a cada "Atualizar dados". Em vez de tentar rebuscar algo que não
+// muda, simplesmente transplanta o previstoInicial que os registros
+// ANTIGOS já tinham pros novos, casando por SUP+tipologia (mesma chave de
+// sempre) -- um SUP/tipologia novo que ainda não existia fica zerado, do
+// jeito que build-dashboard.js já zera quando não acha na linha de base.
+function preservarPrevistoInicial(registrosAntigos, registrosNovos) {
+  var zero12 = function () { return Array(12).fill(0); };
+  var zeroPadrao = {
+    equipes: zero12(), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+    volume: zero12(), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+    financeiro: zero12(), financeiroResumo: { total: 0, totalInicial: 0 },
+  };
+  var porChave = {};
+  registrosAntigos.forEach(function (r) {
+    if (r.previstoInicial) porChave[r.sup + '||' + r.tipologia] = r.previstoInicial;
+  });
+  registrosNovos.forEach(function (r) {
+    r.previstoInicial = porChave[r.sup + '||' + r.tipologia] || zeroPadrao;
+  });
+}
+
 function atualizarDadosAoVivo() {
   definirStatusAtualizacao('Atualizando…', false);
   fetch(URL_ESPELHO_MATRIZ + (URL_ESPELHO_MATRIZ.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now())
@@ -1432,6 +1458,7 @@ function atualizarDadosAoVivo() {
       var registrosNovos = parseMatrizClient(grid);
       if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho -- confira se o Apps Script já rodou pelo menos uma vez');
 
+      preservarPrevistoInicial(window.__REGISTROS__, registrosNovos);
       window.__REGISTROS__ = registrosNovos;
       montarTodosFiltrosMulti(window.__REGISTROS__);
       document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__);
