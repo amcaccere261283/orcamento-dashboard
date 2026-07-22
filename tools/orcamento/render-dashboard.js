@@ -596,7 +596,10 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
   });
 
   var rotuloDimensao = DIMENSOES_ROTULO[dimensao] || '';
-  var casasDecimais = dimensao === 'equipes' ? 0 : 2;
+  // Todo gráfico mostra número inteiro, sem casa decimal -- exceto
+  // Produtividade/Ticket médio, que são razões (m³ por equipe-dia, R$ por
+  // m³) e perderiam precisão útil arredondadas pra inteiro.
+  var casasDecimais = ehRazao ? 2 : 0;
 
   var mensalResultado = construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais);
   var tituloMensal = (ehRazao ? 'Evolução mensal — ' : 'Mensal — ') + rotuloDimensao + (mensalResultado.milhares ? ' (em milhares)' : '');
