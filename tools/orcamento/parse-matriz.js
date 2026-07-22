@@ -109,6 +109,26 @@ function extrairValoresLinha(row, columns) {
   };
 }
 
+// A MATRIZ segue a regra "se tem R, não tem T" pros meses já fechados
+// (Realizado sozinho leva o mês) -- mas no mês vigente (em andamento), é
+// comum a planilha trazer os dois preenchidos ao mesmo tempo: o Realizado
+// parcial (o que já foi de fato apurado até agora) E a Tendência (projeção
+// pro mês inteiro). Sem esse merge, Tendência mostraria a projeção mesmo
+// quando já existe o valor real reportado -- Realizado sempre vence
+// Tendência quando os dois existem no mesmo mês. Mexe só nas 3 séries
+// brutas (equipes/volume/financeiro); Produtividade/Ticket médio herdam a
+// correção de graça, já que são calculadas a partir delas (ver
+// CAMPOS_RATIO em render-dashboard.js).
+function mesclarTotalComRealizado(total, realizado) {
+  ['equipes', 'volume', 'financeiro'].forEach(campo => {
+    total[campo] = total[campo].map((valorTotal, i) => {
+      const valorRealizado = realizado[campo][i];
+      return (valorRealizado === null || valorRealizado === undefined) ? valorTotal : valorRealizado;
+    });
+  });
+  return total;
+}
+
 // Linhas de resumo pré-calculadas pelo Excel (total geral com GRUPO="Todos"
 // no topo da aba, e os totais MENSAL/ACUMULADO no fim de cada contrato) não
 // são dados reais de contrato -- confirmado com o usuário, o dashboard
@@ -163,6 +183,7 @@ function parseMatriz(grid) {
       atual.realizado = extrairValoresLinha(row, columns);
     } else if (base === 'T' && atual) {
       atual.total = extrairValoresLinha(row, columns);
+      if (atual.realizado) mesclarTotalComRealizado(atual.total, atual.realizado);
       atual.observacao = row[columns.observacao] ?? null;
       if (deveIncluir(atual)) registros.push(atual);
       atual = null;
@@ -171,4 +192,4 @@ function parseMatriz(grid) {
   return registros;
 }
 
-module.exports = { parseMatriz, locateColumns };
+module.exports = { parseMatriz, locateColumns, mesclarTotalComRealizado };

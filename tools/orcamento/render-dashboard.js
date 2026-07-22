@@ -1447,6 +1447,20 @@ function extrairValoresLinhaClient(row, columns) {
   };
 }
 
+// Réplica de mesclarTotalComRealizado (parse-matriz.js) -- ver o comentário
+// lá pro porquê: no mês vigente a MATRIZ costuma trazer Realizado parcial
+// e Tendência (projeção do mês inteiro) preenchidos juntos, e Realizado
+// sempre vence quando os dois existem no mesmo mês.
+function mesclarTotalComRealizadoClient(total, realizado) {
+  ['equipes', 'volume', 'financeiro'].forEach(function (campo) {
+    total[campo] = total[campo].map(function (valorTotal, i) {
+      var valorRealizado = realizado[campo][i];
+      return (valorRealizado === null || valorRealizado === undefined) ? valorTotal : valorRealizado;
+    });
+  });
+  return total;
+}
+
 var TIPOLOGIAS_RESUMO_CLIENTE = { MENSAL: true, ACUMULADO: true };
 function deveIncluirClient(registro) {
   if (!registro.grupo || registro.grupo === 'Todos') return false;
@@ -1495,6 +1509,7 @@ function parseMatrizClient(grid) {
       atual.realizado = extrairValoresLinhaClient(row, columns);
     } else if (base === 'T' && atual) {
       atual.total = extrairValoresLinhaClient(row, columns);
+      if (atual.realizado) mesclarTotalComRealizadoClient(atual.total, atual.realizado);
       atual.observacao = celulaTexto(row[columns.observacao]);
       if (deveIncluirClient(atual)) registros.push(atual);
       atual = null;
