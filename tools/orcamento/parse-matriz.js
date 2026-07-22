@@ -119,11 +119,21 @@ function extrairValoresLinha(row, columns) {
 // ação quando Tendência JÁ tinha um valor próprio pro mês -- meses onde
 // Tendência era null (meses fechados) continuam null, não é pra
 // "preencher" com o Realizado o que a própria planilha deixou em branco de
-// propósito. Mexe só nas 3 séries brutas (equipes/volume/financeiro);
-// Produtividade/Ticket médio herdam a correção de graça, já que são
-// calculadas a partir delas (ver CAMPOS_RATIO em render-dashboard.js).
+// propósito.
+//
+// Mexe só em volume/financeiro, NÃO em equipes -- confirmado contra a
+// MATRIZ real que a coluna de Equipes do Realizado usa uma fórmula
+// (média/contagem) que devolve 0 pros meses futuros ainda não alcançados,
+// em vez de ficar em branco como Volume/Financeiro. Esse 0 não é um "mês
+// fechado com zero equipes" de verdade -- é só a fórmula sem nada pra
+// calcular ainda -- então deixar Equipes participar do merge apagava a
+// projeção real da Tendência pros meses futuros (trocando por 0) e, como
+// Produtividade divide Volume por Equipes, zerava o denominador e a
+// própria Produtividade sumia (ver CAMPOS_RATIO em render-dashboard.js).
+// Ticket médio (Financeiro/Volume) não tem esse problema, então continua
+// herdando a correção normalmente.
 function mesclarTotalComRealizado(total, realizado) {
-  ['equipes', 'volume', 'financeiro'].forEach(campo => {
+  ['volume', 'financeiro'].forEach(campo => {
     total[campo] = total[campo].map((valorTotal, i) => {
       if (valorTotal === null || valorTotal === undefined) return valorTotal;
       const valorRealizado = realizado[campo][i];

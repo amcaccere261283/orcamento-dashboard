@@ -165,25 +165,27 @@ test('mesclarTotalComRealizado only lets Realizado win where Tendência ALREADY 
   };
   const resultado = mesclarTotalComRealizado(total, realizado);
   assert.deepEqual(resultado.financeiro, [500, null, null, 1000], 'mês 0: Realizado (500) vence a Tendência própria (1000); mês 1: Tendência continua null -- NÃO vira 700 só porque Realizado tem dado ali, isso é um mês já fechado; mês 2: continua null; mês 3: mantém a projeção própria (1000, sem Realizado pra competir)');
-  assert.deepEqual(resultado.equipes, [5, null, null, 10]);
   assert.deepEqual(resultado.volume, [50, null, null, 100]);
+  assert.deepEqual(resultado.equipes, [10, null, null, 10], 'Equipes NUNCA participa do merge -- o Realizado de Equipes usa fórmula (0 nos meses futuros, não null/blank como Volume/Financeiro), então "Realizado tem valor" não é sinal confiável ali; a Tendência própria de Equipes sempre sobrevive intacta');
 });
 
-test('parseMatriz: no mês vigente (Realizado parcial e Tendência preenchidos ao mesmo tempo), Realizado vence -- reproduz o padrão real encontrado na MATRIZ (mês em andamento tem os dois valores; meses fechados só têm Realizado; meses futuros só têm Tendência)', () => {
+test('parseMatriz: no mês vigente (Realizado parcial e Tendência preenchidos ao mesmo tempo), Realizado vence em Financeiro/Volume -- reproduz o padrão real encontrado na MATRIZ (mês em andamento tem os dois valores; meses fechados só têm Realizado; meses futuros só têm Tendência). Equipes fica de fora do merge (ver mesclarTotalComRealizado) e mantém sua própria projeção mesmo no mês vigente.', () => {
   const grid = construirGrid([
     linha({ origem: 'CONTRATO VIGENTE', grupo: 'PÁTRIA', tomador: 'X', tipologia: 'SM', base: 'P', equipes: 5, volume: 100, financeiro: 1000 }),
     linha({ base: 'R', equipes: 4, volume: 80, financeiro: 800 }),
     linha({ base: 'T', equipes: 6, volume: 120, financeiro: 1200 }),
   ]);
-  // Mês vigente (índice 6): Realizado parcial (3.5 / 350000) E Tendência
-  // (projeção do mês inteiro, 3 / 300000) chegam preenchidos juntos --
-  // Realizado deve vencer.
+  // Mês vigente (índice 6): Realizado parcial E Tendência (projeção do mês
+  // inteiro) chegam preenchidos juntos -- Realizado deve vencer em
+  // Volume/Financeiro; Equipes é deixado de fora de propósito.
   grid[3][13 + 6] = 3.5; grid[4][13 + 6] = 3;
+  grid[3][29 + 6] = 90; grid[4][29 + 6] = 110;
   grid[3][44 + 6] = 350000; grid[4][44 + 6] = 300000;
 
   const registros = parseMatriz(grid);
-  assert.equal(registros[0].total.equipes[6], 3.5, 'mês vigente: Tendência mostra o valor de Realizado (3.5), não o seu próprio (3)');
-  assert.equal(registros[0].total.financeiro[6], 350000);
+  assert.equal(registros[0].total.volume[6], 90, 'Volume: Tendência mostra o valor de Realizado (90), não o seu próprio (110)');
+  assert.equal(registros[0].total.financeiro[6], 350000, 'Financeiro: Tendência mostra o valor de Realizado (350000), não o seu próprio (300000)');
+  assert.equal(registros[0].total.equipes[6], 3, 'Equipes NÃO participa do merge -- mantém sua própria projeção (3) mesmo no mês vigente, mesmo com Realizado (3.5) também preenchido ali');
 });
 
 test('parseMatriz: mês futuro sem nenhum Realizado ainda -- Tendência mantém sua própria projeção sem interferência', () => {

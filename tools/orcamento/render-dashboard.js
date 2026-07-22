@@ -1451,9 +1451,13 @@ function extrairValoresLinhaClient(row, columns) {
 // lá pro porquê: no mês vigente a MATRIZ costuma trazer Realizado parcial
 // e Tendência (projeção do mês inteiro) preenchidos juntos, e Realizado
 // vence só quando os dois JÁ existem no mesmo mês -- meses fechados, onde
-// Tendência é null de propósito, continuam null (nada a preencher).
+// Tendência é null de propósito, continuam null (nada a preencher). Não
+// mexe em Equipes -- o Realizado de Equipes usa fórmula (0 nos meses
+// futuros ainda não alcançados, não null), então deixaria a Tendência de
+// Equipes zerada nos meses futuros e a Produtividade sumida (divide por
+// Equipes).
 function mesclarTotalComRealizadoClient(total, realizado) {
-  ['equipes', 'volume', 'financeiro'].forEach(function (campo) {
+  ['volume', 'financeiro'].forEach(function (campo) {
     total[campo] = total[campo].map(function (valorTotal, i) {
       if (valorTotal === null || valorTotal === undefined) return valorTotal;
       var valorRealizado = realizado[campo][i];
