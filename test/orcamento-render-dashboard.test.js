@@ -168,6 +168,9 @@ function extrairFuncoesPuras(html) {
       ' this.cortarAcumuladoNoUltimoDado = cortarAcumuladoNoUltimoDado;' +
       ' this.preservarPrevistoInicial = preservarPrevistoInicial;' +
       ' this.dimensoesEmOrdem = dimensoesEmOrdem;' +
+      ' this.emOrdemCanonica = emOrdemCanonica;' +
+      ' this.campoAgrupamento = campoAgrupamento;' +
+      ' this.agruparIndicesAlertas = agruparIndicesAlertas;' +
       ' this.construirPainelGraficoHtml = construirPainelGraficoHtml;' +
       ' this.somarIntervaloMensal = somarIntervaloMensal; this.bucketPeriodo = bucketPeriodo;' +
       ' this.classificarSemaforo = classificarSemaforo;' +
@@ -191,6 +194,9 @@ function extrairFuncoesPuras(html) {
     cortarAcumuladoNoUltimoDado: sandbox.cortarAcumuladoNoUltimoDado,
     preservarPrevistoInicial: sandbox.preservarPrevistoInicial,
     dimensoesEmOrdem: sandbox.dimensoesEmOrdem,
+    emOrdemCanonica: sandbox.emOrdemCanonica,
+    campoAgrupamento: sandbox.campoAgrupamento,
+    agruparIndicesAlertas: sandbox.agruparIndicesAlertas,
     construirPainelGraficoHtml: sandbox.construirPainelGraficoHtml,
     somarIntervaloMensal: sandbox.somarIntervaloMensal,
     bucketPeriodo: sandbox.bucketPeriodo,
@@ -980,4 +986,47 @@ test('aplicarSelecaoExclusiva is a no-op when the value being checked is already
   const estado = new Set(['sup']);
   aplicarSelecaoExclusiva(estado, 'sup');
   assert.deepEqual(paraPlano(estado), ['sup']);
+});
+
+test('emOrdemCanonica (extraído do HTML real gerado) filters a canonical order array down to whatever is in the Set, preserving canonical order regardless of Set insertion order', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { emOrdemCanonica } = extrairFuncoesPuras(html);
+  const ordem = ['acumuladoAnterior', 'mesVigente', 'm1', 'm2', 'm3', 'acumuladoFuturo', 'acumuladoAteVigente', 'totalAno'];
+  const selecionadas = new Set(['totalAno', 'mesVigente']);
+  assert.deepEqual(paraPlano(emOrdemCanonica(ordem, selecionadas)), ['mesVigente', 'totalAno']);
+});
+
+test('campoAgrupamento (extraído do HTML real gerado) reads the field directly for sup/tipologia/grupo/origem, but derives categoria via categoriaTipologia (not a stored field)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { campoAgrupamento } = extrairFuncoesPuras(html);
+  const registro = { sup: 'SUP-A', tipologia: 'LAB.E', grupo: 'PÁTRIA', origem: 'CONTRATO VIGENTE' };
+  assert.equal(campoAgrupamento(registro, 'sup'), 'SUP-A');
+  assert.equal(campoAgrupamento(registro, 'tipologia'), 'LAB.E');
+  assert.equal(campoAgrupamento(registro, 'categoria'), 'labEspecial');
+});
+
+test('agruparIndicesAlertas (extraído do HTML real gerado) groups the given indices by campoAgrupamento, alphabetically by chave, aggregating every matching index per group', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { agruparIndicesAlertas } = extrairFuncoesPuras(html);
+  const registros = [
+    { sup: 'SUP-B', tipologia: 'SM' },
+    { sup: 'SUP-A', tipologia: 'ST' },
+    { sup: 'SUP-A', tipologia: 'SM' },
+  ];
+  const grupos = agruparIndicesAlertas(registros, [0, 1, 2], 'sup');
+  assert.deepEqual(paraPlano(grupos), [
+    { chave: 'SUP-A', indices: [1, 2] },
+    { chave: 'SUP-B', indices: [0] },
+  ]);
+});
+
+test('agruparIndicesAlertas only considers the indices it is given (respects an upstream recorte filter), not every registro in the array', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { agruparIndicesAlertas } = extrairFuncoesPuras(html);
+  const registros = [
+    { sup: 'SUP-A', tipologia: 'SM' },
+    { sup: 'SUP-B', tipologia: 'ST' },
+  ];
+  const grupos = agruparIndicesAlertas(registros, [0], 'sup');
+  assert.deepEqual(paraPlano(grupos), [{ chave: 'SUP-A', indices: [0] }]);
 });

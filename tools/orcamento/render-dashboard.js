@@ -900,6 +900,45 @@ function dimensoesEmOrdem(selecionadas) {
   return ordenadas.length ? ordenadas : ['financeiro'];
 }
 
+// Generaliza dimensoesEmOrdem pra qualquer lista de valores canônicos --
+// devolve só os que estão em selecionadas, na ordem de ordemCanonica
+// (nunca na ordem em que a pessoa marcou os checkboxes).
+function emOrdemCanonica(ordemCanonica, selecionadas) {
+  return ordemCanonica.filter(function (v) { return selecionadas.has(v); });
+}
+
+var NUMERICO_ORDEM = ['realizado', 'total'];
+var BASELINE_ORDEM = ['previsto', 'previstoInicial'];
+var PERIODO_ORDEM = ['acumuladoAnterior', 'mesVigente', 'm1', 'm2', 'm3', 'acumuladoFuturo', 'acumuladoAteVigente', 'totalAno'];
+var PERIODO_LABELS = {
+  acumuladoAnterior: 'Acumulado Anterior', mesVigente: 'Mês Vigente',
+  m1: 'M+1', m2: 'M+2', m3: 'M+3', acumuladoFuturo: 'Acumulado Futuro',
+  acumuladoAteVigente: 'Acumulado até Vigente', totalAno: 'Total Ano',
+};
+
+// "Agrupar por" precisa ler categoria (derivada de tipologia, nunca
+// guardada no registro) do mesmo jeito que indicesFiltrados/opcoesFiltro
+// já fazem pro filtro de categoria -- generalizado aqui pra qualquer campo
+// de agrupamento, não só os campos que existem direto no registro.
+function campoAgrupamento(registro, agruparPor) {
+  return agruparPor === 'categoria' ? categoriaTipologia(registro.tipologia) : registro[agruparPor];
+}
+
+// Agrupa só os indices recebidos (já filtrados pelo recorte atual) por
+// campoAgrupamento, em ordem alfabética de chave -- cada grupo soma TODOS
+// os índices que caem nele, não só o primeiro visto.
+function agruparIndicesAlertas(registros, indices, agruparPor) {
+  var porChave = {};
+  var ordem = [];
+  indices.forEach(function (idx) {
+    var chave = campoAgrupamento(registros[idx], agruparPor);
+    if (!porChave[chave]) { porChave[chave] = []; ordem.push(chave); }
+    porChave[chave].push(idx);
+  });
+  ordem.sort();
+  return ordem.map(function (chave) { return { chave: chave, indices: porChave[chave] }; });
+}
+
 function celulasMesVazias() {
   var html = '';
   for (var i = 0; i < 12; i++) html += '<td class="celula-mes num"></td>';
@@ -1087,6 +1126,45 @@ var FILTROS_CONFIG = [
   // começa com Financeiro já marcado, não vazio como os demais.
   { id: 'seletor-dimensao', chave: 'dimensao', rotuloPadrao: 'Selecione ao menos 1', opcoesFixas: DIMENSOES_CONFIG, minimoUm: true },
 ];
+
+// Config dos 5 seletores próprios da aba Alertas -- mesmo componente
+// visual (filtro-multi) dos filtros de recorte, mas com estado PRÓPRIO
+// (filtrosAlertas, não filtrosSelecionados) e, pra Agrupar por/Dimensão,
+// exclusivo:true (single-choice, ver montarFiltroMulti). aoMudar aponta
+// pra recalcularAlertas (definida na Task 7) em vez do recalcularTabela
+// default, já que mudar um seletor da Alertas não deve tocar a Tabela/
+// Gráfico.
+var FILTROS_ALERTAS_CONFIG = [
+  { id: 'filtro-alertas-agrupar-por', chave: 'agruparPor', rotuloPadrao: 'Agrupar por', exclusivo: true, opcoesFixas: [
+    { valor: 'sup', rotulo: 'SUP' },
+    { valor: 'tipologia', rotulo: 'Tipologia' },
+    { valor: 'grupo', rotulo: 'Grupo' },
+    { valor: 'categoria', rotulo: 'Categoria' },
+    { valor: 'origem', rotulo: 'Origem' },
+  ], aoMudar: function () { recalcularAlertas(); } },
+  { id: 'filtro-alertas-dimensao', chave: 'dimensao', rotuloPadrao: 'Dimensão', exclusivo: true, opcoesFixas: DIMENSOES_CONFIG,
+    aoMudar: function () { recalcularAlertas(); } },
+  { id: 'filtro-alertas-numerico', chave: 'numerico', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: [
+    { valor: 'realizado', rotulo: 'Realizado' },
+    { valor: 'total', rotulo: 'Tendência' },
+  ], aoMudar: function () { recalcularAlertas(); } },
+  { id: 'filtro-alertas-baseline', chave: 'baseline', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: [
+    { valor: 'previsto', rotulo: 'Previsto' },
+    { valor: 'previstoInicial', rotulo: 'Previsto Inicial' },
+  ], aoMudar: function () { recalcularAlertas(); } },
+  { id: 'filtro-alertas-periodo', chave: 'periodo', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: PERIODO_ORDEM.map(function (p) { return { valor: p, rotulo: PERIODO_LABELS[p] }; }),
+    aoMudar: function () { recalcularAlertas(); } },
+];
+
+var filtrosAlertas = {};
+FILTROS_ALERTAS_CONFIG.forEach(function (cfg) { filtrosAlertas[cfg.chave] = new Set(); });
+filtrosAlertas.agruparPor.add('sup');
+filtrosAlertas.dimensao.add('financeiro');
+filtrosAlertas.numerico.add('realizado');
+filtrosAlertas.numerico.add('total');
+filtrosAlertas.baseline.add('previsto');
+filtrosAlertas.periodo.add('acumuladoAteVigente');
+filtrosAlertas.periodo.add('totalAno');
 
 // chave -> Set dos valores marcados -- Set vazio tem a MESMA semântica que
 // o <select> de valor único tinha com "" (nenhum filtro, mostra tudo) --
