@@ -101,6 +101,12 @@ test('renderDashboard titles each of the 12 month columns with the real "Mês/An
   assert.match(html, /<th>Total<\/th>/);
 });
 
+test('renderDashboard embeds window.__VIGENTE_IDX__ as a plain (non-encrypted) integer, computed from generatedAt vs the periodos month range', () => {
+  // periodosExemplo() generates Jan..Dez/2026; renderComSenha's default generatedAt is 2026-07-21 (see renderComSenha) -- month index 6 (Jul, 0-based).
+  const html = renderComSenha([registroExemplo()]);
+  assert.match(html, /<script>window\.__VIGENTE_IDX__ = 6;<\/script>/);
+});
+
 test('renderDashboard includes a série filter (Previsto/Realizado/Tendência) and a categoria filter (fixed, non-sensitive labels, safe to render server-side unlike tipologia/grupo/SUP), and Limpar filtros / Atualizar dados buttons', () => {
   const html = renderComSenha([registroExemplo()]);
   assert.match(html, /<div class="filtro-multi" id="filtro-serie">/);
@@ -134,8 +140,8 @@ test('renderDashboard includes Tabela/Gráfico tab buttons and both view section
 // pros testes chamarem diretamente.
 function extrairFuncoesPuras(html) {
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  assert.equal(scripts.length, 3, 'esperava exatamente 3 <script> (dados cifrados, gate, tabela)');
-  const scriptTabela = scripts[2][1];
+  assert.equal(scripts.length, 4, 'esperava exatamente 4 <script> (vigenteIdx, dados cifrados, gate, tabela)');
+  const scriptTabela = scripts[3][1];
   const sandbox = {
     document: {
       getElementById: () => ({ addEventListener: () => {}, value: '0', options: [{}] }),

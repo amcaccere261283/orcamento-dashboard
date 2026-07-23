@@ -1,5 +1,5 @@
 'use strict';
-const { formatarMesAno } = require('./datas.js');
+const { formatarMesAno, calcularVigenteIdx } = require('./datas.js');
 const { cifrarComSenha } = require('./criptografia.js');
 
 function escapeHtml(value) {
@@ -1569,6 +1569,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   if (!senha) {
     throw new Error('renderDashboard requer "senha" -- o conteúdo (SUP/Grupo/Tomador/Tipologia/valores) é cifrado com ela antes de ir pro HTML.');
   }
+  const vigenteIdx = calcularVigenteIdx(periodos, generatedAt);
   const registrosJson = JSON.stringify(registros.map(r => ({
     sup: r.sup, grupo: r.grupo, tomador: r.tomador, escopo: r.escopo, tipologia: r.tipologia, origem: r.origem,
     previstoInicial: r.previstoInicial, previsto: r.previsto, realizado: r.realizado, total: r.total,
@@ -1890,6 +1891,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     </div>
   </div>
   </main>
+  <script>window.__VIGENTE_IDX__ = ${vigenteIdx};</script>
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
   <script>${SCRIPT_CLIENTE_GATE}</script>
   <script>${SCRIPT_CLIENTE_TABELA}</script>
