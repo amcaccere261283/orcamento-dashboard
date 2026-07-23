@@ -1429,7 +1429,7 @@ function montarFiltroMulti(cfg, registros, estado) {
       // Dimensão mudou -- a quantidade de linhas por registro depende de
       // quantas estão marcadas, então a estrutura da tabela (não só os
       // valores) precisa ser remontada antes do preenchimento normal.
-      if (cfg.chave === 'dimensao') {
+      if (cfg.id === 'seletor-dimensao') {
         document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
       }
       cfg.aoMudar ? cfg.aoMudar() : recalcularTabela();

@@ -134,9 +134,9 @@ test('renderDashboard includes Tabela/Gráfico tab buttons and both view section
 });
 
 // Todas as funções de montagem da tabela (linhas, cores, agregação) rodam
-// só no navegador, DEPOIS de decifrar -- por isso vivem dentro do 3º
-// <script> da página (SCRIPT_CLIENTE_TABELA), não no 2º (o gate, que só
-// cuida da senha) nem no 1º (só o JSON cifrado). Extraídas via vm.Context
+// só no navegador, DEPOIS de decifrar -- por isso vivem dentro do 4º
+// <script> da página (SCRIPT_CLIENTE_TABELA), não no 3º (o gate, que só
+// cuida da senha) nem nos anteriores (1º=vigenteIdx, 2º=dados cifrados). Extraídas via vm.Context
 // pros testes chamarem diretamente.
 function extrairFuncoesPuras(html) {
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
