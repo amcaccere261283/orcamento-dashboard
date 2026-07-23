@@ -1144,18 +1144,42 @@ test('renderCorpoAlertas renders Referência (baseline absoluto) e Pesquisado (n
   assert.doesNotMatch(corpo, /style="background:[^"]*"[^>]*>\s*\d+%/, 'a % do Desvio nunca deve ter fundo colorido -- só o círculo de Status carrega cor');
 });
 
-test('renderCorpoAlertas shows "—" for Referência/Pesquisado/Desvio and the cinza "Sem dado" status when the baseline bucket has no data', () => {
+test('renderCorpoAlertas shows Desvio "—" and the cinza "Sem dado" status when the baseline bucket is a real zero (not null) -- but Referência/Pesquisado still show their real (non-"—") values, since only the RATIO is undefined, not the underlying data', () => {
   const html = renderComSenha([registroExemplo()]);
   const { renderCorpoAlertas } = extrairFuncoesPuras(html);
-  const registroSemPrevisto = registroExemplo({
+  const registroBaselineZero = registroExemplo({
     previsto: {
       equipes: Array(12).fill(0), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
       volume: Array(12).fill(0), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
       financeiro: Array(12).fill(0), financeiroResumo: { total: 0, totalInicial: 0 },
     },
   });
-  const corpo = renderCorpoAlertas([registroSemPrevisto], [0], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
+  const corpo = renderCorpoAlertas([registroBaselineZero], [0], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
+  assert.match(corpo, /<td class="num">0<\/td>/, 'Referência (Previsto, zero real) mostra "0", não "—"');
+  assert.match(corpo, /<td class="num">9\.600<\/td>/, 'Pesquisado (Realizado, valor real do registroExemplo default) continua mostrando o número real');
+  assert.match(corpo, /<td class="num">—<\/td>/, 'Desvio é "—" (razão indefinida com denominador zero)');
   assert.match(corpo, /<span class="status-circulo" style="background:#6E7580"><\/span>Sem dado/);
+});
+
+test('renderCorpoAlertas shows "—" for Referência, Pesquisado AND Desvio, plus the cinza "Sem dado" status, when NEITHER baseline nor numérico has any real data at all (both all-null across every month)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoAlertas } = extrairFuncoesPuras(html);
+  const registroSemDadoNenhum = registroExemplo({
+    previsto: {
+      equipes: Array(12).fill(null), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(null), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(null), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+    realizado: {
+      equipes: Array(12).fill(null), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(null), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(null), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const corpo = renderCorpoAlertas([registroSemDadoNenhum], [0], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
+  const celulasTraco = corpo.match(/<td class="num">—<\/td>/g) || [];
+  assert.equal(celulasTraco.length, 6, 'Referência, Pesquisado e Desvio devem TODAS mostrar "—" em ambas as 2 linhas renderizadas (grupo + TOTAL GERAL), pois não há nenhum dado reportado em nenhuma das duas séries');
+  assert.match(corpo, /<span class="status-circulo" style="background:#6E7580"><\/span>Sem dado/, 'Status deve ser "Sem dado" com círculo cinza (pelo menos uma vez)');
 });
 
 test('renderCorpoAlertas gives every row a data-search attribute (normalized: lowercase, sem acento) combining the grupo label and the Combinação label, for the text search box', () => {
