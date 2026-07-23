@@ -196,6 +196,95 @@ function calcularTotalAno(valoresLista, serie, dimensao) {
   return somar(lista.map(function (v) { return somar(v[dimensao]); }));
 }
 
+// Buckets de período pra aba Alertas -- [inicio, fimExclusivo) de meses,
+// no mesmo array de 12 posições que calcularMensal já usa. mesVigente/
+// m1/m2/m3 são um mês só; os outros somam uma faixa. Fora do range 0..11
+// (vigenteIdx pode ser -1 ou 12, ver calcularVigenteIdx em datas.js) o
+// próprio somarIntervaloMensal já clampa e devolve null/0 corretamente.
+var PERIODOS_ALERTAS_INTERVALO = {
+  acumuladoAnterior: function (v) { return [0, v]; },
+  mesVigente: function (v) { return [v, v + 1]; },
+  m1: function (v) { return [v + 1, v + 2]; },
+  m2: function (v) { return [v + 2, v + 3]; },
+  m3: function (v) { return [v + 3, v + 4]; },
+  acumuladoFuturo: function (v) { return [v + 3, 12]; },
+  acumuladoAteVigente: function (v) { return [0, v + 1]; },
+  totalAno: function () { return [0, 12]; },
+};
+
+// Soma só os meses [inicio, fim) -- null quando NENHUM mês do intervalo tem
+// dado (nada foi reportado ainda nessa janela inteira), senão soma o que
+// tem tratando um mês individual em branco dentro do intervalo como 0
+// (mesma convenção de somarArraysMensais, generalizada de "vários
+// registros no mesmo mês" pra "vários meses no mesmo intervalo").
+function somarIntervaloMensal(mensal, inicio, fim) {
+  var soma = null;
+  var ini = Math.max(0, inicio), lim = Math.min(mensal.length, fim);
+  for (var i = ini; i < lim; i++) {
+    if (mensal[i] === null || mensal[i] === undefined) continue;
+    soma = (soma === null ? 0 : soma) + mensal[i];
+  }
+  return soma;
+}
+
+// produtividade soma equipe-DIAS no intervalo (não só equipes), mesma
+// premissa de DIAS_PREMISSA_MES que calcularTotalAno já usa pro ano
+// inteiro -- generalizada aqui pra qualquer intervalo de meses.
+function somarIntervaloEquipeDias(mensal, inicio, fim) {
+  var soma = null;
+  var ini = Math.max(0, inicio), lim = Math.min(mensal.length, fim);
+  for (var i = ini; i < lim; i++) {
+    if (mensal[i] === null || mensal[i] === undefined) continue;
+    soma = (soma === null ? 0 : soma) + mensal[i] * DIAS_PREMISSA_MES[i];
+  }
+  return soma;
+}
+
+// Valor de UMA série (previsto/realizado/total), pra UMA dimensão, bucketado
+// num período da aba Alertas -- generaliza calcularMensal/calcularTotalAno
+// (que só sabem fazer "todos os 12 meses" ou "1 mês") pra um intervalo
+// arbitrário. Dimensões de razão NUNCA fazem média das razões mensais --
+// somam numerador/denominador brutos no intervalo e só então dividem
+// (exatamente como calcularTotalAno já faz pro ano inteiro), exceto a
+// premissa fixa do Previsto de uma única tipologia, que independe do
+// período (mesmo caso especial de calcularMensal/calcularTotalAno).
+function bucketPeriodo(valoresLista, serie, dimensao, periodo, vigenteIdx) {
+  var lista = valoresLista.filter(Boolean);
+  if (!lista.length) return null;
+  var intervalo = PERIODOS_ALERTAS_INTERVALO[periodo](vigenteIdx);
+  var inicio = intervalo[0], fim = intervalo[1];
+  var ratio = CAMPOS_RATIO[dimensao];
+  if (ratio) {
+    if (serie === 'previsto' && lista.length === 1) {
+      var premissa = dimensao === 'produtividade' ? lista[0].equipesResumo.prod : lista[0].volumeResumo.ticket;
+      return (premissa === null || premissa === undefined) ? null : premissa;
+    }
+    var numeradorMensal = somarArraysMensais(lista.map(function (v) { return v[ratio.numerador]; }));
+    var denominadorMensal = somarArraysMensais(lista.map(function (v) { return v[ratio.denominador]; }));
+    var numeradorBucket = somarIntervaloMensal(numeradorMensal, inicio, fim);
+    var denominadorBucket = dimensao === 'produtividade'
+      ? somarIntervaloEquipeDias(denominadorMensal, inicio, fim)
+      : somarIntervaloMensal(denominadorMensal, inicio, fim);
+    if (numeradorBucket === null || !denominadorBucket) return null;
+    return numeradorBucket / denominadorBucket;
+  }
+  var mensal = somarArraysMensais(lista.map(function (v) { return v[dimensao]; }));
+  return somarIntervaloMensal(mensal, inicio, fim);
+}
+
+// Faixas fixas do semáforo (spec 2026-07-23) -- mesma regra pra todas as
+// dimensões, já que Financeiro aqui é receita bruta (não custo): maior é
+// sempre melhor, sem inversão. Limites: >110% azul; 90%-110% (inclusive
+// nas duas pontas) verde; 70%-90% (70 inclusive, 90 exclusivo) amarelo;
+// <70% vermelho; sem dado (desvio null) cinza.
+function classificarSemaforo(desvio) {
+  if (desvio === null || desvio === undefined) return { cor: '#6E7580', indicador: 'Sem dado' };
+  if (desvio > 1.10) return { cor: '#1414CC', indicador: 'Excelente' };
+  if (desvio >= 0.90) return { cor: '#128A3E', indicador: 'Dentro da meta' };
+  if (desvio >= 0.70) return { cor: '#F5A700', indicador: 'Atenção' };
+  return { cor: '#D32020', indicador: 'Crítico' };
+}
+
 // Soma corrida mês a mês -- acumulado[i] = mensal[0]+...+mensal[i]. Trata
 // null/undefined como 0 (não dá pra "acumular" um mês sem dado, mas
 // também não pode quebrar a soma corrida dos meses seguintes).

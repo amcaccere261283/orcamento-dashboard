@@ -168,7 +168,9 @@ function extrairFuncoesPuras(html) {
       ' this.cortarAcumuladoNoUltimoDado = cortarAcumuladoNoUltimoDado;' +
       ' this.preservarPrevistoInicial = preservarPrevistoInicial;' +
       ' this.dimensoesEmOrdem = dimensoesEmOrdem;' +
-      ' this.construirPainelGraficoHtml = construirPainelGraficoHtml;',
+      ' this.construirPainelGraficoHtml = construirPainelGraficoHtml;' +
+      ' this.somarIntervaloMensal = somarIntervaloMensal; this.bucketPeriodo = bucketPeriodo;' +
+      ' this.classificarSemaforo = classificarSemaforo;',
     sandbox
   );
   return {
@@ -189,6 +191,9 @@ function extrairFuncoesPuras(html) {
     preservarPrevistoInicial: sandbox.preservarPrevistoInicial,
     dimensoesEmOrdem: sandbox.dimensoesEmOrdem,
     construirPainelGraficoHtml: sandbox.construirPainelGraficoHtml,
+    somarIntervaloMensal: sandbox.somarIntervaloMensal,
+    bucketPeriodo: sandbox.bucketPeriodo,
+    classificarSemaforo: sandbox.classificarSemaforo,
   };
 }
 
@@ -858,6 +863,84 @@ test('parseMatrizClient (extraído do HTML real gerado) parses a CSV grid shaped
   assert.deepEqual(paraPlano(registros[0].previsto.equipes), Array(12).fill(4.5));
   assert.deepEqual(paraPlano(registros[0].realizado.equipes), Array(12).fill(3.2));
   assert.equal(registros[0].observacao, 'Nota');
+});
+
+test('somarIntervaloMensal sums only the months in [inicio, fim), returns null when every month in that range is null, and treats an individual null month within a mixed range as 0', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { somarIntervaloMensal } = extrairFuncoesPuras(html);
+  const mensal = [10, 20, 30, null, null, null, null, null, null, null, null, null];
+  assert.equal(somarIntervaloMensal(mensal, 0, 3), 60);
+  assert.equal(somarIntervaloMensal(mensal, 3, 6), null, 'meses 3..5 são todos null -- sem dado, não 0');
+  assert.equal(somarIntervaloMensal(mensal, 2, 4), 30, 'mês 2 (30) + mês 3 (null, tratado como ausente) = só 30');
+});
+
+test('bucketPeriodo, dimensão de soma (financeiro), soma só os meses do período pedido -- acumuladoAnterior/mesVigente/acumuladoFuturo/totalAno cobrem faixas diferentes do mesmo array mensal', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { bucketPeriodo } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200], financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const vigenteIdx = 5; // Jun (índice 5)
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'acumuladoAnterior', vigenteIdx), 100 + 200 + 300 + 400 + 500);
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'mesVigente', vigenteIdx), 600);
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'm1', vigenteIdx), 700);
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'acumuladoAteVigente', vigenteIdx), 100 + 200 + 300 + 400 + 500 + 600);
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'acumuladoFuturo', vigenteIdx), 900 + 1000 + 1100 + 1200);
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'totalAno', vigenteIdx), 100 + 200 + 300 + 400 + 500 + 600 + 700 + 800 + 900 + 1000 + 1100 + 1200);
+});
+
+test('bucketPeriodo, dimensão de razão (produtividade/ticketMedio), soma numerador e denominador BRUTOS no intervalo e só então divide -- nunca a média das razões mensais', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { bucketPeriodo } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: Array(12).fill(5), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(100), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(1000), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  // totalAno: ticketMedio = Σfinanceiro ÷ Σvolume = (1000*12) / (100*12) = 10
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'ticketMedio', 'totalAno', 5), 10);
+  // acumuladoAnterior (5 meses, jan..mai): mesma proporção, mesmo resultado (10) -- prova que não é média,
+  // é soma/soma (senão um denominador variável mudaria o resultado só quando os meses realmente diferem).
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'ticketMedio', 'acumuladoAnterior', 5), 10);
+});
+
+test('bucketPeriodo returns the sheet premissa (period-invariant) for previsto ticketMedio/produtividade with a single tipologia, regardless of which período is asked', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { bucketPeriodo } = extrairFuncoesPuras(html);
+  const registro = registroExemplo();
+  assert.equal(bucketPeriodo([registro.previsto], 'previsto', 'ticketMedio', 'totalAno', 5), registro.previsto.volumeResumo.ticket);
+  assert.equal(bucketPeriodo([registro.previsto], 'previsto', 'ticketMedio', 'mesVigente', 5), registro.previsto.volumeResumo.ticket);
+});
+
+test('bucketPeriodo returns null for a sum dimension when the baseline has zero months with real data in that período (denominador handling happens at the desvio level, not here -- this just confirms "sem dado no intervalo" propagates)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { bucketPeriodo } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: Array(12).fill(null), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(null), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(null), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'm3', 0), null);
+});
+
+test('classificarSemaforo classifies the 5 faixas with the exact documented boundaries and colors (spec: >110% azul, 90-110% verde, 70-90% amarelo, <70% vermelho, sem dado cinza)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { classificarSemaforo } = extrairFuncoesPuras(html);
+  assert.deepEqual(paraPlano(classificarSemaforo(1.15)), { cor: '#1414CC', indicador: 'Excelente' });
+  assert.deepEqual(paraPlano(classificarSemaforo(1.10)), { cor: '#128A3E', indicador: 'Dentro da meta' }, '110% é fronteira inclusiva do lado verde, não azul');
+  assert.deepEqual(paraPlano(classificarSemaforo(0.90)), { cor: '#128A3E', indicador: 'Dentro da meta' });
+  assert.deepEqual(paraPlano(classificarSemaforo(0.89)), { cor: '#F5A700', indicador: 'Atenção' });
+  assert.deepEqual(paraPlano(classificarSemaforo(0.70)), { cor: '#F5A700', indicador: 'Atenção' }, '70% é fronteira inclusiva do lado amarelo, não vermelho');
+  assert.deepEqual(paraPlano(classificarSemaforo(0.69)), { cor: '#D32020', indicador: 'Crítico' });
+  assert.deepEqual(paraPlano(classificarSemaforo(null)), { cor: '#6E7580', indicador: 'Sem dado' });
 });
 
 test('preservarPrevistoInicial (extraído do HTML real gerado) transplants the OLD previstoInicial onto the freshly-fetched registros, matched by SUP+tipologia -- the live-refresh CSV never carries it, since it comes from a separate, unchanging baseline file read only at build time', () => {
