@@ -1129,3 +1129,26 @@ test('renderCabecalhoAlertas labels the first column with the current "agrupar p
   assert.match(cabecalho, /<th>SUP<\/th>/);
   assert.match(cabecalho, /<th>Realizado ÷ Previsto — Total Ano<\/th>/);
 });
+
+test('renderDashboard includes the Alertas tab button, the 5 Alertas selector containers (agrupar-por/dimensao/numerico/baseline/periodo), and the empty alertas table shell', () => {
+  const html = renderComSenha([registroExemplo()]);
+  assert.match(html, /<button id="aba-alertas" type="button"><svg[\s\S]*?<\/svg>Alertas<\/button>/);
+  assert.match(html, /<div id="secao-alertas" style="display:none">/);
+  assert.match(html, /<div class="filtro-multi" id="filtro-alertas-agrupar-por">/);
+  assert.match(html, /<div class="filtro-multi" id="filtro-alertas-dimensao">/);
+  assert.match(html, /<div class="filtro-multi" id="filtro-alertas-numerico">/);
+  assert.match(html, /<div class="filtro-multi" id="filtro-alertas-baseline">/);
+  assert.match(html, /<div class="filtro-multi" id="filtro-alertas-periodo">/);
+  assert.match(html, /<table id="tabela-alertas">/);
+  assert.match(html, /<thead id="cabecalho-alertas"><\/thead>/);
+  assert.match(html, /<tbody id="corpo-alertas"><\/tbody>/);
+});
+
+test('renderDashboard\'s Alertas table shell starts empty (thead/tbody with no rows) -- confirmed above already; this test instead locks in that recalcularAlertas exists and is reachable from the client script, by checking montarDashboard wires the 3rd tab click handler', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptTabela = scripts[3][1];
+  assert.match(scriptTabela, /document\.getElementById\('aba-alertas'\)\.addEventListener\('click', function \(\) \{ alternarAba\('alertas'\); \}\);/);
+  assert.match(scriptTabela, /function recalcularAlertas\(\)/);
+  assert.match(scriptTabela, /document\.getElementById\('secao-alertas'\)\.style\.display = aba === 'alertas' \? '' : 'none';/);
+});

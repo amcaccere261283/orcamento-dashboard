@@ -785,6 +785,28 @@ function montarGraficos(registros, filtroTipologia, filtroCategoria, filtroGrupo
   document.getElementById('graficos-container').innerHTML = html;
 }
 
+// Sempre reconstrói cabeçalho + corpo inteiros (sem estado incremental,
+// mesma filosofia do resto do script) -- muito mais simples que a Tabela
+// porque aqui NUNCA existe uma distinção "estrutura vs valor": qualquer
+// mudança (recorte OU um dos 5 seletores próprios) muda linhas E colunas
+// ao mesmo tempo, então não vale a pena ter dois caminhos.
+function recalcularAlertas() {
+  var indices = indicesFiltrados(
+    window.__REGISTROS__, filtrosSelecionados.tipologia, filtrosSelecionados.categoria,
+    filtrosSelecionados.grupo, filtrosSelecionados.sup, filtrosSelecionados.origem
+  );
+  var agruparPor = filtrosAlertas.agruparPor.values().next().value;
+  var dimensao = filtrosAlertas.dimensao.values().next().value;
+  var numericos = emOrdemCanonica(NUMERICO_ORDEM, filtrosAlertas.numerico);
+  var baselines = emOrdemCanonica(BASELINE_ORDEM, filtrosAlertas.baseline);
+  var periodos = emOrdemCanonica(PERIODO_ORDEM, filtrosAlertas.periodo);
+  var colunas = colunasAlertas(numericos, baselines, periodos);
+  document.getElementById('cabecalho-alertas').innerHTML = renderCabecalhoAlertas(AGRUPAR_POR_ROTULO[agruparPor], colunas);
+  document.getElementById('corpo-alertas').innerHTML = renderCorpoAlertas(
+    window.__REGISTROS__, indices, agruparPor, dimensao, numericos, baselines, periodos, window.__VIGENTE_IDX__
+  );
+}
+
 // Tooltip único, delegado (os SVGs são recriados via innerHTML a cada
 // recalcularTabela, então um listener por elemento seria descartado toda
 // hora) -- qualquer elemento com [data-tooltip] dentro da seção de
@@ -808,8 +830,10 @@ function inicializarTooltipGrafico() {
 function alternarAba(aba) {
   document.getElementById('secao-tabela').style.display = aba === 'tabela' ? '' : 'none';
   document.getElementById('secao-grafico').style.display = aba === 'grafico' ? '' : 'none';
+  document.getElementById('secao-alertas').style.display = aba === 'alertas' ? '' : 'none';
   document.getElementById('aba-tabela').classList.toggle('aba-ativa', aba === 'tabela');
   document.getElementById('aba-grafico').classList.toggle('aba-ativa', aba === 'grafico');
+  document.getElementById('aba-alertas').classList.toggle('aba-ativa', aba === 'alertas');
 }
 
 function preencherLinha(linha, valoresLista, serie, dimensao) {
@@ -1540,19 +1564,23 @@ function limparFiltros() {
   montarTodosFiltrosMulti(window.__REGISTROS__);
   document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
   recalcularTabela();
+  recalcularAlertas();
 }
 
 // Chamado uma vez, pelo gate de senha, assim que a senha certa decifra os
 // registros -- monta a tabela inteira e liga os filtros/botões.
 function montarDashboard(registros) {
   montarTodosFiltrosMulti(registros);
+  FILTROS_ALERTAS_CONFIG.forEach(function (cfg) { montarFiltroMulti(cfg, registros, filtrosAlertas); });
   configurarAberturaFiltrosMulti();
   document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(registros, dimensoesEmOrdem(filtrosSelecionados.dimensao));
   document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
   document.getElementById('aba-tabela').addEventListener('click', function () { alternarAba('tabela'); });
   document.getElementById('aba-grafico').addEventListener('click', function () { alternarAba('grafico'); });
+  document.getElementById('aba-alertas').addEventListener('click', function () { alternarAba('alertas'); });
   inicializarTooltipGrafico();
   recalcularTabela();
+  recalcularAlertas();
 }
 
 // ---- Atualização ao vivo (busca a Sheet espelho publicada, sem tocar no
@@ -1811,6 +1839,7 @@ function atualizarDadosAoVivo() {
       montarTodosFiltrosMulti(window.__REGISTROS__);
       document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
       recalcularTabela();
+      recalcularAlertas();
 
       var agora = new Date();
       definirStatusAtualizacao('Atualizado às ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), false);
@@ -2091,6 +2120,11 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   .linha-total-geral-tipologia td { background: rgba(255,255,255,0.03); }
   tr.linha-total.linha-total-geral-tipologia td { border-bottom: 1px solid var(--gridline); }
   .valor-repetido { color: rgba(255,255,255,0.14); }
+  .filtros-alertas { margin-bottom: 16px; }
+  .celula-alerta {
+    color: #ffffff; font-weight: 600; text-align: center;
+    padding: 6px 10px; font-size: 13px;
+  }
 </style>
 </head>
 <body>
@@ -2128,6 +2162,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
         <div class="abas-visualizacao">
           <button id="aba-tabela" type="button" class="aba-ativa"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Tabela</button>
           <button id="aba-grafico" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Gráfico</button>
+          <button id="aba-alertas" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.9 21h16.2a2 2 0 0 0 1.79-2.96L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>Alertas</button>
         </div>
         <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
         <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
@@ -2146,6 +2181,23 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     <div id="secao-grafico" style="display:none">
       <div id="graficos-container"></div>
       <div id="grafico-tooltip" class="grafico-tooltip" style="display:none"></div>
+    </div>
+    <div id="secao-alertas" style="display:none">
+      <div class="filtros filtros-alertas">
+        <div class="filtros-selecao">
+          <div class="filtro-multi" id="filtro-alertas-agrupar-por"><button type="button" class="filtro-multi-trigger">SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-dimensao"><button type="button" class="filtro-multi-trigger">Financeiro<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-numerico"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-baseline"><button type="button" class="filtro-multi-trigger">Previsto<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-periodo"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        </div>
+      </div>
+      <div class="table-scroll">
+      <table id="tabela-alertas">
+        <thead id="cabecalho-alertas"></thead>
+        <tbody id="corpo-alertas"></tbody>
+      </table>
+      </div>
     </div>
   </div>
   </main>
