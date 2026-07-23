@@ -1220,10 +1220,12 @@ var FILTROS_CONFIG = [
 // Config dos 5 seletores próprios da aba Alertas -- mesmo componente
 // visual (filtro-multi) dos filtros de recorte, mas com estado PRÓPRIO
 // (filtrosAlertas, não filtrosSelecionados) e, pra Agrupar por/Dimensão,
-// exclusivo:true (single-choice, ver montarFiltroMulti). aoMudar aponta
-// pra recalcularAlertas (definida na Task 7) em vez do recalcularTabela
-// default, já que mudar um seletor da Alertas não deve tocar a Tabela/
-// Gráfico.
+// exclusivo:true (single-choice, ver montarFiltroMulti). Toda mudança em
+// QUALQUER filtro (este ou um de recorte) recalcula Tabela E Alertas
+// incondicionalmente (ver o fim do handler de mudança em montarFiltroMulti)
+// -- bug real corrigido aqui: antes só estes 5 tinham um mecanismo próprio
+// que acionava recalcularAlertas, então filtrar por SUP na barra de cima
+// nunca atualizava a aba Alertas.
 var FILTROS_ALERTAS_CONFIG = [
   { id: 'filtro-alertas-agrupar-por', chave: 'agruparPor', rotuloPadrao: 'Agrupar por', exclusivo: true, opcoesFixas: [
     { valor: 'sup', rotulo: 'SUP' },
@@ -1231,19 +1233,17 @@ var FILTROS_ALERTAS_CONFIG = [
     { valor: 'grupo', rotulo: 'Grupo' },
     { valor: 'categoria', rotulo: 'Categoria' },
     { valor: 'origem', rotulo: 'Origem' },
-  ], aoMudar: function () { recalcularAlertas(); } },
-  { id: 'filtro-alertas-dimensao', chave: 'dimensao', rotuloPadrao: 'Dimensão', exclusivo: true, opcoesFixas: DIMENSOES_CONFIG,
-    aoMudar: function () { recalcularAlertas(); } },
+  ] },
+  { id: 'filtro-alertas-dimensao', chave: 'dimensao', rotuloPadrao: 'Dimensão', exclusivo: true, opcoesFixas: DIMENSOES_CONFIG },
   { id: 'filtro-alertas-numerico', chave: 'numerico', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: [
     { valor: 'realizado', rotulo: 'Realizado' },
     { valor: 'total', rotulo: 'Tendência' },
-  ], aoMudar: function () { recalcularAlertas(); } },
+  ] },
   { id: 'filtro-alertas-baseline', chave: 'baseline', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: [
     { valor: 'previsto', rotulo: 'Previsto' },
     { valor: 'previstoInicial', rotulo: 'Previsto Inicial' },
-  ], aoMudar: function () { recalcularAlertas(); } },
-  { id: 'filtro-alertas-periodo', chave: 'periodo', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: PERIODO_ORDEM.map(function (p) { return { valor: p, rotulo: PERIODO_LABELS[p] }; }),
-    aoMudar: function () { recalcularAlertas(); } },
+  ] },
+  { id: 'filtro-alertas-periodo', chave: 'periodo', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: PERIODO_ORDEM.map(function (p) { return { valor: p, rotulo: PERIODO_LABELS[p] }; }) },
 ];
 
 var filtrosAlertas = {};
@@ -1432,7 +1432,8 @@ function montarFiltroMulti(cfg, registros, estado) {
       if (cfg.id === 'seletor-dimensao') {
         document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
       }
-      cfg.aoMudar ? cfg.aoMudar() : recalcularTabela();
+      recalcularTabela();
+      recalcularAlertas();
     });
   });
   atualizarRotuloFiltro(cfg, opcoes, estadoFiltros);

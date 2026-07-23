@@ -1152,3 +1152,11 @@ test('renderDashboard\'s Alertas table shell starts empty (thead/tbody with no r
   assert.match(scriptTabela, /function recalcularAlertas\(\)/);
   assert.match(scriptTabela, /document\.getElementById\('secao-alertas'\)\.style\.display = aba === 'alertas' \? '' : 'none';/);
 });
+
+test('every filter change (recorte or Alertas-specific) recalculates BOTH recalcularTabela and recalcularAlertas unconditionally -- the old cfg.aoMudar mechanism (which left recorte filters never touching Alertas) is gone', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptTabela = scripts[3][1];
+  assert.doesNotMatch(scriptTabela, /aoMudar/, 'aoMudar não deve existir mais em lugar nenhum -- nem no config, nem no handler');
+  assert.match(scriptTabela, /recalcularTabela\(\);\s*\n\s*recalcularAlertas\(\);\s*\n\s*\}\);\s*\n\s*\}\);\s*\n\s*atualizarRotuloFiltro\(cfg, opcoes, estadoFiltros\);/, 'o final do handler de mudança de checkbox deve chamar as duas funções incondicionalmente, sem depender de cfg.aoMudar');
+});
