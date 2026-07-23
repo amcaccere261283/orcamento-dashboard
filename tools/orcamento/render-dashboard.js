@@ -207,7 +207,7 @@ var PERIODOS_ALERTAS_INTERVALO = {
   m1: function (v) { return [v + 1, v + 2]; },
   m2: function (v) { return [v + 2, v + 3]; },
   m3: function (v) { return [v + 3, v + 4]; },
-  acumuladoFuturo: function (v) { return [v + 3, 12]; },
+  acumuladoFuturo: function (v) { return [v + 4, 12]; },
   acumuladoAteVigente: function (v) { return [0, v + 1]; },
   totalAno: function () { return [0, 12]; },
 };

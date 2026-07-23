@@ -889,7 +889,7 @@ test('bucketPeriodo, dimensão de soma (financeiro), soma só os meses do perío
   assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'mesVigente', vigenteIdx), 600);
   assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'm1', vigenteIdx), 700);
   assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'acumuladoAteVigente', vigenteIdx), 100 + 200 + 300 + 400 + 500 + 600);
-  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'acumuladoFuturo', vigenteIdx), 900 + 1000 + 1100 + 1200);
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'acumuladoFuturo', vigenteIdx), 1000 + 1100 + 1200);
   assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'totalAno', vigenteIdx), 100 + 200 + 300 + 400 + 500 + 600 + 700 + 800 + 900 + 1000 + 1100 + 1200);
 });
 
