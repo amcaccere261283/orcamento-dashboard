@@ -322,32 +322,41 @@ function calcularCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx) 
 
 var AGRUPAR_POR_ROTULO = { sup: 'SUP', tipologia: 'Tipologia', grupo: 'Grupo', categoria: 'Categoria', origem: 'Origem' };
 
-function renderCabecalhoAlertas(agruparPorRotulo, colunas) {
-  return '<tr><th>' + escapeHtml(agruparPorRotulo) + '</th>' +
-    colunas.map(function (c) { return '<th>' + escapeHtml(c.rotulo) + '</th>'; }).join('') +
-    '</tr>';
+function renderCabecalhoAlertas(agruparPorRotulo) {
+  return '<tr><th>' + escapeHtml(agruparPorRotulo) + '</th><th>Combinação</th><th>Referência</th><th>Pesquisado</th><th>Desvio</th><th>Status</th></tr>';
 }
 
-function renderCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx) {
+// Uma linha por (grupo, combinação) -- Referência/Pesquisado são os
+// valores absolutos que antes só apareciam no tooltip (feedback do
+// usuário: queria conferir o dado, não só confiar na %). Status é um
+// círculo cheio (não um badge com borda, nem fundo de célula colorido --
+// pedido explícito) seguido do rótulo por extenso.
+function renderLinhaAlerta(rotuloGrupo, registros, indices, coluna, dimensao, vigenteIdx) {
   var celula = calcularCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx);
   var classe = classificarSemaforo(celula.desvio);
-  var texto = celula.desvio === null ? '—' : Math.round(celula.desvio * 100) + '%';
-  var tooltip = SERIE_LABELS[coluna.numerico] + ': ' + formatarNumero(celula.numerador, 0) + ' · ' +
-    SERIE_LABELS[coluna.baseline] + ': ' + formatarNumero(celula.denominador, 0);
-  return '<td class="celula-alerta" style="background:' + classe.cor + '" title="' + escapeHtml(tooltip) + '">' + texto + '</td>';
+  var desvioTexto = celula.desvio === null ? '—' : Math.round(celula.desvio * 100) + '%';
+  var referencia = formatarNumero(celula.denominador, 0);
+  var pesquisado = formatarNumero(celula.numerador, 0);
+  var busca = normalizarBusca(rotuloGrupo + ' ' + coluna.rotulo);
+  return '<tr data-search="' + escapeHtml(busca) + '">' +
+    '<td>' + escapeHtml(rotuloGrupo) + '</td>' +
+    '<td>' + escapeHtml(coluna.rotulo) + '</td>' +
+    '<td class="num">' + referencia + '</td>' +
+    '<td class="num">' + pesquisado + '</td>' +
+    '<td class="num">' + desvioTexto + '</td>' +
+    '<td><span class="status-circulo" style="background:' + classe.cor + '"></span>' + escapeHtml(classe.indicador) + '</td>' +
+    '</tr>';
 }
 
-function renderLinhaAlerta(rotuloLinha, registros, indices, colunas, dimensao, vigenteIdx) {
-  return '<tr><td>' + escapeHtml(rotuloLinha) + '</td>' +
-    colunas.map(function (c) { return renderCelulaAlerta(registros, indices, c, dimensao, vigenteIdx); }).join('') +
-    '</tr>';
+function renderLinhasGrupoAlerta(rotuloGrupo, registros, indices, colunas, dimensao, vigenteIdx) {
+  return colunas.map(function (c) { return renderLinhaAlerta(rotuloGrupo, registros, indices, c, dimensao, vigenteIdx); }).join('');
 }
 
 function renderCorpoAlertas(registros, indices, agruparPor, dimensao, numericos, baselines, periodos, vigenteIdx) {
   var colunas = colunasAlertas(numericos, baselines, periodos);
   var grupos = agruparIndicesAlertas(registros, indices, agruparPor);
-  var linhas = grupos.map(function (g) { return renderLinhaAlerta(g.chave, registros, g.indices, colunas, dimensao, vigenteIdx); });
-  linhas.push(renderLinhaAlerta('TOTAL GERAL', registros, indices, colunas, dimensao, vigenteIdx));
+  var linhas = grupos.map(function (g) { return renderLinhasGrupoAlerta(g.chave, registros, g.indices, colunas, dimensao, vigenteIdx); });
+  linhas.push(renderLinhasGrupoAlerta('TOTAL GERAL', registros, indices, colunas, dimensao, vigenteIdx));
   return linhas.join('');
 }
 
@@ -801,7 +810,7 @@ function recalcularAlertas() {
   var baselines = emOrdemCanonica(BASELINE_ORDEM, filtrosAlertas.baseline);
   var periodos = emOrdemCanonica(PERIODO_ORDEM, filtrosAlertas.periodo);
   var colunas = colunasAlertas(numericos, baselines, periodos);
-  document.getElementById('cabecalho-alertas').innerHTML = renderCabecalhoAlertas(AGRUPAR_POR_ROTULO[agruparPor], colunas);
+  document.getElementById('cabecalho-alertas').innerHTML = renderCabecalhoAlertas(AGRUPAR_POR_ROTULO[agruparPor]);
   document.getElementById('corpo-alertas').innerHTML = renderCorpoAlertas(
     window.__REGISTROS__, indices, agruparPor, dimensao, numericos, baselines, periodos, window.__VIGENTE_IDX__
   );
@@ -2122,9 +2131,9 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   tr.linha-total.linha-total-geral-tipologia td { border-bottom: 1px solid var(--gridline); }
   .valor-repetido { color: rgba(255,255,255,0.14); }
   .filtros-alertas { margin-bottom: 16px; }
-  .celula-alerta {
-    color: #ffffff; font-weight: 600; text-align: center;
-    padding: 6px 10px; font-size: 13px;
+  .status-circulo {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle;
   }
 </style>
 </head>

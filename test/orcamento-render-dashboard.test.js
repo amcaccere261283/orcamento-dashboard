@@ -176,7 +176,8 @@ function extrairFuncoesPuras(html) {
       ' this.classificarSemaforo = classificarSemaforo;' +
       ' this.colunasAlertas = colunasAlertas; this.calcularCelulaAlerta = calcularCelulaAlerta;' +
       ' this.renderCabecalhoAlertas = renderCabecalhoAlertas; this.renderCorpoAlertas = renderCorpoAlertas;' +
-      ' this.aplicarSelecaoExclusiva = aplicarSelecaoExclusiva;',
+      ' this.aplicarSelecaoExclusiva = aplicarSelecaoExclusiva;' +
+      ' this.normalizarBusca = normalizarBusca;',
     sandbox
   );
   return {
@@ -1085,22 +1086,42 @@ test('calcularCelulaAlerta divides the bucketed numérico value by the bucketed 
   assert.equal(celulaSemDado.desvio, null);
 });
 
-test('renderCorpoAlertas emits one row per distinct group value (agrupado por SUP), sorted alphabetically, plus a final TOTAL GERAL row summing every given index', () => {
+test('renderCabecalhoAlertas has 6 fixed columns regardless of how many combinações are selected: [agrupar por] / Combinação / Referência / Pesquisado / Desvio / Status', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCabecalhoAlertas } = extrairFuncoesPuras(html);
+  const cabecalho = renderCabecalhoAlertas('SUP');
+  assert.match(cabecalho, /<tr><th>SUP<\/th><th>Combinação<\/th><th>Referência<\/th><th>Pesquisado<\/th><th>Desvio<\/th><th>Status<\/th><\/tr>/);
+});
+
+test('renderCorpoAlertas emits one row PER (grupo, combinação) -- 2 grupos × 1 combinação = 2 data rows, plus 1 combinação × TOTAL GERAL = 3 rows total', () => {
   const html = renderComSenha([registroExemplo()]);
   const { renderCorpoAlertas } = extrairFuncoesPuras(html);
   const registroB = registroExemplo({ sup: 'SUP-B' });
   const registroA = registroExemplo({ sup: 'SUP-A' });
   const corpo = renderCorpoAlertas([registroB, registroA], [0, 1], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
+  assert.equal((corpo.match(/<tr/g) || []).length, 3, '2 grupos (SUP-A, SUP-B) + 1 TOTAL GERAL, 1 combinação cada = 3 linhas');
   const posA = corpo.indexOf('SUP-A');
   const posB = corpo.indexOf('SUP-B');
   const posTotalGeral = corpo.indexOf('TOTAL GERAL');
   assert.ok(posA >= 0 && posB >= 0 && posTotalGeral >= 0);
   assert.ok(posA < posB, 'SUP-A vem antes de SUP-B (ordem alfabética)');
   assert.ok(posB < posTotalGeral, 'TOTAL GERAL vem por último');
-  assert.equal((corpo.match(/<tr/g) || []).length, 3, '2 grupos (SUP-A, SUP-B) + 1 TOTAL GERAL');
 });
 
-test('renderCorpoAlertas paints each cell with the semáforo background color and the desvio as a whole-number percentage, with a tooltip title showing the absolute numerador/baseline', () => {
+test('renderCorpoAlertas emits N rows per grupo when N combinações are selected, each row carrying its own Combinação label, in the canonical Período→Numérico→Baseline order', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoAlertas } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoAlertas([registroExemplo()], [0], 'sup', 'financeiro', ['total', 'realizado'], ['previsto'], ['totalAno', 'acumuladoAteVigente'], 5);
+  // 1 grupo (SUP-7133-24, da registroExemplo() default) + 1 TOTAL GERAL, 2 numéricos × 1 baseline × 2 períodos = 4 combinações cada = 8 linhas.
+  assert.equal((corpo.match(/<tr/g) || []).length, 8);
+  assert.match(corpo, /<td>Realizado ÷ Previsto — Acumulado até Vigente<\/td>/);
+  assert.match(corpo, /<td>Tendência ÷ Previsto — Total Ano<\/td>/);
+  const posAcumulado = corpo.indexOf('Acumulado até Vigente');
+  const posTotalAno = corpo.indexOf('Total Ano');
+  assert.ok(posAcumulado < posTotalAno, 'Acumulado até Vigente vem antes de Total Ano (ordem canônica de período)');
+});
+
+test('renderCorpoAlertas renders Referência (baseline absoluto) e Pesquisado (numérico absoluto) as separate <td>s, Desvio as a whole-number percentage, and a colored circle + label in Status -- no cell background color anywhere', () => {
   const html = renderComSenha([registroExemplo()]);
   const { renderCorpoAlertas } = extrairFuncoesPuras(html);
   const registro = registroExemplo({
@@ -1116,18 +1137,32 @@ test('renderCorpoAlertas paints each cell with the semáforo background color an
     },
   });
   const corpo = renderCorpoAlertas([registro], [0], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
-  assert.match(corpo, /background:#128A3E/, 'desvio de 110% cai na faixa Dentro da meta (verde), inclusive na fronteira');
-  assert.match(corpo, />110%</);
-  assert.match(corpo, /title="Realizado: 13\.200[^"]*Previsto: 12\.000/);
+  assert.match(corpo, /<td class="num">13\.200<\/td>/, 'Pesquisado (Realizado, numerador) = 1100*12');
+  assert.match(corpo, /<td class="num">12\.000<\/td>/, 'Referência (Previsto, denominador) = 1000*12');
+  assert.match(corpo, /<td class="num">110%<\/td>/, 'Desvio (110%, fronteira inclusiva do lado verde)');
+  assert.match(corpo, /<span class="status-circulo" style="background:#128A3E"><\/span>Dentro da meta/);
+  assert.doesNotMatch(corpo, /style="background:[^"]*"[^>]*>\s*\d+%/, 'a % do Desvio nunca deve ter fundo colorido -- só o círculo de Status carrega cor');
 });
 
-test('renderCabecalhoAlertas labels the first column with the current "agrupar por" choice and one <th> per coluna, in order', () => {
+test('renderCorpoAlertas shows "—" for Referência/Pesquisado/Desvio and the cinza "Sem dado" status when the baseline bucket has no data', () => {
   const html = renderComSenha([registroExemplo()]);
-  const { renderCabecalhoAlertas, colunasAlertas } = extrairFuncoesPuras(html);
-  const colunas = colunasAlertas(['realizado'], ['previsto'], ['totalAno']);
-  const cabecalho = renderCabecalhoAlertas('SUP', colunas);
-  assert.match(cabecalho, /<th>SUP<\/th>/);
-  assert.match(cabecalho, /<th>Realizado ÷ Previsto — Total Ano<\/th>/);
+  const { renderCorpoAlertas } = extrairFuncoesPuras(html);
+  const registroSemPrevisto = registroExemplo({
+    previsto: {
+      equipes: Array(12).fill(0), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(0), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(0), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const corpo = renderCorpoAlertas([registroSemPrevisto], [0], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
+  assert.match(corpo, /<span class="status-circulo" style="background:#6E7580"><\/span>Sem dado/);
+});
+
+test('renderCorpoAlertas gives every row a data-search attribute (normalized: lowercase, sem acento) combining the grupo label and the Combinação label, for the text search box', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoAlertas } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoAlertas([registroExemplo({ sup: 'SUP-Ímpar' })], [0], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
+  assert.match(corpo, /<tr data-search="sup-impar realizado [^"]*previsto[^"]*total ano"/);
 });
 
 test('renderDashboard includes the Alertas tab button, the 5 Alertas selector containers (agrupar-por/dimensao/numerico/baseline/periodo), and the empty alertas table shell', () => {
