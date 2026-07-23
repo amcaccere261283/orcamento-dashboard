@@ -174,6 +174,8 @@ function extrairFuncoesPuras(html) {
       ' this.construirPainelGraficoHtml = construirPainelGraficoHtml;' +
       ' this.somarIntervaloMensal = somarIntervaloMensal; this.bucketPeriodo = bucketPeriodo;' +
       ' this.classificarSemaforo = classificarSemaforo;' +
+      ' this.colunasAlertas = colunasAlertas; this.calcularCelulaAlerta = calcularCelulaAlerta;' +
+      ' this.renderCabecalhoAlertas = renderCabecalhoAlertas; this.renderCorpoAlertas = renderCorpoAlertas;' +
       ' this.aplicarSelecaoExclusiva = aplicarSelecaoExclusiva;',
     sandbox
   );
@@ -201,6 +203,10 @@ function extrairFuncoesPuras(html) {
     somarIntervaloMensal: sandbox.somarIntervaloMensal,
     bucketPeriodo: sandbox.bucketPeriodo,
     classificarSemaforo: sandbox.classificarSemaforo,
+    colunasAlertas: sandbox.colunasAlertas,
+    calcularCelulaAlerta: sandbox.calcularCelulaAlerta,
+    renderCabecalhoAlertas: sandbox.renderCabecalhoAlertas,
+    renderCorpoAlertas: sandbox.renderCorpoAlertas,
     aplicarSelecaoExclusiva: sandbox.aplicarSelecaoExclusiva,
   };
 }
@@ -1029,4 +1035,97 @@ test('agruparIndicesAlertas only considers the indices it is given (respects an 
   ];
   const grupos = agruparIndicesAlertas(registros, [0], 'sup');
   assert.deepEqual(paraPlano(grupos), [{ chave: 'SUP-A', indices: [0] }]);
+});
+
+test('colunasAlertas builds one column per Período×Numérico×Baseline combination, in that fixed order (not selection order), with the "Numérico ÷ Baseline — Período" label', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { colunasAlertas } = extrairFuncoesPuras(html);
+  const colunas = colunasAlertas(['total', 'realizado'], ['previstoInicial', 'previsto'], ['totalAno', 'acumuladoAteVigente']);
+  assert.deepEqual(paraPlano(colunas.map(function (c) { return c.rotulo; })), [
+    'Realizado ÷ Previsto — Acumulado até Vigente',
+    'Realizado ÷ Previsto Inicial — Acumulado até Vigente',
+    'Tendência ÷ Previsto — Acumulado até Vigente',
+    'Tendência ÷ Previsto Inicial — Acumulado até Vigente',
+    'Realizado ÷ Previsto — Total Ano',
+    'Realizado ÷ Previsto Inicial — Total Ano',
+    'Tendência ÷ Previsto — Total Ano',
+    'Tendência ÷ Previsto Inicial — Total Ano',
+  ]);
+});
+
+test('calcularCelulaAlerta divides the bucketed numérico value by the bucketed baseline value for the given group of indices, and returns null desvio (sem dado) when the baseline bucket is zero', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { calcularCelulaAlerta, colunasAlertas } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    previsto: {
+      equipes: Array(12).fill(5), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(100), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(1000), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+    realizado: {
+      equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(1100), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const coluna = colunasAlertas(['realizado'], ['previsto'], ['totalAno'])[0];
+  const celula = calcularCelulaAlerta([registro], [0], coluna, 'financeiro', 5);
+  assert.equal(celula.numerador, 1100 * 12);
+  assert.equal(celula.denominador, 1000 * 12);
+  assert.ok(Math.abs(celula.desvio - 1.1) < 1e-9);
+
+  const registroSemPrevisto = registroExemplo({
+    previsto: {
+      equipes: Array(12).fill(0), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(0), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(0), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const celulaSemDado = calcularCelulaAlerta([registroSemPrevisto], [0], coluna, 'financeiro', 5);
+  assert.equal(celulaSemDado.desvio, null);
+});
+
+test('renderCorpoAlertas emits one row per distinct group value (agrupado por SUP), sorted alphabetically, plus a final TOTAL GERAL row summing every given index', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoAlertas } = extrairFuncoesPuras(html);
+  const registroB = registroExemplo({ sup: 'SUP-B' });
+  const registroA = registroExemplo({ sup: 'SUP-A' });
+  const corpo = renderCorpoAlertas([registroB, registroA], [0, 1], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
+  const posA = corpo.indexOf('SUP-A');
+  const posB = corpo.indexOf('SUP-B');
+  const posTotalGeral = corpo.indexOf('TOTAL GERAL');
+  assert.ok(posA >= 0 && posB >= 0 && posTotalGeral >= 0);
+  assert.ok(posA < posB, 'SUP-A vem antes de SUP-B (ordem alfabética)');
+  assert.ok(posB < posTotalGeral, 'TOTAL GERAL vem por último');
+  assert.equal((corpo.match(/<tr/g) || []).length, 3, '2 grupos (SUP-A, SUP-B) + 1 TOTAL GERAL');
+});
+
+test('renderCorpoAlertas paints each cell with the semáforo background color and the desvio as a whole-number percentage, with a tooltip title showing the absolute numerador/baseline', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoAlertas } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    previsto: {
+      equipes: Array(12).fill(5), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(100), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(1000), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+    realizado: {
+      equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(1100), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const corpo = renderCorpoAlertas([registro], [0], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
+  assert.match(corpo, /background:#128A3E/, 'desvio de 110% cai na faixa Dentro da meta (verde), inclusive na fronteira');
+  assert.match(corpo, />110%</);
+  assert.match(corpo, /title="Realizado: 13\.200[^"]*Previsto: 12\.000/);
+});
+
+test('renderCabecalhoAlertas labels the first column with the current "agrupar por" choice and one <th> per coluna, in order', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCabecalhoAlertas, colunasAlertas } = extrairFuncoesPuras(html);
+  const colunas = colunasAlertas(['realizado'], ['previsto'], ['totalAno']);
+  const cabecalho = renderCabecalhoAlertas('SUP', colunas);
+  assert.match(cabecalho, /<th>SUP<\/th>/);
+  assert.match(cabecalho, /<th>Realizado ÷ Previsto — Total Ano<\/th>/);
 });

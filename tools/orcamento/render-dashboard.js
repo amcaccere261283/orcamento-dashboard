@@ -285,6 +285,72 @@ function classificarSemaforo(desvio) {
   return { cor: '#D32020', indicador: 'Crítico' };
 }
 
+// Uma coluna por combinação marcada de Período×Numérico×Baseline, na
+// ordem fixa Período -> Numérico -> Baseline (spec 2026-07-23) -- nunca a
+// ordem em que a pessoa marcou os checkboxes.
+function colunasAlertas(numericos, baselines, periodos) {
+  var colunas = [];
+  // Ordena por ordem canônica, não pela ordem que o usuário marcou
+  var numericosOrdenados = emOrdemCanonica(NUMERICO_ORDEM, new Set(numericos));
+  var baselinesOrdenadas = emOrdemCanonica(BASELINE_ORDEM, new Set(baselines));
+  var periodosOrdenados = emOrdemCanonica(PERIODO_ORDEM, new Set(periodos));
+  periodosOrdenados.forEach(function (periodo) {
+    numericosOrdenados.forEach(function (numerico) {
+      baselinesOrdenadas.forEach(function (baseline) {
+        colunas.push({
+          numerico: numerico, baseline: baseline, periodo: periodo,
+          rotulo: SERIE_LABELS[numerico] + ' ÷ ' + SERIE_LABELS[baseline] + ' — ' + PERIODO_LABELS[periodo],
+        });
+      });
+    });
+  });
+  return colunas;
+}
+
+// Bucketa numérico e baseline pro grupo de índices dado (soma os
+// registros do grupo, ver bucketPeriodo) e divide -- null (sem dado)
+// quando o denominador bucketado é 0/null, ou quando o numerador vier
+// null (nada reportado ainda nesse intervalo).
+function calcularCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx) {
+  var valoresNumerico = indices.map(function (i) { return registros[i][coluna.numerico]; });
+  var valoresBaseline = indices.map(function (i) { return registros[i][coluna.baseline]; });
+  var numerador = bucketPeriodo(valoresNumerico, coluna.numerico, dimensao, coluna.periodo, vigenteIdx);
+  var denominador = bucketPeriodo(valoresBaseline, coluna.baseline, dimensao, coluna.periodo, vigenteIdx);
+  var desvio = (numerador === null || !denominador) ? null : numerador / denominador;
+  return { desvio: desvio, numerador: numerador, denominador: denominador };
+}
+
+var AGRUPAR_POR_ROTULO = { sup: 'SUP', tipologia: 'Tipologia', grupo: 'Grupo', categoria: 'Categoria', origem: 'Origem' };
+
+function renderCabecalhoAlertas(agruparPorRotulo, colunas) {
+  return '<tr><th>' + escapeHtml(agruparPorRotulo) + '</th>' +
+    colunas.map(function (c) { return '<th>' + escapeHtml(c.rotulo) + '</th>'; }).join('') +
+    '</tr>';
+}
+
+function renderCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx) {
+  var celula = calcularCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx);
+  var classe = classificarSemaforo(celula.desvio);
+  var texto = celula.desvio === null ? '—' : Math.round(celula.desvio * 100) + '%';
+  var tooltip = SERIE_LABELS[coluna.numerico] + ': ' + formatarNumero(celula.numerador, 0) + ' · ' +
+    SERIE_LABELS[coluna.baseline] + ': ' + formatarNumero(celula.denominador, 0);
+  return '<td class="celula-alerta" style="background:' + classe.cor + '" title="' + escapeHtml(tooltip) + '">' + texto + '</td>';
+}
+
+function renderLinhaAlerta(rotuloLinha, registros, indices, colunas, dimensao, vigenteIdx) {
+  return '<tr><td>' + escapeHtml(rotuloLinha) + '</td>' +
+    colunas.map(function (c) { return renderCelulaAlerta(registros, indices, c, dimensao, vigenteIdx); }).join('') +
+    '</tr>';
+}
+
+function renderCorpoAlertas(registros, indices, agruparPor, dimensao, numericos, baselines, periodos, vigenteIdx) {
+  var colunas = colunasAlertas(numericos, baselines, periodos);
+  var grupos = agruparIndicesAlertas(registros, indices, agruparPor);
+  var linhas = grupos.map(function (g) { return renderLinhaAlerta(g.chave, registros, g.indices, colunas, dimensao, vigenteIdx); });
+  linhas.push(renderLinhaAlerta('TOTAL GERAL', registros, indices, colunas, dimensao, vigenteIdx));
+  return linhas.join('');
+}
+
 // Soma corrida mês a mês -- acumulado[i] = mensal[0]+...+mensal[i]. Trata
 // null/undefined como 0 (não dá pra "acumular" um mês sem dado, mas
 // também não pode quebrar a soma corrida dos meses seguintes).
