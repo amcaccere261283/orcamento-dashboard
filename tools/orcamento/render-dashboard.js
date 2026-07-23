@@ -814,6 +814,20 @@ function recalcularAlertas() {
   document.getElementById('corpo-alertas').innerHTML = renderCorpoAlertas(
     window.__REGISTROS__, indices, agruparPor, dimensao, numericos, baselines, periodos, window.__VIGENTE_IDX__
   );
+  aplicarBuscaAlertas();
+}
+
+// Filtra as linhas JÁ renderizadas da tabela de Alertas por texto --
+// nunca refaz a busca de dados (bucketPeriodo etc.), só esconde/mostra
+// <tr> pelo data-search que renderLinhaAlerta já embutiu. Termo vazio
+// mostra tudo (mesma convenção do campo de busca dentro de cada
+// filtro-multi, ver montarFiltroMulti).
+function aplicarBuscaAlertas() {
+  var termo = normalizarBusca(document.getElementById('busca-alertas').value);
+  document.querySelectorAll('#tabela-alertas tbody tr').forEach(function (tr) {
+    var combina = termo === '' || (tr.dataset.search || '').indexOf(termo) !== -1;
+    tr.style.display = combina ? '' : 'none';
+  });
 }
 
 // Tooltip único, delegado (os SVGs são recriados via innerHTML a cada
@@ -1588,6 +1602,7 @@ function montarDashboard(registros) {
   document.getElementById('aba-tabela').addEventListener('click', function () { alternarAba('tabela'); });
   document.getElementById('aba-grafico').addEventListener('click', function () { alternarAba('grafico'); });
   document.getElementById('aba-alertas').addEventListener('click', function () { alternarAba('alertas'); });
+  document.getElementById('busca-alertas').addEventListener('input', aplicarBuscaAlertas);
   inicializarTooltipGrafico();
   recalcularTabela();
   recalcularAlertas();
@@ -2135,6 +2150,14 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     display: inline-block; width: 10px; height: 10px; border-radius: 50%;
     margin-right: 6px; vertical-align: middle;
   }
+  .busca-alertas {
+    display: block; width: 100%; max-width: 320px; box-sizing: border-box;
+    margin-bottom: 12px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-primary); font-size: 13px;
+  }
+  .busca-alertas::placeholder { color: var(--text-secondary); }
+  .busca-alertas:focus-visible { outline: 2px solid #f6b53f; outline-offset: 1px; }
 </style>
 </head>
 <body>
@@ -2202,6 +2225,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
           <div class="filtro-multi" id="filtro-alertas-periodo"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         </div>
       </div>
+      <input id="busca-alertas" type="text" class="busca-alertas" placeholder="Buscar..." autocomplete="off">
       <div class="table-scroll">
       <table id="tabela-alertas">
         <thead id="cabecalho-alertas"></thead>

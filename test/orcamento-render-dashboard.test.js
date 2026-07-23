@@ -1195,3 +1195,41 @@ test('every filter change (recorte or Alertas-specific) recalculates BOTH recalc
   assert.doesNotMatch(scriptTabela, /aoMudar/, 'aoMudar não deve existir mais em lugar nenhum -- nem no config, nem no handler');
   assert.match(scriptTabela, /recalcularTabela\(\);\s*\n\s*recalcularAlertas\(\);\s*\n\s*\}\);\s*\n\s*\}\);\s*\n\s*atualizarRotuloFiltro\(cfg, opcoes, estadoFiltros\);/, 'o final do handler de mudança de checkbox deve chamar as duas funções incondicionalmente, sem depender de cfg.aoMudar');
 });
+
+test('aplicarBuscaAlertas (extraído do HTML real gerado) hides rows whose data-search does not contain the normalized search term, and shows all rows when the term is empty', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptTabela = scripts[3][1];
+  const linhas = [
+    { dataset: { search: 'sup-a realizado previsto total ano' }, style: {} },
+    { dataset: { search: 'sup-b realizado previsto total ano' }, style: {} },
+  ];
+  const sandbox = {
+    document: {
+      getElementById: function (id) {
+        if (id === 'busca-alertas') return { value: 'sup-a' };
+        return { addEventListener: () => {}, value: '0', options: [{}] };
+      },
+      querySelectorAll: function (sel) {
+        if (sel === '#tabela-alertas tbody tr') return linhas;
+        return [];
+      },
+    },
+    window: {},
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(scriptTabela + '\nthis.aplicarBuscaAlertas = aplicarBuscaAlertas; this.normalizarBusca = normalizarBusca;', sandbox);
+  sandbox.aplicarBuscaAlertas();
+  assert.equal(linhas[0].style.display, '', 'SUP-A combina com o termo "sup-a"');
+  assert.equal(linhas[1].style.display, 'none', 'SUP-B não combina');
+
+  sandbox.document.getElementById = function (id) { return id === 'busca-alertas' ? { value: '' } : { addEventListener: () => {}, value: '0', options: [{}] }; };
+  sandbox.aplicarBuscaAlertas();
+  assert.equal(linhas[0].style.display, '', 'termo vazio mostra tudo de novo');
+  assert.equal(linhas[1].style.display, '', 'termo vazio mostra tudo de novo');
+});
+
+test('renderDashboard includes the busca-alertas text input above the Alertas table', () => {
+  const html = renderComSenha([registroExemplo()]);
+  assert.match(html, /<input id="busca-alertas" type="text" class="busca-alertas" placeholder="Buscar\.\.\." autocomplete="off">/);
+});
