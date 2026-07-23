@@ -170,7 +170,8 @@ function extrairFuncoesPuras(html) {
       ' this.dimensoesEmOrdem = dimensoesEmOrdem;' +
       ' this.construirPainelGraficoHtml = construirPainelGraficoHtml;' +
       ' this.somarIntervaloMensal = somarIntervaloMensal; this.bucketPeriodo = bucketPeriodo;' +
-      ' this.classificarSemaforo = classificarSemaforo;',
+      ' this.classificarSemaforo = classificarSemaforo;' +
+      ' this.aplicarSelecaoExclusiva = aplicarSelecaoExclusiva;',
     sandbox
   );
   return {
@@ -194,6 +195,7 @@ function extrairFuncoesPuras(html) {
     somarIntervaloMensal: sandbox.somarIntervaloMensal,
     bucketPeriodo: sandbox.bucketPeriodo,
     classificarSemaforo: sandbox.classificarSemaforo,
+    aplicarSelecaoExclusiva: sandbox.aplicarSelecaoExclusiva,
   };
 }
 
@@ -203,7 +205,12 @@ function extrairFuncoesPuras(html) {
 // a protótipo) acusaria divergência mesmo com os mesmos valores.
 // JSON.parse(JSON.stringify(...)) normaliza pro protótipo do realm atual.
 function paraPlano(valor) {
-  return valor === null ? null : JSON.parse(JSON.stringify(valor));
+  if (valor === null) return null;
+  // Set não serializa em array via JSON.stringify (viraria '{}') -- desembrulha
+  // antes do round-trip pra poder comparar estado de filtro (um Set) direto
+  // com um array esperado no teste, igual já se faz com objetos/arrays comuns.
+  if (valor instanceof Set) return JSON.parse(JSON.stringify(Array.from(valor)));
+  return JSON.parse(JSON.stringify(valor));
 }
 
 test('tipologiaColor (extraído do HTML real gerado) usa o mesmo mapeamento da matriz de equipes (SM é azul #2f6ad0)', () => {
@@ -957,4 +964,20 @@ test('preservarPrevistoInicial (extraído do HTML real gerado) transplants the O
 
   assert.deepEqual(paraPlano(novos[0].previstoInicial.financeiro), Array(12).fill(3), 'SUP+tipologia que já existia antes recupera o previstoInicial de verdade, não fica em branco');
   assert.deepEqual(paraPlano(novos[1].previstoInicial.financeiro), Array(12).fill(0), 'SUP novo (não existia antes do refresh) fica zerado, igual ao build-dashboard.js zera quando não acha na linha de base -- nunca fica ausente/undefined');
+});
+
+test('aplicarSelecaoExclusiva (extraído do HTML real gerado) clears every other value in the Set when checking one, in exclusivo mode -- exactly one value stays selected', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { aplicarSelecaoExclusiva } = extrairFuncoesPuras(html);
+  const estado = new Set(['sup']);
+  aplicarSelecaoExclusiva(estado, 'tipologia');
+  assert.deepEqual(paraPlano(estado), ['tipologia']);
+});
+
+test('aplicarSelecaoExclusiva is a no-op when the value being checked is already the only one selected', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { aplicarSelecaoExclusiva } = extrairFuncoesPuras(html);
+  const estado = new Set(['sup']);
+  aplicarSelecaoExclusiva(estado, 'sup');
+  assert.deepEqual(paraPlano(estado), ['sup']);
 });

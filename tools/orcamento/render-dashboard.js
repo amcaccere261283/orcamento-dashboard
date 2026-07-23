@@ -1140,10 +1140,11 @@ function opcoesFiltro(cfg, registros) {
   return linhasDistintas(registros, cfg.campo).map(function (v) { return { valor: v, rotulo: v }; });
 }
 
-function atualizarRotuloFiltro(cfg, opcoes) {
+function atualizarRotuloFiltro(cfg, opcoes, estado) {
+  var estadoFiltros = estado || filtrosSelecionados;
   var trigger = document.querySelector('#' + cfg.id + ' .filtro-multi-trigger');
   var seta = trigger.querySelector('.filtro-multi-seta');
-  var selecionados = filtrosSelecionados[cfg.chave];
+  var selecionados = estadoFiltros[cfg.chave];
   var texto;
   if (selecionados.size === 0) {
     texto = cfg.rotuloPadrao;
@@ -1174,24 +1175,39 @@ function normalizarBusca(texto) {
   return resultado;
 }
 
+// Modo "exclusivo" de um filtro-multi (Agrupar por / Dimensão da aba
+// Alertas): checar um valor esvazia o Set antes de adicionar, deixando
+// exatamente 1 marcado -- as 5 opções continuam sendo checkboxes (mesmo
+// componente visual dos outros filtros), só o COMPORTAMENTO vira
+// radio-like. Função separada (sem DOM) pra poder testar sozinha.
+function aplicarSelecaoExclusiva(estadoSet, valor) {
+  estadoSet.clear();
+  estadoSet.add(valor);
+}
+
 // Monta (ou remonta, ex.: depois de um refresh ao vivo com dados novos) o
 // painel de checkboxes de UM filtro -- descarta seleções que não existem
 // mais nas opções atuais em vez de deixá-las "fantasma" (marcadas mas sem
 // checkbox visível pra desmarcar). Painéis com opção têm um campo de busca
 // fixo no topo (útil sobretudo em SUP/Grupo/Tipologia, que podem ter muitas
 // opções) pra filtrar a lista por texto digitado, sem afetar a seleção.
-function montarFiltroMulti(cfg, registros) {
+// O 3º parâmetro (estado) permite reusar este mesmo componente com um objeto
+// de seleção próprio (ex.: os filtros da aba Alertas), sem tocar no
+// filtrosSelecionados global que controla Tabela/Gráfico -- todo call site
+// existente omite o argumento e continua operando sobre o global de sempre.
+function montarFiltroMulti(cfg, registros, estado) {
+  var estadoFiltros = estado || filtrosSelecionados;
   var opcoes = opcoesFiltro(cfg, registros);
   var valoresValidos = {};
   opcoes.forEach(function (o) { valoresValidos[o.valor] = true; });
-  filtrosSelecionados[cfg.chave].forEach(function (v) {
-    if (!valoresValidos[v]) filtrosSelecionados[cfg.chave].delete(v);
+  estadoFiltros[cfg.chave].forEach(function (v) {
+    if (!valoresValidos[v]) estadoFiltros[cfg.chave].delete(v);
   });
 
   var painel = document.querySelector('#' + cfg.id + ' .filtro-multi-painel');
   var listaHtml = opcoes.length
     ? opcoes.map(function (o) {
-        var marcado = filtrosSelecionados[cfg.chave].has(o.valor) ? ' checked' : '';
+        var marcado = estadoFiltros[cfg.chave].has(o.valor) ? ' checked' : '';
         return '<label class="filtro-multi-item"><input type="checkbox" value="' + escapeHtml(o.valor) + '"' + marcado + '>' + escapeHtml(o.rotulo) + '</label>';
       }).join('')
     : '<div class="filtro-multi-vazio">Nenhuma opção</div>';
@@ -1216,16 +1232,25 @@ function montarFiltroMulti(cfg, registros) {
 
   painel.querySelectorAll('input[type="checkbox"]').forEach(function (checkbox) {
     checkbox.addEventListener('change', function () {
-      // Dimensão nunca pode ficar sem nenhuma marcada -- não faz sentido
-      // mostrar uma tabela sem nenhum valor. Trava a desmarcação da
-      // última em vez de deixar o Set esvaziar.
-      if (cfg.minimoUm && !checkbox.checked && filtrosSelecionados[cfg.chave].size === 1) {
+      // Dimensão (e qualquer filtro exclusivo) nunca pode ficar sem nenhuma
+      // marcada -- não faz sentido mostrar uma tabela sem nenhum valor, nem
+      // um exclusivo sem opção escolhida. Trava a desmarcação da última em
+      // vez de deixar o Set esvaziar.
+      if ((cfg.minimoUm || cfg.exclusivo) && !checkbox.checked && estadoFiltros[cfg.chave].size === 1) {
         checkbox.checked = true;
         return;
       }
-      if (checkbox.checked) filtrosSelecionados[cfg.chave].add(checkbox.value);
-      else filtrosSelecionados[cfg.chave].delete(checkbox.value);
-      atualizarRotuloFiltro(cfg, opcoes);
+      if (checkbox.checked) {
+        if (cfg.exclusivo) aplicarSelecaoExclusiva(estadoFiltros[cfg.chave], checkbox.value);
+        else estadoFiltros[cfg.chave].add(checkbox.value);
+      } else {
+        estadoFiltros[cfg.chave].delete(checkbox.value);
+      }
+      atualizarRotuloFiltro(cfg, opcoes, estadoFiltros);
+      // Exclusivo mudou -- remonta o painel pra refletir visualmente que só
+      // 1 checkbox ficou marcado (o Set já mudou, mas o atributo "checked"
+      // dos outros checkboxes não se atualiza sozinho).
+      if (cfg.exclusivo) montarFiltroMulti(cfg, registros, estado);
       // Categoria mudou -- remonta o painel de Tipologia (cascata) pra
       // refletir a lista nova de opções válidas, e descartar qualquer
       // tipologia marcada que não pertença mais à(s) categoria(s) atual(is).
@@ -1239,10 +1264,10 @@ function montarFiltroMulti(cfg, registros) {
       if (cfg.chave === 'dimensao') {
         document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
       }
-      recalcularTabela();
+      cfg.aoMudar ? cfg.aoMudar() : recalcularTabela();
     });
   });
-  atualizarRotuloFiltro(cfg, opcoes);
+  atualizarRotuloFiltro(cfg, opcoes, estadoFiltros);
 }
 
 function montarTodosFiltrosMulti(registros) {
