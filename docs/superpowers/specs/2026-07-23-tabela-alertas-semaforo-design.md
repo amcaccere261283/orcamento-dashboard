@@ -1,8 +1,18 @@
-# Aba Alertas (semáforo de desvio) — Design v1
+# Aba Alertas (semáforo de desvio) — Design v2
 
 ## Contexto
 
 O dashboard ORÇAMENTO hoje tem duas abas (Tabela, Gráfico — ver `2026-07-21-primeira-tabela-orcamento-design.md` e `2026-07-21-grafico-orcamento-design.md`). O usuário quer uma terceira visão: uma tabela resumo que classifica o desvio de Realizado/Tendência contra Previsto/Previsto Inicial, por faixa de percentual, com um semáforo de cores — pra identificar rapidamente onde (SUP, tipologia, grupo...) o orçamento está fora da meta, sem precisar ler número a número na tabela detalhada.
+
+## Revisão v2 (feedback pós-deploy, 2026-07-23)
+
+A v1 (matriz de células coloridas, uma linha por grupo × N colunas de desvio) foi implementada, revisada e publicada, mas o usuário reportou 3 problemas depois de usar:
+
+1. **Bug real:** os filtros de recorte de cima (Origem/Categoria/Tipologia/Grupo/SUP) nunca recalculavam a aba Alertas — só os 5 seletores próprios da aba tinham esse gatilho (`aoMudar`). Filtrar por SUP na barra de cima não mudava nada na Alertas.
+2. **Sensação de filtro duplicado:** o seletor "Dimensão" de cima (Tabela/Gráfico) e o seletor "Dimensão" da própria Alertas mostravam o mesmo rótulo ("Financeiro") lado a lado, parecendo a mesma coisa duas vezes — confirmado como confusão de UI, não um bug de dado. **Decisão do usuário: manter os filtros de recorte compartilhados (não criar um segundo conjunto independente) — só corrigir a propagação.**
+3. **Falta de confiança no dado:** só a % aparecia (fundo colorido), sem os valores absolutos por trás — só no tooltip. **Decisão do usuário: virar tabela de LISTA** (uma linha por combinação Período×Numérico×Baseline, não uma célula), mostrando Referência/Pesquisado/Desvio/Status como colunas, no padrão de `tools/matriz/render-dashboard.js`'s aba Alertas (`renderTabelaAlertas`/`STATUS_ALERTA_META`/busca por texto).
+
+As seções abaixo marcadas **(v1, substituída)** documentam o que existia antes; as seções **Linhas (v2)**, **Renderização da linha (v2)**, **Busca (v2)** e **Correção: propagação de filtros** substituem o comportamento. Toda a matemática (`bucketPeriodo`, `calcularCelulaAlerta`, `colunasAlertas`, `classificarSemaforo`) continua igual e é reaproveitada — a mudança é só em como a tabela é montada (linhas em vez de células) e no bug de propagação.
 
 ## Escopo v1
 
@@ -37,17 +47,26 @@ Cinco seletores novos, com estado **independente** do resto (não compartilham o
 - **Baseline** (multi-select): `previsto` | `previstoInicial`. Default: só `previsto` marcado (mesma convenção do filtro de Série existente, onde Previsto Inicial começa desmarcado).
 - **Período** (multi-select, 8 opções): `acumuladoAnterior`, `mesVigente`, `m1`, `m2`, `m3`, `acumuladoFuturo`, `acumuladoAteVigente`, `totalAno`. Default: `acumuladoAteVigente` + `totalAno` marcados.
 
-Trocar "Agrupar por" ou "Dimensão" reconstrói a tabela inteira. Marcar/desmarcar Numérico/Baseline/Período reconstrói só as colunas (linhas continuam as mesmas).
+Qualquer mudança (recorte, ou um dos 5 seletores da aba) reconstrói a tabela inteira — ver Correção: propagação de filtros.
 
-## Linhas
+## Linhas (v1, substituída — ver Linhas (v2) abaixo)
 
-Uma linha por valor distinto do campo escolhido em "Agrupar por", entre os registros que passam nos filtros de recorte atuais (mesma função `indicesFiltrados` já usada por Tabela/Gráfico) — ordem alfabética do valor. Mais uma linha final **TOTAL GERAL**, somando todos os registros filtrados independente do agrupamento.
+~~Uma linha por valor distinto do campo escolhido em "Agrupar por"~~ — ver Linhas (v2).
 
-Sem sub-agrupamento hierárquico nesta v1: se "Agrupar por" = SUP, a linha de um SUP soma todas as tipologias dele; pra ver por tipologia dentro de um SUP, o usuário troca "Agrupar por" ou usa o filtro de SUP pra restringir antes.
+## Colunas (v1, substituída — vira ordem de linha em v2)
 
-## Colunas
+Cada combinação marcada de **Período × Numérico × Baseline**, na ordem Período (na ordem da lista acima) → Numérico (Realizado antes de Tendência) → Baseline (Previsto antes de Previsto Inicial), com rótulo `"<Numérico> ÷ <Baseline> — <Período>"` (ex.: "Realizado ÷ Previsto — Total Ano") — essa combinação e esse rótulo continuam existindo em v2, só que cada uma vira uma LINHA (ver Linhas (v2)), não mais uma coluna. `colunasAlertas` (já implementada e testada) continua sendo a função que gera essa lista ordenada; só quem a consome muda.
 
-Cada combinação marcada de **Período × Numérico × Baseline** vira uma coluna, na ordem Período (na ordem da lista acima) → Numérico (Realizado antes de Tendência) → Baseline (Previsto antes de Previsto Inicial). Rótulo da coluna: `"<Numérico> ÷ <Baseline> — <Período>"` (ex.: "Realizado ÷ Previsto — Total Ano"). Com os defaults (Período = Acumulado até Vigente + Total Ano; Numérico = ambos; Baseline = só Previsto): 4 colunas.
+## Linhas (v2)
+
+Duas dimensões de agrupamento, aninhadas:
+
+1. **Grupo** (valor do campo escolhido em "Agrupar por": SUP/Tipologia/Grupo/Categoria/Origem), em ordem alfabética — mesmo `agruparIndicesAlertas` já implementado. Mais um grupo final **TOTAL GERAL**, somando todos os registros filtrados.
+2. Dentro de cada grupo, **uma linha por combinação marcada** de Período×Numérico×Baseline (mesma lista e mesma ordem que `colunasAlertas` já produz).
+
+Ou seja: com os defaults (2 numéricos × 1 baseline × 2 períodos = 4 combinações) e N grupos, a tabela tem `N × 4` linhas de dado + 4 linhas de TOTAL GERAL. Sem sub-agrupamento hierárquico dentro do "Agrupar por" (mesma ressalva da v1): se "Agrupar por" = SUP, a linha de um SUP soma todas as tipologias dele.
+
+Colunas da tabela (fixas, não dependem da seleção): **[rótulo do Agrupar por]** (ex. "SUP") | **Combinação** | **Referência** | **Pesquisado** | **Desvio** | **Status**.
 
 ## Cálculo de cada célula
 
@@ -79,9 +98,37 @@ Mesma regra de faixa pra todas as dimensões (Financeiro aqui é receita bruta, 
 
 Limites: `> 1.10` azul; `0.90 <= x <= 1.10` verde; `0.70 <= x < 0.90` amarelo; `x < 0.70` vermelho — sem sobreposição nem lacuna.
 
-## Renderização da célula
+## Renderização da célula (v1, substituída — ver Renderização da linha (v2) abaixo)
 
-Fundo sólido com a cor da faixa, texto branco com o percentual formatado (`104%`, 0 casas decimais). `title` (tooltip nativo, mesmo padrão de hover/foco já usado na Tabela) mostra os dois valores absolutos por trás da razão, formatados com `formatarNumero` já existente (ex.: "Realizado: 1.234,50 · Previsto: 1.186,00").
+~~Fundo sólido com a cor da faixa~~ — ver Renderização da linha (v2). `calcularCelulaAlerta` (já implementada e testada, devolve `{ desvio, numerador, denominador }`) continua sendo a função de cálculo — só a apresentação muda.
+
+## Renderização da linha (v2)
+
+Cada `<tr>` de dado (dentro de um grupo, para uma combinação) renderiza:
+
+- **[Agrupar por]**: o valor do grupo (ex. "SUP-6498-23"), repetido em toda linha do grupo (sem rowspan — mesmo motivo já documentado pra Tabela: rowspan quebra filtro/busca por linha).
+- **Combinação**: o rótulo já existente (`"<Numérico> ÷ <Baseline> — <Período>"`).
+- **Referência**: `celula.denominador` (o valor do baseline) formatado com `formatarNumero(v, 0)`.
+- **Pesquisado**: `celula.numerador` (o valor do numérico) formatado com `formatarNumero(v, 0)`.
+- **Desvio**: `celula.desvio` como percentual inteiro (`104%`), ou `—` quando `null`.
+- **Status**: `<span class="status-circulo" style="--circulo-cor:${classe.cor}"></span> ${classe.indicador}` — um círculo sólido (10px, `border-radius:50%`, cor de fundo = `classe.cor`) seguido do rótulo por extenso (Excelente/Dentro da meta/Atenção/Crítico/Sem dado), mesmo espírito do `statusChip` de `tools/matriz/render-dashboard.js`, mas círculo cheio em vez de badge com borda (pedido explícito do usuário: "círculo colorido").
+
+Sem fundo colorido na linha inteira nem em nenhuma célula — só o círculo da coluna Status carrega cor.
+
+## Busca (v2)
+
+Campo de texto livre acima da tabela (mesmo padrão visual do `search-alertas` da matriz de equipes), filtrando as linhas visíveis por texto — reaproveita `normalizarBusca` (já existe no client, tira acento e caixa) em vez do `.toLowerCase()` simples da matriz de equipes, já que este projeto já tem essa função pronta e testada. Cada `<tr>` ganha um `data-search` com `[grupo, combinação].join(' ')` normalizado; o campo de busca compara contra isso, mesmo mecanismo do filtro de busca dentro de cada dropdown `filtro-multi` já existente (mas aplicado à tabela inteira, não a um painel de checkboxes).
+
+## Correção: propagação de filtros
+
+Bug encontrado: `montarFiltroMulti`'s handler de mudança de checkbox chamava `cfg.aoMudar ? cfg.aoMudar() : recalcularTabela();` — só os 5 `FILTROS_ALERTAS_CONFIG` tinham `aoMudar` (apontando pra `recalcularAlertas`), então mudar Origem/Categoria/Tipologia/Grupo/SUP/Série/Dimensão (os filtros de recorte, `FILTROS_CONFIG`) nunca recalculava a Alertas.
+
+**Correção:** remove o campo `aoMudar` de `FILTROS_ALERTAS_CONFIG` (não é mais necessário) e troca a linha final do handler de mudança em `montarFiltroMulti` para chamar as duas funções incondicionalmente:
+```js
+recalcularTabela();
+recalcularAlertas();
+```
+Qualquer mudança em qualquer filtro (recorte ou os 5 da Alertas) recalcula as duas abas — consistente com a filosofia "sem estado incremental" já documentada, e mais simples que manter um mecanismo de callback por config.
 
 ## Redesenho
 
@@ -89,4 +136,4 @@ Mesma filosofia do resto do script cliente: sem estado incremental, a tabela de 
 
 ## Testes
 
-`calcularVigenteIdx` (novo, em `datas.js`) é testado como as outras funções puras desse módulo, via `node --test`. `bucketPeriodo` e a classificação do semáforo (faixa → cor) são funções client-side, testáveis isoladamente via `vm.Context`, mesmo padrão já usado para `calcularMensal`/`mesclarConsecutivos`/`dividirJanelas`. A montagem da tabela em si (linhas/colunas/cores renderizadas) é verificada via Playwright, mesmo padrão de verificação visual do resto do projeto.
+`calcularVigenteIdx` (novo, em `datas.js`) é testado como as outras funções puras desse módulo, via `node --test`. `bucketPeriodo` e a classificação do semáforo (faixa → cor) são funções client-side, testáveis isoladamente via `vm.Context`, mesmo padrão já usado para `calcularMensal`/`mesclarConsecutivos`/`dividirJanelas`. A montagem da tabela em si (linhas/colunas/cores renderizadas) é verificada via Playwright, mesmo padrão de verificação visual do resto do projeto. `renderCorpoAlertas`/`renderCabecalhoAlertas` (v2) ganham novos testes cobrindo o formato de lista (uma linha por combinação, colunas Referência/Pesquisado/Desvio/Status) e a busca por texto.
