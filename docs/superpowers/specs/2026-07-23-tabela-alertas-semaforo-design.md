@@ -8,6 +8,13 @@ O dashboard ORÇAMENTO hoje tem duas abas (Tabela, Gráfico — ver `2026-07-21-
 
 Uma terceira aba "Alertas", ao lado de "Tabela"/"Gráfico", reaproveitando os filtros de recorte já existentes (Origem/Categoria/Tipologia/Grupo/SUP) e a mesma base de registros (`window.__REGISTROS__`) já carregada no client. Fora de escopo: qualquer dado da aba Gerencial/Juvencio (fonte B.Dados, adiada — ver `project_gerencial_juvencio_chart_deferred` memory), export/impressão da tabela de alertas, e configuração dos thresholds pelo usuário (ficam fixos no código nesta v1).
 
+## Mês vigente (`vigenteIdx`)
+
+Os buckets de período (`mesVigente`/`m1`/`m2`/`m3`/`acumuladoAnterior`/`acumuladoFuturo`) precisam saber qual dos 12 meses é "hoje" — mas esse conceito **não existe hoje em nenhum lugar do pipeline real**: `compute-orcamento.js` já tem `calcularJanelas(mensal, vigenteIdx)` testado, mas nunca é chamado por `build-dashboard.js`; e o client nunca recebe nenhuma data, só os rótulos `<th>Jan/2026</th>` já formatados como texto (`periodos` só existe no servidor). Precisa ser adicionado:
+
+- Nova função pura em `datas.js`: `calcularVigenteIdx(periodos, generatedAt)` → compara o ano/mês UTC de `generatedAt` com o ano dos `periodos` (sempre um único ano, Jan..Dez, mesma garantia já assumida pelo resto do projeto): mesmo ano → retorna o mês (0..11, bate direto com o índice do array); `generatedAt` de um ano anterior → `-1` (ano inteiro ainda é futuro); ano posterior → `12` (ano inteiro já é passado). `calcularJanelas` já trata esses dois extremos corretamente sem mudança (mês fora do intervalo 0..11 vira `null` em `valorMes`, e `somarMeses` já usa `Math.max`/`Math.min` nos limites).
+- `renderDashboard` chama `calcularVigenteIdx(periodos, generatedAt)` e embute o resultado como `window.__VIGENTE_IDX__ = <n>;` no HTML — um inteiro isolado, não é dado sensível (mesma categoria dos rótulos de mês já em texto puro), não precisa estar no blob cifrado.
+
 ## Arquitetura
 
 Mesmo arquivo `render-dashboard.js`, mesmo padrão das duas abas existentes: HTML/CSS/JS gerados como strings e embutidos no HTML final, sem dependência nova. A aba Alertas ganha:
@@ -82,4 +89,4 @@ Mesma filosofia do resto do script cliente: sem estado incremental, a tabela de 
 
 ## Testes
 
-`bucketPeriodo` e a classificação do semáforo (faixa → cor) são funções puras, testáveis isoladamente via `vm.Context`, mesmo padrão já usado para `calcularMensal`/`mesclarConsecutivos`/`dividirJanelas`. A montagem da tabela em si (linhas/colunas/cores renderizadas) é verificada via Playwright, mesmo padrão de verificação visual do resto do projeto.
+`calcularVigenteIdx` (novo, em `datas.js`) é testado como as outras funções puras desse módulo, via `node --test`. `bucketPeriodo` e a classificação do semáforo (faixa → cor) são funções client-side, testáveis isoladamente via `vm.Context`, mesmo padrão já usado para `calcularMensal`/`mesclarConsecutivos`/`dividirJanelas`. A montagem da tabela em si (linhas/colunas/cores renderizadas) é verificada via Playwright, mesmo padrão de verificação visual do resto do projeto.
