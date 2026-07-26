@@ -608,7 +608,7 @@ test('the new "Realizado + Previsto Inicial" série never adds a row to the Tabe
   assert.doesNotMatch(corpo, /realizadoPrevistoInicial/, 'nenhuma linha/atributo da Tabela deve referenciar a nova série');
 });
 
-test('calcularAcumuladoAposRealizado (extraído do HTML real gerado, usado tanto por Tendência quanto por Realizado+Previsto Inicial) picks up the running total exactly where Realizado\'s accumulated total left off, not from zero -- but the connection month itself stays null (só Realizado aparece nesse mês, confirmado com o usuário: um mês com Realizado nunca mostra a série futura)', () => {
+test('calcularAcumuladoAposRealizado (extraído do HTML real gerado, usado tanto por Tendência quanto por Realizado+Previsto Inicial) picks up the running total exactly where Realizado\'s accumulated total left off, not from zero -- INCLUDING at the connection month itself, so construirLinhasSvg has a point to draw a connecting line from (see indiceConector -- suppressing the duplicate marker/rótulo there is the renderer\'s job, not this function\'s)', () => {
   const html = renderComSenha([registroExemplo()]);
   const { calcularAcumuladoAposRealizado, calcularAcumulado } = extrairFuncoesPuras(html);
   const mensalRealizado = [10, 10, 10, null, null, null, null, null, null, null, null, null];
@@ -616,8 +616,9 @@ test('calcularAcumuladoAposRealizado (extraído do HTML real gerado, usado tanto
   const ultimoMesRealizado = 2;
   const mensalFutura = [null, null, null, 5, 5, 5, null, null, null, null, null, null];
   const resultado = calcularAcumuladoAposRealizado(mensalFutura, acumuladoRealizado, ultimoMesRealizado);
-  assert.deepEqual(paraPlano(resultado.slice(0, 3)), [null, null, null], 'até e incluindo o último mês de Realizado (índice 2), a série futura não desenha nada -- quem cobre esses meses é o Realizado');
-  assert.deepEqual(paraPlano(resultado.slice(3, 6)), [35, 40, 45], 'a partir do 1º mês futuro, soma a própria contribuição mensal EM CIMA do acumulado real herdado (30 + 5 = 35), sem mostrar o valor herdado como um ponto próprio da série futura');
+  assert.deepEqual(paraPlano(resultado.slice(0, 2)), [null, null], 'antes do último mês de Realizado, a série futura não tem valor nenhum');
+  assert.equal(resultado[2], 30, 'no mês de conexão (índice 2), o acumulado da série futura é igual ao acumulado real de Realizado ali (30) -- existe um ponto pra desenhar a linha a partir dele');
+  assert.deepEqual(paraPlano(resultado.slice(3, 6)), [35, 40, 45], 'a partir do 1º mês futuro, soma a própria contribuição mensal EM CIMA do acumulado real herdado (30 + 5 = 35)');
 });
 
 test('calcularAcumuladoAposRealizado falls back to accumulating the série futura alone from Jan when there is no Realizado month at all', () => {

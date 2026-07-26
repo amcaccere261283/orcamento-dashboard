@@ -386,19 +386,18 @@ function ultimoIndiceComDado(mensal) {
 // Previsto Inicial) nunca recomeça do zero em Jan -- a SOMA interna
 // continua exatamente de onde o acumulado de Realizado parou, pra o
 // primeiro mês futuro somar em cima do total real já reportado. O PONTO
-// de conexão em si (o último mês de Realizado) não aparece na série
-// futura, só em Realizado -- um mês que já tem Realizado mostra
-// Previsto+Realizado, nunca as duas séries juntas (confirmado com o
-// usuário: tanto Tendência quanto Realizado+Previsto Inicial são só a
-// projeção dos meses AINDA sem Realizado). Sem nenhum mês de Realizado
-// (ultimoMesRealizado -1), a série futura acumula sozinha desde Jan, do
-// jeito usual. \`mensalFutura\` já vem com null em todo mês
-// \`<= ultimoMesRealizado\` (quem monta essa máscara é o chamador -- ver
-// construirPainelGraficoHtml).
+// de conexão (o último mês de Realizado) TEM valor aqui -- igual ao
+// acumulado real de Realizado ali -- pra existir um ponto de onde a linha
+// da série futura possa partir (ver construirLinhasSvg/indiceConector: é o
+// desenho SVG, não esta função, quem decide não duplicar marcador/rótulo
+// nesse mês, já que Realizado desenha os dois ali). Sem nenhum mês de
+// Realizado (ultimoMesRealizado -1), a série futura acumula sozinha desde
+// Jan, do jeito usual.
 function calcularAcumuladoAposRealizado(mensalFutura, acumuladoRealizado, ultimoMesRealizado) {
   if (ultimoMesRealizado === -1) return calcularAcumulado(mensalFutura);
   var resultado = new Array(mensalFutura.length).fill(null);
   var soma = acumuladoRealizado[ultimoMesRealizado] || 0;
+  resultado[ultimoMesRealizado] = soma;
   for (var i = ultimoMesRealizado + 1; i < mensalFutura.length; i++) {
     soma += mensalFutura[i] || 0;
     resultado[i] = soma;
