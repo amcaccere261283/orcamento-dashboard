@@ -160,6 +160,7 @@ function extrairFuncoesPuras(html) {
       ' this.construirGraficoAcumuladoSvg = construirGraficoAcumuladoSvg;' +
       ' this.calcularEscalaEixo = calcularEscalaEixo;' +
       ' this.ultimoIndiceComDado = ultimoIndiceComDado;' +
+      ' this.removerZerosFinaisNaoReportados = removerZerosFinaisNaoReportados;' +
       ' this.calcularAcumuladoTendencia = calcularAcumuladoTendencia;' +
       ' this.parseCsvGrid = parseCsvGrid; this.numeroPtBr = numeroPtBr;' +
       ' this.parseMatrizClient = parseMatrizClient;' +
@@ -189,6 +190,7 @@ function extrairFuncoesPuras(html) {
     construirGraficoAcumuladoSvg: sandbox.construirGraficoAcumuladoSvg,
     calcularEscalaEixo: sandbox.calcularEscalaEixo,
     ultimoIndiceComDado: sandbox.ultimoIndiceComDado,
+    removerZerosFinaisNaoReportados: sandbox.removerZerosFinaisNaoReportados,
     calcularAcumuladoTendencia: sandbox.calcularAcumuladoTendencia,
     parseCsvGrid: sandbox.parseCsvGrid, numeroPtBr: sandbox.numeroPtBr,
     parseMatrizClient: sandbox.parseMatrizClient,
@@ -517,6 +519,53 @@ test('ultimoIndiceComDado ignores a null gap followed by more real data (a hole 
   const html = renderComSenha([registroExemplo()]);
   const { ultimoIndiceComDado } = extrairFuncoesPuras(html);
   assert.equal(ultimoIndiceComDado([10, null, 30, null, null, null, null, null, null, null, null, null]), 2);
+});
+
+test('removerZerosFinaisNaoReportados nulls out a trailing run of exact zeros (real case: MATRIZ Financeiro do Realizado devolve 0 pro mês ainda não reportado em vez de branco)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { removerZerosFinaisNaoReportados } = extrairFuncoesPuras(html);
+  const mensal = [100, 200, 150, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  assert.deepEqual(paraPlano(removerZerosFinaisNaoReportados(mensal)), [100, 200, 150, null, null, null, null, null, null, null, null, null]);
+});
+
+test('removerZerosFinaisNaoReportados leaves a real zero alone when a later month still has real data (not the end of the series)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { removerZerosFinaisNaoReportados } = extrairFuncoesPuras(html);
+  const mensal = [100, 0, 150, null, null, null, null, null, null, null, null, null];
+  assert.deepEqual(paraPlano(removerZerosFinaisNaoReportados(mensal)), [100, 0, 150, null, null, null, null, null, null, null, null, null]);
+});
+
+test('removerZerosFinaisNaoReportados does not touch an array that is already all null or has no trailing zero', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { removerZerosFinaisNaoReportados } = extrairFuncoesPuras(html);
+  assert.deepEqual(paraPlano(removerZerosFinaisNaoReportados(Array(12).fill(null))), Array(12).fill(null));
+  assert.deepEqual(paraPlano(removerZerosFinaisNaoReportados([10, 20, 30, null, null, null, null, null, null, null, null, null])), [10, 20, 30, null, null, null, null, null, null, null, null, null]);
+});
+
+test('construirPainelGraficoHtml: a trailing zero artifact in Realizado (real case: Financeiro de julho = 0 na MATRIZ, mas Tendência de julho já tem previsão própria) não deve zerar o efeito de julho no acumulado -- a Tendência precisa continuar somando a partir de junho, não "grudar" no acumulado de junho', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: Array(12).fill(5), volume: Array(12).fill(80),
+      // Jun (idx 5) tem dado real; Jul (idx 6) é o artefato 0 da MATRIZ;
+      // Ago em diante fica em branco (null), igual Equipes/Volume.
+      financeiro: [900, 900, 900, 900, 900, 900, 0, null, null, null, null, null],
+    },
+    total: {
+      equipes: Array(12).fill(0), volume: Array(12).fill(0),
+      // Tendência já tem valor próprio a partir de julho (regra "se tem R
+      // não tem T" -- julho não tem R de verdade, só o artefato 0).
+      financeiro: [null, null, null, null, null, null, 1000, 1000, 1000, 1000, 1000, 1000],
+    },
+  });
+  const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(), 'financeiro');
+  const acumuladoMatch = htmlPainel.match(/Acumulado no ano[\s\S]*$/);
+  assert.ok(acumuladoMatch, 'esperava o painel de Acumulado no HTML');
+  // Acumulado até junho = 900*6 = 5400; com o bug, julho ficava travado em
+  // 5400 (efeito zero) porque o 0 artificial "roubava" o ponto de conexão
+  // da Tendência. Corrigido, julho soma a própria Tendência (1000): 6400.
+  assert.match(acumuladoMatch[0], /6\.400/, 'acumulado de julho deveria ser 5.400 (junho) + 1.000 (Tendência de julho) = 6.400, não travar em 5.400');
 });
 
 test('calcularAcumuladoTendencia (extraído do HTML real gerado) picks up Tendência\'s running total exactly where Realizado\'s accumulated total left off, not from zero', () => {

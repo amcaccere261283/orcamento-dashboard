@@ -401,6 +401,30 @@ function calcularAcumuladoTendencia(mensalTotal, acumuladoRealizado, ultimoMesRe
   return resultado;
 }
 
+// Alguns blocos de mês da MATRIZ (achado real: Financeiro do Realizado)
+// usam uma fórmula que devolve 0 pro mês ainda não reportado, em vez de
+// deixar a célula em branco -- Equipes/Volume do mesmo mês corretamente
+// ficam null, só Financeiro tem esse artefato. Sem tratar isso, esse 0
+// artificial passa pro resto do código como se fosse "mês reportado":
+// ultimoIndiceComDado acha esse mês como o último Realizado quando não tem
+// dado nenhum, e a Tendência perde de vez a contribuição real desse mês (o
+// acumulado "gruda" no valor do mês anterior em vez de somar a Tendência
+// dali em diante -- o mês parece ter "efeito zero"). Varre do fim pro
+// começo pulando zeros E nulls (o artefato de fim de série mistura os
+// dois, ver caso real acima) até achar um mês com dado de verdade
+// (não-zero) -- só então zera qualquer 0 exato encontrado depois desse
+// ponto. Não mexe num zero seguido de outro mês com dado real (não é
+// "final da série", é um zero real no meio de meses já reportados).
+function removerZerosFinaisNaoReportados(mensal) {
+  var resultado = mensal.slice();
+  var i = resultado.length - 1;
+  while (i >= 0 && (resultado[i] === 0 || resultado[i] === null || resultado[i] === undefined)) i--;
+  for (var j = i + 1; j < resultado.length; j++) {
+    if (resultado[j] === 0) resultado[j] = null;
+  }
+  return resultado;
+}
+
 // Acumulado de Realizado não continua reto (flat) até dezembro depois do
 // último mês reportado -- corta ali (null dali em diante), igual ao painel
 // Mensal, pra não parecer que o total "parou de crescer" já sabendo de
@@ -731,6 +755,7 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
     var valoresLista = indices.map(function (idx) { return registros[idx][serie]; });
     mensalPorSerie[serie] = calcularMensal(valoresLista, serie, dimensao) || new Array(12).fill(null);
   });
+  if (mensalPorSerie.realizado) mensalPorSerie.realizado = removerZerosFinaisNaoReportados(mensalPorSerie.realizado);
 
   // Tendência sempre parte do último Realizado -- se as duas séries estão
   // visíveis e a Tendência ainda não tem valor próprio nesse mês (regra "se
