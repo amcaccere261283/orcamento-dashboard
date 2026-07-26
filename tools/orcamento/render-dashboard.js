@@ -330,10 +330,14 @@ function renderCabecalhoAlertas(agruparPorRotulo) {
 // valores absolutos que antes só apareciam no tooltip (feedback do
 // usuário: queria conferir o dado, não só confiar na %). Status é um
 // círculo cheio (não um badge com borda, nem fundo de célula colorido --
-// pedido explícito) seguido do rótulo por extenso.
-function renderLinhaAlerta(rotuloGrupo, registros, indices, coluna, dimensao, vigenteIdx) {
+// pedido explícito) seguido do rótulo por extenso. statusFiltro (Set dos
+// rótulos marcados no filtro dedicado de Status, ver FILTROS_ALERTAS_CONFIG)
+// omite a linha inteira quando marcado e o status calculado não bate --
+// Set vazio/undefined mostra tudo, mesma convenção dos filtros de recorte.
+function renderLinhaAlerta(rotuloGrupo, registros, indices, coluna, dimensao, vigenteIdx, statusFiltro) {
   var celula = calcularCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx);
   var classe = classificarSemaforo(celula.desvio);
+  if (statusFiltro && statusFiltro.size > 0 && !statusFiltro.has(classe.indicador)) return '';
   var desvioTexto = celula.desvio === null ? '—' : Math.round(celula.desvio * 100) + '%';
   var referencia = formatarNumero(celula.denominador, 0);
   var pesquisado = formatarNumero(celula.numerador, 0);
@@ -348,15 +352,15 @@ function renderLinhaAlerta(rotuloGrupo, registros, indices, coluna, dimensao, vi
     '</tr>';
 }
 
-function renderLinhasGrupoAlerta(rotuloGrupo, registros, indices, colunas, dimensao, vigenteIdx) {
-  return colunas.map(function (c) { return renderLinhaAlerta(rotuloGrupo, registros, indices, c, dimensao, vigenteIdx); }).join('');
+function renderLinhasGrupoAlerta(rotuloGrupo, registros, indices, colunas, dimensao, vigenteIdx, statusFiltro) {
+  return colunas.map(function (c) { return renderLinhaAlerta(rotuloGrupo, registros, indices, c, dimensao, vigenteIdx, statusFiltro); }).join('');
 }
 
-function renderCorpoAlertas(registros, indices, agruparPor, dimensao, numericos, baselines, periodos, vigenteIdx) {
+function renderCorpoAlertas(registros, indices, agruparPor, dimensao, numericos, baselines, periodos, vigenteIdx, statusFiltro) {
   var colunas = colunasAlertas(numericos, baselines, periodos);
   var grupos = agruparIndicesAlertas(registros, indices, agruparPor);
-  var linhas = grupos.map(function (g) { return renderLinhasGrupoAlerta(g.chave, registros, g.indices, colunas, dimensao, vigenteIdx); });
-  linhas.push(renderLinhasGrupoAlerta('TOTAL GERAL', registros, indices, colunas, dimensao, vigenteIdx));
+  var linhas = grupos.map(function (g) { return renderLinhasGrupoAlerta(g.chave, registros, g.indices, colunas, dimensao, vigenteIdx, statusFiltro); });
+  linhas.push(renderLinhasGrupoAlerta('TOTAL GERAL', registros, indices, colunas, dimensao, vigenteIdx, statusFiltro));
   return linhas.join('');
 }
 
@@ -898,7 +902,8 @@ function recalcularAlertas() {
   var colunas = colunasAlertas(numericos, baselines, periodos);
   document.getElementById('cabecalho-alertas').innerHTML = renderCabecalhoAlertas(AGRUPAR_POR_ROTULO[agruparPor]);
   document.getElementById('corpo-alertas').innerHTML = renderCorpoAlertas(
-    window.__REGISTROS__, indices, agruparPor, dimensao, numericos, baselines, periodos, window.__VIGENTE_IDX__
+    window.__REGISTROS__, indices, agruparPor, dimensao, numericos, baselines, periodos, window.__VIGENTE_IDX__,
+    filtrosAlertas.status
   );
   aplicarBuscaAlertas();
 }
@@ -1363,6 +1368,17 @@ var FILTROS_ALERTAS_CONFIG = [
     { valor: 'previstoInicial', rotulo: 'Previsto Inicial' },
   ] },
   { id: 'filtro-alertas-periodo', chave: 'periodo', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: PERIODO_ORDEM.map(function (p) { return { valor: p, rotulo: PERIODO_LABELS[p] }; }) },
+  // Único dos 6 que FILTRA linhas (os outros 5 decidem que colunas/grupos
+  // aparecem) -- por isso sem minimoUm/exclusivo: Set vazio mostra tudo,
+  // igual aos filtros de recorte da barra de cima. O valor de cada opção é
+  // o próprio rótulo que classificarSemaforo devolve (ver renderLinhaAlerta).
+  { id: 'filtro-alertas-status', chave: 'status', rotuloPadrao: 'Status', opcoesFixas: [
+    { valor: 'Excelente', rotulo: 'Excelente' },
+    { valor: 'Dentro da meta', rotulo: 'Dentro da meta' },
+    { valor: 'Atenção', rotulo: 'Atenção' },
+    { valor: 'Crítico', rotulo: 'Crítico' },
+    { valor: 'Sem dado', rotulo: 'Sem dado' },
+  ] },
 ];
 
 var filtrosAlertas = {};
@@ -2319,6 +2335,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
           <div class="filtro-multi" id="filtro-alertas-numerico"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
           <div class="filtro-multi" id="filtro-alertas-baseline"><button type="button" class="filtro-multi-trigger">Previsto<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
           <div class="filtro-multi" id="filtro-alertas-periodo"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-status"><button type="button" class="filtro-multi-trigger">Status<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
         </div>
       </div>
       <input id="busca-alertas" type="text" class="busca-alertas" placeholder="Buscar..." autocomplete="off">
