@@ -496,15 +496,22 @@ function escalaLinear(valor, valorMax, pixelMax) {
   return (valor / valorMax) * pixelMax;
 }
 
-// Arredonda o teto do eixo Y pro próximo passo "limpo" (1/2/5 x 10^n), do
+// Arredonda o teto do eixo Y pro próximo passo "limpo" (degrau x 10^n), do
 // jeito que uma pessoa desenharia à mão -- os ticks caem em números
 // redondos (0 / 500 / 1.000...) em vez de frações arbitrárias do máximo.
+// Degraus 1/1,5/2/2,5/3/4/5/6/8/10 (não só 1/2/2,5/5/10): o salto de 2,5
+// direto pra 5 sobrava até quase 2x o teto real (achado no gráfico
+// Acumulado — dezembro fechava em ~110.000 e o eixo ia até 200.000, mais
+// da metade do painel vazia); com os degraus intermediários, o pior caso
+// de sobra cai de ~100% pra ~50%, mantendo o mesmo espírito de número
+// redondo.
+var GRAFICO_DEGRAUS_ESCALA = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
 function calcularEscalaEixo(valorMax) {
   if (!valorMax || valorMax <= 0) return { max: 1, passo: 0.25 };
   var passoBruto = valorMax / GRAFICO_NUM_TICKS;
   var magnitude = Math.pow(10, Math.floor(Math.log10(passoBruto)));
   var normalizado = passoBruto / magnitude;
-  var passoNormalizado = normalizado <= 1 ? 1 : normalizado <= 2 ? 2 : normalizado <= 2.5 ? 2.5 : normalizado <= 5 ? 5 : 10;
+  var passoNormalizado = GRAFICO_DEGRAUS_ESCALA.find(function (degrau) { return normalizado <= degrau; }) || 10;
   var passo = passoNormalizado * magnitude;
   return { max: passo * GRAFICO_NUM_TICKS, passo: passo };
 }

@@ -791,6 +791,14 @@ test('calcularEscalaEixo (extraído do HTML real gerado) rounds the axis max to 
   assert.equal(escala.passo, 25000);
 });
 
+test('calcularEscalaEixo does not overshoot to double the real max when normalizado lands just past the 2,5x degrau either -- real case: acumulado de dezembro ~110.000 must not blow the axis out to 200.000 (44% empty above the real max), a tighter degrau (3x) covers it at 120.000', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { calcularEscalaEixo } = extrairFuncoesPuras(html);
+  const escala = calcularEscalaEixo(110000);
+  assert.equal(escala.max, 120000);
+  assert.equal(escala.passo, 30000);
+});
+
 test('escapeHtml (extraído do HTML real gerado) escapes the same 5 characters as the server-side helper, protecting against markup injection from spreadsheet text once rendered client-side', () => {
   const html = renderComSenha([registroExemplo()]);
   const { escapeHtml } = extrairFuncoesPuras(html);
