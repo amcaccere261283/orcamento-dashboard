@@ -892,6 +892,40 @@ test('construirGraficoMensalSvg (razão dimension, linha) and construirGraficoAc
   assert.equal((acumulado.svg.match(/<polyline class="grafico-linha"/g) || []).length, 2);
 });
 
+test('construirLinhasSvg (via construirGraficoAcumuladoSvg): a point at indiceConector joins the polyline (closing the gap to the next real point) but draws no marker, no hit-target, and no label -- Realizado already drew all three there', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoAcumuladoSvg } = extrairFuncoesPuras(html);
+  const dados = [
+    { serie: 'realizado', acumulado: [10, 20, 30, null, null, null, null, null, null, null, null, null], indiceConector: null },
+    { serie: 'total', acumulado: [null, null, 30, 35, 40, null, null, null, null, null, null, null], indiceConector: 2 },
+  ];
+  const { svg } = construirGraficoAcumuladoSvg(dados, 0);
+  // A polyline da Tendência deve ligar os meses 2,3,4 (3 pontos) -- inclui
+  // o mês de conexão (2) mesmo sem marcador ali.
+  const polylineTendencia = svg.match(/<polyline[^>]*points="([^"]*)"[^>]*stroke="#f6b53f"/);
+  assert.ok(polylineTendencia, 'esperava uma polyline da Tendência ligando o mês de conexão aos meses seguintes');
+  assert.equal(polylineTendencia[1].trim().split(' ').length, 3, 'a polyline deve ter 3 pontos (mês de conexão + 2 meses seguintes)');
+  // Só 1 marcador da Tendência (mês 3, valor 35) e 1 do mês 4 (valor 40) --
+  // NENHUM no mês de conexão (2).
+  const marcadoresTendencia = (svg.match(/<circle class="grafico-marcador"[^>]*fill="#f6b53f"/g) || []).length;
+  assert.equal(marcadoresTendencia, 2, 'só os 2 meses realmente "próprios" da Tendência (3 e 4) desenham marcador -- o mês de conexão (2) não');
+  const hitsTendencia = (svg.match(/<circle class="grafico-hit"[^>]*Tendência/g) || []).length;
+  assert.equal(hitsTendencia, 2, 'mesma contagem pro hit-target de hover');
+  // Realizado continua desenhando normalmente nos seus 3 meses, incluindo
+  // o mês de conexão (2) -- é dele mesmo, não suprimido.
+  const marcadoresRealizado = (svg.match(/<circle class="grafico-marcador"[^>]*fill="#7fd858"/g) || []).length;
+  assert.equal(marcadoresRealizado, 3, 'Realizado desenha seus 3 marcadores normalmente, sem nenhuma supressão');
+});
+
+test('construirLinhasSvg: a point NOT at indiceConector (or a série with indiceConector null/absent) always draws marker+hit+label normally -- suppression is scoped exactly to the connector month of a série that has one', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoAcumuladoSvg } = extrairFuncoesPuras(html);
+  const dados = [{ serie: 'previsto', acumulado: [10, 20, 30, 40, null, null, null, null, null, null, null, null], indiceConector: null }];
+  const { svg } = construirGraficoAcumuladoSvg(dados, 0);
+  assert.equal((svg.match(/<circle class="grafico-marcador"/g) || []).length, 4, 'sem indiceConector, todo mês com dado desenha seu marcador normalmente');
+  assert.equal((svg.match(/class="grafico-rotulo-final"/g) || []).length, 4, 'e seu rótulo');
+});
+
 test('construirGraficoMensalSvg and construirGraficoAcumuladoSvg emit no numeric label for a zero-value point (real "no data yet" case, e.g. Realizado before any month has actuals) -- a labeled "0" on every empty point is visual clutter, not signal', () => {
   const html = renderComSenha([registroExemplo()]);
   const { construirGraficoMensalSvg, construirGraficoAcumuladoSvg } = extrairFuncoesPuras(html);

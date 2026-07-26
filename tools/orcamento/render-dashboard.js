@@ -657,6 +657,14 @@ function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, marg
 // Um mês null (sem dado reportado ainda, ver somarArraysMensais) quebra a
 // linha em vez de "cair" até a base -- desenha um <polyline> por trecho
 // contínuo de meses com dado, não um só ligando os 12 pontos.
+// indiceConector (opcional, em cada item de dadosPorSerie): o mês onde uma
+// série "pós-Realizado" (Tendência, Realizado+Previsto Inicial) herda o
+// ponto de partida de Realizado -- ver calcularAcumuladoAposRealizado e
+// construirPainelGraficoHtml. Esse mês PRECISA entrar no trecho da
+// polyline (fecha o hiato visual entre o último mês de Realizado e o
+// primeiro mês próprio da série futura, desenhando o segmento na cor/
+// tracejado da série futura), mas NÃO desenha marcador/hit/rótulo -- quem
+// já desenhou os três ali foi a própria série Realizado, no mesmo x,y.
 function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais) {
   var svg = '';
   dadosPorSerie.forEach(function (d) {
@@ -674,10 +682,13 @@ function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraMes
       var x = margem.esquerda + mes * larguraMes + larguraMes / 2;
       var y = margem.topo + alturaPlot - escalaLinear(valor, escala.max, alturaPlot);
       trecho.push({ x: x, y: y });
-      svg += '<circle class="grafico-marcador" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4" fill="' + SERIE_COR[d.serie] + '" stroke="var(--surface-1)" stroke-width="2"/>';
-      svg += '<circle class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor, casasDecimais) + '" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="10" fill="transparent"/>';
-      if (valor) {
-        rotulos.push({ x: x, y: y - 10, texto: formatarValorGrafico(valor, usarMilhares, casasDecimais), classe: 'grafico-rotulo-final' });
+      var ehConector = d.indiceConector !== null && d.indiceConector !== undefined && mes === d.indiceConector;
+      if (!ehConector) {
+        svg += '<circle class="grafico-marcador" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4" fill="' + SERIE_COR[d.serie] + '" stroke="var(--surface-1)" stroke-width="2"/>';
+        svg += '<circle class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor, casasDecimais) + '" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="10" fill="transparent"/>';
+        if (valor) {
+          rotulos.push({ x: x, y: y - 10, texto: formatarValorGrafico(valor, usarMilhares, casasDecimais), classe: 'grafico-rotulo-final' });
+        }
       }
     });
     fecharTrecho();
