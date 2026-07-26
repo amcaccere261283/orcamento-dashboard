@@ -382,21 +382,25 @@ function ultimoIndiceComDado(mensal) {
   return -1;
 }
 
-// Acumulado da série Tendência nunca recomeça do zero em Jan -- a SOMA
-// interna continua exatamente de onde o acumulado de Realizado parou, pra
-// o primeiro mês futuro somar em cima do total real já reportado. O PONTO
-// de conexão em si (o último mês de Realizado) não aparece na série de
-// Tendência, só em Realizado -- um mês que já tem Realizado mostra
-// Previsto+Realizado, nunca Previsto+Realizado+Tendência (confirmado com o
-// usuário: Tendência é só a projeção dos meses AINDA sem Realizado). Sem
-// nenhum mês de Realizado (ultimoMesRealizado -1), a Tendência acumula
-// sozinha desde Jan, do jeito usual.
-function calcularAcumuladoTendencia(mensalTotal, acumuladoRealizado, ultimoMesRealizado) {
-  if (ultimoMesRealizado === -1) return calcularAcumulado(mensalTotal);
-  var resultado = new Array(mensalTotal.length).fill(null);
+// Acumulado de uma série "pós-Realizado" (Tendência, ou Realizado +
+// Previsto Inicial) nunca recomeça do zero em Jan -- a SOMA interna
+// continua exatamente de onde o acumulado de Realizado parou, pra o
+// primeiro mês futuro somar em cima do total real já reportado. O PONTO
+// de conexão em si (o último mês de Realizado) não aparece na série
+// futura, só em Realizado -- um mês que já tem Realizado mostra
+// Previsto+Realizado, nunca as duas séries juntas (confirmado com o
+// usuário: tanto Tendência quanto Realizado+Previsto Inicial são só a
+// projeção dos meses AINDA sem Realizado). Sem nenhum mês de Realizado
+// (ultimoMesRealizado -1), a série futura acumula sozinha desde Jan, do
+// jeito usual. \`mensalFutura\` já vem com null em todo mês
+// \`<= ultimoMesRealizado\` (quem monta essa máscara é o chamador -- ver
+// construirPainelGraficoHtml).
+function calcularAcumuladoAposRealizado(mensalFutura, acumuladoRealizado, ultimoMesRealizado) {
+  if (ultimoMesRealizado === -1) return calcularAcumulado(mensalFutura);
+  var resultado = new Array(mensalFutura.length).fill(null);
   var soma = acumuladoRealizado[ultimoMesRealizado] || 0;
-  for (var i = ultimoMesRealizado + 1; i < mensalTotal.length; i++) {
-    soma += mensalTotal[i] || 0;
+  for (var i = ultimoMesRealizado + 1; i < mensalFutura.length; i++) {
+    soma += mensalFutura[i] || 0;
     resultado[i] = soma;
   }
   return resultado;
@@ -430,7 +434,7 @@ function removerZerosFinaisNaoReportados(mensal) {
 // último mês reportado -- corta ali (null dali em diante), igual ao painel
 // Mensal, pra não parecer que o total "parou de crescer" já sabendo de
 // verdade, quando na real é só que ainda não tem dado. É a partir desse
-// mesmo ponto de corte que calcularAcumuladoTendencia continua a linha.
+// mesmo ponto de corte que calcularAcumuladoAposRealizado continua a linha.
 function cortarAcumuladoNoUltimoDado(acumulado, mensal) {
   var ultimo = ultimoIndiceComDado(mensal);
   return acumulado.map(function (v, i) { return i <= ultimo ? v : null; });
@@ -770,7 +774,7 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
   // painel Mensal mostra Previsto+Realizado nesses meses, Previsto+Tendência
   // nos meses futuros, nunca as 3 juntas. ultimoMesRealizado só serve pro
   // Acumulado saber de onde herdar a soma corrida (ver
-  // calcularAcumuladoTendencia) -- não precisa (e não deve) editar
+  // calcularAcumuladoAposRealizado) -- não precisa (e não deve) editar
   // mensalPorSerie.total aqui.
   var ultimoMesRealizado = -1;
   if (mensalPorSerie.realizado) ultimoMesRealizado = ultimoIndiceComDado(mensalPorSerie.realizado);
@@ -780,7 +784,7 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
     var acumulado = null;
     if (!ehRazao) {
       if (serie === 'total') {
-        acumulado = calcularAcumuladoTendencia(mensal, calcularAcumulado(mensalPorSerie.realizado || []), ultimoMesRealizado);
+        acumulado = calcularAcumuladoAposRealizado(mensal, calcularAcumulado(mensalPorSerie.realizado || []), ultimoMesRealizado);
       } else if (serie === 'realizado') {
         acumulado = cortarAcumuladoNoUltimoDado(calcularAcumulado(mensal), mensal);
       } else {

@@ -161,7 +161,7 @@ function extrairFuncoesPuras(html) {
       ' this.calcularEscalaEixo = calcularEscalaEixo;' +
       ' this.ultimoIndiceComDado = ultimoIndiceComDado;' +
       ' this.removerZerosFinaisNaoReportados = removerZerosFinaisNaoReportados;' +
-      ' this.calcularAcumuladoTendencia = calcularAcumuladoTendencia;' +
+      ' this.calcularAcumuladoAposRealizado = calcularAcumuladoAposRealizado;' +
       ' this.parseCsvGrid = parseCsvGrid; this.numeroPtBr = numeroPtBr;' +
       ' this.parseMatrizClient = parseMatrizClient;' +
       ' this.formatarNumero = formatarNumero; this.formatarValorGrafico = formatarValorGrafico;' +
@@ -191,7 +191,7 @@ function extrairFuncoesPuras(html) {
     calcularEscalaEixo: sandbox.calcularEscalaEixo,
     ultimoIndiceComDado: sandbox.ultimoIndiceComDado,
     removerZerosFinaisNaoReportados: sandbox.removerZerosFinaisNaoReportados,
-    calcularAcumuladoTendencia: sandbox.calcularAcumuladoTendencia,
+    calcularAcumuladoAposRealizado: sandbox.calcularAcumuladoAposRealizado,
     parseCsvGrid: sandbox.parseCsvGrid, numeroPtBr: sandbox.numeroPtBr,
     parseMatrizClient: sandbox.parseMatrizClient,
     formatarNumero: sandbox.formatarNumero, formatarValorGrafico: sandbox.formatarValorGrafico,
@@ -568,22 +568,22 @@ test('construirPainelGraficoHtml: a trailing zero artifact in Realizado (real ca
   assert.match(acumuladoMatch[0], /6\.400/, 'acumulado de julho deveria ser 5.400 (junho) + 1.000 (Tendência de julho) = 6.400, não travar em 5.400');
 });
 
-test('calcularAcumuladoTendencia (extraído do HTML real gerado) picks up Tendência\'s running total exactly where Realizado\'s accumulated total left off, not from zero -- but the connection month itself stays null (só Realizado aparece nesse mês, confirmado com o usuário: um mês com Realizado nunca mostra Tendência)', () => {
+test('calcularAcumuladoAposRealizado (extraído do HTML real gerado, usado tanto por Tendência quanto por Realizado+Previsto Inicial) picks up the running total exactly where Realizado\'s accumulated total left off, not from zero -- but the connection month itself stays null (só Realizado aparece nesse mês, confirmado com o usuário: um mês com Realizado nunca mostra a série futura)', () => {
   const html = renderComSenha([registroExemplo()]);
-  const { calcularAcumuladoTendencia, calcularAcumulado } = extrairFuncoesPuras(html);
+  const { calcularAcumuladoAposRealizado, calcularAcumulado } = extrairFuncoesPuras(html);
   const mensalRealizado = [10, 10, 10, null, null, null, null, null, null, null, null, null];
   const acumuladoRealizado = calcularAcumulado(mensalRealizado); // [10,20,30,30,30,...]
   const ultimoMesRealizado = 2;
-  const mensalTendencia = [null, null, null, 5, 5, 5, null, null, null, null, null, null];
-  const resultado = calcularAcumuladoTendencia(mensalTendencia, acumuladoRealizado, ultimoMesRealizado);
-  assert.deepEqual(paraPlano(resultado.slice(0, 3)), [null, null, null], 'até e incluindo o último mês de Realizado (índice 2), Tendência não desenha nada -- quem cobre esses meses é o Realizado');
-  assert.deepEqual(paraPlano(resultado.slice(3, 6)), [35, 40, 45], 'a partir do 1º mês futuro, soma a própria contribuição mensal da Tendência EM CIMA do acumulado real herdado (30 + 5 = 35), sem mostrar o valor herdado como um ponto próprio da Tendência');
+  const mensalFutura = [null, null, null, 5, 5, 5, null, null, null, null, null, null];
+  const resultado = calcularAcumuladoAposRealizado(mensalFutura, acumuladoRealizado, ultimoMesRealizado);
+  assert.deepEqual(paraPlano(resultado.slice(0, 3)), [null, null, null], 'até e incluindo o último mês de Realizado (índice 2), a série futura não desenha nada -- quem cobre esses meses é o Realizado');
+  assert.deepEqual(paraPlano(resultado.slice(3, 6)), [35, 40, 45], 'a partir do 1º mês futuro, soma a própria contribuição mensal EM CIMA do acumulado real herdado (30 + 5 = 35), sem mostrar o valor herdado como um ponto próprio da série futura');
 });
 
-test('calcularAcumuladoTendencia falls back to accumulating Tendência alone from Jan when there is no Realizado month at all', () => {
+test('calcularAcumuladoAposRealizado falls back to accumulating the série futura alone from Jan when there is no Realizado month at all', () => {
   const html = renderComSenha([registroExemplo()]);
-  const { calcularAcumuladoTendencia } = extrairFuncoesPuras(html);
-  const resultado = calcularAcumuladoTendencia([5, 5, 5], [], -1);
+  const { calcularAcumuladoAposRealizado } = extrairFuncoesPuras(html);
+  const resultado = calcularAcumuladoAposRealizado([5, 5, 5], [], -1);
   assert.deepEqual(paraPlano(resultado), [5, 10, 15]);
 });
 
