@@ -568,7 +568,7 @@ test('construirPainelGraficoHtml: a trailing zero artifact in Realizado (real ca
   assert.match(acumuladoMatch[0], /6\.400/, 'acumulado de julho deveria ser 5.400 (junho) + 1.000 (Tendência de julho) = 6.400, não travar em 5.400');
 });
 
-test('calcularAcumuladoTendencia (extraído do HTML real gerado) picks up Tendência\'s running total exactly where Realizado\'s accumulated total left off, not from zero', () => {
+test('calcularAcumuladoTendencia (extraído do HTML real gerado) picks up Tendência\'s running total exactly where Realizado\'s accumulated total left off, not from zero -- but the connection month itself stays null (só Realizado aparece nesse mês, confirmado com o usuário: um mês com Realizado nunca mostra Tendência)', () => {
   const html = renderComSenha([registroExemplo()]);
   const { calcularAcumuladoTendencia, calcularAcumulado } = extrairFuncoesPuras(html);
   const mensalRealizado = [10, 10, 10, null, null, null, null, null, null, null, null, null];
@@ -576,9 +576,8 @@ test('calcularAcumuladoTendencia (extraído do HTML real gerado) picks up Tendê
   const ultimoMesRealizado = 2;
   const mensalTendencia = [null, null, null, 5, 5, 5, null, null, null, null, null, null];
   const resultado = calcularAcumuladoTendencia(mensalTendencia, acumuladoRealizado, ultimoMesRealizado);
-  assert.deepEqual(paraPlano(resultado.slice(0, 2)), [null, null], 'antes do último Realizado, Tendência não desenha nada -- quem cobre esses meses é o Realizado');
-  assert.equal(resultado[2], 30, 'no mês de conexão, o acumulado de Tendência é o mesmo do acumulado de Realizado ali');
-  assert.deepEqual(paraPlano(resultado.slice(3, 6)), [35, 40, 45], 'dali em diante, soma só a própria contribuição mensal da Tendência em cima do acumulado herdado');
+  assert.deepEqual(paraPlano(resultado.slice(0, 3)), [null, null, null], 'até e incluindo o último mês de Realizado (índice 2), Tendência não desenha nada -- quem cobre esses meses é o Realizado');
+  assert.deepEqual(paraPlano(resultado.slice(3, 6)), [35, 40, 45], 'a partir do 1º mês futuro, soma a própria contribuição mensal da Tendência EM CIMA do acumulado real herdado (30 + 5 = 35), sem mostrar o valor herdado como um ponto próprio da Tendência');
 });
 
 test('calcularAcumuladoTendencia falls back to accumulating Tendência alone from Jan when there is no Realizado month at all', () => {

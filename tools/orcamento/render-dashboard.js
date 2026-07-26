@@ -382,18 +382,19 @@ function ultimoIndiceComDado(mensal) {
   return -1;
 }
 
-// Acumulado da série Tendência nunca recomeça do zero em Jan -- ele
-// continua exatamente de onde o acumulado de Realizado parou (mesmo ponto
-// de conexão usado no painel mensal, ver montarGrafico), somando dali em
-// diante só a própria contribuição mensal da Tendência. Antes desse mês,
-// null (nada desenhado -- quem cobre esses meses é a linha de Realizado).
-// Sem nenhum mês de Realizado (ultimoMesRealizado -1), a Tendência acumula
+// Acumulado da série Tendência nunca recomeça do zero em Jan -- a SOMA
+// interna continua exatamente de onde o acumulado de Realizado parou, pra
+// o primeiro mês futuro somar em cima do total real já reportado. O PONTO
+// de conexão em si (o último mês de Realizado) não aparece na série de
+// Tendência, só em Realizado -- um mês que já tem Realizado mostra
+// Previsto+Realizado, nunca Previsto+Realizado+Tendência (confirmado com o
+// usuário: Tendência é só a projeção dos meses AINDA sem Realizado). Sem
+// nenhum mês de Realizado (ultimoMesRealizado -1), a Tendência acumula
 // sozinha desde Jan, do jeito usual.
 function calcularAcumuladoTendencia(mensalTotal, acumuladoRealizado, ultimoMesRealizado) {
   if (ultimoMesRealizado === -1) return calcularAcumulado(mensalTotal);
   var resultado = new Array(mensalTotal.length).fill(null);
   var soma = acumuladoRealizado[ultimoMesRealizado] || 0;
-  resultado[ultimoMesRealizado] = soma;
   for (var i = ultimoMesRealizado + 1; i < mensalTotal.length; i++) {
     soma += mensalTotal[i] || 0;
     resultado[i] = soma;
@@ -764,17 +765,15 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
   });
   if (mensalPorSerie.realizado) mensalPorSerie.realizado = removerZerosFinaisNaoReportados(mensalPorSerie.realizado);
 
-  // Tendência sempre parte do último Realizado -- se as duas séries estão
-  // visíveis e a Tendência ainda não tem valor próprio nesse mês (regra "se
-  // tem R não tem T"), usa o valor de Realizado ali como ponto de conexão,
-  // pra Tendência nunca aparecer "flutuando" desconectada de onde o
-  // Realizado parou.
+  // Um mês com Realizado nunca mostra Tendência junto (confirmado com o
+  // usuário: Tendência é só a projeção dos meses AINDA sem Realizado) --
+  // painel Mensal mostra Previsto+Realizado nesses meses, Previsto+Tendência
+  // nos meses futuros, nunca as 3 juntas. ultimoMesRealizado só serve pro
+  // Acumulado saber de onde herdar a soma corrida (ver
+  // calcularAcumuladoTendencia) -- não precisa (e não deve) editar
+  // mensalPorSerie.total aqui.
   var ultimoMesRealizado = -1;
   if (mensalPorSerie.realizado) ultimoMesRealizado = ultimoIndiceComDado(mensalPorSerie.realizado);
-  if (mensalPorSerie.total && ultimoMesRealizado !== -1 &&
-      (mensalPorSerie.total[ultimoMesRealizado] === null || mensalPorSerie.total[ultimoMesRealizado] === undefined)) {
-    mensalPorSerie.total[ultimoMesRealizado] = mensalPorSerie.realizado[ultimoMesRealizado];
-  }
 
   var dadosPorSerie = seriesVisiveis.map(function (serie) {
     var mensal = mensalPorSerie[serie];
