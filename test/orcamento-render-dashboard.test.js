@@ -568,7 +568,7 @@ test('construirPainelGraficoHtml: a trailing zero artifact in Realizado (real ca
   assert.match(acumuladoMatch[0], /6\.400/, 'acumulado de julho deveria ser 5.400 (junho) + 1.000 (Tendência de julho) = 6.400, não travar em 5.400');
 });
 
-test('construirPainelGraficoHtml computes a 5ª série "Realizado + Previsto Inicial": Realizado up to the last reported month, Previsto Inicial for the rest -- real case, financeiro sem filtro fecha em ~104MM (Realizado Jan-Jun ~49.299 + Previsto Inicial Jul-Dez)', () => {
+test('construirPainelGraficoHtml computes a 5ª série "Realizado + Previsto Inicial": Realizado up to the last reported month, Previsto Inicial for the rest -- synthetic fixture (Realizado Jan-Jun @10.000/mês + Previsto Inicial Jul-Dez @12.000/mês) fecha em 132.000 (o caso real com dados de produção, confirmado separadamente, fecha em ~104MM)', () => {
   const html = renderComSenha([registroExemplo()]);
   const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
   const registro = registroExemplo({
@@ -690,7 +690,7 @@ test('"Realizado + Previsto Inicial" also works for a razão dimension (Produtiv
   const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(['realizadoPrevistoInicial']), 'produtividade');
   assert.doesNotMatch(htmlPainel, /Acumulado no ano/, 'dimensão de razão nunca mostra painel Acumulado, nem pra essa nova série');
   const pontos = (htmlPainel.match(/fill="#a78bfa"/g) || []).length;
-  assert.ok(pontos > 0, 'esperava ao menos 1 marcador roxo no painel Mensal (meses futuros com Previsto Inicial)');
+  assert.equal(pontos, 6, 'esperava exatamente 6 marcadores roxos no painel Mensal -- um por mês futuro (Jul-Dez), nenhum nos 6 meses já realizados (Jan-Jun)');
 });
 
 test('Tendência keeps correctly inheriting the real Realizado accumulated total even when "Realizado" itself is unchecked in filtro-serie (regression: before this task, unchecking Realizado made Tendência silently restart from Jan)', () => {
