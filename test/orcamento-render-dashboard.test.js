@@ -568,6 +568,46 @@ test('construirPainelGraficoHtml: a trailing zero artifact in Realizado (real ca
   assert.match(acumuladoMatch[0], /6\.400/, 'acumulado de julho deveria ser 5.400 (junho) + 1.000 (Tendência de julho) = 6.400, não travar em 5.400');
 });
 
+test('construirPainelGraficoHtml computes a 5ª série "Realizado + Previsto Inicial": Realizado up to the last reported month, Previsto Inicial for the rest -- real case, financeiro sem filtro fecha em ~104MM (Realizado Jan-Jun ~49.299 + Previsto Inicial Jul-Dez)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: Array(12).fill(5), volume: Array(12).fill(80),
+      financeiro: [10000, 10000, 10000, 10000, 10000, 10000, null, null, null, null, null, null],
+    },
+    previstoInicial: {
+      equipes: Array(12).fill(0), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(0), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: [10000, 10000, 10000, 10000, 10000, 10000, 12000, 12000, 12000, 12000, 12000, 12000],
+      financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(['realizadoPrevistoInicial']), 'financeiro');
+
+  // Mensal: Jan-Jun não desenha a nova série (mesma regra da Tendência);
+  // Jul-Dez desenha Previsto Inicial (12.000/mês).
+  const mensalMatch = htmlPainel.match(/Mensal[\s\S]*?Acumulado no ano/);
+  assert.ok(mensalMatch, 'esperava o painel Mensal no HTML');
+  assert.equal((mensalMatch[0].match(/fill="#a78bfa"/g) || []).length, 6, 'só 6 barras (Jul-Dez) na cor da nova série -- Jan-Jun não desenha nada dela');
+
+  // Acumulado: Jun = 60.000 (6 x 10.000, herdado do Realizado, não
+  // desenhado); Jul = 60.000 + 12.000 = 72.000; ... Dez = 60.000 + 6x12.000 = 132.000.
+  const acumuladoMatch = htmlPainel.match(/Acumulado no ano[\s\S]*$/);
+  assert.match(acumuladoMatch[0], /72\.000/, 'julho deveria ser 60.000 (acumulado real de junho) + 12.000 (Previsto Inicial de julho) = 72.000');
+  assert.match(acumuladoMatch[0], /132\.000/, 'dezembro deveria fechar em 60.000 + 6×12.000 = 132.000');
+});
+
+test('the new "Realizado + Previsto Inicial" série never adds a row to the Tabela -- ORDEM_SERIES (Tabela row generation) stays at exactly 4 séries', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoTabela } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoTabela([registroExemplo()]);
+  const linhasRegistro = (corpo.match(/<tr class="linha-serie[^>]*>/g) || [])
+    .filter(tr => tr.includes('data-registro-indices="0"') && !tr.includes('data-total-sup') && !tr.includes('data-total-geral'));
+  assert.equal(linhasRegistro.length, 4, 'continua 4 linhas (Previsto Inicial/Previsto/Realizado/Tendência) por registro -- a 5ª série não deve aparecer na Tabela');
+  assert.doesNotMatch(corpo, /realizadoPrevistoInicial/, 'nenhuma linha/atributo da Tabela deve referenciar a nova série');
+});
+
 test('calcularAcumuladoAposRealizado (extraído do HTML real gerado, usado tanto por Tendência quanto por Realizado+Previsto Inicial) picks up the running total exactly where Realizado\'s accumulated total left off, not from zero -- but the connection month itself stays null (só Realizado aparece nesse mês, confirmado com o usuário: um mês com Realizado nunca mostra a série futura)', () => {
   const html = renderComSenha([registroExemplo()]);
   const { calcularAcumuladoAposRealizado, calcularAcumulado } = extrairFuncoesPuras(html);

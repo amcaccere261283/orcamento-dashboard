@@ -468,13 +468,16 @@ function indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGru
 }
 
 // Mesmo cinza claro usado na linha "Previsto Inicial" da tabela (.linha-previsto-inicial),
-// pra não inventar uma cor nova pra mesma série.
-var SERIE_COR = { previstoInicial: '#8b8a82', previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f' };
+// pra não inventar uma cor nova pra mesma série. Roxo é a 5ª cor
+// categórica (só do Gráfico, ver ORDEM_SERIES_GRAFICO) -- distinta das
+// outras 4 hues (cinza/azul/verde/âmbar).
+var SERIE_COR = { previstoInicial: '#8b8a82', previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f', realizadoPrevistoInicial: '#a78bfa' };
 // Tracejado por série além da cor -- segunda camada de identidade (não só
 // hue) pra sobreviver a daltonismo/impressão P&B: previsto inicial pontilhado
 // esparso (mais discreto, é a referência de fundo), previsto sólido,
-// realizado pontilhado fino, tendência tracejado longo.
-var SERIE_TRACEJADO = { previstoInicial: '2,4', previsto: '', realizado: '1,5', total: '9,5' };
+// realizado pontilhado fino, tendência tracejado longo, realizado+previsto
+// inicial dash-dot (distinto dos outros 4 traços).
+var SERIE_TRACEJADO = { previstoInicial: '2,4', previsto: '', realizado: '1,5', total: '9,5', realizadoPrevistoInicial: '6,3,1,3' };
 var DIMENSOES_RAZAO = ['produtividade', 'ticketMedio'];
 var MESES_ABREVIADOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -759,32 +762,46 @@ function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
 // próprio par de painéis, "sobrepostos" na página em vez de combinados num
 // único número -- o mesmo princípio já usado nas linhas da tabela.
 function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
-  var seriesVisiveis = ORDEM_SERIES.filter(function (s) { return !filtroExclui(filtroSerie, s); });
+  var seriesVisiveis = ORDEM_SERIES_GRAFICO.filter(function (s) { return !filtroExclui(filtroSerie, s); });
   var ehRazao = DIMENSOES_RAZAO.indexOf(dimensao) !== -1;
 
-  var mensalPorSerie = {};
-  seriesVisiveis.forEach(function (serie) {
+  function mensalBruto(serie) {
     var valoresLista = indices.map(function (idx) { return registros[idx][serie]; });
-    mensalPorSerie[serie] = calcularMensal(valoresLista, serie, dimensao) || new Array(12).fill(null);
-  });
-  if (mensalPorSerie.realizado) mensalPorSerie.realizado = removerZerosFinaisNaoReportados(mensalPorSerie.realizado);
+    return calcularMensal(valoresLista, serie, dimensao) || new Array(12).fill(null);
+  }
 
-  // Um mês com Realizado nunca mostra Tendência junto (confirmado com o
-  // usuário: Tendência é só a projeção dos meses AINDA sem Realizado) --
-  // painel Mensal mostra Previsto+Realizado nesses meses, Previsto+Tendência
-  // nos meses futuros, nunca as 3 juntas. ultimoMesRealizado só serve pro
-  // Acumulado saber de onde herdar a soma corrida (ver
-  // calcularAcumuladoAposRealizado) -- não precisa (e não deve) editar
-  // mensalPorSerie.total aqui.
-  var ultimoMesRealizado = -1;
-  if (mensalPorSerie.realizado) ultimoMesRealizado = ultimoIndiceComDado(mensalPorSerie.realizado);
+  // Realizado e Previsto Inicial SEMPRE calculados, mesmo se não
+  // estiverem marcados no filtro de série -- Tendência e "Realizado +
+  // Previsto Inicial" dependem dos dois pra achar onde o Realizado parou
+  // (ultimoMesRealizado) e montar a parte futura, mesmo quando nenhum dos
+  // dois está marcado pra aparecer no gráfico (efeito colateral bom: antes
+  // dessa mudança, desmarcar "Realizado" no filtro fazia a Tendência
+  // "esquecer" o total real acumulado e recomeçar sozinha do zero -- não
+  // acontece mais).
+  var mensalRealizado = removerZerosFinaisNaoReportados(mensalBruto('realizado'));
+  var mensalPrevistoInicial = mensalBruto('previstoInicial');
+  var ultimoMesRealizado = ultimoIndiceComDado(mensalRealizado);
+  var acumuladoRealizado = calcularAcumulado(mensalRealizado);
+
+  var mensalPorSerie = { realizado: mensalRealizado, previstoInicial: mensalPrevistoInicial };
+  seriesVisiveis.forEach(function (serie) {
+    if (mensalPorSerie[serie] || serie === 'realizadoPrevistoInicial') return;
+    mensalPorSerie[serie] = mensalBruto(serie);
+  });
+  // "Realizado + Previsto Inicial": null em todo mês que já tem Realizado
+  // (mesma regra da Tendência -- um mês com Realizado nunca mostra outra
+  // série de projeção junto), Previsto Inicial do próprio mês dali em
+  // diante (não Previsto atual, não a Tendência da MATRIZ).
+  mensalPorSerie.realizadoPrevistoInicial = mensalPrevistoInicial.map(function (v, i) {
+    return i <= ultimoMesRealizado ? null : v;
+  });
 
   var dadosPorSerie = seriesVisiveis.map(function (serie) {
     var mensal = mensalPorSerie[serie];
     var acumulado = null;
     if (!ehRazao) {
-      if (serie === 'total') {
-        acumulado = calcularAcumuladoAposRealizado(mensal, calcularAcumulado(mensalPorSerie.realizado || []), ultimoMesRealizado);
+      if (serie === 'total' || serie === 'realizadoPrevistoInicial') {
+        acumulado = calcularAcumuladoAposRealizado(mensal, acumuladoRealizado, ultimoMesRealizado);
       } else if (serie === 'realizado') {
         acumulado = cortarAcumuladoNoUltimoDado(calcularAcumulado(mensal), mensal);
       } else {
@@ -1018,8 +1035,14 @@ function categoriaTipologia(tipologia) {
   return 'sondagemConvencional';
 }
 
-var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência' };
+var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência', realizadoPrevistoInicial: 'Realizado + Previsto Inicial' };
+// ORDEM_SERIES gera as linhas por registro da TABELA (renderBlocosDimensao)
+// -- fica só com as 4 séries originais de propósito. ORDEM_SERIES_GRAFICO
+// é a versão usada SÓ pelo Gráfico (construirPainelGraficoHtml), com a 5ª
+// série "Realizado + Previsto Inicial" -- confirmado com o usuário que
+// essa série não faz sentido como uma 5ª linha da Tabela.
 var ORDEM_SERIES = ['previstoInicial', 'previsto', 'realizado', 'total'];
+var ORDEM_SERIES_GRAFICO = ORDEM_SERIES.concat(['realizadoPrevistoInicial']);
 var CLASSE_SERIE = { previstoInicial: 'previsto-inicial', previsto: 'previsto', realizado: 'realizado', total: 'total' };
 // Estado inicial do filtro de série: Previsto Inicial começa DESMARCADO (é
 // a referência de fundo, não o dado do dia a dia) -- as outras 3 começam
@@ -1267,6 +1290,10 @@ var FILTROS_CONFIG = [
     { valor: 'previsto', rotulo: 'Previsto' },
     { valor: 'realizado', rotulo: 'Realizado' },
     { valor: 'total', rotulo: 'Tendência' },
+    // Só existe no Gráfico (ORDEM_SERIES_GRAFICO) -- nenhuma <tr> da
+    // Tabela tem data-serie="realizadoPrevistoInicial", então marcar essa
+    // opção aqui não tem efeito na Tabela, só filtra o Gráfico.
+    { valor: 'realizadoPrevistoInicial', rotulo: 'Realizado + Previsto Inicial' },
   ] },
   // Diferente dos outros -- não é um FILTRO que estreita quais linhas
   // aparecem, decide qual(is) valor(es) elas mostram, então nunca pode
