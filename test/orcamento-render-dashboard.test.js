@@ -627,6 +627,91 @@ test('calcularAcumuladoAposRealizado falls back to accumulating the série futur
   assert.deepEqual(paraPlano(resultado), [5, 10, 15]);
 });
 
+test('"Realizado + Previsto Inicial" falls back to Previsto Inicial alone for the whole year when there is no Realizado at all in the recorte', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: Array(12).fill(null), volume: Array(12).fill(null),
+      financeiro: Array(12).fill(null),
+    },
+    previstoInicial: {
+      equipes: Array(12).fill(0), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(0), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(5000),
+      financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(['realizadoPrevistoInicial']), 'financeiro');
+  const mensalMatch = htmlPainel.match(/Mensal[\s\S]*?Acumulado no ano/);
+  assert.equal((mensalMatch[0].match(/fill="#a78bfa"/g) || []).length, 12, 'sem Realizado nenhum, todos os 12 meses desenham a nova série (Previsto Inicial puro)');
+  const acumuladoMatch = htmlPainel.match(/Acumulado no ano[\s\S]*$/);
+  assert.match(acumuladoMatch[0], /60\.000/, 'dezembro deveria fechar em 12 × 5.000 = 60.000, acumulando Previsto Inicial sozinho desde Jan');
+});
+
+test('"Realizado + Previsto Inicial" draws nothing when the entire year already has Realizado (no future month left to substitute)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: Array(12).fill(5), volume: Array(12).fill(80),
+      financeiro: Array(12).fill(1000),
+    },
+    previstoInicial: {
+      equipes: Array(12).fill(0), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(0), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(5000),
+      financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(['realizadoPrevistoInicial']), 'financeiro');
+  const mensalMatch = htmlPainel.match(/Mensal[\s\S]*?Acumulado no ano/);
+  assert.equal((mensalMatch[0].match(/fill="#a78bfa"/g) || []).length, 0, 'ano inteiro já realizado -- nada da nova série aparece no Mensal');
+  const acumuladoMatch = htmlPainel.match(/Acumulado no ano[\s\S]*$/);
+  assert.doesNotMatch(acumuladoMatch[0], /stroke="#a78bfa"/, 'nem uma polyline da nova série deveria existir no Acumulado');
+});
+
+test('"Realizado + Previsto Inicial" also works for a razão dimension (Produtividade) -- só painel Mensal (sem Acumulado, mesma regra já existente pras outras 4 séries), com a mesma máscara (null até o corte, razão de Previsto Inicial dali em diante)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: [4, 4, 4, 4, 4, 4, null, null, null, null, null, null],
+      volume: [80, 80, 80, 80, 80, 80, null, null, null, null, null, null],
+      financeiro: Array(12).fill(800),
+    },
+    previstoInicial: {
+      equipes: Array(12).fill(5), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(100), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(0),
+      financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(['realizadoPrevistoInicial']), 'produtividade');
+  assert.doesNotMatch(htmlPainel, /Acumulado no ano/, 'dimensão de razão nunca mostra painel Acumulado, nem pra essa nova série');
+  const pontos = (htmlPainel.match(/fill="#a78bfa"/g) || []).length;
+  assert.ok(pontos > 0, 'esperava ao menos 1 marcador roxo no painel Mensal (meses futuros com Previsto Inicial)');
+});
+
+test('Tendência keeps correctly inheriting the real Realizado accumulated total even when "Realizado" itself is unchecked in filtro-serie (regression: before this task, unchecking Realizado made Tendência silently restart from Jan)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: Array(12).fill(5), volume: Array(12).fill(80),
+      financeiro: [10000, 10000, 10000, 10000, 10000, 10000, null, null, null, null, null, null],
+    },
+    total: {
+      equipes: Array(12).fill(0), volume: Array(12).fill(0),
+      financeiro: [null, null, null, null, null, null, 8000, 8000, 8000, 8000, 8000, 8000],
+    },
+  });
+  // "Realizado" NÃO está no filtro -- só Tendência.
+  const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(['total']), 'financeiro');
+  const acumuladoMatch = htmlPainel.match(/Acumulado no ano[\s\S]*$/);
+  assert.match(acumuladoMatch[0], /68\.000/, 'julho deveria ser 60.000 (Realizado acumulado até junho, mesmo não aparecendo no gráfico) + 8.000 (Tendência de julho) = 68.000 -- não 8.000 (o que aconteceria se Tendência tivesse esquecido o Realizado)');
+});
+
 test('indicesFiltrados (extraído do HTML real gerado) returns every index when no filter is active', () => {
   const html = renderComSenha([registroExemplo()]);
   const { indicesFiltrados } = extrairFuncoesPuras(html);
