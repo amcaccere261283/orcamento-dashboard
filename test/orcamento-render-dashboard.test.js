@@ -672,6 +672,79 @@ test('"Realizado + Previsto Inicial" draws nothing when the entire year already 
   assert.doesNotMatch(acumuladoMatch[0], /stroke="#a78bfa"/, 'nem uma polyline da nova série deveria existir no Acumulado');
 });
 
+test('construirPainelGraficoHtml: the Acumulado panel has NO gap between Realizado and the future séries (Tendência, Realizado+Previsto Inicial) -- their polylines include the connection month, drawn in their own color, with no duplicate marker there', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: Array(12).fill(5), volume: Array(12).fill(80),
+      financeiro: [10000, 10000, 10000, 10000, 10000, 10000, null, null, null, null, null, null],
+    },
+    total: {
+      equipes: Array(12).fill(0), volume: Array(12).fill(0),
+      financeiro: [null, null, null, null, null, null, 9000, 9000, 9000, 9000, 9000, 9000],
+    },
+    previstoInicial: {
+      equipes: Array(12).fill(0), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(0), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: [10000, 10000, 10000, 10000, 10000, 10000, 12000, 12000, 12000, 12000, 12000, 12000],
+      financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(['total', 'realizadoPrevistoInicial']), 'financeiro');
+  const acumuladoMatch = htmlPainel.match(/Acumulado no ano[\s\S]*$/);
+  assert.ok(acumuladoMatch, 'esperava o painel Acumulado');
+
+  // Tendência (âmbar) e Realizado+Previsto Inicial (roxo): cada polyline
+  // liga o mês de conexão (junho, valor herdado 60.000) aos meses
+  // seguintes -- pelo menos 7 pontos (Jun..Dez).
+  const polylineTendencia = acumuladoMatch[0].match(/<polyline[^>]*points="([^"]*)"[^>]*stroke="#f6b53f"/);
+  assert.ok(polylineTendencia, 'esperava a polyline da Tendência fechando o hiato');
+  assert.ok(polylineTendencia[1].trim().split(' ').length >= 7, 'a polyline da Tendência deve incluir o mês de conexão + os 6 meses futuros');
+
+  const polylineHibrida = acumuladoMatch[0].match(/<polyline[^>]*points="([^"]*)"[^>]*stroke="#a78bfa"/);
+  assert.ok(polylineHibrida, 'esperava a polyline de Realizado+Previsto Inicial fechando o hiato');
+  assert.ok(polylineHibrida[1].trim().split(' ').length >= 7, 'a polyline de Realizado+Previsto Inicial deve incluir o mês de conexão + os 6 meses futuros');
+
+  // Nenhum marcador âmbar/roxo no mês de conexão -- só o verde do
+  // Realizado ali. Conta o TOTAL de marcadores de cada cor: Tendência e
+  // Realizado+Previsto Inicial só têm valor próprio Jul-Dez (6 meses cada),
+  // então só podem ter 6 marcadores cada, nunca 7 (o que aconteceria se o
+  // mês de conexão também desenhasse um).
+  const marcadoresTendencia = (acumuladoMatch[0].match(/<circle class="grafico-marcador"[^>]*fill="#f6b53f"/g) || []).length;
+  assert.equal(marcadoresTendencia, 6, 'Tendência só desenha marcador nos 6 meses onde tem valor próprio (Jul-Dez), nunca no mês de conexão');
+  const marcadoresHibrida = (acumuladoMatch[0].match(/<circle class="grafico-marcador"[^>]*fill="#a78bfa"/g) || []).length;
+  assert.equal(marcadoresHibrida, 6, 'Realizado+Previsto Inicial só desenha marcador nos 6 meses onde tem valor próprio (Jul-Dez), nunca no mês de conexão');
+});
+
+test('construirPainelGraficoHtml: the Mensal BAR panel (soma dimension) still shows NO bar for the future séries at the connection month -- the connector patch never reaches the bar-drawing path', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: {
+      equipes: Array(12).fill(5), volume: Array(12).fill(80),
+      financeiro: [10000, 10000, 10000, 10000, 10000, 10000, null, null, null, null, null, null],
+    },
+    total: {
+      equipes: Array(12).fill(0), volume: Array(12).fill(0),
+      financeiro: [null, null, null, null, null, null, 9000, 9000, 9000, 9000, 9000, 9000],
+    },
+    previstoInicial: {
+      equipes: Array(12).fill(0), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(0), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: [10000, 10000, 10000, 10000, 10000, 10000, 12000, 12000, 12000, 12000, 12000, 12000],
+      financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(['total', 'realizadoPrevistoInicial']), 'financeiro');
+  const mensalMatch = htmlPainel.match(/Mensal[\s\S]*?Acumulado no ano/);
+  assert.ok(mensalMatch, 'esperava o painel Mensal');
+  // 6 barras âmbar (Tendência) + 6 roxas (Realizado+Previsto Inicial) --
+  // nenhuma das duas no mês de conexão (junho), exatamente como antes.
+  assert.equal((mensalMatch[0].match(/fill="#f6b53f"/g) || []).length, 6, 'Tendência continua sem barra no mês de conexão');
+  assert.equal((mensalMatch[0].match(/fill="#a78bfa"/g) || []).length, 6, 'Realizado+Previsto Inicial continua sem barra no mês de conexão');
+});
+
 test('"Realizado + Previsto Inicial" also works for a razão dimension (Produtividade) -- só painel Mensal (sem Acumulado, mesma regra já existente pras outras 4 séries), com a mesma máscara (null até o corte, razão de Previsto Inicial dali em diante)', () => {
   const html = renderComSenha([registroExemplo()]);
   const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);

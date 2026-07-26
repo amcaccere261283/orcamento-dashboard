@@ -793,18 +793,34 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
   var ultimoMesRealizado = ultimoIndiceComDado(mensalRealizado);
   var acumuladoRealizado = calcularAcumulado(mensalRealizado);
 
+  // Só pro painel Mensal em LINHA (razão -- Produtividade/Ticket Médio):
+  // injeta o valor do próprio Realizado no mês de conexão pra série
+  // futura ter um ponto ali (fecha o hiato dessa linha também) -- nunca
+  // sobrescreve um valor que já exista (a MATRIZ pode, em tese, ter o
+  // próprio T ali) e NUNCA roda pro painel Mensal em BARRA (soma), que
+  // continua sem nenhum ponto/barra da série futura no mês de conexão.
+  function comConectorSeRazao(mensal) {
+    if (!ehRazao || ultimoMesRealizado === -1) return mensal;
+    var resultado = mensal.slice();
+    if (resultado[ultimoMesRealizado] === null || resultado[ultimoMesRealizado] === undefined) {
+      resultado[ultimoMesRealizado] = mensalRealizado[ultimoMesRealizado];
+    }
+    return resultado;
+  }
+
   var mensalPorSerie = { realizado: mensalRealizado, previstoInicial: mensalPrevistoInicial };
   seriesVisiveis.forEach(function (serie) {
     if (mensalPorSerie[serie] || serie === 'realizadoPrevistoInicial') return;
     mensalPorSerie[serie] = mensalBruto(serie);
   });
+  if (mensalPorSerie.total) mensalPorSerie.total = comConectorSeRazao(mensalPorSerie.total);
   // "Realizado + Previsto Inicial": null em todo mês que já tem Realizado
   // (mesma regra da Tendência -- um mês com Realizado nunca mostra outra
   // série de projeção junto), Previsto Inicial do próprio mês dali em
   // diante (não Previsto atual, não a Tendência da MATRIZ).
-  mensalPorSerie.realizadoPrevistoInicial = mensalPrevistoInicial.map(function (v, i) {
+  mensalPorSerie.realizadoPrevistoInicial = comConectorSeRazao(mensalPrevistoInicial.map(function (v, i) {
     return i <= ultimoMesRealizado ? null : v;
-  });
+  }));
 
   var dadosPorSerie = seriesVisiveis.map(function (serie) {
     var mensal = mensalPorSerie[serie];
@@ -818,7 +834,15 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
         acumulado = calcularAcumulado(mensal);
       }
     }
-    return { serie: serie, mensal: mensal, acumulado: acumulado };
+    // indiceConector: só pras séries "pós-Realizado", e só quando existe
+    // de fato um mês de Realizado pra herdar (ultimoMesRealizado !== -1)
+    // -- ver construirLinhasSvg. Vale tanto pro painel Mensal em linha
+    // (razão) quanto pro Acumulado; o painel Mensal em BARRA (soma) não
+    // usa esse campo (construirColunasSvg não olha pra ele).
+    var indiceConector = (serie === 'total' || serie === 'realizadoPrevistoInicial') && ultimoMesRealizado !== -1
+      ? ultimoMesRealizado
+      : null;
+    return { serie: serie, mensal: mensal, acumulado: acumulado, indiceConector: indiceConector };
   });
 
   var rotuloDimensao = DIMENSOES_ROTULO[dimensao] || '';
