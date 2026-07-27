@@ -403,8 +403,8 @@ function calcularCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx) 
 
 var AGRUPAR_POR_ROTULO = { sup: 'SUP', tipologia: 'Tipologia', grupo: 'Grupo', categoria: 'Categoria', origem: 'Origem' };
 
-function renderCabecalhoAlertas(agruparPorRotulo) {
-  return '<tr><th>' + escapeHtml(agruparPorRotulo) + '</th><th>Tomador</th><th>Combinação</th><th>Referência</th><th>Pesquisado</th><th>Desvio</th><th>Status</th></tr>';
+function renderCabecalhoAlertas(agruparPorRotulo, dimensaoRotulo) {
+  return '<tr><th>' + escapeHtml(agruparPorRotulo) + '</th><th>Tomador</th><th>Combinação</th><th>Referência (' + escapeHtml(dimensaoRotulo) + ')</th><th>Pesquisado (' + escapeHtml(dimensaoRotulo) + ')</th><th>Desvio</th><th>Status</th></tr>';
 }
 
 // Tomador do grupo -- só é um valor único de verdade quando agruparPor é
@@ -1003,7 +1003,7 @@ function recalcularAlertas() {
   var baselines = emOrdemCanonica(BASELINE_ORDEM, filtrosAlertas.baseline);
   var periodos = emOrdemCanonica(PERIODO_ORDEM, filtrosAlertas.periodo);
   var colunas = colunasAlertas(numericos, baselines, periodos);
-  document.getElementById('cabecalho-alertas').innerHTML = renderCabecalhoAlertas(AGRUPAR_POR_ROTULO[agruparPor]);
+  document.getElementById('cabecalho-alertas').innerHTML = renderCabecalhoAlertas(AGRUPAR_POR_ROTULO[agruparPor], DIMENSOES_ROTULO[dimensao]);
   document.getElementById('corpo-alertas').innerHTML = renderCorpoAlertas(
     window.__REGISTROS__, indices, agruparPor, dimensao, numericos, baselines, periodos, window.__VIGENTE_IDX__,
     filtrosAlertas.status

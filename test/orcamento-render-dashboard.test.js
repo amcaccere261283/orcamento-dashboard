@@ -1607,8 +1607,16 @@ test('calcularCelulaAlerta divides the bucketed numérico value by the bucketed 
 test('renderCabecalhoAlertas has 7 fixed columns regardless of how many combinações are selected: [agrupar por] / Tomador / Combinação / Referência / Pesquisado / Desvio / Status', () => {
   const html = renderComSenha([registroExemplo()]);
   const { renderCabecalhoAlertas } = extrairFuncoesPuras(html);
-  const cabecalho = renderCabecalhoAlertas('SUP');
-  assert.match(cabecalho, /<tr><th>SUP<\/th><th>Tomador<\/th><th>Combinação<\/th><th>Referência<\/th><th>Pesquisado<\/th><th>Desvio<\/th><th>Status<\/th><\/tr>/);
+  const cabecalho = renderCabecalhoAlertas('SUP', 'Financeiro');
+  assert.match(cabecalho, /<tr><th>SUP<\/th><th>Tomador<\/th><th>Combinação<\/th><th>Referência \(Financeiro\)<\/th><th>Pesquisado \(Financeiro\)<\/th><th>Desvio<\/th><th>Status<\/th><\/tr>/);
+});
+
+test('renderCabecalhoAlertas includes the dimensão label in the Referência/Pesquisado column headers -- the tab lost its own on-screen dimension indicator when its selector was removed, so the header must carry it now', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCabecalhoAlertas } = extrairFuncoesPuras(html);
+  const cabecalho = renderCabecalhoAlertas('SUP', 'Financeiro');
+  assert.match(cabecalho, /<th>Referência \(Financeiro\)<\/th>/);
+  assert.match(cabecalho, /<th>Pesquisado \(Financeiro\)<\/th>/);
 });
 
 test('tomadorDoGrupo returns the single tomador shared by every registro in the group', () => {
