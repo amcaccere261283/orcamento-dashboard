@@ -178,7 +178,8 @@ function extrairFuncoesPuras(html) {
       ' this.colunasAlertas = colunasAlertas; this.calcularCelulaAlerta = calcularCelulaAlerta;' +
       ' this.renderCabecalhoAlertas = renderCabecalhoAlertas; this.renderCorpoAlertas = renderCorpoAlertas;' +
       ' this.aplicarSelecaoExclusiva = aplicarSelecaoExclusiva;' +
-      ' this.normalizarBusca = normalizarBusca;',
+      ' this.normalizarBusca = normalizarBusca;' +
+      ' this.preencherLinha = preencherLinha;',
     sandbox
   );
   return {
@@ -211,6 +212,7 @@ function extrairFuncoesPuras(html) {
     renderCabecalhoAlertas: sandbox.renderCabecalhoAlertas,
     renderCorpoAlertas: sandbox.renderCorpoAlertas,
     aplicarSelecaoExclusiva: sandbox.aplicarSelecaoExclusiva,
+    preencherLinha: sandbox.preencherLinha,
   };
 }
 
@@ -402,6 +404,42 @@ test('calcularMensal, agregando VÁRIAS tipologias (caso da linha de total por S
   assert.ok(Math.abs(produtividadeAgregada[0] - 150 / (7 * 15)) < 1e-9);
   assert.notEqual(produtividadeAgregada[0], 1.5);
   assert.notEqual(produtividadeAgregada[0], 9);
+});
+
+// Fabrica um <tr> falso o bastante pra preencherLinha (só usa
+// querySelectorAll('.celula-mes') e querySelector('.celula-total-linha')) --
+// sem DOM real, só os 2 métodos que a função de fato chama.
+function criarLinhaFake(nMeses) {
+  const celulas = Array.from({ length: nMeses }, () => ({ textContent: '' }));
+  const celulaTotal = { textContent: '' };
+  return {
+    celulas, celulaTotal,
+    querySelectorAll: sel => (sel === '.celula-mes' ? celulas : []),
+    querySelector: sel => (sel === '.celula-total-linha' ? celulaTotal : null),
+  };
+}
+
+test('preencherLinha (extraído do HTML real gerado) shows produtividade with 2 decimal places, in every monthly cell and the yearly total -- explicit user request, unlike every other dimension', () => {
+  const registro = registroExemplo();
+  const html = renderComSenha([registro]);
+  const { preencherLinha } = extrairFuncoesPuras(html);
+  const linha = criarLinhaFake(12);
+  preencherLinha(linha, [registro.previsto], 'previsto', 'produtividade');
+  // registro.previsto.equipesResumo.prod = 1.5 -- toLocaleString pt-BR omite
+  // o zero à direita ("1,5"), mas a rodada em 2 casas (não 0) é o que importa.
+  assert.equal(linha.celulas[0].textContent, '1,5');
+  assert.equal(linha.celulas[6].textContent, '1,5');
+  assert.equal(linha.celulaTotal.textContent, '1,5');
+});
+
+test('preencherLinha keeps every OTHER dimension a whole number (0 casas decimais) -- produtividade is the only exception to the "tabela principal sempre inteira" rule', () => {
+  const registro = registroExemplo();
+  const html = renderComSenha([registro]);
+  const { preencherLinha } = extrairFuncoesPuras(html);
+  const linha = criarLinhaFake(12);
+  preencherLinha(linha, [registro.previsto], 'previsto', 'financeiro');
+  assert.equal(linha.celulas[0].textContent, '1.000');
+  assert.equal(linha.celulaTotal.textContent, '12.000');
 });
 
 test('calcularMensal, aggregating multiple tipologias, sums whatever contributors DO have data for a month (does not zero out just because one contributor is still blank that month) -- but stays null when EVERY contributor is blank', () => {
@@ -1431,6 +1469,26 @@ test('renderCorpoAlertas renders Referência (baseline absoluto) e Pesquisado (n
   assert.match(corpo, /<td class="num">110%<\/td>/, 'Desvio (110%, fronteira inclusiva do lado verde)');
   assert.match(corpo, /<span class="status-circulo" style="background:#128A3E"><\/span>Dentro da meta/);
   assert.doesNotMatch(corpo, /style="background:[^"]*"[^>]*>\s*\d+%/, 'a % do Desvio nunca deve ter fundo colorido -- só o círculo de Status carrega cor');
+});
+
+test('renderCorpoAlertas shows Referência/Pesquisado with 2 decimal places for the produtividade dimension -- explicit user request, unlike every other dimension (financeiro above), which shows whole numbers', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoAlertas } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    previsto: {
+      equipes: Array(12).fill(5), equipesResumo: { pico: 0, media: 0, prod: 2.5, dias: 0 },
+      volume: Array(12).fill(100), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(1000), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+    realizado: {
+      equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(800), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
+  });
+  const corpo = renderCorpoAlertas([registro], [0], 'sup', 'produtividade', ['realizado'], ['previsto'], ['totalAno'], 5);
+  assert.match(corpo, /<td class="num">2,5<\/td>/, 'Referência (Previsto, premissa) em 2 casas -- toLocaleString omite o zero à direita');
+  assert.match(corpo, /<td class="num">0,73<\/td>/, 'Pesquisado (Realizado, 960÷1320 arredondado) em 2 casas, não "1" ou "3"');
 });
 
 test('renderCorpoAlertas shows Desvio "—" and the cinza "Sem dado" status when the baseline bucket is a real zero (not null) -- but Referência/Pesquisado still show their real (non-"—") values, since only the RATIO is undefined, not the underlying data', () => {

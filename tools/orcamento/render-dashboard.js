@@ -339,8 +339,11 @@ function renderLinhaAlerta(rotuloGrupo, registros, indices, coluna, dimensao, vi
   var classe = classificarSemaforo(celula.desvio);
   if (statusFiltro && statusFiltro.size > 0 && !statusFiltro.has(classe.indicador)) return '';
   var desvioTexto = celula.desvio === null ? '—' : Math.round(celula.desvio * 100) + '%';
-  var referencia = formatarNumero(celula.denominador, 0);
-  var pesquisado = formatarNumero(celula.numerador, 0);
+  // Produtividade sempre em 2 casas decimais (pedido explícito), igual à
+  // tabela principal (ver preencherLinha) -- resto das dimensões continua inteiro.
+  var casasDecimaisAlerta = dimensao === 'produtividade' ? 2 : 0;
+  var referencia = formatarNumero(celula.denominador, casasDecimaisAlerta);
+  var pesquisado = formatarNumero(celula.numerador, casasDecimaisAlerta);
   var busca = normalizarBusca(rotuloGrupo + ' ' + coluna.rotulo);
   return '<tr data-search="' + escapeHtml(busca) + '">' +
     '<td>' + escapeHtml(rotuloGrupo) + '</td>' +
@@ -955,8 +958,10 @@ function preencherLinha(linha, valoresLista, serie, dimensao) {
   // qualquer dimensão -- diferente do gráfico, que continua com 2 casas
   // pra Financeiro/Volume/Produtividade/Ticket médio (só Equipes já tinha 0
   // lá, por não existir "meia equipe" -- na tabela isso agora vale igual
-  // pra todas).
-  var casasDecimais = 0;
+  // pra todas). Produtividade é a única exceção (pedido explícito): sempre
+  // 2 casas decimais, aqui e em qualquer outro lugar que mostre esse
+  // número (ver também renderLinhaAlerta).
+  var casasDecimais = dimensao === 'produtividade' ? 2 : 0;
   var mensal = calcularMensal(valoresLista, serie, dimensao);
   var celulasMes = linha.querySelectorAll('.celula-mes');
   celulasMes.forEach(function (celula, idx) {
