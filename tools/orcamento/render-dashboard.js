@@ -988,7 +988,7 @@ function recalcularAlertas() {
     filtrosSelecionados.grupo, filtrosSelecionados.sup, filtrosSelecionados.origem
   );
   var agruparPor = filtrosAlertas.agruparPor.values().next().value;
-  var dimensao = filtrosAlertas.dimensao.values().next().value;
+  var dimensao = dimensoesEmOrdem(filtrosSelecionados.dimensao)[0];
   var numericos = emOrdemCanonica(NUMERICO_ORDEM, filtrosAlertas.numerico);
   var baselines = emOrdemCanonica(BASELINE_ORDEM, filtrosAlertas.baseline);
   var periodos = emOrdemCanonica(PERIODO_ORDEM, filtrosAlertas.periodo);
@@ -1453,7 +1453,6 @@ var FILTROS_ALERTAS_CONFIG = [
     { valor: 'categoria', rotulo: 'Categoria' },
     { valor: 'origem', rotulo: 'Origem' },
   ] },
-  { id: 'filtro-alertas-dimensao', chave: 'dimensao', rotuloPadrao: 'Dimensão', exclusivo: true, opcoesFixas: DIMENSOES_CONFIG },
   { id: 'filtro-alertas-numerico', chave: 'numerico', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: [
     { valor: 'realizado', rotulo: 'Realizado' },
     { valor: 'total', rotulo: 'Tendência' },
@@ -1479,7 +1478,6 @@ var FILTROS_ALERTAS_CONFIG = [
 var filtrosAlertas = {};
 FILTROS_ALERTAS_CONFIG.forEach(function (cfg) { filtrosAlertas[cfg.chave] = new Set(); });
 filtrosAlertas.agruparPor.add('sup');
-filtrosAlertas.dimensao.add('financeiro');
 filtrosAlertas.numerico.add('realizado');
 filtrosAlertas.numerico.add('total');
 filtrosAlertas.baseline.add('previsto');
@@ -2427,7 +2425,6 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
       <div class="filtros filtros-alertas">
         <div class="filtros-selecao">
           <div class="filtro-multi" id="filtro-alertas-agrupar-por"><button type="button" class="filtro-multi-trigger">SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-          <div class="filtro-multi" id="filtro-alertas-dimensao"><button type="button" class="filtro-multi-trigger">Financeiro<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
           <div class="filtro-multi" id="filtro-alertas-numerico"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
           <div class="filtro-multi" id="filtro-alertas-baseline"><button type="button" class="filtro-multi-trigger">Previsto<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
           <div class="filtro-multi" id="filtro-alertas-periodo"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>

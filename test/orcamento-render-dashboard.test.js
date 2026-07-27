@@ -1746,18 +1746,26 @@ test('renderCorpoAlertas gives every row a data-search attribute (normalized: lo
   assert.match(corpo, /<tr data-search="sup-impar via araucaria s\.a realizado [^"]*previsto[^"]*total ano"/);
 });
 
-test('renderDashboard includes the Alertas tab button, the 5 Alertas selector containers (agrupar-por/dimensao/numerico/baseline/periodo), and the empty alertas table shell', () => {
+test('renderDashboard includes the Alertas tab button, the 4 Alertas selector containers (agrupar-por/numerico/baseline/periodo -- no dimensao selector of its own, ver próximo teste), and the empty alertas table shell', () => {
   const html = renderComSenha([registroExemplo()]);
   assert.match(html, /<button id="aba-alertas" type="button"><svg[\s\S]*?<\/svg>Alertas<\/button>/);
   assert.match(html, /<div id="secao-alertas" style="display:none">/);
   assert.match(html, /<div class="filtro-multi" id="filtro-alertas-agrupar-por">/);
-  assert.match(html, /<div class="filtro-multi" id="filtro-alertas-dimensao">/);
+  assert.doesNotMatch(html, /id="filtro-alertas-dimensao"/, 'Alertas não tem mais seletor de Dimensão próprio -- segue a barra de cima');
   assert.match(html, /<div class="filtro-multi" id="filtro-alertas-numerico">/);
   assert.match(html, /<div class="filtro-multi" id="filtro-alertas-baseline">/);
   assert.match(html, /<div class="filtro-multi" id="filtro-alertas-periodo">/);
   assert.match(html, /<table id="tabela-alertas">/);
   assert.match(html, /<thead id="cabecalho-alertas"><\/thead>/);
   assert.match(html, /<tbody id="corpo-alertas"><\/tbody>/);
+});
+
+test('recalcularAlertas deriva a dimensão da barra de cima (dimensoesEmOrdem(filtrosSelecionados.dimensao)[0]), não de um filtro próprio -- confirma via código-fonte que filtrosAlertas.dimensao não existe mais em lugar nenhum', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptTabela = scripts[3][1];
+  assert.match(scriptTabela, /var dimensao = dimensoesEmOrdem\(filtrosSelecionados\.dimensao\)\[0\];/);
+  assert.doesNotMatch(scriptTabela, /filtrosAlertas\.dimensao/, 'filtrosAlertas não deve ter mais uma chave "dimensao" -- removida junto com o seletor');
 });
 
 test('renderDashboard\'s Alertas table shell starts empty (thead/tbody with no rows) -- confirmed above already; this test instead locks in that recalcularAlertas exists and is reachable from the client script, by checking montarDashboard wires the 3rd tab click handler', () => {
