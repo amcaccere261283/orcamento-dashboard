@@ -1436,6 +1436,25 @@ test('fecharTendenciaVigente: registro sem série total (registro.total null) pa
   assert.equal(fechado.total, null);
 });
 
+test('fecharTendenciaVigente: um zero artificial de "mês ainda não reportado" em Realizado (mesmo artefato de removerZerosFinaisNaoReportados) não deve sobrescrever a projeção real da linha T nesse mês', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { fecharTendenciaVigente } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: { equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: [700, 700, 700, 700, 0, 0, 0, null, null, null, null, null], financeiroResumo: { total: 0, totalInicial: 0 } },
+    total: { equipes: Array(12).fill(4.5), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(90), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: [0, 0, 0, 0, 500, 600, 200, 900, 900, 900, 900, 900], financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  // meses 4,5,6 (Mai,Jun,Jul=vigente) são 0 no Realizado -- são o "ainda não
+  // reportado" artificial, não fato real de R$0 -- devem cair de volta pra
+  // linha T real (500,600) nos meses passados 4-5, e o mês vigente (6) deve
+  // usar o Realizado real anterior (700, do mês 3) só que... na verdade o
+  // Realizado do próprio mês 6 é 0 (artificial), então cai pra usar só a
+  // projeção da própria linha T (200) no fechamento do mês vigente.
+  const [fechado] = fecharTendenciaVigente([registro], 6);
+  assert.equal(fechado.total.financeiro[4], 500, 'mês 4: Realizado tem 0 artificial -- usa a projeção real da linha T (500), não sobrescreve com 0');
+  assert.equal(fechado.total.financeiro[5], 600, 'mês 5: mesmo caso (600)');
+  assert.equal(fechado.total.financeiro[6], 200, 'mês vigente: Realizado tem 0 artificial (tratado como sem dado) -- fecha só com a projeção da linha T (0 + 200)');
+});
+
 test('o gate de senha (tentarDesbloquear) fecha a Tendência com fecharTendenciaVigente logo após decifrar, antes de montarDashboard', () => {
   const html = renderComSenha([registroExemplo()]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];

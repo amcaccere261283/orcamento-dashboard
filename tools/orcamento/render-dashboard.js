@@ -173,6 +173,11 @@ function fecharSerieMensal(totalMensal, realizadoMensal, vigenteIdx, fechar) {
   });
 }
 
+// Não é idempotente -- chamar 2x sobre o mesmo resultado dobraria o mês
+// vigente (Financeiro/Volume somam, então a 2ª chamada somaria de novo).
+// Os 2 pontos de chamada reais sempre passam um array recém-atribuído
+// (JSON.parse ou o resultado de um novo fetch), nunca o retorno desta
+// própria função -- mantenha essa invariante se adicionar um 3º ponto.
 function fecharTendenciaVigente(registros, vigenteIdx) {
   if (vigenteIdx < 0 || vigenteIdx > 11) return registros; // fora do ano coberto -- nada a fechar
   return registros.map(function (registro) {
@@ -180,9 +185,14 @@ function fecharTendenciaVigente(registros, vigenteIdx) {
     var realizado = registro.realizado;
     var totalFechado = Object.assign({}, registro.total);
     ['equipes', 'volume', 'financeiro'].forEach(function (campo) {
-      totalFechado[campo] = fecharSerieMensal(
-        registro.total[campo], realizado ? realizado[campo] : null, vigenteIdx, CAMPOS_FECHAMENTO_VIGENTE[campo]
-      );
+      if (!Array.isArray(registro.total[campo])) return;
+      // Realizado pode ter zeros artificiais de "mês ainda não reportado"
+      // (ver removerZerosFinaisNaoReportados) -- sem tratar isso aqui, esse
+      // 0 falso passaria por "dado real" e sobrescreveria a projeção de
+      // verdade da linha T naquele mês, recriando o mesmo problema que esta
+      // função existe pra resolver.
+      var realizadoCampo = realizado && Array.isArray(realizado[campo]) ? removerZerosFinaisNaoReportados(realizado[campo]) : null;
+      totalFechado[campo] = fecharSerieMensal(registro.total[campo], realizadoCampo, vigenteIdx, CAMPOS_FECHAMENTO_VIGENTE[campo]);
     });
     return Object.assign({}, registro, { total: totalFechado });
   });
