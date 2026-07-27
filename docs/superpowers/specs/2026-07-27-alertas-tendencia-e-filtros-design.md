@@ -47,12 +47,9 @@ ao vivo contra o dashboard publicado:
 - **Coluna mensal individual (Tabela) não muda.** Só a coluna "Total"
   (ano inteiro) usa a média ponderada de Equipes -- cada mês isolado já
   mostra o valor daquele mês só, sem soma nem média.
-- **Botão "Atualizar dados" (live-refresh) não precisa de nenhuma mudança
-  própria.** A transformação da Seção A acontece uma vez, antes do JSON de
-  `registros` ser embutido/cifrado na página (`render-dashboard.js`, logo
-  após `calcularVigenteIdx`) -- o mesmo `window.__REGISTROS__` que o
-  live-refresh já usa nasce com a Tendência já fechada, sem precisar
-  recalcular nada no navegador.
+- **Nenhuma mudança de arquitetura no botão "Atualizar dados" (live-refresh).**
+  Ele chama a MESMA função `fecharTendenciaVigente` que o gate de senha já
+  chama (ver Seção A) -- só reaproveita, não precisa de lógica nova própria.
 - **`compute-orcamento.js` não é tocado.** Confirmado que esse módulo não é
   importado por `build-dashboard.js` nem `render-dashboard.js` -- é código
   morto (só o próprio teste o exercita), fora do escopo desta mudança.
@@ -119,20 +116,34 @@ function fecharTendenciaVigente(registros, vigenteIdx) {
 }
 ```
 
-Chamada em `renderDashboard` (`render-dashboard.js:2021-2026`), logo após
-`calcularVigenteIdx`, antes do `JSON.stringify` que vira
-`window.__REGISTROS__`:
+**Importante (descoberto ao ler o arquivo com atenção):** este dashboard
+monta a Tabela/Gráfico/Alertas inteiramente no NAVEGADOR, não no servidor --
+`SCRIPT_CLIENTE_TABELA` (`render-dashboard.js:91-2019`) é uma única string
+gigante embutida como `<script>` na página; `calcularMensal`, `bucketPeriodo`,
+`FILTROS_ALERTAS_CONFIG` etc. só existem como texto dentro dela, nunca são
+executados pelo `renderDashboard` do Node (que só monta o HTML e cifra os
+dados -- ver `render-dashboard.js:2021+`, fora da string). `fecharTendenciaVigente`
+entra nessa mesma string (perto de `DIAS_PREMISSA_MES`), e é chamada em 2
+lugares, os 2 pontos onde `window.__REGISTROS__` é definido:
 
-```js
-const vigenteIdx = calcularVigenteIdx(periodos, generatedAt);
-const registrosFechados = fecharTendenciaVigente(registros, vigenteIdx);
-const registrosJson = JSON.stringify(registrosFechados.map(r => ({ ... })));
-```
-
-Esse é o único ponto de aplicação necessário: `window.__REGISTROS__` é a
-ÚNICA fonte de dados que toda a Tabela/Gráfico/Alertas (inicial e
-live-refresh) já usa hoje -- nenhuma outra função precisa saber que a
-Tendência foi "fechada".
+1. **`tentarDesbloquear`** (`SCRIPT_CLIENTE_GATE`, `render-dashboard.js:63`),
+   logo após decifrar:
+   ```js
+   window.__REGISTROS__ = JSON.parse(jsonTexto);
+   window.__REGISTROS__ = fecharTendenciaVigente(window.__REGISTROS__, window.__VIGENTE_IDX__);
+   ```
+   (`fecharTendenciaVigente`, definida em `SCRIPT_CLIENTE_TABELA`, já existe
+   no escopo global quando `tentarDesbloquear` roda -- os scripts executam em
+   ordem no carregamento da página, bem antes de qualquer clique do usuário.)
+2. **`atualizarDadosAoVivo`** (`SCRIPT_CLIENTE_TABELA`, `render-dashboard.js:2004`),
+   logo após buscar dados novos:
+   ```js
+   window.__REGISTROS__ = registrosNovos;
+   window.__REGISTROS__ = fecharTendenciaVigente(window.__REGISTROS__, window.__VIGENTE_IDX__);
+   ```
+   (reaproveita `window.__VIGENTE_IDX__` já embutido na carga inicial da
+   página -- o live-refresh não recalcula o mês vigente, mesma premissa que
+   o resto do live-refresh já assume.)
 
 ### Seção B: Equipes acumuladas viram média ponderada por dias
 
