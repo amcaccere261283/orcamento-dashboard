@@ -229,10 +229,12 @@ function calcularMensal(valoresLista, serie, dimensao) {
   return somarArraysMensais(lista.map(function (v) { return v[dimensao]; }));
 }
 
-// Coluna "Total" (soma do ano inteiro) da mesma linha -- soma os 12 meses
-// pras 3 dimensões brutas; produtividade/ticketMedio recalculam a razão a
-// partir da soma do numerador/denominador do ANO INTEIRO, nunca a soma das
-// razões mensais (somar "R$/m³" de 12 meses não seria um número válido).
+// Coluna "Total" (ano inteiro) da mesma linha -- soma os 12 meses pras
+// dimensões-fluxo (Financeiro/Volume); Equipes usa média ponderada por dias
+// (mediaEquipesPonderada, não soma -- é uma foto por mês, não um fluxo);
+// produtividade/ticketMedio recalculam a razão a partir da soma do
+// numerador/denominador do ANO INTEIRO, nunca a soma das razões mensais
+// (somar "R$/m³" de 12 meses não seria um número válido).
 function calcularTotalAno(valoresLista, serie, dimensao) {
   var lista = valoresLista.filter(Boolean);
   if (!lista.length) return null;
@@ -329,6 +331,8 @@ function somarIntervaloEquipeDias(mensal, inicio, fim) {
 // (exatamente como calcularTotalAno já faz pro ano inteiro), exceto a
 // premissa fixa do Previsto de uma única tipologia, que independe do
 // período (mesmo caso especial de calcularMensal/calcularTotalAno).
+// (Exceção: dimensão Equipes nunca soma através de vários meses -- usa
+// mediaEquipesPonderada, ver o final da função.)
 function bucketPeriodo(valoresLista, serie, dimensao, periodo, vigenteIdx) {
   var lista = valoresLista.filter(Boolean);
   if (!lista.length) return null;
@@ -1009,7 +1013,7 @@ function montarGraficos(registros, filtroTipologia, filtroCategoria, filtroGrupo
 // Sempre reconstrói cabeçalho + corpo inteiros (sem estado incremental,
 // mesma filosofia do resto do script) -- muito mais simples que a Tabela
 // porque aqui NUNCA existe uma distinção "estrutura vs valor": qualquer
-// mudança (recorte OU um dos 5 seletores próprios) muda linhas E colunas
+// mudança (recorte OU um dos 4 seletores próprios) muda linhas E colunas
 // ao mesmo tempo, então não vale a pena ter dois caminhos.
 function recalcularAlertas() {
   var indices = indicesFiltrados(
@@ -1465,7 +1469,7 @@ var FILTROS_CONFIG = [
   { id: 'seletor-dimensao', chave: 'dimensao', rotuloPadrao: 'Selecione ao menos 1', opcoesFixas: DIMENSOES_CONFIG, minimoUm: true },
 ];
 
-// Config dos 5 seletores próprios da aba Alertas -- mesmo componente
+// Config dos 4 seletores próprios da aba Alertas -- mesmo componente
 // visual (filtro-multi) dos filtros de recorte, mas com estado PRÓPRIO
 // (filtrosAlertas, não filtrosSelecionados) e, pra Agrupar por/Dimensão,
 // exclusivo:true (single-choice, ver montarFiltroMulti). Toda mudança em
