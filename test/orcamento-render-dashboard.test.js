@@ -177,6 +177,7 @@ function extrairFuncoesPuras(html) {
       ' this.classificarSemaforo = classificarSemaforo;' +
       ' this.colunasAlertas = colunasAlertas; this.calcularCelulaAlerta = calcularCelulaAlerta;' +
       ' this.renderCabecalhoAlertas = renderCabecalhoAlertas; this.renderCorpoAlertas = renderCorpoAlertas;' +
+      ' this.tomadorDoGrupo = tomadorDoGrupo;' +
       ' this.aplicarSelecaoExclusiva = aplicarSelecaoExclusiva;' +
       ' this.normalizarBusca = normalizarBusca;' +
       ' this.preencherLinha = preencherLinha;',
@@ -213,6 +214,7 @@ function extrairFuncoesPuras(html) {
     renderCorpoAlertas: sandbox.renderCorpoAlertas,
     aplicarSelecaoExclusiva: sandbox.aplicarSelecaoExclusiva,
     preencherLinha: sandbox.preencherLinha,
+    tomadorDoGrupo: sandbox.tomadorDoGrupo,
   };
 }
 
@@ -1428,11 +1430,49 @@ test('calcularCelulaAlerta divides the bucketed numérico value by the bucketed 
   assert.equal(celulaSemDado.desvio, null);
 });
 
-test('renderCabecalhoAlertas has 6 fixed columns regardless of how many combinações are selected: [agrupar por] / Combinação / Referência / Pesquisado / Desvio / Status', () => {
+test('renderCabecalhoAlertas has 7 fixed columns regardless of how many combinações are selected: [agrupar por] / Tomador / Combinação / Referência / Pesquisado / Desvio / Status', () => {
   const html = renderComSenha([registroExemplo()]);
   const { renderCabecalhoAlertas } = extrairFuncoesPuras(html);
   const cabecalho = renderCabecalhoAlertas('SUP');
-  assert.match(cabecalho, /<tr><th>SUP<\/th><th>Combinação<\/th><th>Referência<\/th><th>Pesquisado<\/th><th>Desvio<\/th><th>Status<\/th><\/tr>/);
+  assert.match(cabecalho, /<tr><th>SUP<\/th><th>Tomador<\/th><th>Combinação<\/th><th>Referência<\/th><th>Pesquisado<\/th><th>Desvio<\/th><th>Status<\/th><\/tr>/);
+});
+
+test('tomadorDoGrupo returns the single tomador shared by every registro in the group', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { tomadorDoGrupo } = extrairFuncoesPuras(html);
+  const registros = [
+    { sup: 'SUP-A', tomador: 'Via Araucária S.A' },
+    { sup: 'SUP-A', tomador: 'Via Araucária S.A' },
+  ];
+  assert.equal(tomadorDoGrupo(registros, [0, 1]), 'Via Araucária S.A');
+});
+
+test('tomadorDoGrupo returns "Vários" when the group spans more than one distinct tomador (typical when agrupando por tipologia/categoria/grupo/origem, or na linha TOTAL GERAL)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { tomadorDoGrupo } = extrairFuncoesPuras(html);
+  const registros = [
+    { sup: 'SUP-A', tomador: 'Via Araucária S.A' },
+    { sup: 'SUP-B', tomador: 'CCR RioSP' },
+  ];
+  assert.equal(tomadorDoGrupo(registros, [0, 1]), 'Vários');
+});
+
+test('tomadorDoGrupo returns "—" when no registro in the group has a tomador at all', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { tomadorDoGrupo } = extrairFuncoesPuras(html);
+  assert.equal(tomadorDoGrupo([{ sup: 'SUP-A', tomador: null }], [0]), '—');
+});
+
+test('renderCorpoAlertas shows a Tomador column, repeated on every row of a group, searchable via data-search -- single tomador when agrupando por SUP (the default), "Vários" on TOTAL GERAL when there is more than one', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoAlertas } = extrairFuncoesPuras(html);
+  const registroA = registroExemplo({ sup: 'SUP-A', tomador: 'Via Araucária S.A' });
+  const registroB = registroExemplo({ sup: 'SUP-B', tomador: 'CCR RioSP' });
+  const corpo = renderCorpoAlertas([registroA, registroB], [0, 1], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
+  assert.match(corpo, /<td>SUP-A<\/td><td>Via Ara[uú]c[áa]ria S\.A<\/td>/);
+  assert.match(corpo, /<td>SUP-B<\/td><td>CCR RioSP<\/td>/);
+  assert.match(corpo, /<td>TOTAL GERAL<\/td><td>Vários<\/td>/);
+  assert.match(corpo, /data-search="[^"]*via araucaria[^"]*"/, 'normalizarBusca remove acento -- "Araucária" vira "araucaria" no data-search');
 });
 
 test('renderCorpoAlertas emits one row PER (grupo, combinação) -- 2 grupos × 1 combinação = 2 data rows, plus 1 combinação × TOTAL GERAL = 3 rows total', () => {
@@ -1544,11 +1584,11 @@ test('renderCorpoAlertas shows "—" for Referência, Pesquisado AND Desvio, plu
   assert.match(corpo, /<span class="status-circulo" style="background:#6E7580"><\/span>Sem dado/, 'Status deve ser "Sem dado" com círculo cinza (pelo menos uma vez)');
 });
 
-test('renderCorpoAlertas gives every row a data-search attribute (normalized: lowercase, sem acento) combining the grupo label and the Combinação label, for the text search box', () => {
+test('renderCorpoAlertas gives every row a data-search attribute (normalized: lowercase, sem acento) combining the grupo label, o tomador and the Combinação label, for the text search box', () => {
   const html = renderComSenha([registroExemplo()]);
   const { renderCorpoAlertas } = extrairFuncoesPuras(html);
   const corpo = renderCorpoAlertas([registroExemplo({ sup: 'SUP-Ímpar' })], [0], 'sup', 'financeiro', ['realizado'], ['previsto'], ['totalAno'], 5);
-  assert.match(corpo, /<tr data-search="sup-impar realizado [^"]*previsto[^"]*total ano"/);
+  assert.match(corpo, /<tr data-search="sup-impar via araucaria s\.a realizado [^"]*previsto[^"]*total ano"/);
 });
 
 test('renderDashboard includes the Alertas tab button, the 5 Alertas selector containers (agrupar-por/dimensao/numerico/baseline/periodo), and the empty alertas table shell', () => {

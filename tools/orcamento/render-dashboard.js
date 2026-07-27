@@ -328,7 +328,23 @@ function calcularCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx) 
 var AGRUPAR_POR_ROTULO = { sup: 'SUP', tipologia: 'Tipologia', grupo: 'Grupo', categoria: 'Categoria', origem: 'Origem' };
 
 function renderCabecalhoAlertas(agruparPorRotulo) {
-  return '<tr><th>' + escapeHtml(agruparPorRotulo) + '</th><th>Combinação</th><th>Referência</th><th>Pesquisado</th><th>Desvio</th><th>Status</th></tr>';
+  return '<tr><th>' + escapeHtml(agruparPorRotulo) + '</th><th>Tomador</th><th>Combinação</th><th>Referência</th><th>Pesquisado</th><th>Desvio</th><th>Status</th></tr>';
+}
+
+// Tomador do grupo -- só é um valor único de verdade quando agruparPor é
+// "sup" (1 SUP = 1 tomador sempre). Agrupando por tipologia/categoria/
+// grupo/origem, ou na linha TOTAL GERAL, o grupo quase sempre cruza vários
+// tomadores diferentes -- "Vários" deixa isso explícito em vez de mostrar
+// só o 1º encontrado, que pareceria (errado) que só existe aquele tomador.
+function tomadorDoGrupo(registros, indices) {
+  var tomadores = [];
+  indices.forEach(function (idx) {
+    var t = registros[idx].tomador;
+    if (t && tomadores.indexOf(t) === -1) tomadores.push(t);
+  });
+  if (tomadores.length === 0) return '—';
+  if (tomadores.length === 1) return tomadores[0];
+  return 'Vários';
 }
 
 // Uma linha por (grupo, combinação) -- Referência/Pesquisado são os
@@ -339,7 +355,7 @@ function renderCabecalhoAlertas(agruparPorRotulo) {
 // rótulos marcados no filtro dedicado de Status, ver FILTROS_ALERTAS_CONFIG)
 // omite a linha inteira quando marcado e o status calculado não bate --
 // Set vazio/undefined mostra tudo, mesma convenção dos filtros de recorte.
-function renderLinhaAlerta(rotuloGrupo, registros, indices, coluna, dimensao, vigenteIdx, statusFiltro) {
+function renderLinhaAlerta(rotuloGrupo, tomadorGrupo, registros, indices, coluna, dimensao, vigenteIdx, statusFiltro) {
   var celula = calcularCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx);
   var classe = classificarSemaforo(celula.desvio);
   if (statusFiltro && statusFiltro.size > 0 && !statusFiltro.has(classe.indicador)) return '';
@@ -349,9 +365,10 @@ function renderLinhaAlerta(rotuloGrupo, registros, indices, coluna, dimensao, vi
   var casasDecimaisAlerta = dimensao === 'produtividade' ? 2 : 0;
   var referencia = formatarNumero(celula.denominador, casasDecimaisAlerta);
   var pesquisado = formatarNumero(celula.numerador, casasDecimaisAlerta);
-  var busca = normalizarBusca(rotuloGrupo + ' ' + coluna.rotulo);
+  var busca = normalizarBusca(rotuloGrupo + ' ' + tomadorGrupo + ' ' + coluna.rotulo);
   return '<tr data-search="' + escapeHtml(busca) + '">' +
     '<td>' + escapeHtml(rotuloGrupo) + '</td>' +
+    '<td>' + escapeHtml(tomadorGrupo) + '</td>' +
     '<td>' + escapeHtml(coluna.rotulo) + '</td>' +
     '<td class="num">' + referencia + '</td>' +
     '<td class="num">' + pesquisado + '</td>' +
@@ -361,7 +378,8 @@ function renderLinhaAlerta(rotuloGrupo, registros, indices, coluna, dimensao, vi
 }
 
 function renderLinhasGrupoAlerta(rotuloGrupo, registros, indices, colunas, dimensao, vigenteIdx, statusFiltro) {
-  return colunas.map(function (c) { return renderLinhaAlerta(rotuloGrupo, registros, indices, c, dimensao, vigenteIdx, statusFiltro); }).join('');
+  var tomadorGrupo = tomadorDoGrupo(registros, indices);
+  return colunas.map(function (c) { return renderLinhaAlerta(rotuloGrupo, tomadorGrupo, registros, indices, c, dimensao, vigenteIdx, statusFiltro); }).join('');
 }
 
 function renderCorpoAlertas(registros, indices, agruparPor, dimensao, numericos, baselines, periodos, vigenteIdx, statusFiltro) {
