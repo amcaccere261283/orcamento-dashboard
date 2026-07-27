@@ -100,8 +100,13 @@ function escapeHtml(valor) {
 // tendo médias/frações internamente).
 function formatarNumero(v, casasDecimais) {
   if (v === null || v === undefined) return '—';
-  var fator = Math.pow(10, casasDecimais === undefined ? 2 : casasDecimais);
-  return (Math.round(v * fator) / fator).toLocaleString('pt-BR');
+  var casas = casasDecimais === undefined ? 2 : casasDecimais;
+  var fator = Math.pow(10, casas);
+  // min/maxFractionDigits força SEMPRE exatamente essa quantidade de casas
+  // (ex. "10,00", não "10") -- toLocaleString sozinho, sem essas opções,
+  // descarta zero à direita ("10,00" viraria "10"), o que pareceria "sem
+  // decimais" pra quem olha, mesmo a rodagem em si já estando certa.
+  return (Math.round(v * fator) / fator).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
 }
 function somar(array) { return (array || []).reduce(function (a, b) { return a + (b || 0); }, 0); }
 // null num mês = nenhum registro que contribui pra essa soma tem dado
@@ -537,8 +542,9 @@ function calcularEscalaEixo(valorMax) {
 function formatarValorGrafico(valor, usarMilhares, casasDecimais) {
   if (valor === null || valor === undefined) return '—';
   var base = usarMilhares ? valor / 1000 : valor;
-  var fator = Math.pow(10, casasDecimais === undefined ? 2 : casasDecimais);
-  return (Math.round(base * fator) / fator).toLocaleString('pt-BR');
+  var casas = casasDecimais === undefined ? 2 : casasDecimais;
+  var fator = Math.pow(10, casas);
+  return (Math.round(base * fator) / fator).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
 }
 
 function construirEixoXSvg(larguraMes, alturaPlot, margem) {

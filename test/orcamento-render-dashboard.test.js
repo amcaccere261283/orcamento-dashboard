@@ -419,17 +419,18 @@ function criarLinhaFake(nMeses) {
   };
 }
 
-test('preencherLinha (extraído do HTML real gerado) shows produtividade with 2 decimal places, in every monthly cell and the yearly total -- explicit user request, unlike every other dimension', () => {
+test('preencherLinha (extraído do HTML real gerado) shows produtividade with 2 decimal places, ALWAYS padded (never "1,5") in every monthly cell and the yearly total -- explicit user request, unlike every other dimension', () => {
   const registro = registroExemplo();
   const html = renderComSenha([registro]);
   const { preencherLinha } = extrairFuncoesPuras(html);
   const linha = criarLinhaFake(12);
   preencherLinha(linha, [registro.previsto], 'previsto', 'produtividade');
-  // registro.previsto.equipesResumo.prod = 1.5 -- toLocaleString pt-BR omite
-  // o zero à direita ("1,5"), mas a rodada em 2 casas (não 0) é o que importa.
-  assert.equal(linha.celulas[0].textContent, '1,5');
-  assert.equal(linha.celulas[6].textContent, '1,5');
-  assert.equal(linha.celulaTotal.textContent, '1,5');
+  // registro.previsto.equipesResumo.prod = 1.5 -- formatarNumero força
+  // minimumFractionDigits/maximumFractionDigits, então mostra "1,50", nunca
+  // "1,5" (que pareceria só 1 casa pra quem olha a tabela).
+  assert.equal(linha.celulas[0].textContent, '1,50');
+  assert.equal(linha.celulas[6].textContent, '1,50');
+  assert.equal(linha.celulaTotal.textContent, '1,50');
 });
 
 test('preencherLinha keeps every OTHER dimension a whole number (0 casas decimais) -- produtividade is the only exception to the "tabela principal sempre inteira" rule', () => {
@@ -1085,12 +1086,26 @@ test('formatarNumero (extraído do HTML real gerado) rounds to 2 decimal places 
   assert.equal(formatarNumero(0, 0), '0');
 });
 
+test('formatarNumero ALWAYS pads to the requested casasDecimais, never trimming trailing zeros -- "10,00" and "1,50", not "10" or "1,5" (a round/short value must not look like it has fewer decimal places than everything else in the same column)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { formatarNumero } = extrairFuncoesPuras(html);
+  assert.equal(formatarNumero(10, 2), '10,00');
+  assert.equal(formatarNumero(1.5, 2), '1,50');
+  assert.equal(formatarNumero(0, 2), '0,00');
+});
+
 test('formatarValorGrafico (extraído do HTML real gerado) rounds to the given casasDecimais the same way as formatarNumero, on top of the milhares scaling', () => {
   const html = renderComSenha([registroExemplo()]);
   const { formatarValorGrafico } = extrairFuncoesPuras(html);
   assert.equal(formatarValorGrafico(4.567, false), '4,57');
   assert.equal(formatarValorGrafico(4.567, false, 0), '5');
   assert.equal(formatarValorGrafico(4500, true, 0), '5', 'em milhares, 4500 -> 4,5 mil -> arredondado a 0 casas -> "5"');
+});
+
+test('formatarValorGrafico ALWAYS pads to the requested casasDecimais too, same as formatarNumero -- "10,00", not "10"', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { formatarValorGrafico } = extrairFuncoesPuras(html);
+  assert.equal(formatarValorGrafico(10, false, 2), '10,00');
 });
 
 test('construirGraficoMensalSvg rounds column/axis/tooltip labels to 0 decimal places for Equipes (casasDecimais=0), while a dimension without it passed keeps the default 2 decimals', () => {
@@ -1487,7 +1502,7 @@ test('renderCorpoAlertas shows Referência/Pesquisado with 2 decimal places for 
     },
   });
   const corpo = renderCorpoAlertas([registro], [0], 'sup', 'produtividade', ['realizado'], ['previsto'], ['totalAno'], 5);
-  assert.match(corpo, /<td class="num">2,5<\/td>/, 'Referência (Previsto, premissa) em 2 casas -- toLocaleString omite o zero à direita');
+  assert.match(corpo, /<td class="num">2,50<\/td>/, 'Referência (Previsto, premissa) SEMPRE em 2 casas -- "2,50", nunca "2,5" nem "3"');
   assert.match(corpo, /<td class="num">0,73<\/td>/, 'Pesquisado (Realizado, 960÷1320 arredondado) em 2 casas, não "1" ou "3"');
 });
 
