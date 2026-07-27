@@ -181,7 +181,8 @@ function extrairFuncoesPuras(html) {
       ' this.aplicarSelecaoExclusiva = aplicarSelecaoExclusiva;' +
       ' this.normalizarBusca = normalizarBusca;' +
       ' this.preencherLinha = preencherLinha;' +
-      ' this.fecharTendenciaVigente = fecharTendenciaVigente;',
+      ' this.fecharTendenciaVigente = fecharTendenciaVigente;' +
+      ' this.mediaEquipesPonderada = mediaEquipesPonderada;',
     sandbox
   );
   return {
@@ -217,6 +218,7 @@ function extrairFuncoesPuras(html) {
     preencherLinha: sandbox.preencherLinha,
     tomadorDoGrupo: sandbox.tomadorDoGrupo,
     fecharTendenciaVigente: sandbox.fecharTendenciaVigente,
+    mediaEquipesPonderada: sandbox.mediaEquipesPonderada,
   };
 }
 
@@ -1238,6 +1240,67 @@ test('somarIntervaloMensal sums only the months in [inicio, fim), returns null w
   assert.equal(somarIntervaloMensal(mensal, 0, 3), 60);
   assert.equal(somarIntervaloMensal(mensal, 3, 6), null, 'meses 3..5 são todos null -- sem dado, não 0');
   assert.equal(somarIntervaloMensal(mensal, 2, 4), 30, 'mês 2 (30) + mês 3 (null, tratado como ausente) = só 30');
+});
+
+test('mediaEquipesPonderada: 3 meses "normais" (30 dias) com valores diferentes dá a média aritmética simples (mesmo peso)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { mediaEquipesPonderada } = extrairFuncoesPuras(html);
+  // meses 3,4,5 (Abr,Mai,Jun) -- todos 30 dias
+  const mensal = [0, 0, 0, 4, 6, 8, 0, 0, 0, 0, 0, 0];
+  assert.equal(mediaEquipesPonderada(mensal, 3, 6), (4 + 6 + 8) / 3);
+});
+
+test('mediaEquipesPonderada: Janeiro/Dezembro (15 dias) pesam metade de um mês normal (30 dias) na média', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { mediaEquipesPonderada } = extrairFuncoesPuras(html);
+  // mês 0 (Jan, 15 dias) = 10; mês 1 (Fev, 30 dias) = 20
+  // média ponderada = (10*15 + 20*30) / (15+30), não (10+20)/2
+  const mensal = [10, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  assert.equal(mediaEquipesPonderada(mensal, 0, 2), (10 * 15 + 20 * 30) / (15 + 30));
+});
+
+test('mediaEquipesPonderada: intervalo de 1 mês só devolve o valor do próprio mês (sem diferença de comportamento pros buckets de 1 mês)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { mediaEquipesPonderada } = extrairFuncoesPuras(html);
+  const mensal = [0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0];
+  assert.equal(mediaEquipesPonderada(mensal, 6, 7), 7);
+});
+
+test('mediaEquipesPonderada: meses com null no meio são ignorados (não contam nem no numerador nem no peso)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { mediaEquipesPonderada } = extrairFuncoesPuras(html);
+  const mensal = [10, null, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  // só meses 0 e 2 (ambos 30... na verdade mês 0 é Jan=15 dias) contam
+  assert.equal(mediaEquipesPonderada(mensal, 0, 3), (10 * 15 + 20 * 30) / (15 + 30));
+});
+
+test('mediaEquipesPonderada: intervalo sem nenhum dado (tudo null) devolve null', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { mediaEquipesPonderada } = extrairFuncoesPuras(html);
+  const mensal = Array(12).fill(null);
+  assert.equal(mediaEquipesPonderada(mensal, 0, 12), null);
+});
+
+test('bucketPeriodo: dimensão Equipes num período de vários meses usa a média ponderada, não a soma; Financeiro no mesmo período continua somando (sem regressão)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { bucketPeriodo } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: { equipes: [4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0], equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: [100, 200, 300, 400, 500, 600, 700, 0, 0, 0, 0, 0], financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  const vigenteIdx = 6;
+  const mediaEsperada = (4 * 15 + 4 * 30 + 4 * 30 + 4 * 30 + 4 * 30 + 4 * 30 + 4 * 30) / (15 + 30 * 6);
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'equipes', 'acumuladoAteVigente', vigenteIdx), mediaEsperada);
+  assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'acumuladoAteVigente', vigenteIdx), 100 + 200 + 300 + 400 + 500 + 600 + 700);
+});
+
+test('calcularTotalAno: dimensão Equipes usa a média ponderada do ano inteiro (não a soma); Financeiro no mesmo registro continua somando (sem regressão)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { calcularTotalAno } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: { equipes: Array(12).fill(5), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(100), financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  assert.equal(calcularTotalAno([registro.realizado], 'realizado', 'equipes'), 5, 'todo mês com o mesmo valor (5) -- média ponderada continua 5, não 60 (soma)');
+  assert.equal(calcularTotalAno([registro.realizado], 'realizado', 'financeiro'), 1200);
 });
 
 test('bucketPeriodo, dimensão de soma (financeiro), soma só os meses do período pedido -- acumuladoAnterior/mesVigente/acumuladoFuturo/totalAno cobrem faixas diferentes do mesmo array mensal', () => {

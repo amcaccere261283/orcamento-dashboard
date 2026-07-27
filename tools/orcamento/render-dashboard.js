@@ -246,6 +246,7 @@ function calcularTotalAno(valoresLista, serie, dimensao) {
     }
     return denominadorTotal ? numeradorTotal / denominadorTotal : null;
   }
+  if (dimensao === 'equipes') return mediaEquipesPonderada(somarArraysMensais(lista.map(function (v) { return v[dimensao]; })), 0, 12);
   return somar(lista.map(function (v) { return somar(v[dimensao]); }));
 }
 
@@ -278,6 +279,23 @@ function somarIntervaloMensal(mensal, inicio, fim) {
     soma = (soma === null ? 0 : soma) + mensal[i];
   }
   return soma;
+}
+
+// Equipes é uma foto por mês, não um fluxo -- acumular vários meses deve
+// ser uma MÉDIA ponderada pelos dias de cada mês (mesma premissa de
+// DIAS_PREMISSA_MES do denominador de Produtividade), não uma soma bruta
+// (que produziria um "equipe-meses" sem significado prático). Um único mês
+// no intervalo devolve o próprio valor do mês (peso 1, sem diferença de
+// comportamento pros buckets de 1 mês só).
+function mediaEquipesPonderada(mensal, inicio, fim) {
+  var somaEquipeDias = null, somaDias = 0;
+  var ini = Math.max(0, inicio), lim = Math.min(mensal.length, fim);
+  for (var i = ini; i < lim; i++) {
+    if (mensal[i] === null || mensal[i] === undefined) continue;
+    somaEquipeDias = (somaEquipeDias === null ? 0 : somaEquipeDias) + mensal[i] * DIAS_PREMISSA_MES[i];
+    somaDias += DIAS_PREMISSA_MES[i];
+  }
+  return somaDias ? somaEquipeDias / somaDias : null;
 }
 
 // produtividade soma equipe-DIAS no intervalo (não só equipes), mesma
@@ -322,7 +340,7 @@ function bucketPeriodo(valoresLista, serie, dimensao, periodo, vigenteIdx) {
     return numeradorBucket / denominadorBucket;
   }
   var mensal = somarArraysMensais(lista.map(function (v) { return v[dimensao]; }));
-  return somarIntervaloMensal(mensal, inicio, fim);
+  return dimensao === 'equipes' ? mediaEquipesPonderada(mensal, inicio, fim) : somarIntervaloMensal(mensal, inicio, fim);
 }
 
 // Faixas fixas do semáforo (spec 2026-07-23) -- mesma regra pra todas as
