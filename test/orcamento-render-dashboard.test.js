@@ -1307,6 +1307,23 @@ test('bucketPeriodo: dimensão Equipes num período de vários meses usa a médi
   assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'acumuladoAteVigente', vigenteIdx), 100 + 200 + 300 + 400 + 500 + 600 + 700);
 });
 
+test('fecharTendenciaVigente + bucketPeriodo compõem corretamente: a Tendência acumulada até o mês vigente, dimensão Equipes, usa o total.equipes JÁ FECHADO (não o cru da linha T) e já em média ponderada (não soma)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { fecharTendenciaVigente, bucketPeriodo } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: { equipes: [6, 6, 6, 6, 6, 6, 8, null, null, null, null, null], equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(800), financeiroResumo: { total: 0, totalInicial: 0 } },
+    total: { equipes: [0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10], equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(90), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(900), financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  const vigenteIdx = 6;
+  const [fechado] = fecharTendenciaVigente([registro], vigenteIdx);
+  const resultado = bucketPeriodo([fechado.total], 'total', 'equipes', 'acumuladoAteVigente', vigenteIdx);
+  // mês vigente (6): max(realizado=8, T=5) = 8 (fechamento de Equipes usa o
+  // maior, nunca soma). Meses 0-5: usam Realizado (6 cada). Média ponderada
+  // (Jan=15 dias, os demais 30): (6*15 + 6*30*5 + 8*30) / (15+30*6).
+  const esperado = (6 * 15 + 6 * 30 * 5 + 8 * 30) / (15 + 30 * 6);
+  assert.equal(resultado, esperado);
+});
+
 test('calcularTotalAno: dimensão Equipes usa a média ponderada do ano inteiro (não a soma); Financeiro no mesmo registro continua somando (sem regressão)', () => {
   const html = renderComSenha([registroExemplo()]);
   const { calcularTotalAno } = extrairFuncoesPuras(html);
