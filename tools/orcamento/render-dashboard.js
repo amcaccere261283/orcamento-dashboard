@@ -61,6 +61,7 @@ async function tentarDesbloquear() {
   try {
     var jsonTexto = await decifrarComSenha(window.__DADOS_CIFRADOS__, senha);
     window.__REGISTROS__ = JSON.parse(jsonTexto);
+    window.__REGISTROS__ = fecharTendenciaVigente(window.__REGISTROS__, window.__VIGENTE_IDX__);
     document.getElementById('gate-senha').style.display = 'none';
     document.getElementById('conteudo-protegido').style.display = '';
     montarDashboard(window.__REGISTROS__);
@@ -139,6 +140,53 @@ var CAMPOS_RATIO = {
 // (equipesResumo.prod, abaixo) já vem pronta como taxa diária da própria
 // planilha, não passa por aqui.
 var DIAS_PREMISSA_MES = [15, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 15];
+
+// Fecha a Tendência (série "total") do mês vigente combinando o Realizado
+// parcial já ocorrido com a projeção da própria linha T da planilha pra
+// completar o mês -- meses já fechados (antes do vigente) passam a valer
+// pelo Realizado (fato, não projeção); meses futuros continuam com o valor
+// cru da linha T. Financeiro/Volume são fluxos do mês (o que já rodou + o
+// que falta pra fechar = soma); Equipes é uma foto (headcount), somar
+// contaria equipe em dobro -- usa o maior dos dois em vez de somar.
+// Confirmado com o usuário (2026-07-27): vale pro dashboard inteiro
+// (Tabela/Gráfico/Alertas), aplicado uma vez nos 2 pontos onde
+// window.__REGISTROS__ é definido (gate de senha e live-refresh) -- nunca
+// dentro de calcularMensal/bucketPeriodo/calcularTotalAno.
+function fecharValorMesVigenteFluxo(totalMes, realizadoMes) {
+  if ((totalMes === null || totalMes === undefined) && (realizadoMes === null || realizadoMes === undefined)) return null;
+  return (realizadoMes || 0) + (totalMes || 0);
+}
+function fecharValorMesVigenteEquipes(totalMes, realizadoMes) {
+  if ((totalMes === null || totalMes === undefined) && (realizadoMes === null || realizadoMes === undefined)) return null;
+  return Math.max(realizadoMes || 0, totalMes || 0);
+}
+var CAMPOS_FECHAMENTO_VIGENTE = { equipes: fecharValorMesVigenteEquipes, volume: fecharValorMesVigenteFluxo, financeiro: fecharValorMesVigenteFluxo };
+
+function fecharSerieMensal(totalMensal, realizadoMensal, vigenteIdx, fechar) {
+  return totalMensal.map(function (v, i) {
+    if (i < vigenteIdx) {
+      var r = realizadoMensal ? realizadoMensal[i] : null;
+      return (r === null || r === undefined) ? v : r;
+    }
+    if (i === vigenteIdx) return fechar(v, realizadoMensal ? realizadoMensal[i] : null);
+    return v;
+  });
+}
+
+function fecharTendenciaVigente(registros, vigenteIdx) {
+  if (vigenteIdx < 0 || vigenteIdx > 11) return registros; // fora do ano coberto -- nada a fechar
+  return registros.map(function (registro) {
+    if (!registro.total) return registro;
+    var realizado = registro.realizado;
+    var totalFechado = Object.assign({}, registro.total);
+    ['equipes', 'volume', 'financeiro'].forEach(function (campo) {
+      totalFechado[campo] = fecharSerieMensal(
+        registro.total[campo], realizado ? realizado[campo] : null, vigenteIdx, CAMPOS_FECHAMENTO_VIGENTE[campo]
+      );
+    });
+    return Object.assign({}, registro, { total: totalFechado });
+  });
+}
 
 // valoresLista: array de "valores" de UMA série (previsto/realizado/total),
 // um item por registro agregado (lista de 1 item no caso normal de uma
@@ -2002,6 +2050,7 @@ function atualizarDadosAoVivo() {
 
       preservarPrevistoInicial(window.__REGISTROS__, registrosNovos);
       window.__REGISTROS__ = registrosNovos;
+      window.__REGISTROS__ = fecharTendenciaVigente(window.__REGISTROS__, window.__VIGENTE_IDX__);
       montarTodosFiltrosMulti(window.__REGISTROS__);
       document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
       recalcularTabela();

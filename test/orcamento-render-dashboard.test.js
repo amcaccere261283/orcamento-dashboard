@@ -180,7 +180,8 @@ function extrairFuncoesPuras(html) {
       ' this.tomadorDoGrupo = tomadorDoGrupo;' +
       ' this.aplicarSelecaoExclusiva = aplicarSelecaoExclusiva;' +
       ' this.normalizarBusca = normalizarBusca;' +
-      ' this.preencherLinha = preencherLinha;',
+      ' this.preencherLinha = preencherLinha;' +
+      ' this.fecharTendenciaVigente = fecharTendenciaVigente;',
     sandbox
   );
   return {
@@ -215,6 +216,7 @@ function extrairFuncoesPuras(html) {
     aplicarSelecaoExclusiva: sandbox.aplicarSelecaoExclusiva,
     preencherLinha: sandbox.preencherLinha,
     tomadorDoGrupo: sandbox.tomadorDoGrupo,
+    fecharTendenciaVigente: sandbox.fecharTendenciaVigente,
   };
 }
 
@@ -1293,6 +1295,96 @@ test('bucketPeriodo returns null for a sum dimension when the baseline has zero 
     },
   });
   assert.equal(bucketPeriodo([registro.realizado], 'realizado', 'financeiro', 'm3', 0), null);
+});
+
+test('fecharTendenciaVigente: meses antes do vigente passam a valer pelo Realizado, não pelo valor cru da linha T (Financeiro)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { fecharTendenciaVigente } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: { equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: [1, 2, 3, 4, 5, 6, 7, null, null, null, null, null], financeiroResumo: { total: 0, totalInicial: 0 } },
+    total: { equipes: Array(12).fill(4.5), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(90), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120], financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  const [fechado] = fecharTendenciaVigente([registro], 6);
+  assert.deepEqual(fechado.total.financeiro, [1, 2, 3, 4, 5, 6, 77, 80, 90, 100, 110, 120]);
+});
+
+test('fecharTendenciaVigente: mês vigente de Financeiro/Volume (fluxos) soma Realizado + valor cru da linha T', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { fecharTendenciaVigente } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    realizado: { equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: [10, 10, 10, 10, 10, 10, 25, null, null, null, null, null], volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(100), financeiroResumo: { total: 0, totalInicial: 0 } },
+    total: { equipes: Array(12).fill(4.5), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: [1, 1, 1, 1, 1, 1, 15, 30, 30, 30, 30, 30], volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(900), financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  const [fechado] = fecharTendenciaVigente([registro], 6);
+  assert.equal(fechado.total.volume[6], 25 + 15);
+});
+
+test('fecharTendenciaVigente: mês vigente de Equipes (foto, não fluxo) usa o MAIOR entre Realizado e a linha T, nunca soma', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { fecharTendenciaVigente } = extrairFuncoesPuras(html);
+  const registroTProjetaMais = registroExemplo({
+    realizado: { equipes: [4, 4, 4, 4, 4, 4, 3, null, null, null, null, null], equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(800), financeiroResumo: { total: 0, totalInicial: 0 } },
+    total: { equipes: [4, 4, 4, 4, 4, 4, 10, 10, 10, 10, 10, 10], equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(90), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(900), financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  const [fechado1] = fecharTendenciaVigente([registroTProjetaMais], 6);
+  assert.equal(fechado1.total.equipes[6], 10, 'linha T (10) projeta mais que o Realizado (3) -- usa a linha T');
+
+  const registroRealizadoMaisAlto = registroExemplo({
+    realizado: { equipes: [4, 4, 4, 4, 4, 4, 15, null, null, null, null, null], equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(800), financeiroResumo: { total: 0, totalInicial: 0 } },
+    total: { equipes: [4, 4, 4, 4, 4, 4, 10, 10, 10, 10, 10, 10], equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(90), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(900), financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  const [fechado2] = fecharTendenciaVigente([registroRealizadoMaisAlto], 6);
+  assert.equal(fechado2.total.equipes[6], 15, 'Realizado (15) já mobilizou mais que a linha T (10) previu -- usa o Realizado');
+});
+
+test('fecharTendenciaVigente: mês vigente com só uma das 2 séries presente usa a que existe; com as 2 em branco, continua em branco (não vira 0 falso)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { fecharTendenciaVigente } = extrairFuncoesPuras(html);
+  const registroSoT = registroExemplo({
+    realizado: { equipes: Array(12).fill(null), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(null), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(null), financeiroResumo: { total: 0, totalInicial: 0 } },
+    total: { equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(90), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(500), financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  const [fechadoSoT] = fecharTendenciaVigente([registroSoT], 6);
+  assert.equal(fechadoSoT.total.financeiro[6], 500);
+
+  const registroNenhum = registroExemplo({
+    realizado: { equipes: Array(12).fill(null), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(null), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(null), financeiroResumo: { total: 0, totalInicial: 0 } },
+    total: { equipes: Array(12).fill(null), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(null), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: Array(12).fill(null), financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  const [fechadoNenhum] = fecharTendenciaVigente([registroNenhum], 6);
+  assert.equal(fechadoNenhum.total.financeiro[6], null);
+});
+
+test('fecharTendenciaVigente: meses futuros (depois do vigente) não mudam -- continuam com o valor cru da linha T', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { fecharTendenciaVigente } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({
+    total: { equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 }, volume: Array(12).fill(90), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 }, financeiro: [0, 0, 0, 0, 0, 0, 0, 777, 888, 999, 0, 0], financeiroResumo: { total: 0, totalInicial: 0 } },
+  });
+  const [fechado] = fecharTendenciaVigente([registro], 6);
+  assert.deepEqual(fechado.total.financeiro.slice(7, 10), [777, 888, 999]);
+});
+
+test('fecharTendenciaVigente: registro sem série total (registro.total null) passa direto, sem lançar erro', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { fecharTendenciaVigente } = extrairFuncoesPuras(html);
+  const registro = registroExemplo({ total: null });
+  const [fechado] = fecharTendenciaVigente([registro], 6);
+  assert.equal(fechado.total, null);
+});
+
+test('o gate de senha (tentarDesbloquear) fecha a Tendência com fecharTendenciaVigente logo após decifrar, antes de montarDashboard', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptGate = scripts[2][1];
+  assert.match(scriptGate, /window\.__REGISTROS__ = JSON\.parse\(jsonTexto\);\s*\n\s*window\.__REGISTROS__ = fecharTendenciaVigente\(window\.__REGISTROS__, window\.__VIGENTE_IDX__\);/);
+});
+
+test('o live-refresh (atualizarDadosAoVivo) fecha a Tendência com fecharTendenciaVigente logo após buscar dados novos', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptTabela = scripts[3][1];
+  assert.match(scriptTabela, /window\.__REGISTROS__ = registrosNovos;\s*\n\s*window\.__REGISTROS__ = fecharTendenciaVigente\(window\.__REGISTROS__, window\.__VIGENTE_IDX__\);/);
 });
 
 test('classificarSemaforo classifies the 5 faixas with the exact documented boundaries and colors (spec: >110% azul, 90-110% verde, 70-90% amarelo, <70% vermelho, sem dado cinza)', () => {
