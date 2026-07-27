@@ -673,6 +673,20 @@ test('calcularAcumuladoAposRealizado falls back to accumulating the série futur
   assert.deepEqual(paraPlano(resultado), [5, 10, 15]);
 });
 
+test('calcularAcumuladoAposRealizado: quando o mês de conexão já tem um valor FECHADO da Tendência (Realizado + projeção da linha T, ver fecharTendenciaVigente), usa esse valor no acumulado em vez de só herdar o acumulado puro de Realizado -- senão o Acumulado do Gráfico fecha o ano com um número menor que a Tabela/Alertas (que somam o total já fechado direto)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { calcularAcumuladoAposRealizado, calcularAcumulado } = extrairFuncoesPuras(html);
+  const mensalRealizado = [700, 700, 700, 700, 700, 700, 700, null, null, null, null, null]; // Jan-Jul @700
+  const acumuladoRealizado = calcularAcumulado(mensalRealizado); // [700,1400,...,4900,null,...]
+  const ultimoMesRealizado = 6; // Jul (índice 6)
+  // mês vigente (6) já fechado: 700 (realizado) + 200 (projeção da linha T
+  // pra completar o mês) = 900 -- NÃO é igual ao Realizado puro (700).
+  const mensalFutura = [null, null, null, null, null, null, 900, 900, 900, 900, 900, 900];
+  const resultado = calcularAcumuladoAposRealizado(mensalFutura, acumuladoRealizado, ultimoMesRealizado);
+  assert.equal(resultado[6], 4200 + 900, 'mês de conexão: acumulado de Jan-Jun (4200) + o valor FECHADO de julho (900), não o acumulado puro de Realizado (4900)');
+  assert.equal(resultado[11], 4200 + 900 + 900 * 5, 'dezembro: continua somando a própria linha T dos meses seguintes em cima do acumulado correto');
+});
+
 test('"Realizado + Previsto Inicial" falls back to Previsto Inicial alone for the whole year when there is no Realizado at all in the recorte', () => {
   const html = renderComSenha([registroExemplo()]);
   const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);

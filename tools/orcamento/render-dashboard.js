@@ -502,7 +502,17 @@ function ultimoIndiceComDado(mensal) {
 function calcularAcumuladoAposRealizado(mensalFutura, acumuladoRealizado, ultimoMesRealizado) {
   if (ultimoMesRealizado === -1) return calcularAcumulado(mensalFutura);
   var resultado = new Array(mensalFutura.length).fill(null);
-  var soma = acumuladoRealizado[ultimoMesRealizado] || 0;
+  var acumuladoAntes = ultimoMesRealizado > 0 ? (acumuladoRealizado[ultimoMesRealizado - 1] || 0) : 0;
+  // No mês de conexão, mensalFutura já pode trazer o valor FECHADO da
+  // Tendência (Realizado do mês + o que a própria linha T projeta pra
+  // completar o mês, ver fecharTendenciaVigente) -- usa esse valor
+  // diretamente em vez de só herdar o acumulado puro de Realizado, senão o
+  // Acumulado deste painel fecha o ano com um número menor que o da Tabela/
+  // Alertas (que somam registro.total direto, já fechado).
+  var valorConector = (mensalFutura[ultimoMesRealizado] === null || mensalFutura[ultimoMesRealizado] === undefined)
+    ? (acumuladoRealizado[ultimoMesRealizado] || 0) - acumuladoAntes
+    : mensalFutura[ultimoMesRealizado];
+  var soma = acumuladoAntes + valorConector;
   resultado[ultimoMesRealizado] = soma;
   for (var i = ultimoMesRealizado + 1; i < mensalFutura.length; i++) {
     soma += mensalFutura[i] || 0;
@@ -941,6 +951,15 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
         acumulado = calcularAcumulado(mensal);
       }
     }
+    // Tendência: um mês que já tem Realizado nunca desenha barra de
+    // projeção nele (mesma regra de "Realizado + Previsto Inicial" acima)
+    // -- só o painel Mensal em BARRA (soma) precisa disso; em razão (linha)
+    // o próprio comConectorSeRazao já cuida da continuidade, e o Acumulado
+    // usa "mensal" sem esse corte (calculado acima), pra não perder a
+    // contribuição real do mês de conexão (ver calcularAcumuladoAposRealizado).
+    var mensalParaDesenho = (serie === 'total' && !ehRazao)
+      ? mensal.map(function (v, i) { return i <= ultimoMesRealizado ? null : v; })
+      : mensal;
     // indiceConector: só pras séries "pós-Realizado", e só quando existe
     // de fato um mês de Realizado pra herdar (ultimoMesRealizado !== -1)
     // -- ver construirLinhasSvg. Vale tanto pro painel Mensal em linha
@@ -949,7 +968,7 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
     var indiceConector = (serie === 'total' || serie === 'realizadoPrevistoInicial') && ultimoMesRealizado !== -1
       ? ultimoMesRealizado
       : null;
-    return { serie: serie, mensal: mensal, acumulado: acumulado, indiceConector: indiceConector };
+    return { serie: serie, mensal: mensalParaDesenho, acumulado: acumulado, indiceConector: indiceConector };
   });
 
   var rotuloDimensao = DIMENSOES_ROTULO[dimensao] || '';
