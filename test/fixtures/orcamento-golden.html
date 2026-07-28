@@ -1,0 +1,2458 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>ORÇAMENTO — MATRIZ</title>
+<style>
+  :root {
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --muted: #898781;
+    --gridline: #2c2c2a;
+    --border: rgba(255,255,255,0.10);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--text-primary);
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .generated { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
+  .watermark {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(70vw, 900px);
+    height: auto;
+    opacity: 0.16;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .header-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .header-bar img { height: 36px; width: auto; }
+  .header-bar-title { flex: 1 1 200px; min-width: 0; }
+  .gate-senha {
+    position: relative; z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 40vh;
+  }
+  .gate-senha-box {
+    background: var(--surface-1); border: 2px solid #f6b53f; border-radius: 12px;
+    padding: 32px; max-width: 360px; width: 100%; text-align: center;
+  }
+  .gate-senha-box h2 { margin: 0 0 16px; font-size: 16px; }
+  .gate-senha-box input {
+    width: 100%; padding: 10px 12px; margin-bottom: 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--page); color: var(--text-primary); font-size: 14px;
+  }
+  .gate-senha-box button {
+    width: 100%; padding: 10px 16px;
+    border: 2px solid #f6b53f; border-radius: 8px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .gate-senha-box button:hover { background: rgba(246,181,63,0.1); }
+  .gate-senha-box button:disabled { opacity: 0.6; cursor: wait; }
+  .gate-senha-erro { color: #f0857a; font-size: 13px; margin-top: 10px; }
+  .filtros { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .filtros-selecao { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .filtros-acoes { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .filtros select,
+  #limpar-filtros,
+  #atualizar-dashboard,
+  .abas-visualizacao button {
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease, box-shadow 150ms ease;
+  }
+  .filtros select:focus-visible,
+  #limpar-filtros:focus-visible,
+  #atualizar-dashboard:focus-visible,
+  .abas-visualizacao button:focus-visible,
+  .gate-senha-box input:focus-visible,
+  .gate-senha-box button:focus-visible {
+    outline: 2px solid #f6b53f; outline-offset: 2px;
+  }
+  .filtros select {
+    padding: 8px 30px 8px 10px; height: 36px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23c3c2b7' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+    color: var(--text-primary);
+    font-size: 13px; cursor: pointer;
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  }
+  .filtros select:hover { border-color: rgba(246,181,63,0.5); }
+  .filtro-multi { position: relative; }
+  .filtro-multi-trigger {
+    display: inline-flex; align-items: center; gap: 8px;
+    max-width: 190px;
+    padding: 8px 10px; height: 36px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .filtro-multi-trigger span,
+  .filtro-multi-trigger { overflow: hidden; text-overflow: ellipsis; }
+  .filtro-multi-seta { flex: none; margin-left: auto; color: #c3c2b7; transition: transform 150ms ease; }
+  .filtro-multi-trigger:hover { border-color: rgba(246,181,63,0.5); }
+  .filtro-multi.aberto .filtro-multi-trigger { border-color: #f6b53f; }
+  .filtro-multi.aberto .filtro-multi-seta { transform: rotate(180deg); }
+  .filtro-multi-painel {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
+    min-width: 210px; max-width: 300px; max-height: 260px; overflow-y: auto;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    padding: 6px;
+  }
+  .filtro-multi-painel[hidden] { display: none; }
+  .filtro-multi-busca {
+    position: sticky; top: 0; z-index: 1;
+    display: block; width: 100%; box-sizing: border-box;
+    margin-bottom: 6px; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface-1); color: var(--text-primary); font-size: 13px;
+  }
+  .filtro-multi-busca::placeholder { color: var(--text-secondary); }
+  .filtro-multi-busca:focus-visible { outline: 2px solid #f6b53f; outline-offset: 1px; }
+  .filtro-multi-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 8px; border-radius: 4px; cursor: pointer;
+    font-size: 13px; color: var(--text-primary); white-space: nowrap;
+  }
+  .filtro-multi-item:hover { background: rgba(255,255,255,0.05); }
+  .filtro-multi-item input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; flex: none; }
+  .filtro-multi-vazio { padding: 7px 8px; font-size: 13px; color: var(--text-secondary); }
+  #limpar-filtros,
+  #atualizar-dashboard,
+  .abas-visualizacao button {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  #limpar-filtros svg, #atualizar-dashboard svg, .abas-visualizacao button svg { flex: none; }
+  #limpar-filtros {
+    height: 36px; padding: 0 14px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-secondary);
+  }
+  #limpar-filtros:hover { border-color: #f6b53f; color: var(--text-primary); background: rgba(255,255,255,0.04); }
+  #limpar-filtros:active { transform: translateY(1px); }
+  #atualizar-dashboard {
+    height: 38px; padding: 0 18px;
+    border: 2px solid #f6b53f; border-radius: 8px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 2px 6px rgba(0,0,0,0.35);
+  }
+  #atualizar-dashboard:hover { background: rgba(246,181,63,0.14); box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 4px 10px rgba(0,0,0,0.4); transform: translateY(-1px); }
+  #atualizar-dashboard:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(0,0,0,0.3) inset; }
+  #atualizar-dashboard:active svg { transform: rotate(70deg); }
+  #atualizar-dashboard svg { transition: transform 300ms ease; }
+  .status-atualizacao { font-size: 12px; color: var(--text-secondary); margin-left: 8px; }
+  .status-atualizacao.status-erro { color: #e0684f; }
+  .nota-premissa {
+    width: 100%; margin-top: 10px; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: rgba(255,255,255,0.03);
+    font-size: 12px; color: var(--text-secondary);
+  }
+  .abas-visualizacao {
+    display: flex; gap: 2px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 3px;
+  }
+  .abas-visualizacao button {
+    height: 30px; padding: 0 14px;
+    border: none; border-radius: 6px;
+    background: transparent; color: var(--text-secondary);
+  }
+  .abas-visualizacao button:hover { color: var(--text-primary); }
+  .abas-visualizacao button:active { transform: translateY(1px); }
+  .abas-visualizacao button.aba-ativa {
+    background: var(--surface-1); color: var(--text-primary); font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(246,181,63,0.4) inset;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .filtros select, #limpar-filtros, #atualizar-dashboard, .abas-visualizacao button, #atualizar-dashboard svg { transition: none; }
+  }
+  #secao-grafico {
+    background: rgba(26,26,25,0.68); border-radius: 8px; padding: 16px 8px;
+    position: relative; z-index: 1;
+  }
+  .grafico-svg { width: 100%; height: auto; display: block; }
+  .grafico-painel { margin-bottom: 28px; }
+  .grafico-painel:last-child { margin-bottom: 0; }
+  .grafico-bloco-dimensao + .grafico-bloco-dimensao { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--border); }
+  .grafico-titulo { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .grafico-eixo-texto { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .grafico-gridline, .grafico-linha-guia { stroke: var(--gridline); stroke-width: 1; }
+  .grafico-linha { stroke-linecap: round; stroke-linejoin: round; }
+  .grafico-rotulo { fill: var(--text-secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .grafico-rotulo-final { fill: var(--text-primary); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
+  .grafico-rotulo { paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
+  .grafico-hit { cursor: pointer; pointer-events: all; }
+  .grafico-marcador { pointer-events: none; }
+  .grafico-tooltip {
+    position: absolute; pointer-events: none;
+    background: #0d0d0d; border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; color: var(--text-primary);
+    white-space: nowrap; z-index: 5; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .table-scroll { overflow-x: auto; border-radius: 8px; position: relative; z-index: 1; }
+  table { width: 100%; border-collapse: collapse; background: rgba(26,26,25,0.68); }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--gridline); font-size: 13px; }
+  td.num { font-variant-numeric: tabular-nums; }
+  th {
+    color: var(--text-secondary); font-weight: 600; background: #141412;
+    position: sticky; top: 0; z-index: 1;
+    box-shadow: 0 1px 0 var(--gridline), 0 2px 6px rgba(0,0,0,0.3);
+  }
+  /* Primeira coluna (SUP) fixa ao rolar a tabela pro lado -- especificidade
+     igual à das regras de fundo por tipo de linha (.linha-total-sup td etc.)
+     abaixo, então essas continuam ganhando por ordem (vêm depois no CSS) e
+     a coluna fixa herda o tom certo em cada tipo de linha, em vez de travar
+     num fundo genérico. */
+  td:first-child, th:first-child { position: sticky; left: 0; z-index: 1; }
+  td:first-child { background: var(--surface-1); }
+  th:first-child { z-index: 2; }
+  #corpo-tabela tr:hover { filter: brightness(1.14); }
+  .tipologia-chip {
+    display: inline-block;
+    background: var(--chip-color); color: #fff;
+    border-radius: 4px; padding: 2px 8px;
+    font-size: 12px; font-weight: 600;
+  }
+  .tipologia-chip-total { background: rgba(26,26,25,0.6); color: var(--text-primary); border: 2px solid var(--text-secondary); }
+  .celula-mes { white-space: nowrap; }
+  .celula-total-linha { white-space: nowrap; font-weight: 700; border-left: 2px solid var(--border); }
+  .serie-label { font-weight: 700; border-left: 4px solid transparent; padding-left: 10px; white-space: nowrap; }
+  .linha-previsto-inicial .serie-label, .linha-previsto-inicial .celula-mes, .linha-previsto-inicial .celula-total-linha { color: #8b8a82; }
+  .linha-previsto-inicial .serie-label { border-left-color: #8b8a82; }
+  .linha-previsto .serie-label, .linha-previsto .celula-mes, .linha-previsto .celula-total-linha { color: #2f6ad0; }
+  .linha-previsto .serie-label { border-left-color: #2f6ad0; }
+  .linha-realizado .serie-label, .linha-realizado .celula-mes, .linha-realizado .celula-total-linha { color: #7fd858; }
+  .linha-realizado .serie-label { border-left-color: #7fd858; }
+  .linha-total .serie-label, .linha-total .celula-mes, .linha-total .celula-total-linha { color: #f6b53f; }
+  .linha-total .serie-label { border-left-color: #f6b53f; }
+  tr.linha-total td { border-bottom: 2px solid var(--gridline); }
+  .linha-total-sup td { background: rgba(0,0,0,0.32); }
+  .linha-total-geral td { background: rgba(246,181,63,0.10); }
+  tr.linha-total.linha-total-geral td { border-bottom: 2px solid #f6b53f; }
+  .linha-total-geral-tipologia td { background: rgba(255,255,255,0.03); }
+  tr.linha-total.linha-total-geral-tipologia td { border-bottom: 1px solid var(--gridline); }
+  .valor-repetido { color: rgba(255,255,255,0.14); }
+  .filtros-alertas { margin-bottom: 16px; }
+  .status-circulo {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle;
+  }
+  .busca-alertas {
+    display: block; width: 100%; max-width: 320px; box-sizing: border-box;
+    margin-bottom: 12px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-primary); font-size: 13px;
+  }
+  .busca-alertas::placeholder { color: var(--text-secondary); }
+  .busca-alertas:focus-visible { outline: 2px solid #f6b53f; outline-offset: 1px; }
+</style>
+</head>
+<body>
+  <img class="watermark" src="data:image/png;base64,GOLDEN" alt="">
+  <main>
+  <div class="header-bar">
+    <img src="data:image/png;base64,GOLDEN" alt="Suporte Infra">
+    <div class="header-bar-title">
+      <h1>ORÇAMENTO — Previsto x Realizado x Tendência</h1>
+      <div class="generated">Gerado em 14/07/2026, 21:00:00</div>
+    </div>
+  </div>
+
+  <div id="gate-senha" class="gate-senha">
+    <div class="gate-senha-box">
+      <h2>Digite a senha para abrir o dashboard</h2>
+      <input type="password" id="campo-senha" autocomplete="off" placeholder="Senha">
+      <button id="btn-desbloquear" type="button">Abrir</button>
+      <div id="gate-senha-erro" class="gate-senha-erro" style="display:none"></div>
+    </div>
+  </div>
+
+  <div id="conteudo-protegido" style="display:none">
+    <div class="filtros">
+      <div class="filtros-selecao">
+        <div class="filtro-multi" id="filtro-origem"><button type="button" class="filtro-multi-trigger">Todas as origens<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-categoria"><button type="button" class="filtro-multi-trigger">Todas as categorias<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-tipologia"><button type="button" class="filtro-multi-trigger">Todas as tipologias<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-grupo"><button type="button" class="filtro-multi-trigger">Todos os grupos<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-sup"><button type="button" class="filtro-multi-trigger">Todos os SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-serie"><button type="button" class="filtro-multi-trigger">Todas as séries<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="seletor-dimensao"><button type="button" class="filtro-multi-trigger">Financeiro<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+      </div>
+      <div class="filtros-acoes">
+        <div class="abas-visualizacao">
+          <button id="aba-tabela" type="button" class="aba-ativa"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Tabela</button>
+          <button id="aba-grafico" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Gráfico</button>
+          <button id="aba-alertas" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.9 21h16.2a2 2 0 0 0 1.79-2.96L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>Alertas</button>
+        </div>
+        <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
+        <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
+        <span id="status-atualizacao" class="status-atualizacao"></span>
+      </div>
+      <div id="nota-premissa-produtividade" class="nota-premissa" style="display:none">Premissa: Produtividade = Volume ÷ (Equipes × dias do mês) — dias = 15 em Janeiro e Dezembro, 30 nos demais meses.</div>
+    </div>
+    <div id="secao-tabela">
+    <div class="table-scroll">
+    <table id="tabela-orcamento">
+      <thead><tr><th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th><th>Jan/2026</th><th>Fev/2026</th><th>Mar/2026</th><th>Abr/2026</th><th>Mai/2026</th><th>Jun/2026</th><th>Jul/2026</th><th>Ago/2026</th><th>Set/2026</th><th>Out/2026</th><th>Nov/2026</th><th>Dez/2026</th><th>Total</th></tr></thead>
+      <tbody id="corpo-tabela"></tbody>
+    </table>
+    </div>
+    </div>
+    <div id="secao-grafico" style="display:none">
+      <div id="graficos-container"></div>
+      <div id="grafico-tooltip" class="grafico-tooltip" style="display:none"></div>
+    </div>
+    <div id="secao-alertas" style="display:none">
+      <div class="filtros filtros-alertas">
+        <div class="filtros-selecao">
+          <div class="filtro-multi" id="filtro-alertas-agrupar-por"><button type="button" class="filtro-multi-trigger">SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-numerico"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-baseline"><button type="button" class="filtro-multi-trigger">Previsto<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-periodo"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-status"><button type="button" class="filtro-multi-trigger">Status<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        </div>
+      </div>
+      <input id="busca-alertas" type="text" class="busca-alertas" placeholder="Buscar..." autocomplete="off">
+      <div class="table-scroll">
+      <table id="tabela-alertas">
+        <thead id="cabecalho-alertas"></thead>
+        <tbody id="corpo-alertas"></tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+  </main>
+  <script>window.__VIGENTE_IDX__ = 6;</script>
+  <script>window.__DADOS_CIFRADOS__ = {"salt":"s5ISFFr0fZjYGtLrwawyNg==","iv":"B61WuaxwflCdJmVo","dados":"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","iteracoes":250000};</script>
+  <script>
+function base64ParaBytes(base64) {
+  var binario = atob(base64);
+  var bytes = new Uint8Array(binario.length);
+  for (var i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  return bytes;
+}
+
+// Espelha tools/orcamento/criptografia.js's decifrarComSenha, usando
+// crypto.subtle (Web Crypto) no lugar de node:crypto -- mesmo algoritmo
+// (PBKDF2-SHA256 pra derivar a chave, AES-256-GCM pra decifrar), mesmo
+// formato de pacote (tag de autenticação concatenada no fim dos dados
+// cifrados, que é o que crypto.subtle.decrypt espera por padrão).
+async function decifrarComSenha(pacote, senha) {
+  var salt = base64ParaBytes(pacote.salt);
+  var iv = base64ParaBytes(pacote.iv);
+  var dados = base64ParaBytes(pacote.dados);
+  var chaveBase = await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
+  var chave = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: salt, iterations: pacote.iteracoes, hash: 'SHA-256' },
+    chaveBase,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  );
+  var textoPlanoBuffer = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, chave, dados);
+  return new TextDecoder().decode(textoPlanoBuffer);
+}
+
+function mostrarErroSenha(msg) {
+  var erro = document.getElementById('gate-senha-erro');
+  erro.textContent = msg;
+  erro.style.display = 'block';
+}
+
+async function tentarDesbloquear() {
+  var campo = document.getElementById('campo-senha');
+  var botao = document.getElementById('btn-desbloquear');
+  var senha = campo.value;
+  botao.disabled = true;
+  botao.textContent = 'Verificando…';
+  try {
+    var jsonTexto = await decifrarComSenha(window.__DADOS_CIFRADOS__, senha);
+    window.__REGISTROS__ = JSON.parse(jsonTexto);
+    window.__REGISTROS__ = fecharTendenciaVigente(window.__REGISTROS__, window.__VIGENTE_IDX__);
+    document.getElementById('gate-senha').style.display = 'none';
+    document.getElementById('conteudo-protegido').style.display = '';
+    montarDashboard(window.__REGISTROS__);
+  } catch (e) {
+    mostrarErroSenha('Senha incorreta.');
+  } finally {
+    botao.disabled = false;
+    botao.textContent = 'Abrir';
+  }
+}
+
+document.getElementById('btn-desbloquear').addEventListener('click', tentarDesbloquear);
+document.getElementById('campo-senha').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') tentarDesbloquear();
+});
+document.getElementById('campo-senha').focus();
+</script>
+  <script>
+function escapeHtml(valor) {
+  return String(valor === null || valor === undefined ? '' : valor)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// casasDecimais default 2 (mantém o comportamento de sempre pra quem já
+// chama sem o argumento) -- Equipes usa 0 (arredonda pra inteiro: "número
+// de equipes" não existe fracionado na prática, mesmo a planilha de origem
+// tendo médias/frações internamente).
+function formatarNumero(v, casasDecimais) {
+  if (v === null || v === undefined) return '—';
+  var casas = casasDecimais === undefined ? 2 : casasDecimais;
+  var fator = Math.pow(10, casas);
+  // min/maxFractionDigits força SEMPRE exatamente essa quantidade de casas
+  // (ex. "10,00", não "10") -- toLocaleString sozinho, sem essas opções,
+  // descarta zero à direita ("10,00" viraria "10"), o que pareceria "sem
+  // decimais" pra quem olha, mesmo a rodagem em si já estando certa.
+  return (Math.round(v * fator) / fator).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+function somar(array) { return (array || []).reduce(function (a, b) { return a + (b || 0); }, 0); }
+// null num mês = nenhum registro que contribui pra essa soma tem dado
+// digitado ali ainda (ver render-dashboard: R/P ficam em branco, não 0,
+// quando a planilha de origem não tinha valor pro mês) -- soma[i] só vira
+// número quando ALGUM dos arrays tem valor real naquele mês; um contribuinte
+// em branco simplesmente não participa da soma, não vira 0 nela.
+function somarArraysMensais(arrays) {
+  var soma = new Array(12).fill(null);
+  arrays.forEach(function (arr) {
+    if (!arr) return;
+    for (var i = 0; i < 12; i++) {
+      if (arr[i] === null || arr[i] === undefined) continue;
+      soma[i] = (soma[i] || 0) + arr[i];
+    }
+  });
+  return soma;
+}
+
+var CAMPOS_RATIO = {
+  produtividade: { numerador: 'volume', denominador: 'equipes' },
+  ticketMedio: { numerador: 'financeiro', denominador: 'volume' },
+};
+
+// Premissa de dias úteis considerados por mês, pra Produtividade virar uma
+// taxa por EQUIPE-DIA (volume ÷ (equipes × dias)), não só por equipe-mês --
+// Jan/Dez usam 15 (meses parciais), os outros 10 usam 30. Confirmado com o
+// usuário. Só entra na conta de Realizado/Tendência (e num Previsto
+// agregando várias tipologias) -- a premissa de Previsto de UMA tipologia
+// (equipesResumo.prod, abaixo) já vem pronta como taxa diária da própria
+// planilha, não passa por aqui.
+var DIAS_PREMISSA_MES = [15, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 15];
+
+// Fecha a Tendência (série "total") do mês vigente combinando o Realizado
+// parcial já ocorrido com a projeção da própria linha T da planilha pra
+// completar o mês -- meses já fechados (antes do vigente) passam a valer
+// pelo Realizado (fato, não projeção); meses futuros continuam com o valor
+// cru da linha T. Financeiro/Volume são fluxos do mês (o que já rodou + o
+// que falta pra fechar = soma); Equipes é uma foto (headcount), somar
+// contaria equipe em dobro -- usa o maior dos dois em vez de somar.
+// Confirmado com o usuário (2026-07-27): vale pro dashboard inteiro
+// (Tabela/Gráfico/Alertas), aplicado uma vez nos 2 pontos onde
+// window.__REGISTROS__ é definido (gate de senha e live-refresh) -- nunca
+// dentro de calcularMensal/bucketPeriodo/calcularTotalAno.
+function fecharValorMesVigenteFluxo(totalMes, realizadoMes) {
+  if ((totalMes === null || totalMes === undefined) && (realizadoMes === null || realizadoMes === undefined)) return null;
+  return (realizadoMes || 0) + (totalMes || 0);
+}
+function fecharValorMesVigenteEquipes(totalMes, realizadoMes) {
+  if ((totalMes === null || totalMes === undefined) && (realizadoMes === null || realizadoMes === undefined)) return null;
+  return Math.max(realizadoMes || 0, totalMes || 0);
+}
+var CAMPOS_FECHAMENTO_VIGENTE = { equipes: fecharValorMesVigenteEquipes, volume: fecharValorMesVigenteFluxo, financeiro: fecharValorMesVigenteFluxo };
+
+function fecharSerieMensal(totalMensal, realizadoMensal, vigenteIdx, fechar) {
+  return totalMensal.map(function (v, i) {
+    if (i < vigenteIdx) {
+      var r = realizadoMensal ? realizadoMensal[i] : null;
+      return (r === null || r === undefined) ? v : r;
+    }
+    if (i === vigenteIdx) return fechar(v, realizadoMensal ? realizadoMensal[i] : null);
+    return v;
+  });
+}
+
+// Não é idempotente -- chamar 2x sobre o mesmo resultado dobraria o mês
+// vigente (Financeiro/Volume somam, então a 2ª chamada somaria de novo).
+// Os 2 pontos de chamada reais sempre passam um array recém-atribuído
+// (JSON.parse ou o resultado de um novo fetch), nunca o retorno desta
+// própria função -- mantenha essa invariante se adicionar um 3º ponto.
+function fecharTendenciaVigente(registros, vigenteIdx) {
+  if (vigenteIdx < 0 || vigenteIdx > 11) return registros; // fora do ano coberto -- nada a fechar
+  return registros.map(function (registro) {
+    if (!registro.total) return registro;
+    var realizado = registro.realizado;
+    var totalFechado = Object.assign({}, registro.total);
+    ['equipes', 'volume', 'financeiro'].forEach(function (campo) {
+      if (!Array.isArray(registro.total[campo])) return;
+      // Realizado pode ter zeros artificiais de "mês ainda não reportado"
+      // (ver removerZerosFinaisNaoReportados) -- sem tratar isso aqui, esse
+      // 0 falso passaria por "dado real" e sobrescreveria a projeção de
+      // verdade da linha T naquele mês, recriando o mesmo problema que esta
+      // função existe pra resolver.
+      var realizadoCampo = realizado && Array.isArray(realizado[campo]) ? removerZerosFinaisNaoReportados(realizado[campo]) : null;
+      totalFechado[campo] = fecharSerieMensal(registro.total[campo], realizadoCampo, vigenteIdx, CAMPOS_FECHAMENTO_VIGENTE[campo]);
+    });
+    return Object.assign({}, registro, { total: totalFechado });
+  });
+}
+
+// valoresLista: array de "valores" de UMA série (previsto/realizado/total),
+// um item por registro agregado (lista de 1 item no caso normal de uma
+// única tipologia; vários itens nas linhas de total por SUP/geral). Devolve
+// os 12 valores mensais na dimensão escolhida. Previsto de produtividade/
+// ticketMedio, quando é UMA ÚNICA tipologia, usa a premissa fixa da
+// planilha (PROD./TICKET, nunca recalculada); quando agrega várias
+// tipologias, não existe premissa própria do agregado, então usa a mesma
+// razão-a-partir-da-soma que Realizado/Tendência (produtividade = Σvolume ÷
+// (Σequipes × dias do mês), ticketMedio = Σfinanceiro ÷ Σvolume -- fórmulas
+// confirmadas com o usuário, estendidas aqui pra somar através das
+// tipologias, não só dos meses).
+function calcularMensal(valoresLista, serie, dimensao) {
+  var lista = valoresLista.filter(Boolean);
+  if (!lista.length) return null;
+  var ratio = CAMPOS_RATIO[dimensao];
+  if (ratio) {
+    if (serie === 'previsto' && lista.length === 1) {
+      var premissa = dimensao === 'produtividade' ? lista[0].equipesResumo.prod : lista[0].volumeResumo.ticket;
+      return new Array(12).fill((premissa === null || premissa === undefined) ? null : premissa);
+    }
+    var numeradorMensal = somarArraysMensais(lista.map(function (v) { return v[ratio.numerador]; }));
+    var denominadorMensal = somarArraysMensais(lista.map(function (v) { return v[ratio.denominador]; }));
+    return numeradorMensal.map(function (v, i) {
+      if (v === null || v === undefined || !denominadorMensal[i]) return null;
+      var denominador = dimensao === 'produtividade' ? denominadorMensal[i] * DIAS_PREMISSA_MES[i] : denominadorMensal[i];
+      return v / denominador;
+    });
+  }
+  return somarArraysMensais(lista.map(function (v) { return v[dimensao]; }));
+}
+
+// Coluna "Total" (ano inteiro) da mesma linha -- soma os 12 meses pras
+// dimensões-fluxo (Financeiro/Volume); Equipes usa média ponderada por dias
+// (mediaEquipesPonderada, não soma -- é uma foto por mês, não um fluxo);
+// produtividade/ticketMedio recalculam a razão a partir da soma do
+// numerador/denominador do ANO INTEIRO, nunca a soma das razões mensais
+// (somar "R$/m³" de 12 meses não seria um número válido).
+function calcularTotalAno(valoresLista, serie, dimensao) {
+  var lista = valoresLista.filter(Boolean);
+  if (!lista.length) return null;
+  var ratio = CAMPOS_RATIO[dimensao];
+  if (ratio) {
+    if (serie === 'previsto' && lista.length === 1) {
+      return dimensao === 'produtividade' ? lista[0].equipesResumo.prod : lista[0].volumeResumo.ticket;
+    }
+    var numeradorTotal = somar(lista.map(function (v) { return somar(v[ratio.numerador]); }));
+    var denominadorTotal;
+    if (dimensao === 'produtividade') {
+      // Soma equipe-dias do ano (não só equipes) -- consistente com o mês a
+      // mês de calcularMensal: um total anual "por equipe-mês" misturaria
+      // meses de 15 e 30 dias com o mesmo peso, o que não bate com a soma
+      // dos meses individuais.
+      denominadorTotal = somar(lista.map(function (v) {
+        return somar((v[ratio.denominador] || []).map(function (equipesMes, i) { return (equipesMes || 0) * DIAS_PREMISSA_MES[i]; }));
+      }));
+    } else {
+      denominadorTotal = somar(lista.map(function (v) { return somar(v[ratio.denominador]); }));
+    }
+    return denominadorTotal ? numeradorTotal / denominadorTotal : null;
+  }
+  if (dimensao === 'equipes') return mediaEquipesPonderada(somarArraysMensais(lista.map(function (v) { return v[dimensao]; })), 0, 12);
+  return somar(lista.map(function (v) { return somar(v[dimensao]); }));
+}
+
+// Buckets de período pra aba Alertas -- [inicio, fimExclusivo) de meses,
+// no mesmo array de 12 posições que calcularMensal já usa. mesVigente/
+// m1/m2/m3 são um mês só; os outros somam uma faixa. Fora do range 0..11
+// (vigenteIdx pode ser -1 ou 12, ver calcularVigenteIdx em datas.js) o
+// próprio somarIntervaloMensal já clampa e devolve null/0 corretamente.
+var PERIODOS_ALERTAS_INTERVALO = {
+  acumuladoAnterior: function (v) { return [0, v]; },
+  mesVigente: function (v) { return [v, v + 1]; },
+  m1: function (v) { return [v + 1, v + 2]; },
+  m2: function (v) { return [v + 2, v + 3]; },
+  m3: function (v) { return [v + 3, v + 4]; },
+  acumuladoFuturo: function (v) { return [v + 4, 12]; },
+  acumuladoAteVigente: function (v) { return [0, v + 1]; },
+  totalAno: function () { return [0, 12]; },
+};
+
+// Soma só os meses [inicio, fim) -- null quando NENHUM mês do intervalo tem
+// dado (nada foi reportado ainda nessa janela inteira), senão soma o que
+// tem tratando um mês individual em branco dentro do intervalo como 0
+// (mesma convenção de somarArraysMensais, generalizada de "vários
+// registros no mesmo mês" pra "vários meses no mesmo intervalo").
+function somarIntervaloMensal(mensal, inicio, fim) {
+  var soma = null;
+  var ini = Math.max(0, inicio), lim = Math.min(mensal.length, fim);
+  for (var i = ini; i < lim; i++) {
+    if (mensal[i] === null || mensal[i] === undefined) continue;
+    soma = (soma === null ? 0 : soma) + mensal[i];
+  }
+  return soma;
+}
+
+// Equipes é uma foto por mês, não um fluxo -- acumular vários meses deve
+// ser uma MÉDIA ponderada pelos dias de cada mês (mesma premissa de
+// DIAS_PREMISSA_MES do denominador de Produtividade), não uma soma bruta
+// (que produziria um "equipe-meses" sem significado prático). Um único mês
+// no intervalo devolve o próprio valor do mês (peso 1, sem diferença de
+// comportamento pros buckets de 1 mês só).
+function mediaEquipesPonderada(mensal, inicio, fim) {
+  var somaEquipeDias = null, somaDias = 0;
+  var ini = Math.max(0, inicio), lim = Math.min(mensal.length, fim);
+  for (var i = ini; i < lim; i++) {
+    if (mensal[i] === null || mensal[i] === undefined) continue;
+    somaEquipeDias = (somaEquipeDias === null ? 0 : somaEquipeDias) + mensal[i] * DIAS_PREMISSA_MES[i];
+    somaDias += DIAS_PREMISSA_MES[i];
+  }
+  return somaDias ? somaEquipeDias / somaDias : null;
+}
+
+// produtividade soma equipe-DIAS no intervalo (não só equipes), mesma
+// premissa de DIAS_PREMISSA_MES que calcularTotalAno já usa pro ano
+// inteiro -- generalizada aqui pra qualquer intervalo de meses.
+function somarIntervaloEquipeDias(mensal, inicio, fim) {
+  var soma = null;
+  var ini = Math.max(0, inicio), lim = Math.min(mensal.length, fim);
+  for (var i = ini; i < lim; i++) {
+    if (mensal[i] === null || mensal[i] === undefined) continue;
+    soma = (soma === null ? 0 : soma) + mensal[i] * DIAS_PREMISSA_MES[i];
+  }
+  return soma;
+}
+
+// Valor de UMA série (previsto/realizado/total), pra UMA dimensão, bucketado
+// num intervalo [inicio, fim) arbitrário -- generaliza calcularMensal/
+// calcularTotalAno (que só sabem fazer "todos os 12 meses" ou "1 mês").
+// Dimensões de razão NUNCA fazem média das razões mensais -- somam
+// numerador/denominador brutos no intervalo e só então dividem (exatamente
+// como calcularTotalAno já faz pro ano inteiro), exceto a premissa fixa do
+// Previsto de uma única tipologia, que independe do período (mesmo caso
+// especial de calcularMensal/calcularTotalAno). (Exceção: dimensão Equipes
+// nunca soma através de vários meses -- usa mediaEquipesPonderada, ver o
+// final da função.) Extraída de bucketPeriodo (aba Alertas) pra também
+// servir o Total do ano da Tendência na Tabela (ver preencherLinha), que
+// soma só do mês vigente em diante, não os 12 meses inteiros.
+function bucketIntervalo(valoresLista, serie, dimensao, inicio, fim) {
+  var lista = valoresLista.filter(Boolean);
+  if (!lista.length) return null;
+  var ratio = CAMPOS_RATIO[dimensao];
+  if (ratio) {
+    if (serie === 'previsto' && lista.length === 1) {
+      var premissa = dimensao === 'produtividade' ? lista[0].equipesResumo.prod : lista[0].volumeResumo.ticket;
+      return (premissa === null || premissa === undefined) ? null : premissa;
+    }
+    var numeradorMensal = somarArraysMensais(lista.map(function (v) { return v[ratio.numerador]; }));
+    var denominadorMensal = somarArraysMensais(lista.map(function (v) { return v[ratio.denominador]; }));
+    var numeradorBucket = somarIntervaloMensal(numeradorMensal, inicio, fim);
+    var denominadorBucket = dimensao === 'produtividade'
+      ? somarIntervaloEquipeDias(denominadorMensal, inicio, fim)
+      : somarIntervaloMensal(denominadorMensal, inicio, fim);
+    if (numeradorBucket === null || !denominadorBucket) return null;
+    return numeradorBucket / denominadorBucket;
+  }
+  var mensal = somarArraysMensais(lista.map(function (v) { return v[dimensao]; }));
+  return dimensao === 'equipes' ? mediaEquipesPonderada(mensal, inicio, fim) : somarIntervaloMensal(mensal, inicio, fim);
+}
+
+// Aba Alertas: mesmo bucketIntervalo acima, só resolvendo o [inicio, fim)
+// a partir de um dos períodos fixos (acumuladoAnterior/mesVigente/M+1..3/
+// acumuladoFuturo/acumuladoAteVigente/totalAno, ver PERIODOS_ALERTAS_INTERVALO).
+function bucketPeriodo(valoresLista, serie, dimensao, periodo, vigenteIdx) {
+  var intervalo = PERIODOS_ALERTAS_INTERVALO[periodo](vigenteIdx);
+  return bucketIntervalo(valoresLista, serie, dimensao, intervalo[0], intervalo[1]);
+}
+
+// Faixas fixas do semáforo (spec 2026-07-23) -- mesma regra pra todas as
+// dimensões, já que Financeiro aqui é receita bruta (não custo): maior é
+// sempre melhor, sem inversão. Limites: >110% azul; 90%-110% (inclusive
+// nas duas pontas) verde; 70%-90% (70 inclusive, 90 exclusivo) amarelo;
+// <70% vermelho; sem dado (desvio null) cinza.
+function classificarSemaforo(desvio) {
+  if (desvio === null || desvio === undefined) return { cor: '#6E7580', indicador: 'Sem dado' };
+  if (desvio > 1.10) return { cor: '#1414CC', indicador: 'Excelente' };
+  if (desvio >= 0.90) return { cor: '#128A3E', indicador: 'Dentro da meta' };
+  if (desvio >= 0.70) return { cor: '#F5A700', indicador: 'Atenção' };
+  return { cor: '#D32020', indicador: 'Crítico' };
+}
+
+// Uma coluna por combinação marcada de Período×Numérico×Baseline, na
+// ordem fixa Período -> Numérico -> Baseline (spec 2026-07-23) -- nunca a
+// ordem em que a pessoa marcou os checkboxes.
+function colunasAlertas(numericos, baselines, periodos) {
+  var colunas = [];
+  // Ordena por ordem canônica, não pela ordem que o usuário marcou
+  var numericosOrdenados = emOrdemCanonica(NUMERICO_ORDEM, new Set(numericos));
+  var baselinesOrdenadas = emOrdemCanonica(BASELINE_ORDEM, new Set(baselines));
+  var periodosOrdenados = emOrdemCanonica(PERIODO_ORDEM, new Set(periodos));
+  periodosOrdenados.forEach(function (periodo) {
+    numericosOrdenados.forEach(function (numerico) {
+      baselinesOrdenadas.forEach(function (baseline) {
+        colunas.push({
+          numerico: numerico, baseline: baseline, periodo: periodo,
+          rotulo: SERIE_LABELS[numerico] + ' ÷ ' + SERIE_LABELS[baseline] + ' — ' + PERIODO_LABELS[periodo],
+        });
+      });
+    });
+  });
+  return colunas;
+}
+
+// Bucketa numérico e baseline pro grupo de índices dado (soma os
+// registros do grupo, ver bucketPeriodo) e divide -- null (sem dado)
+// quando o denominador bucketado é 0/null, ou quando o numerador vier
+// null (nada reportado ainda nesse intervalo).
+function calcularCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx) {
+  var valoresNumerico = indices.map(function (i) { return registros[i][coluna.numerico]; });
+  var valoresBaseline = indices.map(function (i) { return registros[i][coluna.baseline]; });
+  var numerador = bucketPeriodo(valoresNumerico, coluna.numerico, dimensao, coluna.periodo, vigenteIdx);
+  var denominador = bucketPeriodo(valoresBaseline, coluna.baseline, dimensao, coluna.periodo, vigenteIdx);
+  var desvio = (numerador === null || !denominador) ? null : numerador / denominador;
+  return { desvio: desvio, numerador: numerador, denominador: denominador };
+}
+
+var AGRUPAR_POR_ROTULO = { sup: 'SUP', tipologia: 'Tipologia', grupo: 'Grupo', categoria: 'Categoria', origem: 'Origem' };
+
+function renderCabecalhoAlertas(agruparPorRotulo, dimensaoRotulo) {
+  return '<tr><th>' + escapeHtml(agruparPorRotulo) + '</th><th>Tomador</th><th>Combinação</th><th>Referência (' + escapeHtml(dimensaoRotulo) + ')</th><th>Pesquisado (' + escapeHtml(dimensaoRotulo) + ')</th><th>Desvio</th><th>Status</th></tr>';
+}
+
+// Tomador do grupo -- só é um valor único de verdade quando agruparPor é
+// "sup" (1 SUP = 1 tomador sempre). Agrupando por tipologia/categoria/
+// grupo/origem, ou na linha TOTAL GERAL, o grupo quase sempre cruza vários
+// tomadores diferentes -- "Vários" deixa isso explícito em vez de mostrar
+// só o 1º encontrado, que pareceria (errado) que só existe aquele tomador.
+function tomadorDoGrupo(registros, indices) {
+  var tomadores = [];
+  indices.forEach(function (idx) {
+    var t = registros[idx].tomador;
+    if (t && tomadores.indexOf(t) === -1) tomadores.push(t);
+  });
+  if (tomadores.length === 0) return '—';
+  if (tomadores.length === 1) return tomadores[0];
+  return 'Vários';
+}
+
+// Uma linha por (grupo, combinação) -- Referência/Pesquisado são os
+// valores absolutos que antes só apareciam no tooltip (feedback do
+// usuário: queria conferir o dado, não só confiar na %). Status é um
+// círculo cheio (não um badge com borda, nem fundo de célula colorido --
+// pedido explícito) seguido do rótulo por extenso. statusFiltro (Set dos
+// rótulos marcados no filtro dedicado de Status, ver FILTROS_ALERTAS_CONFIG)
+// omite a linha inteira quando marcado e o status calculado não bate --
+// Set vazio/undefined mostra tudo, mesma convenção dos filtros de recorte.
+function renderLinhaAlerta(rotuloGrupo, tomadorGrupo, registros, indices, coluna, dimensao, vigenteIdx, statusFiltro) {
+  var celula = calcularCelulaAlerta(registros, indices, coluna, dimensao, vigenteIdx);
+  var classe = classificarSemaforo(celula.desvio);
+  if (statusFiltro && statusFiltro.size > 0 && !statusFiltro.has(classe.indicador)) return '';
+  var desvioTexto = celula.desvio === null ? '—' : Math.round(celula.desvio * 100) + '%';
+  // Produtividade sempre em 2 casas decimais (pedido explícito), igual à
+  // tabela principal (ver preencherLinha) -- resto das dimensões continua inteiro.
+  var casasDecimaisAlerta = dimensao === 'produtividade' ? 2 : 0;
+  var referencia = formatarNumero(celula.denominador, casasDecimaisAlerta);
+  var pesquisado = formatarNumero(celula.numerador, casasDecimaisAlerta);
+  var busca = normalizarBusca(rotuloGrupo + ' ' + tomadorGrupo + ' ' + coluna.rotulo);
+  return '<tr data-search="' + escapeHtml(busca) + '">' +
+    '<td>' + escapeHtml(rotuloGrupo) + '</td>' +
+    '<td>' + escapeHtml(tomadorGrupo) + '</td>' +
+    '<td>' + escapeHtml(coluna.rotulo) + '</td>' +
+    '<td class="num">' + referencia + '</td>' +
+    '<td class="num">' + pesquisado + '</td>' +
+    '<td class="num">' + desvioTexto + '</td>' +
+    '<td><span class="status-circulo" style="background:' + classe.cor + '"></span>' + escapeHtml(classe.indicador) + '</td>' +
+    '</tr>';
+}
+
+function renderLinhasGrupoAlerta(rotuloGrupo, registros, indices, colunas, dimensao, vigenteIdx, statusFiltro) {
+  var tomadorGrupo = tomadorDoGrupo(registros, indices);
+  return colunas.map(function (c) { return renderLinhaAlerta(rotuloGrupo, tomadorGrupo, registros, indices, c, dimensao, vigenteIdx, statusFiltro); }).join('');
+}
+
+function renderCorpoAlertas(registros, indices, agruparPor, dimensao, numericos, baselines, periodos, vigenteIdx, statusFiltro) {
+  var colunas = colunasAlertas(numericos, baselines, periodos);
+  var grupos = agruparIndicesAlertas(registros, indices, agruparPor);
+  var linhas = grupos.map(function (g) { return renderLinhasGrupoAlerta(g.chave, registros, g.indices, colunas, dimensao, vigenteIdx, statusFiltro); });
+  linhas.push(renderLinhasGrupoAlerta('TOTAL GERAL', registros, indices, colunas, dimensao, vigenteIdx, statusFiltro));
+  return linhas.join('');
+}
+
+// Soma corrida mês a mês -- acumulado[i] = mensal[0]+...+mensal[i]. Trata
+// null/undefined como 0 (não dá pra "acumular" um mês sem dado, mas
+// também não pode quebrar a soma corrida dos meses seguintes).
+function calcularAcumulado(mensal) {
+  var soma = 0;
+  return mensal.map(function (v) {
+    soma += v || 0;
+    return soma;
+  });
+}
+
+// Índice (0=Jan..11=Dez) do último mês com dado real em `mensal` -- -1 se
+// nenhum mês tem dado. Usado pra achar onde Realizado "parou" de ser
+// reportado, tanto pra parar de desenhar Realizado dali em diante quanto
+// pra saber onde a Tendência deve começar (ver construirPainelGraficoHtml).
+function ultimoIndiceComDado(mensal) {
+  for (var i = mensal.length - 1; i >= 0; i--) {
+    if (mensal[i] !== null && mensal[i] !== undefined) return i;
+  }
+  return -1;
+}
+
+// Acumulado de uma série "pós-Realizado" (Tendência, ou Realizado +
+// Previsto Inicial) nunca recomeça do zero em Jan -- a SOMA interna
+// continua exatamente de onde o acumulado de Realizado parou, pra o
+// primeiro mês futuro somar em cima do total real já reportado. O PONTO
+// de conexão (o último mês de Realizado) TEM valor aqui -- igual ao
+// acumulado real de Realizado ali -- pra existir um ponto de onde a linha
+// da série futura possa partir (ver construirLinhasSvg/indiceConector: é o
+// desenho SVG, não esta função, quem decide não duplicar marcador/rótulo
+// nesse mês, já que Realizado desenha os dois ali). Sem nenhum mês de
+// Realizado (ultimoMesRealizado -1), a série futura acumula sozinha desde
+// Jan, do jeito usual.
+function calcularAcumuladoAposRealizado(mensalFutura, acumuladoRealizado, ultimoMesRealizado) {
+  if (ultimoMesRealizado === -1) return calcularAcumulado(mensalFutura);
+  var resultado = new Array(mensalFutura.length).fill(null);
+  var acumuladoAntes = ultimoMesRealizado > 0 ? (acumuladoRealizado[ultimoMesRealizado - 1] || 0) : 0;
+  // No mês de conexão, mensalFutura já pode trazer o valor FECHADO da
+  // Tendência (Realizado do mês + o que a própria linha T projeta pra
+  // completar o mês, ver fecharTendenciaVigente) -- usa esse valor
+  // diretamente em vez de só herdar o acumulado puro de Realizado, senão o
+  // Acumulado deste painel fecha o ano com um número menor que o da Tabela/
+  // Alertas (que somam registro.total direto, já fechado).
+  var valorConector = (mensalFutura[ultimoMesRealizado] === null || mensalFutura[ultimoMesRealizado] === undefined)
+    ? (acumuladoRealizado[ultimoMesRealizado] || 0) - acumuladoAntes
+    : mensalFutura[ultimoMesRealizado];
+  var soma = acumuladoAntes + valorConector;
+  resultado[ultimoMesRealizado] = soma;
+  for (var i = ultimoMesRealizado + 1; i < mensalFutura.length; i++) {
+    soma += mensalFutura[i] || 0;
+    resultado[i] = soma;
+  }
+  return resultado;
+}
+
+// Alguns blocos de mês da MATRIZ (achado real: Financeiro do Realizado)
+// usam uma fórmula que devolve 0 pro mês ainda não reportado, em vez de
+// deixar a célula em branco -- Equipes/Volume do mesmo mês corretamente
+// ficam null, só Financeiro tem esse artefato. Sem tratar isso, esse 0
+// artificial passa pro resto do código como se fosse "mês reportado":
+// ultimoIndiceComDado acha esse mês como o último Realizado quando não tem
+// dado nenhum, e a Tendência perde de vez a contribuição real desse mês (o
+// acumulado "gruda" no valor do mês anterior em vez de somar a Tendência
+// dali em diante -- o mês parece ter "efeito zero"). Varre do fim pro
+// começo pulando zeros E nulls (o artefato de fim de série mistura os
+// dois, ver caso real acima) até achar um mês com dado de verdade
+// (não-zero) -- só então zera qualquer 0 exato encontrado depois desse
+// ponto. Não mexe num zero seguido de outro mês com dado real (não é
+// "final da série", é um zero real no meio de meses já reportados).
+function removerZerosFinaisNaoReportados(mensal) {
+  var resultado = mensal.slice();
+  var i = resultado.length - 1;
+  while (i >= 0 && (resultado[i] === 0 || resultado[i] === null || resultado[i] === undefined)) i--;
+  for (var j = i + 1; j < resultado.length; j++) {
+    if (resultado[j] === 0) resultado[j] = null;
+  }
+  return resultado;
+}
+
+// Acumulado de Realizado não continua reto (flat) até dezembro depois do
+// último mês reportado -- corta ali (null dali em diante), igual ao painel
+// Mensal, pra não parecer que o total "parou de crescer" já sabendo de
+// verdade, quando na real é só que ainda não tem dado. É a partir desse
+// mesmo ponto de corte que calcularAcumuladoAposRealizado continua a linha.
+function cortarAcumuladoNoUltimoDado(acumulado, mensal) {
+  var ultimo = ultimoIndiceComDado(mensal);
+  return acumulado.map(function (v, i) { return i <= ultimo ? v : null; });
+}
+
+// Um filtro é um Set de valores selecionados -- Set vazio (ou ausente)
+// significa "sem filtro" (não exclui nada), igual ao "" do <select> antigo.
+// Com o filtro ativo, um valor passa se estiver em QUALQUER um dos
+// selecionados (OR dentro do mesmo filtro -- "Tipologia = SP ou ST"),
+// combinando com AND entre filtros diferentes (mesmo esquema de sempre).
+function filtroExclui(filtro, valor) {
+  return !!(filtro && filtro.size > 0 && !filtro.has(valor));
+}
+
+// Devolve os índices de `registros` que combinam com os filtros de
+// tipologia/categoria/grupo/SUP/origem atuais, calculada aqui direto sobre
+// os registros crus, sem depender de uma linha <tr> já renderizada, pra o
+// gráfico poder agregar o recorte atual sem precisar de uma linha "molde"
+// no DOM.
+function indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem) {
+  var indices = [];
+  registros.forEach(function (registro, indice) {
+    if (filtroExclui(filtroTipologia, registro.tipologia)) return;
+    if (filtroExclui(filtroCategoria, categoriaTipologia(registro.tipologia))) return;
+    if (filtroExclui(filtroGrupo, registro.grupo)) return;
+    if (filtroExclui(filtroSup, registro.sup)) return;
+    if (filtroExclui(filtroOrigem, registro.origem)) return;
+    indices.push(indice);
+  });
+  return indices;
+}
+
+// Mesmo cinza claro usado na linha "Previsto Inicial" da tabela (.linha-previsto-inicial),
+// pra não inventar uma cor nova pra mesma série. Roxo é a 5ª cor
+// categórica (só do Gráfico, ver ORDEM_SERIES_GRAFICO) -- distinta das
+// outras 4 hues (cinza/azul/verde/âmbar).
+var SERIE_COR = { previstoInicial: '#8b8a82', previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f', realizadoPrevistoInicial: '#a78bfa' };
+// Tracejado por série além da cor -- segunda camada de identidade (não só
+// hue) pra sobreviver a daltonismo/impressão P&B: previsto inicial pontilhado
+// esparso (mais discreto, é a referência de fundo), previsto sólido,
+// realizado pontilhado fino, tendência tracejado longo, realizado+previsto
+// inicial dash-dot (distinto dos outros 4 traços).
+var SERIE_TRACEJADO = { previstoInicial: '2,4', previsto: '', realizado: '1,5', total: '9,5', realizadoPrevistoInicial: '6,3,1,3' };
+var DIMENSOES_RAZAO = ['produtividade', 'ticketMedio'];
+var MESES_ABREVIADOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+var GRAFICO_LARGURA = 1000;
+var GRAFICO_ALTURA_BARRAS = 320;
+var GRAFICO_ALTURA_LINHA = 280;
+// Dois painéis, eixo único cada -- direita só precisa de espaço pro rótulo
+// do último mês não vazar da borda (não tem mais 2º eixo do lado direito).
+var GRAFICO_MARGEM_BARRAS = { topo: 36, baixo: 36, esquerda: 68, direita: 28 };
+var GRAFICO_MARGEM_LINHA = { topo: 36, baixo: 36, esquerda: 68, direita: 36 };
+var GRAFICO_NUM_TICKS = 4;
+var GRAFICO_BARRA_MAX = 24;
+var GRAFICO_BARRA_GAP = 2;
+// Acima desse valor bruto (não escalado) o gráfico passa a exibir em
+// milhares -- assim um recorte pequeno (poucas centenas) não vira "0"
+// depois de dividido, e o eixo/rótulos ganham "(em milhares)" no título.
+var GRAFICO_LIMIAR_MILHARES = 1000;
+
+// Mapeia um valor pra uma distância em pixels dentro de [0, pixelMax],
+// proporcional a valorMax -- 0 quando valorMax é 0 (evita divisão por
+// zero quando não há nenhum dado no recorte filtrado).
+function escalaLinear(valor, valorMax, pixelMax) {
+  if (!valorMax) return 0;
+  return (valor / valorMax) * pixelMax;
+}
+
+// Arredonda o teto do eixo Y pro próximo passo "limpo" (degrau x 10^n), do
+// jeito que uma pessoa desenharia à mão -- os ticks caem em números
+// redondos (0 / 500 / 1.000...) em vez de frações arbitrárias do máximo.
+// Degraus 1/1,5/2/2,5/3/4/5/6/8/10 (não só 1/2/2,5/5/10): o salto de 2,5
+// direto pra 5 sobrava até quase 2x o teto real (achado no gráfico
+// Acumulado — dezembro fechava em ~110.000 e o eixo ia até 200.000, mais
+// da metade do painel vazia); com os degraus intermediários, o pior caso
+// de sobra cai de ~100% pra ~50%, mantendo o mesmo espírito de número
+// redondo.
+var GRAFICO_DEGRAUS_ESCALA = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+function calcularEscalaEixo(valorMax) {
+  if (!valorMax || valorMax <= 0) return { max: 1, passo: 0.25 };
+  var passoBruto = valorMax / GRAFICO_NUM_TICKS;
+  var magnitude = Math.pow(10, Math.floor(Math.log10(passoBruto)));
+  var normalizado = passoBruto / magnitude;
+  var passoNormalizado = GRAFICO_DEGRAUS_ESCALA.find(function (degrau) { return normalizado <= degrau; }) || 10;
+  var passo = passoNormalizado * magnitude;
+  return { max: passo * GRAFICO_NUM_TICKS, passo: passo };
+}
+
+// Formata um valor pro que aparece NO gráfico (eixo, rótulo de coluna/linha)
+// -- em milhares quando o recorte é grande o bastante pra fazer sentido.
+// O tooltip usa formatarNumero puro (valor exato), nunca esta função: hover
+// é onde a pessoa vai quando quer o número completo, não o arredondado.
+function formatarValorGrafico(valor, usarMilhares, casasDecimais) {
+  if (valor === null || valor === undefined) return '—';
+  var base = usarMilhares ? valor / 1000 : valor;
+  var casas = casasDecimais === undefined ? 2 : casasDecimais;
+  var fator = Math.pow(10, casas);
+  return (Math.round(base * fator) / fator).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
+function construirEixoXSvg(larguraMes, alturaPlot, margem) {
+  var svg = '';
+  for (var mes = 0; mes < 12; mes++) {
+    var x = margem.esquerda + mes * larguraMes + larguraMes / 2;
+    var y = margem.topo + alturaPlot + 20;
+    svg += '<text class="grafico-eixo-texto" x="' + x.toFixed(1) + '" y="' + y + '" text-anchor="middle">' + MESES_ABREVIADOS[mes] + '</text>';
+  }
+  return svg;
+}
+
+function construirEixoYSvg(escala, alturaPlot, margem, ladoDireita, usarMilhares, casasDecimais) {
+  var svg = '';
+  for (var i = 0; i <= GRAFICO_NUM_TICKS; i++) {
+    var valor = i * escala.passo;
+    var y = margem.topo + alturaPlot - (valor / escala.max) * alturaPlot;
+    var x = ladoDireita ? (GRAFICO_LARGURA - margem.direita + 10) : (margem.esquerda - 10);
+    var ancora = ladoDireita ? 'start' : 'end';
+    svg += '<text class="grafico-eixo-texto" x="' + x + '" y="' + (y + 4).toFixed(1) + '" text-anchor="' + ancora + '">' + formatarValorGrafico(valor, usarMilhares, casasDecimais) + '</text>';
+    if (!ladoDireita) {
+      svg += '<line class="grafico-gridline" x1="' + margem.esquerda + '" y1="' + y.toFixed(1) + '" x2="' + (GRAFICO_LARGURA - margem.direita) + '" y2="' + y.toFixed(1) + '"/>';
+    }
+  }
+  return svg;
+}
+
+// Legenda só entra com 2+ séries -- com uma série só, o título do painel já
+// diz o que é. O traço da legenda repete o tracejado da série, então o
+// canal secundário (não só a cor) já aparece ali.
+function construirLegendaSvg(dadosPorSerie, margem) {
+  if (dadosPorSerie.length < 2) return '';
+  var svg = '';
+  var y = 14;
+  dadosPorSerie.forEach(function (d, i) {
+    var x = margem.esquerda + i * 140;
+    var traco = SERIE_TRACEJADO[d.serie] ? ' stroke-dasharray="' + SERIE_TRACEJADO[d.serie] + '"' : '';
+    svg += '<line x1="' + x + '" y1="' + y + '" x2="' + (x + 20) + '" y2="' + y + '" stroke="' + SERIE_COR[d.serie] + '" stroke-width="3" stroke-linecap="round"' + traco + '/>';
+    svg += '<text class="grafico-eixo-texto" x="' + (x + 28) + '" y="' + (y + 4) + '" text-anchor="start">' + SERIE_LABELS[d.serie] + '</text>';
+  });
+  return svg;
+}
+
+// Desenha uma barra/coluna com topo arredondado (4px) e base quadrada,
+// ancorada na baseline -- nunca um <rect> puro com cantos vivos nos 4 lados.
+function desenharBarraArredondada(x, y, w, h, cor) {
+  if (h <= 0) return '';
+  var r = Math.min(4, w / 2, h);
+  var d = 'M' + x.toFixed(1) + ',' + (y + h).toFixed(1) +
+    ' L' + x.toFixed(1) + ',' + (y + r).toFixed(1) +
+    ' Q' + x.toFixed(1) + ',' + y.toFixed(1) + ' ' + (x + r).toFixed(1) + ',' + y.toFixed(1) +
+    ' L' + (x + w - r).toFixed(1) + ',' + y.toFixed(1) +
+    ' Q' + (x + w).toFixed(1) + ',' + y.toFixed(1) + ' ' + (x + w).toFixed(1) + ',' + (y + r).toFixed(1) +
+    ' L' + (x + w).toFixed(1) + ',' + (y + h).toFixed(1) + ' Z';
+  return '<path class="grafico-barra" d="' + d + '" fill="' + cor + '"/>';
+}
+
+// Empurra rótulos que colidem (caixa estimada pela largura do texto) pra
+// baixo do que colidiram, na ordem de cima pra baixo -- usado tanto pros
+// rótulos de coluna quanto de linha JUNTOS, porque num eixo duplo os dois
+// grupos têm escalas diferentes e podem convergir na mesma faixa vertical
+// num mês onde ambas as séries estão perto do teto do seu próprio eixo
+// (ex.: o último mês, que costuma ser o maior tanto no valor do mês quanto
+// no acumulado). Empurrar só dentro do próprio grupo não pega esse caso.
+function resolverColisoesRotulos(rotulos) {
+  rotulos.sort(function (a, b) { return a.y - b.y; });
+  var posicionados = [];
+  rotulos.forEach(function (r) {
+    var largura = r.texto.length * 6.5 + 6;
+    var y = r.y;
+    var tentativas = 0;
+    var colidiu = true;
+    while (colidiu && tentativas < 60) {
+      colidiu = posicionados.some(function (p) {
+        return Math.abs(p.x - r.x) < (largura + p.largura) / 2 && Math.abs(p.y - y) < 13;
+      });
+      if (colidiu) { y += 2; tentativas++; }
+    }
+    posicionados.push({ x: r.x, y: y, largura: largura });
+    r.y = y;
+  });
+  return rotulos;
+}
+
+// Colunas agrupadas por mês, largura travada em <=24px com um respiro de
+// 2px entre colunas vizinhas (nunca encostadas). Rótulo sempre visível em
+// cada coluna (a pedido) -- fica denso com 3 séries, mas o valor exato
+// também mora no tooltip (hover/foco) e na aba Tabela. Os candidatos a
+// rótulo são só ACUMULADOS em `rotulos` -- desenhados depois, junto com os
+// da linha, numa única passada de anti-colisão (ver construirGraficoSvg).
+function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais) {
+  var svg = '';
+  var numSeries = dadosPorSerie.length;
+  var slot = larguraMes * 0.72;
+  var larguraColuna = Math.min(GRAFICO_BARRA_MAX, (slot - GRAFICO_BARRA_GAP * (numSeries - 1)) / numSeries);
+  var slotOcupado = larguraColuna * numSeries + GRAFICO_BARRA_GAP * (numSeries - 1);
+
+  for (var mes = 0; mes < 12; mes++) {
+    var inicioSlot = margem.esquerda + mes * larguraMes + (larguraMes - slotOcupado) / 2;
+    dadosPorSerie.forEach(function (d, i) {
+      var valor = d.mensal[mes];
+      // null = mês sem dado reportado ainda (nunca 0 -- ver
+      // somarArraysMensais) -- não desenha nada pra essa série nesse mês,
+      // em vez de uma coluna fantasma na base do eixo.
+      if (valor === null || valor === undefined) return;
+      var alturaColuna = escalaLinear(valor, escala.max, alturaPlot);
+      var x = inicioSlot + i * (larguraColuna + GRAFICO_BARRA_GAP);
+      var y = margem.topo + alturaPlot - alturaColuna;
+      svg += desenharBarraArredondada(x, y, larguraColuna, alturaColuna, SERIE_COR[d.serie]);
+      svg += '<rect class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor, casasDecimais) + '" x="' + x.toFixed(1) + '" y="' + margem.topo + '" width="' + Math.max(larguraColuna, GRAFICO_BARRA_GAP).toFixed(1) + '" height="' + alturaPlot + '" fill="transparent"/>';
+      if (valor) {
+        rotulos.push({ x: x + larguraColuna / 2, y: y - 6, texto: formatarValorGrafico(valor, usarMilhares, casasDecimais), classe: 'grafico-rotulo' });
+      }
+    });
+  }
+  return svg;
+}
+
+// Linhas (usadas pro acumulado, e pro mensal das dimensões-razão) --
+// marcador de 8px com anel na cor da superfície (fica legível cruzando
+// outra linha ou uma coluna). Rótulo em CADA ponto (a pedido), também só
+// acumulado em `rotulos` -- ver construirColunasSvg acima pro porquê.
+// Um mês null (sem dado reportado ainda, ver somarArraysMensais) quebra a
+// linha em vez de "cair" até a base -- desenha um <polyline> por trecho
+// contínuo de meses com dado, não um só ligando os 12 pontos.
+// indiceConector (opcional, em cada item de dadosPorSerie): o mês onde uma
+// série "pós-Realizado" (Tendência, Realizado+Previsto Inicial) herda o
+// ponto de partida de Realizado -- ver calcularAcumuladoAposRealizado e
+// construirPainelGraficoHtml. Esse mês PRECISA entrar no trecho da
+// polyline (fecha o hiato visual entre o último mês de Realizado e o
+// primeiro mês próprio da série futura, desenhando o segmento na cor/
+// tracejado da série futura), mas NÃO desenha marcador/hit/rótulo -- quem
+// já desenhou os três ali foi a própria série Realizado, no mesmo x,y.
+function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais) {
+  var svg = '';
+  dadosPorSerie.forEach(function (d) {
+    var traco = SERIE_TRACEJADO[d.serie] ? ' stroke-dasharray="' + SERIE_TRACEJADO[d.serie] + '"' : '';
+    var trecho = [];
+    function fecharTrecho() {
+      if (trecho.length > 1) {
+        var pontosStr = trecho.map(function (p) { return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' ');
+        svg += '<polyline class="grafico-linha" points="' + pontosStr + '" fill="none" stroke="' + SERIE_COR[d.serie] + '" stroke-width="2"' + traco + '/>';
+      }
+      trecho = [];
+    }
+    d[campo].forEach(function (valor, mes) {
+      if (valor === null || valor === undefined) { fecharTrecho(); return; }
+      var x = margem.esquerda + mes * larguraMes + larguraMes / 2;
+      var y = margem.topo + alturaPlot - escalaLinear(valor, escala.max, alturaPlot);
+      trecho.push({ x: x, y: y });
+      var ehConector = d.indiceConector !== null && d.indiceConector !== undefined && mes === d.indiceConector;
+      if (!ehConector) {
+        svg += '<circle class="grafico-marcador" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4" fill="' + SERIE_COR[d.serie] + '" stroke="var(--surface-1)" stroke-width="2"/>';
+        svg += '<circle class="grafico-hit" data-tooltip="' + MESES_ABREVIADOS[mes] + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor, casasDecimais) + '" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="10" fill="transparent"/>';
+        if (valor) {
+          rotulos.push({ x: x, y: y - 10, texto: formatarValorGrafico(valor, usarMilhares, casasDecimais), classe: 'grafico-rotulo-final' });
+        }
+      }
+    });
+    fecharTrecho();
+  });
+  return svg;
+}
+
+// Monta o SVG final de um painel a partir das marcas (colunas OU linhas,
+// já em `svgMarcas`) + candidatos a rótulo acumulados em `rotulos` --
+// resolve a colisão uma vez, no conjunto inteiro do painel, e desenha os
+// <text> por último (por cima de tudo, incluindo o halo).
+function finalizarPainelSvg(svgMarcas, rotulos, altura) {
+  var svg = svgMarcas;
+  resolverColisoesRotulos(rotulos).forEach(function (r) {
+    svg += '<text class="' + r.classe + '" x="' + r.x.toFixed(1) + '" y="' + r.y.toFixed(1) + '" text-anchor="middle">' + r.texto + '</text>';
+  });
+  return '<svg viewBox="0 0 ' + GRAFICO_LARGURA + ' ' + altura + '" class="grafico-svg">' + svg + '</svg>';
+}
+
+// dadosPorSerie: [{ serie, mensal: number[12], acumulado: number[12]|null }],
+// já filtrado só com as séries visíveis (respeita filtro-serie) e com
+// valores mensais nunca-nulos (null já virou 0 antes de chegar aqui -- ver
+// construirPainelGraficoHtml). ehRazao=true pras dimensões Produtividade/Ticket médio:
+// nesse caso não faz sentido "acumular" uma razão, então só a linha do
+// valor mensal aparece (painel único, sem colunas).
+function construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais) {
+  var margem = ehRazao ? GRAFICO_MARGEM_LINHA : GRAFICO_MARGEM_BARRAS;
+  var altura = ehRazao ? GRAFICO_ALTURA_LINHA : GRAFICO_ALTURA_BARRAS;
+  var larguraPlot = GRAFICO_LARGURA - margem.esquerda - margem.direita;
+  var alturaPlot = altura - margem.topo - margem.baixo;
+  var larguraMes = larguraPlot / 12;
+
+  var maxMensal = 0;
+  dadosPorSerie.forEach(function (d) { d.mensal.forEach(function (v) { if (v > maxMensal) maxMensal = v; }); });
+  var escala = calcularEscalaEixo(maxMensal);
+  var usarMilhares = maxMensal >= GRAFICO_LIMIAR_MILHARES;
+
+  var svg = '';
+  svg += construirEixoYSvg(escala, alturaPlot, margem, false, usarMilhares, casasDecimais);
+  svg += construirEixoXSvg(larguraMes, alturaPlot, margem);
+
+  var rotulos = [];
+  svg += ehRazao
+    ? construirLinhasSvg(dadosPorSerie, 'mensal', escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais)
+    : construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais);
+  svg += construirLegendaSvg(dadosPorSerie, margem);
+
+  return { svg: finalizarPainelSvg(svg, rotulos, altura), milhares: usarMilhares };
+}
+
+// Painel separado, eixo único, pro acumulado no ano -- mensal e acumulado
+// nunca compartilham escala (dezembro acumulado é ~12x um mês típico), um
+// eixo duplo no mesmo plot inventaria uma correlação visual que não existe.
+function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
+  var margem = GRAFICO_MARGEM_LINHA;
+  var altura = GRAFICO_ALTURA_LINHA;
+  var larguraPlot = GRAFICO_LARGURA - margem.esquerda - margem.direita;
+  var alturaPlot = altura - margem.topo - margem.baixo;
+  var larguraMes = larguraPlot / 12;
+
+  var maxAcumulado = 0;
+  dadosPorSerie.forEach(function (d) { d.acumulado.forEach(function (v) { if (v > maxAcumulado) maxAcumulado = v; }); });
+  var escala = calcularEscalaEixo(maxAcumulado);
+  var usarMilhares = maxAcumulado >= GRAFICO_LIMIAR_MILHARES;
+
+  var svg = '';
+  svg += construirEixoYSvg(escala, alturaPlot, margem, false, usarMilhares, casasDecimais);
+  svg += construirEixoXSvg(larguraMes, alturaPlot, margem);
+
+  var rotulos = [];
+  svg += construirLinhasSvg(dadosPorSerie, 'acumulado', escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais);
+  svg += construirLegendaSvg(dadosPorSerie, margem);
+
+  return { svg: finalizarPainelSvg(svg, rotulos, altura), milhares: usarMilhares };
+}
+
+// Monta o par Mensal + Acumulado de UMA dimensão (HTML pronto, não toca o
+// DOM diretamente) -- reaproveitado por montarGraficos pra cada dimensão
+// marcada, uma abaixo da outra. As dimensões nunca se somam entre si (não
+// faz sentido somar Equipes com Financeiro): cada uma sempre ganha seu
+// próprio par de painéis, "sobrepostos" na página em vez de combinados num
+// único número -- o mesmo princípio já usado nas linhas da tabela.
+function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
+  var seriesVisiveis = ORDEM_SERIES_GRAFICO.filter(function (s) { return !filtroExclui(filtroSerie, s); });
+  var ehRazao = DIMENSOES_RAZAO.indexOf(dimensao) !== -1;
+
+  function mensalBruto(serie) {
+    var valoresLista = indices.map(function (idx) { return registros[idx][serie]; });
+    return calcularMensal(valoresLista, serie, dimensao) || new Array(12).fill(null);
+  }
+
+  // Realizado e Previsto Inicial SEMPRE calculados, mesmo se não
+  // estiverem marcados no filtro de série -- Tendência e "Realizado +
+  // Previsto Inicial" dependem dos dois pra achar onde o Realizado parou
+  // (ultimoMesRealizado) e montar a parte futura, mesmo quando nenhum dos
+  // dois está marcado pra aparecer no gráfico (efeito colateral bom: antes
+  // dessa mudança, desmarcar "Realizado" no filtro fazia a Tendência
+  // "esquecer" o total real acumulado e recomeçar sozinha do zero -- não
+  // acontece mais).
+  var mensalRealizado = removerZerosFinaisNaoReportados(mensalBruto('realizado'));
+  var mensalPrevistoInicial = mensalBruto('previstoInicial');
+  var ultimoMesRealizado = ultimoIndiceComDado(mensalRealizado);
+  var acumuladoRealizado = calcularAcumulado(mensalRealizado);
+
+  // Só pro painel Mensal em LINHA (razão -- Produtividade/Ticket Médio):
+  // injeta o valor do próprio Realizado no mês de conexão pra série
+  // futura ter um ponto ali (fecha o hiato dessa linha também) -- nunca
+  // sobrescreve um valor que já exista (a MATRIZ pode, em tese, ter o
+  // próprio T ali) e NUNCA roda pro painel Mensal em BARRA (soma), que
+  // continua sem nenhum ponto/barra da série futura no mês de conexão.
+  function comConectorSeRazao(mensal) {
+    if (!ehRazao || ultimoMesRealizado === -1) return mensal;
+    var resultado = mensal.slice();
+    if (resultado[ultimoMesRealizado] === null || resultado[ultimoMesRealizado] === undefined) {
+      resultado[ultimoMesRealizado] = mensalRealizado[ultimoMesRealizado];
+    }
+    return resultado;
+  }
+
+  var mensalPorSerie = { realizado: mensalRealizado, previstoInicial: mensalPrevistoInicial };
+  seriesVisiveis.forEach(function (serie) {
+    if (mensalPorSerie[serie] || serie === 'realizadoPrevistoInicial') return;
+    mensalPorSerie[serie] = mensalBruto(serie);
+  });
+  if (mensalPorSerie.total) mensalPorSerie.total = comConectorSeRazao(mensalPorSerie.total);
+  // "Realizado + Previsto Inicial": null em todo mês que já tem Realizado
+  // (mesma regra da Tendência -- um mês com Realizado nunca mostra outra
+  // série de projeção junto), Previsto Inicial do próprio mês dali em
+  // diante (não Previsto atual, não a Tendência da MATRIZ).
+  mensalPorSerie.realizadoPrevistoInicial = comConectorSeRazao(mensalPrevistoInicial.map(function (v, i) {
+    return i <= ultimoMesRealizado ? null : v;
+  }));
+
+  var dadosPorSerie = seriesVisiveis.map(function (serie) {
+    var mensal = mensalPorSerie[serie];
+    var acumulado = null;
+    if (!ehRazao) {
+      if (serie === 'total' || serie === 'realizadoPrevistoInicial') {
+        acumulado = calcularAcumuladoAposRealizado(mensal, acumuladoRealizado, ultimoMesRealizado);
+      } else if (serie === 'realizado') {
+        acumulado = cortarAcumuladoNoUltimoDado(calcularAcumulado(mensal), mensal);
+      } else {
+        acumulado = calcularAcumulado(mensal);
+      }
+    }
+    // Tendência: um mês que já tem Realizado nunca desenha barra de
+    // projeção nele (mesma regra de "Realizado + Previsto Inicial" acima)
+    // -- só o painel Mensal em BARRA (soma) precisa disso; em razão (linha)
+    // o próprio comConectorSeRazao já cuida da continuidade, e o Acumulado
+    // usa "mensal" sem esse corte (calculado acima), pra não perder a
+    // contribuição real do mês de conexão (ver calcularAcumuladoAposRealizado).
+    var mensalParaDesenho = (serie === 'total' && !ehRazao)
+      ? mensal.map(function (v, i) { return i <= ultimoMesRealizado ? null : v; })
+      : mensal;
+    // indiceConector: só pras séries "pós-Realizado", e só quando existe
+    // de fato um mês de Realizado pra herdar (ultimoMesRealizado !== -1)
+    // -- ver construirLinhasSvg. Vale tanto pro painel Mensal em linha
+    // (razão) quanto pro Acumulado; o painel Mensal em BARRA (soma) não
+    // usa esse campo (construirColunasSvg não olha pra ele).
+    var indiceConector = (serie === 'total' || serie === 'realizadoPrevistoInicial') && ultimoMesRealizado !== -1
+      ? ultimoMesRealizado
+      : null;
+    return { serie: serie, mensal: mensalParaDesenho, acumulado: acumulado, indiceConector: indiceConector };
+  });
+
+  var rotuloDimensao = DIMENSOES_ROTULO[dimensao] || '';
+  // Todo gráfico mostra número inteiro, sem casa decimal -- exceto
+  // Produtividade/Ticket médio, que são razões (m³ por equipe-dia, R$ por
+  // m³) e perderiam precisão útil arredondadas pra inteiro.
+  var casasDecimais = ehRazao ? 2 : 0;
+
+  var mensalResultado = construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais);
+  var tituloMensal = (ehRazao ? 'Evolução mensal — ' : 'Mensal — ') + rotuloDimensao + (mensalResultado.milhares ? ' (em milhares)' : '');
+  var html = '<div class="grafico-painel"><div class="grafico-titulo">' + escapeHtml(tituloMensal) + '</div><div>' + mensalResultado.svg + '</div></div>';
+
+  // Acumulado de Equipes não tem leitura de negócio (não existe "total de
+  // equipes acumulado no ano") -- some junto com as dimensões-razão, que já
+  // não mostravam esse painel por um motivo parecido.
+  if (!(ehRazao || dimensao === 'equipes')) {
+    var acumuladoResultado = construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais);
+    var tituloAcumulado = 'Acumulado no ano — ' + rotuloDimensao + (acumuladoResultado.milhares ? ' (em milhares)' : '');
+    html += '<div class="grafico-painel"><div class="grafico-titulo">' + escapeHtml(tituloAcumulado) + '</div><div>' + acumuladoResultado.svg + '</div></div>';
+  }
+  return html;
+}
+
+// Recalcula e redesenha os gráficos a partir dos MESMOS filtros/dimensões da
+// tabela -- chamado toda vez que recalcularTabela roda, então nunca fica
+// desatualizado mesmo se o usuário estiver na aba Tabela quando muda um
+// filtro e só depois troca pra aba Gráfico. Uma dimensão marcada = um par
+// de painéis; várias marcadas = vários pares, um abaixo do outro (nunca
+// somados entre si).
+function montarGraficos(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem, filtroSerie, dimensoes) {
+  var indices = indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem);
+  var html = dimensoes.map(function (dimensao) {
+    return '<div class="grafico-bloco-dimensao">' + construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) + '</div>';
+  }).join('');
+  document.getElementById('graficos-container').innerHTML = html;
+}
+
+// Sempre reconstrói cabeçalho + corpo inteiros (sem estado incremental,
+// mesma filosofia do resto do script) -- muito mais simples que a Tabela
+// porque aqui NUNCA existe uma distinção "estrutura vs valor": qualquer
+// mudança (recorte OU um dos 4 seletores próprios) muda linhas E colunas
+// ao mesmo tempo, então não vale a pena ter dois caminhos.
+function recalcularAlertas() {
+  var indices = indicesFiltrados(
+    window.__REGISTROS__, filtrosSelecionados.tipologia, filtrosSelecionados.categoria,
+    filtrosSelecionados.grupo, filtrosSelecionados.sup, filtrosSelecionados.origem
+  );
+  var agruparPor = filtrosAlertas.agruparPor.values().next().value;
+  var dimensao = dimensoesEmOrdem(filtrosSelecionados.dimensao)[0];
+  var numericos = emOrdemCanonica(NUMERICO_ORDEM, filtrosAlertas.numerico);
+  var baselines = emOrdemCanonica(BASELINE_ORDEM, filtrosAlertas.baseline);
+  var periodos = emOrdemCanonica(PERIODO_ORDEM, filtrosAlertas.periodo);
+  var colunas = colunasAlertas(numericos, baselines, periodos);
+  document.getElementById('cabecalho-alertas').innerHTML = renderCabecalhoAlertas(AGRUPAR_POR_ROTULO[agruparPor], DIMENSOES_ROTULO[dimensao]);
+  document.getElementById('corpo-alertas').innerHTML = renderCorpoAlertas(
+    window.__REGISTROS__, indices, agruparPor, dimensao, numericos, baselines, periodos, window.__VIGENTE_IDX__,
+    filtrosAlertas.status
+  );
+  aplicarBuscaAlertas();
+}
+
+// Filtra as linhas JÁ renderizadas da tabela de Alertas por texto --
+// nunca refaz a busca de dados (bucketPeriodo etc.), só esconde/mostra
+// <tr> pelo data-search que renderLinhaAlerta já embutiu. Termo vazio
+// mostra tudo (mesma convenção do campo de busca dentro de cada
+// filtro-multi, ver montarFiltroMulti).
+function aplicarBuscaAlertas() {
+  var termo = normalizarBusca(document.getElementById('busca-alertas').value);
+  document.querySelectorAll('#tabela-alertas tbody tr').forEach(function (tr) {
+    var combina = termo === '' || (tr.dataset.search || '').indexOf(termo) !== -1;
+    tr.style.display = combina ? '' : 'none';
+  });
+}
+
+// Tooltip único, delegado (os SVGs são recriados via innerHTML a cada
+// recalcularTabela, então um listener por elemento seria descartado toda
+// hora) -- qualquer elemento com [data-tooltip] dentro da seção de
+// gráficos aciona o balão, com foco/teclado cobrindo o mesmo caso via
+// mouseover que já borbulha de um :focus programático.
+function inicializarTooltipGrafico() {
+  var secao = document.getElementById('secao-grafico');
+  var tooltip = document.getElementById('grafico-tooltip');
+  secao.addEventListener('mousemove', function (e) {
+    var alvo = e.target.closest ? e.target.closest('[data-tooltip]') : null;
+    if (!alvo) { tooltip.style.display = 'none'; return; }
+    var rectSecao = secao.getBoundingClientRect();
+    tooltip.textContent = alvo.getAttribute('data-tooltip');
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX - rectSecao.left + 14) + 'px';
+    tooltip.style.top = (e.clientY - rectSecao.top - 12) + 'px';
+  });
+  secao.addEventListener('mouseleave', function () { tooltip.style.display = 'none'; });
+}
+
+function alternarAba(aba) {
+  document.getElementById('secao-tabela').style.display = aba === 'tabela' ? '' : 'none';
+  document.getElementById('secao-grafico').style.display = aba === 'grafico' ? '' : 'none';
+  document.getElementById('secao-alertas').style.display = aba === 'alertas' ? '' : 'none';
+  document.getElementById('aba-tabela').classList.toggle('aba-ativa', aba === 'tabela');
+  document.getElementById('aba-grafico').classList.toggle('aba-ativa', aba === 'grafico');
+  document.getElementById('aba-alertas').classList.toggle('aba-ativa', aba === 'alertas');
+}
+
+function preencherLinha(linha, valoresLista, serie, dimensao) {
+  // Toda a tabela principal mostra número inteiro, sem vírgula, em
+  // qualquer dimensão -- diferente do gráfico, que continua com 2 casas
+  // pra Financeiro/Volume/Produtividade/Ticket médio (só Equipes já tinha 0
+  // lá, por não existir "meia equipe" -- na tabela isso agora vale igual
+  // pra todas). Produtividade é a única exceção (pedido explícito): sempre
+  // 2 casas decimais, aqui e em qualquer outro lugar que mostre esse
+  // número (ver também renderLinhaAlerta).
+  var casasDecimais = dimensao === 'produtividade' ? 2 : 0;
+  var mensal = calcularMensal(valoresLista, serie, dimensao);
+  var vigenteIdx = window.__VIGENTE_IDX__;
+  var temVigente = typeof vigenteIdx === 'number';
+  // Tendência (série "total") só existe na Tabela a partir do mês vigente
+  // em diante -- meses passados mostram só Previsto/Realizado, seguindo a
+  // MATRIZ base (regra confirmada com o usuário, 2026-07-28). O valor já
+  // FECHADO com o Realizado (fecharTendenciaVigente) continua existindo por
+  // baixo pros cálculos agregados de Alertas e pro conector do Acumulado no
+  // Gráfico -- só a célula mensal (e o Total do ano logo abaixo) escondem
+  // os meses passados aqui, não o dado em si.
+  if (serie === 'total' && mensal && temVigente) {
+    mensal = mensal.map(function (v, idx) { return idx < vigenteIdx ? null : v; });
+  }
+  var celulasMes = linha.querySelectorAll('.celula-mes');
+  celulasMes.forEach(function (celula, idx) {
+    celula.textContent = formatarNumero(mensal ? mensal[idx] : null, casasDecimais);
+  });
+  var celulaTotal = linha.querySelector('.celula-total-linha');
+  // Total do ano da Tendência soma só do mês vigente em diante (mesmo corte
+  // do mensal acima) -- incluir os meses passados fechados com o Realizado
+  // dobraria a contagem desses meses (já aparecem no Total do ano da linha
+  // Realizado) e infla o Total muito além do que ainda falta projetar (bug
+  // real: SUP com T só em 3 meses futuros somando o ano inteiro por causa
+  // do fechamento). Toda outra série continua somando o ano cheio.
+  var totalAno = (serie === 'total' && temVigente)
+    ? bucketIntervalo(valoresLista, serie, dimensao, vigenteIdx, 12)
+    : calcularTotalAno(valoresLista, serie, dimensao);
+  if (celulaTotal) celulaTotal.textContent = formatarNumero(totalAno, casasDecimais);
+}
+
+// Dado um array de valores (na ordem das linhas visíveis de UMA coluna),
+// devolve um array {valor, repetido} do mesmo tamanho -- repetido=true
+// quando o valor é igual ao da linha visível anterior. O texto continua
+// sempre visível (nunca vira '') -- quem decide como exibir isso (esmaecido
+// quando repetido) é mesclarColunasRepetidas, não esta função. Função pura
+// (sem DOM) pra poder testar sozinha.
+function mesclarConsecutivos(valores) {
+  var resultado = [];
+  var anterior = null;
+  valores.forEach(function (valor, i) {
+    resultado.push({ valor: valor, repetido: i > 0 && valor === anterior });
+    anterior = valor;
+  });
+  return resultado;
+}
+
+// Nunca reescreve o conteúdo da célula (só a classe que esmaece) -- a coluna
+// Tipologia guarda um <span class="tipologia-chip"> colorido, e sobrescrever
+// com textContent destruiria esse HTML. Pro mesmo motivo, sup/grupo/tomador
+// também pararam de ter o conteúdo reescrito (era sempre o mesmo valor já
+// presente, um no-op).
+function mesclarColunasRepetidas() {
+  var linhasVisiveis = Array.prototype.filter.call(
+    document.querySelectorAll('#tabela-orcamento tbody tr'),
+    function (tr) { return tr.style.display !== 'none'; }
+  );
+
+  // SUP > Grupo > Tomador é uma hierarquia, não 3 colunas independentes --
+  // Grupo só pode contar como repetido se o SUP acima também não tiver
+  // mudado (senão um SUP novo que por coincidência tem o mesmo Grupo do
+  // anterior ficaria com o nome apagado, escondendo que um bloco novo
+  // começou; mesmo raciocínio pra Tomador exigir Grupo+SUP inalterados).
+  // Por isso cada nível usa uma CHAVE que inclui todos os níveis acima, não
+  // só seu próprio texto -- reaproveita mesclarConsecutivos (já testada)
+  // aplicando-a a essas chaves compostas em vez do texto puro.
+  var celulasSup = linhasVisiveis.map(function (tr) { return tr.querySelector('.col-sup'); });
+  var celulasGrupo = linhasVisiveis.map(function (tr) { return tr.querySelector('.col-grupo'); });
+  var celulasTomador = linhasVisiveis.map(function (tr) { return tr.querySelector('.col-tomador'); });
+  var valoresSup = celulasSup.map(function (c) { return c.getAttribute('data-valor'); });
+  var valoresGrupo = celulasGrupo.map(function (c) { return c.getAttribute('data-valor'); });
+  var valoresTomador = celulasTomador.map(function (c) { return c.getAttribute('data-valor'); });
+  // Chave = array [niveis acima..., proprio valor] serializado em JSON, em
+  // vez de uma string concatenada com separador -- evita qualquer risco de
+  // colisao entre valores que por acaso contenham o proprio separador.
+  var chavesGrupo = valoresSup.map(function (sup, i) { return JSON.stringify([sup, valoresGrupo[i]]); });
+  var chavesTomador = valoresSup.map(function (sup, i) { return JSON.stringify([sup, valoresGrupo[i], valoresTomador[i]]); });
+
+  var mescladosSup = mesclarConsecutivos(valoresSup);
+  var mescladosGrupo = mesclarConsecutivos(chavesGrupo);
+  var mescladosTomador = mesclarConsecutivos(chavesTomador);
+  celulasSup.forEach(function (c, i) { c.classList.toggle('valor-repetido', mescladosSup[i].repetido); });
+  celulasGrupo.forEach(function (c, i) { c.classList.toggle('valor-repetido', mescladosGrupo[i].repetido); });
+  celulasTomador.forEach(function (c, i) { c.classList.toggle('valor-repetido', mescladosTomador[i].repetido); });
+
+  // Tipologia (e os selos TOTAL/TOTAL GERAL) mesclam por GRUPO de linha
+  // (as 3 linhas P/R/T de um mesmo bloco compartilham o mesmo
+  // data-registro-indices), não por valor de texto -- se comparasse por
+  // texto, duas tipologias iguais vindas de blocos diferentes (ex.: dois
+  // SUPs distintos, ambos "SM") se mesclariam entre si, o que nunca foi o
+  // comportamento pretendido.
+  var celulasTipologia = linhasVisiveis.map(function (tr) { return tr.querySelector('.col-tipologia'); }).filter(Boolean);
+  var chavesTipologia = linhasVisiveis.map(function (tr) { return tr.dataset.registroIndices; });
+  var mescladosTipologia = mesclarConsecutivos(chavesTipologia);
+  celulasTipologia.forEach(function (c, i) { c.classList.toggle('valor-repetido', mescladosTipologia[i].repetido); });
+}
+
+// Mesmo mapeamento de cores por tipologia da matriz de equipes
+// (tools/matriz/render-dashboard.js's tipologiaColor), reimplementado aqui
+// em JS de navegador pelo mesmo motivo do resto deste script: a própria
+// tipologia é dado protegido por senha, não pode vir pronta do servidor.
+var TIPOLOGIA_COLOR = {
+  SP: '#3f851a', SM: '#2f6ad0', ST: '#8d6f00', PI: '#606060',
+  BL: '#4a3aa7', CPTU: '#db244e', SH: '#e87ba4', VT: '#eda100',
+  'SEGURANÇA': '#2775b8', ESPECIAIS: '#db244e', SSMA: '#2775b8',
+};
+var TIPOLOGIA_COMPOSTA_COLOR = {
+  'CPTU / VT / SH': TIPOLOGIA_COLOR.CPTU,
+  'SP/SM': TIPOLOGIA_COLOR.SP,
+};
+function tipologiaColor(tipologia) {
+  var raw = String(tipologia || '').trim();
+  var key = raw.toUpperCase();
+  if (TIPOLOGIA_COLOR[key]) return TIPOLOGIA_COLOR[key];
+  if (TIPOLOGIA_COMPOSTA_COLOR[key]) return TIPOLOGIA_COMPOSTA_COLOR[key];
+  var parenMatch = raw.match(/\(([^)]+)\)\s*$/);
+  if (parenMatch) {
+    var viaParen = TIPOLOGIA_COLOR[parenMatch[1].trim().toUpperCase()];
+    if (viaParen) return viaParen;
+  }
+  var primeiroToken = key.split('/')[0].trim();
+  if (TIPOLOGIA_COLOR[primeiroToken]) return TIPOLOGIA_COLOR[primeiroToken];
+  return '#898781';
+}
+
+// Agrupamento fixo das 8 tipologias reais em 4 categorias -- Lab.
+// Convencional (LAB.C) e Lab. Especial (LAB.E) são suas próprias
+// categorias; entre as sondagens, CPTu/BL/SH/VT são "Especial" e todo o
+// resto (SP, SM/SM.F/SR, ST, PI) é "Convencional" -- regra confirmada com
+// o usuário, não uma inferência.
+var TIPOLOGIAS_SONDAGEM_ESPECIAL = { CPTU: true, BL: true, SH: true, VT: true };
+function categoriaTipologia(tipologia) {
+  var key = String(tipologia || '').trim().toUpperCase();
+  if (key === 'LAB.C') return 'labConvencional';
+  if (key === 'LAB.E') return 'labEspecial';
+  if (TIPOLOGIAS_SONDAGEM_ESPECIAL[key]) return 'sondagemEspecial';
+  return 'sondagemConvencional';
+}
+
+var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência', realizadoPrevistoInicial: 'Realizado + Previsto Inicial' };
+// ORDEM_SERIES gera as linhas por registro da TABELA (renderBlocosDimensao)
+// -- fica só com as 4 séries originais de propósito. ORDEM_SERIES_GRAFICO
+// é a versão usada SÓ pelo Gráfico (construirPainelGraficoHtml), com a 5ª
+// série "Realizado + Previsto Inicial" -- confirmado com o usuário que
+// essa série não faz sentido como uma 5ª linha da Tabela.
+var ORDEM_SERIES = ['previstoInicial', 'previsto', 'realizado', 'total'];
+var ORDEM_SERIES_GRAFICO = ORDEM_SERIES.concat(['realizadoPrevistoInicial']);
+var CLASSE_SERIE = { previstoInicial: 'previsto-inicial', previsto: 'previsto', realizado: 'realizado', total: 'total' };
+// Estado inicial do filtro de série: Previsto Inicial começa DESMARCADO (é
+// a referência de fundo, não o dado do dia a dia) -- as outras 3 começam
+// marcadas. Precisa ser um Set não-vazio logo de cara pra excluir Previsto
+// Inicial (Set vazio = "sem filtro" = mostra tudo, ver filtroExclui).
+var SERIES_PADRAO_ATIVAS = ['previsto', 'realizado', 'total'];
+
+// Ordem fixa e canônica das dimensões -- quando várias estão marcadas, os
+// blocos na tabela sempre aparecem nesta ordem, não na ordem que a pessoa
+// marcou os checkboxes (previsibilidade).
+var DIMENSOES_CONFIG = [
+  { valor: 'equipes', rotulo: 'Equipes' },
+  { valor: 'volume', rotulo: 'Volume' },
+  { valor: 'financeiro', rotulo: 'Financeiro' },
+  { valor: 'produtividade', rotulo: 'Produtividade' },
+  { valor: 'ticketMedio', rotulo: 'Ticket médio' },
+];
+var DIMENSOES_ROTULO = {};
+DIMENSOES_CONFIG.forEach(function (d) { DIMENSOES_ROTULO[d.valor] = d.rotulo; });
+
+// Devolve as dimensões marcadas (Set), na ordem canônica -- nunca vazio na
+// prática (o checkbox de dimensão nunca deixa desmarcar a última, ver
+// montarFiltroMulti), mas cai pra Financeiro se por algum motivo estiver.
+function dimensoesEmOrdem(selecionadas) {
+  var ordenadas = DIMENSOES_CONFIG.filter(function (d) { return selecionadas.has(d.valor); }).map(function (d) { return d.valor; });
+  return ordenadas.length ? ordenadas : ['financeiro'];
+}
+
+// Generaliza dimensoesEmOrdem pra qualquer lista de valores canônicos --
+// devolve só os que estão em selecionadas, na ordem de ordemCanonica
+// (nunca na ordem em que a pessoa marcou os checkboxes).
+function emOrdemCanonica(ordemCanonica, selecionadas) {
+  return ordemCanonica.filter(function (v) { return selecionadas.has(v); });
+}
+
+var NUMERICO_ORDEM = ['realizado', 'total'];
+var BASELINE_ORDEM = ['previsto', 'previstoInicial'];
+var PERIODO_ORDEM = ['acumuladoAnterior', 'mesVigente', 'm1', 'm2', 'm3', 'acumuladoFuturo', 'acumuladoAteVigente', 'totalAno'];
+var PERIODO_LABELS = {
+  acumuladoAnterior: 'Acumulado Anterior', mesVigente: 'Mês Vigente',
+  m1: 'M+1', m2: 'M+2', m3: 'M+3', acumuladoFuturo: 'Acumulado Futuro',
+  acumuladoAteVigente: 'Acumulado até Vigente', totalAno: 'Total Ano',
+};
+
+// "Agrupar por" precisa ler categoria (derivada de tipologia, nunca
+// guardada no registro) do mesmo jeito que indicesFiltrados/opcoesFiltro
+// já fazem pro filtro de categoria -- generalizado aqui pra qualquer campo
+// de agrupamento, não só os campos que existem direto no registro.
+function campoAgrupamento(registro, agruparPor) {
+  return agruparPor === 'categoria' ? categoriaTipologia(registro.tipologia) : registro[agruparPor];
+}
+
+// Agrupa só os indices recebidos (já filtrados pelo recorte atual) por
+// campoAgrupamento, em ordem alfabética de chave -- cada grupo soma TODOS
+// os índices que caem nele, não só o primeiro visto.
+function agruparIndicesAlertas(registros, indices, agruparPor) {
+  var porChave = {};
+  var ordem = [];
+  indices.forEach(function (idx) {
+    var chave = campoAgrupamento(registros[idx], agruparPor);
+    if (!porChave[chave]) { porChave[chave] = []; ordem.push(chave); }
+    porChave[chave].push(idx);
+  });
+  ordem.sort();
+  return ordem.map(function (chave) { return { chave: chave, indices: porChave[chave] }; });
+}
+
+function celulasMesVazias() {
+  var html = '';
+  for (var i = 0; i < 12; i++) html += '<td class="celula-mes num"></td>';
+  return html;
+}
+
+// Gera o bloco de 4 linhas (Previsto Inicial/Previsto/Realizado/Tendência)
+// pra CADA dimensão marcada, reaproveitando as mesmas células fixas
+// (SUP/Grupo/Tomador/Tipologia) em todos os blocos -- só o rótulo da série
+// ganha o nome da dimensão junto (" — Financeiro" etc.), pra diferenciar
+// os blocos quando várias dimensões estão marcadas ao mesmo tempo. Usado
+// pelos 4 tipos de linha (registro normal, total por SUP, total geral,
+// total geral por tipologia), que só diferem nas células fixas em si.
+function renderBlocosDimensao(classesExtra, dataAttrsBase, celulaSup, celulaGrupo, celulaTomador, celulaTipologia, dimensoes) {
+  var sufixoClasse = classesExtra ? ' ' + classesExtra : '';
+  var celulaTotalLinha = '<td class="celula-total-linha num"></td>';
+  var html = '';
+  dimensoes.forEach(function (dim) {
+    var rotuloDim = DIMENSOES_ROTULO[dim];
+    var dataAttrs = dataAttrsBase + ' data-dimensao="' + dim + '"';
+    ORDEM_SERIES.forEach(function (serie) {
+      html += '<tr class="linha-serie linha-' + CLASSE_SERIE[serie] + sufixoClasse + '" data-serie="' + serie + '" ' + dataAttrs + '>' +
+          celulaSup + celulaGrupo + celulaTomador + celulaTipologia +
+          '<td class="serie-label">' + SERIE_LABELS[serie] + ' — ' + rotuloDim + '</td>' +
+          celulasMesVazias() + celulaTotalLinha +
+        '</tr>';
+    });
+  });
+  return html;
+}
+
+function renderLinhaTabela(registro, indice, dimensoes) {
+  var chipColor = tipologiaColor(registro.tipologia);
+  var dataAttrsBase = 'data-tipologia="' + escapeHtml(registro.tipologia) + '" data-categoria="' + categoriaTipologia(registro.tipologia) + '" data-grupo="' + escapeHtml(registro.grupo) + '" data-sup="' + escapeHtml(registro.sup) + '" data-origem="' + escapeHtml(registro.origem) + '" data-registro-indices="' + indice + '"';
+  var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(registro.sup) + '">' + escapeHtml(registro.sup) + '</td>';
+  var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(registro.grupo) + '">' + escapeHtml(registro.grupo) + '</td>';
+  var celulaTomador = '<td class="col-mesclavel col-tomador" data-valor="' + escapeHtml(registro.tomador) + '">' + escapeHtml(registro.tomador) + '</td>';
+  var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(registro.tipologia) + '</span></td>';
+  return renderBlocosDimensao('', dataAttrsBase, celulaSup, celulaGrupo, celulaTomador, celulaTipologia, dimensoes);
+}
+
+// origem: sempre uniforme dentro de um SUP (confirmado contra a MATRIZ
+// real -- nenhum SUP mistura CONTRATO VIGENTE e NOVOS NEGÓCIOS entre suas
+// tipologias), então o total do SUP pode levar um único data-origem sem
+// risco de esconder/mostrar errado quando o filtro de Origem for aplicado.
+function renderLinhaTotalSup(sup, grupo, tomador, origem, indices, dimensoes) {
+  var dataAttrsBase = 'data-grupo="' + escapeHtml(grupo) + '" data-sup="' + escapeHtml(sup) + '" data-origem="' + escapeHtml(origem) + '" data-registro-indices="' + indices.join(',') + '" data-total-sup="1"';
+  var celulaSup = '<td class="col-mesclavel col-sup" data-valor="' + escapeHtml(sup) + '">' + escapeHtml(sup) + '</td>';
+  var celulaGrupo = '<td class="col-mesclavel col-grupo" data-valor="' + escapeHtml(grupo) + '">' + escapeHtml(grupo) + '</td>';
+  var celulaTomador = '<td class="col-mesclavel col-tomador" data-valor="' + escapeHtml(tomador) + '">' + escapeHtml(tomador) + '</td>';
+  var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip tipologia-chip-total">TOTAL</span></td>';
+  return renderBlocosDimensao('linha-total-sup', dataAttrsBase, celulaSup, celulaGrupo, celulaTomador, celulaTipologia, dimensoes);
+}
+
+// O bloco do topo da tabela -- ao contrário de TOTAL SUP/TOTAL GERAL POR
+// TIPOLOGIA (que somem quando um filtro de recorte estreita os dados,
+// porque os índices que eles somam foram fixados na hora da montagem),
+// este NUNCA some: recalcularTabela recalcula os índices a cada chamada a
+// partir dos filtros atuais (ver indicesFiltrados), então o "TOTAL GERAL"
+// vira "SUBTOTAL" (rótulo trocado em tempo real, ver .chip-total-geral) e
+// mostra a soma exata do que está filtrado no momento -- sempre visível,
+// sempre correto, no topo da tabela onde é mais fácil de achar.
+function renderLinhaTotalGeral(totalRegistros, dimensoes) {
+  var todosIndices = [];
+  for (var i = 0; i < totalRegistros; i++) todosIndices.push(i);
+  var dataAttrsBase = 'data-registro-indices="' + todosIndices.join(',') + '" data-total-geral="1"';
+  var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
+  var celulaTodos = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="Todos">Todos</td>'; };
+  var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip tipologia-chip-total chip-total-geral">TOTAL GERAL</span></td>';
+  return renderBlocosDimensao('linha-total-geral', dataAttrsBase, celulaVazia('col-sup'), celulaTodos('col-grupo'), celulaTodos('col-tomador'), celulaTipologia, dimensoes);
+}
+
+// Total geral de UMA tipologia (soma através de TODOS os grupos/SUPs que
+// têm essa tipologia, não só um) -- SUP fica em branco (como o total
+// geral), Grupo/Tomador mostram "Todos" (não há um grupo/tomador único pra
+// exibir aqui), mas a Tipologia aparece de verdade e colorida, pra
+// distinguir qual bloco é qual quando vários aparecem juntos no topo.
+function renderLinhaTotalGeralTipologia(tipologia, indices, dimensoes) {
+  var chipColor = tipologiaColor(tipologia);
+  var dataAttrsBase = 'data-tipologia="' + escapeHtml(tipologia) + '" data-categoria="' + categoriaTipologia(tipologia) + '" data-registro-indices="' + indices.join(',') + '" data-total-geral-tipologia="1"';
+  var celulaVazia = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="">—</td>'; };
+  var celulaTodos = function (classe) { return '<td class="col-mesclavel ' + classe + '" data-valor="Todos">Todos</td>'; };
+  var celulaTipologia = '<td class="col-mesclavel col-tipologia"><span class="tipologia-chip" style="--chip-color:' + chipColor + '">' + escapeHtml(tipologia) + '</span></td>';
+  return renderBlocosDimensao('linha-total-geral linha-total-geral-tipologia', dataAttrsBase, celulaVazia('col-sup'), celulaTodos('col-grupo'), celulaTodos('col-tomador'), celulaTipologia, dimensoes);
+}
+
+function renderCorpoTabela(registros, dimensoes) {
+  dimensoes = dimensoes && dimensoes.length ? dimensoes : ['financeiro'];
+  var html = renderLinhaTotalGeral(registros.length, dimensoes);
+
+  // Um total geral por tipologia, logo depois do total geral -- agrega
+  // todos os registros daquela tipologia através de TODOS os SUPs (não só
+  // do bloco de um contrato), em ordem alfabética (mesma ordem do filtro de
+  // tipologia).
+  var indicesPorTipologia = {};
+  var ordemTipologias = [];
+  registros.forEach(function (registro, indice) {
+    if (!registro.tipologia) return;
+    if (!indicesPorTipologia[registro.tipologia]) {
+      indicesPorTipologia[registro.tipologia] = [];
+      ordemTipologias.push(registro.tipologia);
+    }
+    indicesPorTipologia[registro.tipologia].push(indice);
+  });
+  ordemTipologias.sort();
+  ordemTipologias.forEach(function (tipologia) {
+    html += renderLinhaTotalGeralTipologia(tipologia, indicesPorTipologia[tipologia], dimensoes);
+  });
+
+  var supAtual = null;
+  var grupoAtual = null;
+  var tomadorAtual = null;
+  var origemAtual = null;
+  var indicesGrupoAtual = [];
+
+  function fecharGrupo() {
+    if (indicesGrupoAtual.length) {
+      html += renderLinhaTotalSup(supAtual, grupoAtual, tomadorAtual, origemAtual, indicesGrupoAtual, dimensoes);
+    }
+  }
+
+  registros.forEach(function (registro, indice) {
+    if (supAtual !== null && registro.sup !== supAtual) {
+      fecharGrupo();
+      indicesGrupoAtual = [];
+    }
+    supAtual = registro.sup;
+    grupoAtual = registro.grupo;
+    tomadorAtual = registro.tomador;
+    origemAtual = registro.origem;
+    indicesGrupoAtual.push(indice);
+    html += renderLinhaTabela(registro, indice, dimensoes);
+  });
+  fecharGrupo();
+  return html;
+}
+
+function linhasDistintas(registros, campo) {
+  var vistos = {};
+  var resultado = [];
+  registros.forEach(function (r) {
+    var v = r[campo];
+    if (v && !vistos[v]) { vistos[v] = true; resultado.push(v); }
+  });
+  resultado.sort();
+  return resultado;
+}
+
+// Os filtros (Origem/Tipologia/Categoria/Grupo/SUP/Série) são todos seleção
+// múltipla, num dropdown de checkboxes -- Origem/Tipologia/Grupo/SUP têm
+// opções dinâmicas (dependem dos registros decifrados); Categoria/Série têm
+// opções fixas (rótulos genéricos, sem dado protegido, podem ir hardcoded).
+var FILTROS_CONFIG = [
+  // Origem vem direto da coluna ORIGEM da MATRIZ (CONTRATO VIGENTE /
+  // NOVOS NEGÓCIOS hoje) -- dinâmico como tipologia/grupo/SUP, não fixo
+  // como categoria/série, porque é texto cru da planilha, não uma
+  // classificação computada pelo dashboard (ver capitalizarPalavras pro
+  // rótulo bonito; o VALOR do checkbox continua sendo o texto original,
+  // já que é isso que os registros carregam).
+  { id: 'filtro-origem', chave: 'origem', rotuloPadrao: 'Todas as origens', campo: 'origem', rotuloCapitalizado: true },
+  { id: 'filtro-categoria', chave: 'categoria', rotuloPadrao: 'Todas as categorias', opcoesFixas: [
+    { valor: 'labConvencional', rotulo: 'Lab. Convencional' },
+    { valor: 'labEspecial', rotulo: 'Lab. Especial' },
+    { valor: 'sondagemConvencional', rotulo: 'Sondagem Convencional' },
+    { valor: 'sondagemEspecial', rotulo: 'Sondagem Especial' },
+  ] },
+  // Em cascata com Categoria -- só lista as tipologias que pertencem à(s)
+  // categoria(s) marcada(s) (ver opcoesFiltro), pra não deixar escolher uma
+  // combinação impossível (ex.: categoria=Lab. Especial + tipologia=SP).
+  { id: 'filtro-tipologia', chave: 'tipologia', rotuloPadrao: 'Todas as tipologias', campo: 'tipologia' },
+  { id: 'filtro-grupo', chave: 'grupo', rotuloPadrao: 'Todos os grupos', campo: 'grupo' },
+  // Rótulo de cada opção traz Tomador/Escopo junto do código (o código
+  // sozinho não é identificável de cabeça) -- o VALOR do checkbox continua
+  // sendo só o código do SUP, já que é isso que os registros carregam.
+  { id: 'filtro-sup', chave: 'sup', rotuloPadrao: 'Todos os SUP', campo: 'sup', rotuloComposto: true },
+  { id: 'filtro-serie', chave: 'serie', rotuloPadrao: 'Todas as séries', opcoesFixas: [
+    { valor: 'previstoInicial', rotulo: 'Previsto Inicial' },
+    { valor: 'previsto', rotulo: 'Previsto' },
+    { valor: 'realizado', rotulo: 'Realizado' },
+    { valor: 'total', rotulo: 'Tendência' },
+    // Só existe no Gráfico (ORDEM_SERIES_GRAFICO) -- nenhuma <tr> da
+    // Tabela tem data-serie="realizadoPrevistoInicial", então marcar essa
+    // opção aqui não tem efeito na Tabela, só filtra o Gráfico.
+    { valor: 'realizadoPrevistoInicial', rotulo: 'Realizado + Previsto Inicial' },
+  ] },
+  // Diferente dos outros -- não é um FILTRO que estreita quais linhas
+  // aparecem, decide qual(is) valor(es) elas mostram, então nunca pode
+  // ficar vazio (ver montarFiltroMulti, que trava a última desmarcação) e
+  // começa com Financeiro já marcado, não vazio como os demais.
+  { id: 'seletor-dimensao', chave: 'dimensao', rotuloPadrao: 'Selecione ao menos 1', opcoesFixas: DIMENSOES_CONFIG, minimoUm: true },
+];
+
+// Config dos 4 seletores próprios da aba Alertas -- mesmo componente
+// visual (filtro-multi) dos filtros de recorte, mas com estado PRÓPRIO
+// (filtrosAlertas, não filtrosSelecionados) e, pra Agrupar por/Dimensão,
+// exclusivo:true (single-choice, ver montarFiltroMulti). Toda mudança em
+// QUALQUER filtro (este ou um de recorte) recalcula Tabela E Alertas
+// incondicionalmente (ver o fim do handler de mudança em montarFiltroMulti)
+// -- bug real corrigido aqui: antes só estes 5 tinham um mecanismo próprio
+// que acionava recalcularAlertas, então filtrar por SUP na barra de cima
+// nunca atualizava a aba Alertas.
+var FILTROS_ALERTAS_CONFIG = [
+  { id: 'filtro-alertas-agrupar-por', chave: 'agruparPor', rotuloPadrao: 'Agrupar por', exclusivo: true, opcoesFixas: [
+    { valor: 'sup', rotulo: 'SUP' },
+    { valor: 'tipologia', rotulo: 'Tipologia' },
+    { valor: 'grupo', rotulo: 'Grupo' },
+    { valor: 'categoria', rotulo: 'Categoria' },
+    { valor: 'origem', rotulo: 'Origem' },
+  ] },
+  { id: 'filtro-alertas-numerico', chave: 'numerico', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: [
+    { valor: 'realizado', rotulo: 'Realizado' },
+    { valor: 'total', rotulo: 'Tendência' },
+  ] },
+  { id: 'filtro-alertas-baseline', chave: 'baseline', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: [
+    { valor: 'previsto', rotulo: 'Previsto' },
+    { valor: 'previstoInicial', rotulo: 'Previsto Inicial' },
+  ] },
+  { id: 'filtro-alertas-periodo', chave: 'periodo', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: PERIODO_ORDEM.map(function (p) { return { valor: p, rotulo: PERIODO_LABELS[p] }; }) },
+  // Único dos 6 que FILTRA linhas (os outros 5 decidem que colunas/grupos
+  // aparecem) -- por isso sem minimoUm/exclusivo: Set vazio mostra tudo,
+  // igual aos filtros de recorte da barra de cima. O valor de cada opção é
+  // o próprio rótulo que classificarSemaforo devolve (ver renderLinhaAlerta).
+  { id: 'filtro-alertas-status', chave: 'status', rotuloPadrao: 'Status', opcoesFixas: [
+    { valor: 'Excelente', rotulo: 'Excelente' },
+    { valor: 'Dentro da meta', rotulo: 'Dentro da meta' },
+    { valor: 'Atenção', rotulo: 'Atenção' },
+    { valor: 'Crítico', rotulo: 'Crítico' },
+    { valor: 'Sem dado', rotulo: 'Sem dado' },
+  ] },
+];
+
+var filtrosAlertas = {};
+FILTROS_ALERTAS_CONFIG.forEach(function (cfg) { filtrosAlertas[cfg.chave] = new Set(); });
+filtrosAlertas.agruparPor.add('sup');
+filtrosAlertas.numerico.add('realizado');
+filtrosAlertas.numerico.add('total');
+filtrosAlertas.baseline.add('previsto');
+filtrosAlertas.periodo.add('acumuladoAteVigente');
+filtrosAlertas.periodo.add('totalAno');
+
+// chave -> Set dos valores marcados -- Set vazio tem a MESMA semântica que
+// o <select> de valor único tinha com "" (nenhum filtro, mostra tudo) --
+// exceto "dimensao" (começa com Financeiro marcado, ver FILTROS_CONFIG) e
+// "serie" (começa com tudo MENOS Previsto Inicial marcado, ver SERIES_PADRAO_ATIVAS).
+var filtrosSelecionados = {};
+FILTROS_CONFIG.forEach(function (cfg) { filtrosSelecionados[cfg.chave] = new Set(); });
+filtrosSelecionados.dimensao.add('financeiro');
+SERIES_PADRAO_ATIVAS.forEach(function (s) { filtrosSelecionados.serie.add(s); });
+
+// "CONTRATO VIGENTE" -> "Contrato Vigente" -- só cosmético pro rótulo do
+// checkbox (o VALOR que efetivamente filtra continua o texto original em
+// caixa alta, exatamente como vem da coluna ORIGEM da MATRIZ). Sem regex
+// com \s/\S de propósito -- esses escapes viram "s"/"S" literal depois
+// de atravessar o template literal externo deste arquivo (mesma pegadinha
+// de \r/\n/\. documentada nas outras funções client-side), então
+// split/join simples é mais seguro que arriscar o regex sair errado.
+function capitalizarPalavras(texto) {
+  return (texto || '').toString().toLowerCase().split(' ').map(function (palavra) {
+    return palavra ? palavra.charAt(0).toUpperCase() + palavra.slice(1) : palavra;
+  }).join(' ');
+}
+
+function opcoesFiltro(cfg, registros) {
+  if (cfg.opcoesFixas) return cfg.opcoesFixas;
+
+  if (cfg.chave === 'tipologia' && filtrosSelecionados.categoria.size > 0) {
+    var tipologiasDaCategoria = linhasDistintas(registros, 'tipologia').filter(function (t) {
+      return filtrosSelecionados.categoria.has(categoriaTipologia(t));
+    });
+    return tipologiasDaCategoria.map(function (v) { return { valor: v, rotulo: v }; });
+  }
+
+  if (cfg.rotuloComposto) {
+    var vistoSup = {};
+    var opcoes = [];
+    registros.forEach(function (r) {
+      if (!r[cfg.campo] || vistoSup[r[cfg.campo]]) return;
+      vistoSup[r[cfg.campo]] = true;
+      var partes = [r.tomador, r.escopo].filter(Boolean).join(' / ');
+      opcoes.push({ valor: r[cfg.campo], rotulo: partes ? r[cfg.campo] + ' — ' + partes : r[cfg.campo] });
+    });
+    opcoes.sort(function (a, b) { return a.valor < b.valor ? -1 : a.valor > b.valor ? 1 : 0; });
+    return opcoes;
+  }
+
+  if (cfg.rotuloCapitalizado) {
+    return linhasDistintas(registros, cfg.campo).map(function (v) { return { valor: v, rotulo: capitalizarPalavras(v) }; });
+  }
+
+  return linhasDistintas(registros, cfg.campo).map(function (v) { return { valor: v, rotulo: v }; });
+}
+
+function atualizarRotuloFiltro(cfg, opcoes, estado) {
+  var estadoFiltros = estado || filtrosSelecionados;
+  var trigger = document.querySelector('#' + cfg.id + ' .filtro-multi-trigger');
+  var seta = trigger.querySelector('.filtro-multi-seta');
+  var selecionados = estadoFiltros[cfg.chave];
+  var texto;
+  if (selecionados.size === 0) {
+    texto = cfg.rotuloPadrao;
+  } else if (selecionados.size === 1) {
+    var valor = selecionados.values().next().value;
+    var opcao = opcoes.filter(function (o) { return o.valor === valor; })[0];
+    texto = opcao ? opcao.rotulo : valor;
+  } else {
+    texto = selecionados.size + ' selecionadas';
+  }
+  trigger.textContent = texto;
+  trigger.appendChild(seta);
+}
+
+// Normaliza texto pra comparação de busca -- minúsculas e sem acento, pra
+// "iguacu" achar "Iguaçu" e "sao" achar "São" sem o usuário precisar
+// digitar o acento certo. Filtra por código Unicode em vez de regex com
+// \uNNNN pra evitar o problema de escapes sendo "comidos" pelo template
+// literal externo deste arquivo antes de virar código do cliente (mesma
+// pegadinha de \r/\n/\. documentada nas outras funções client-side).
+function normalizarBusca(texto) {
+  var normalizado = (texto || '').toString().toLowerCase().normalize('NFD');
+  var resultado = '';
+  for (var i = 0; i < normalizado.length; i++) {
+    var codigo = normalizado.charCodeAt(i);
+    if (codigo < 768 || codigo > 879) resultado += normalizado[i];
+  }
+  return resultado;
+}
+
+// Modo "exclusivo" de um filtro-multi (Agrupar por / Dimensão da aba
+// Alertas): checar um valor esvazia o Set antes de adicionar, deixando
+// exatamente 1 marcado -- as 5 opções continuam sendo checkboxes (mesmo
+// componente visual dos outros filtros), só o COMPORTAMENTO vira
+// radio-like. Função separada (sem DOM) pra poder testar sozinha.
+function aplicarSelecaoExclusiva(estadoSet, valor) {
+  estadoSet.clear();
+  estadoSet.add(valor);
+}
+
+// Monta (ou remonta, ex.: depois de um refresh ao vivo com dados novos) o
+// painel de checkboxes de UM filtro -- descarta seleções que não existem
+// mais nas opções atuais em vez de deixá-las "fantasma" (marcadas mas sem
+// checkbox visível pra desmarcar). Painéis com opção têm um campo de busca
+// fixo no topo (útil sobretudo em SUP/Grupo/Tipologia, que podem ter muitas
+// opções) pra filtrar a lista por texto digitado, sem afetar a seleção.
+// O 3º parâmetro (estado) permite reusar este mesmo componente com um objeto
+// de seleção próprio (ex.: os filtros da aba Alertas), sem tocar no
+// filtrosSelecionados global que controla Tabela/Gráfico -- todo call site
+// existente omite o argumento e continua operando sobre o global de sempre.
+function montarFiltroMulti(cfg, registros, estado) {
+  var estadoFiltros = estado || filtrosSelecionados;
+  var opcoes = opcoesFiltro(cfg, registros);
+  var valoresValidos = {};
+  opcoes.forEach(function (o) { valoresValidos[o.valor] = true; });
+  estadoFiltros[cfg.chave].forEach(function (v) {
+    if (!valoresValidos[v]) estadoFiltros[cfg.chave].delete(v);
+  });
+
+  var painel = document.querySelector('#' + cfg.id + ' .filtro-multi-painel');
+  var listaHtml = opcoes.length
+    ? opcoes.map(function (o) {
+        var marcado = estadoFiltros[cfg.chave].has(o.valor) ? ' checked' : '';
+        return '<label class="filtro-multi-item"><input type="checkbox" value="' + escapeHtml(o.valor) + '"' + marcado + '>' + escapeHtml(o.rotulo) + '</label>';
+      }).join('')
+    : '<div class="filtro-multi-vazio">Nenhuma opção</div>';
+  painel.innerHTML =
+    (opcoes.length ? '<input type="text" class="filtro-multi-busca" placeholder="Buscar..." autocomplete="off">' : '') +
+    listaHtml +
+    '<div class="filtro-multi-vazio filtro-multi-vazio-busca" hidden>Nenhum resultado</div>';
+
+  var busca = painel.querySelector('.filtro-multi-busca');
+  if (busca) {
+    busca.addEventListener('input', function () {
+      var termo = normalizarBusca(busca.value);
+      var algumVisivel = false;
+      painel.querySelectorAll('.filtro-multi-item').forEach(function (item) {
+        var combina = normalizarBusca(item.textContent).indexOf(termo) !== -1;
+        item.style.display = combina ? '' : 'none';
+        if (combina) algumVisivel = true;
+      });
+      painel.querySelector('.filtro-multi-vazio-busca').hidden = algumVisivel || termo === '';
+    });
+  }
+
+  painel.querySelectorAll('input[type="checkbox"]').forEach(function (checkbox) {
+    checkbox.addEventListener('change', function () {
+      // Dimensão (e qualquer filtro exclusivo) nunca pode ficar sem nenhuma
+      // marcada -- não faz sentido mostrar uma tabela sem nenhum valor, nem
+      // um exclusivo sem opção escolhida. Trava a desmarcação da última em
+      // vez de deixar o Set esvaziar.
+      if ((cfg.minimoUm || cfg.exclusivo) && !checkbox.checked && estadoFiltros[cfg.chave].size === 1) {
+        checkbox.checked = true;
+        return;
+      }
+      if (checkbox.checked) {
+        if (cfg.exclusivo) aplicarSelecaoExclusiva(estadoFiltros[cfg.chave], checkbox.value);
+        else estadoFiltros[cfg.chave].add(checkbox.value);
+      } else {
+        estadoFiltros[cfg.chave].delete(checkbox.value);
+      }
+      atualizarRotuloFiltro(cfg, opcoes, estadoFiltros);
+      // Exclusivo mudou -- remonta o painel pra refletir visualmente que só
+      // 1 checkbox ficou marcado (o Set já mudou, mas o atributo "checked"
+      // dos outros checkboxes não se atualiza sozinho).
+      if (cfg.exclusivo) montarFiltroMulti(cfg, registros, estado);
+      // Categoria mudou -- remonta o painel de Tipologia (cascata) pra
+      // refletir a lista nova de opções válidas, e descartar qualquer
+      // tipologia marcada que não pertença mais à(s) categoria(s) atual(is).
+      if (cfg.chave === 'categoria') {
+        var cfgTipologia = FILTROS_CONFIG.filter(function (c) { return c.chave === 'tipologia'; })[0];
+        montarFiltroMulti(cfgTipologia, registros);
+      }
+      // Dimensão mudou -- a quantidade de linhas por registro depende de
+      // quantas estão marcadas, então a estrutura da tabela (não só os
+      // valores) precisa ser remontada antes do preenchimento normal.
+      if (cfg.id === 'seletor-dimensao') {
+        document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
+      }
+      recalcularTabela();
+      recalcularAlertas();
+    });
+  });
+  atualizarRotuloFiltro(cfg, opcoes, estadoFiltros);
+}
+
+function montarTodosFiltrosMulti(registros) {
+  FILTROS_CONFIG.forEach(function (cfg) { montarFiltroMulti(cfg, registros); });
+}
+
+// Abre/fecha o painel ao clicar no botão-gatilho (fechando qualquer outro
+// que já estivesse aberto) e fecha ao clicar fora -- ligado uma vez só, no
+// carregamento (os botões-gatilho são fixos; só o CONTEÚDO do painel é
+// remontado por montarFiltroMulti).
+function configurarAberturaFiltrosMulti() {
+  document.querySelectorAll('.filtro-multi-trigger').forEach(function (trigger) {
+    trigger.addEventListener('click', function (evento) {
+      evento.stopPropagation();
+      var container = trigger.closest('.filtro-multi');
+      var jaAberto = container.classList.contains('aberto');
+      document.querySelectorAll('.filtro-multi.aberto').forEach(function (el) {
+        el.classList.remove('aberto');
+        el.querySelector('.filtro-multi-painel').hidden = true;
+      });
+      if (!jaAberto) {
+        container.classList.add('aberto');
+        var painelAberto = container.querySelector('.filtro-multi-painel');
+        painelAberto.hidden = false;
+        // Reabrir sempre limpo -- se o usuário buscou algo da última vez
+        // que abriu esse painel, não faz sentido a lista continuar
+        // filtrada (ou o campo continuar com texto) numa abertura nova.
+        var buscaAberto = painelAberto.querySelector('.filtro-multi-busca');
+        if (buscaAberto) {
+          buscaAberto.value = '';
+          painelAberto.querySelectorAll('.filtro-multi-item').forEach(function (item) { item.style.display = ''; });
+          var vazioBusca = painelAberto.querySelector('.filtro-multi-vazio-busca');
+          if (vazioBusca) vazioBusca.hidden = true;
+          buscaAberto.focus();
+        }
+      }
+    });
+  });
+  // O painel (container fixo -- só o conteúdo dos checkboxes é remontado
+  // por montarFiltroMulti) para a propagação de qualquer clique dentro
+  // dele, senão marcar um checkbox borbulharia até o listener do document
+  // logo abaixo e fecharia o painel a cada clique, impedindo marcar mais
+  // de uma opção.
+  document.querySelectorAll('.filtro-multi-painel').forEach(function (painel) {
+    painel.addEventListener('click', function (evento) { evento.stopPropagation(); });
+  });
+  document.addEventListener('click', function () {
+    document.querySelectorAll('.filtro-multi.aberto').forEach(function (el) {
+      el.classList.remove('aberto');
+      el.querySelector('.filtro-multi-painel').hidden = true;
+    });
+  });
+}
+
+function recalcularTabela() {
+  var notaPremissa = document.getElementById('nota-premissa-produtividade');
+  notaPremissa.style.display = filtrosSelecionados.dimensao.has('produtividade') ? '' : 'none';
+  var filtroTipologia = filtrosSelecionados.tipologia;
+  var filtroCategoria = filtrosSelecionados.categoria;
+  var filtroGrupo = filtrosSelecionados.grupo;
+  var filtroSup = filtrosSelecionados.sup;
+  var filtroOrigem = filtrosSelecionados.origem;
+  var filtroSerie = filtrosSelecionados.serie;
+  // O bloco TOTAL GERAL/SUBTOTAL nunca some -- recalcula sempre a partir do
+  // recorte atual (mesma função que o gráfico usa) em vez de usar os
+  // índices fixados na hora da montagem, então continua correto qualquer
+  // que seja a combinação de filtros marcada. Vira "SUBTOTAL" (rótulo
+  // trocado abaixo) assim que QUALQUER filtro que recorta linhas -- não
+  // Série/Dimensão, que só escolhem o que aparece, não o que é somado --
+  // estiver ativo.
+  var indicesSubtotal = indicesFiltrados(window.__REGISTROS__, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem);
+  var algumFiltroDeRecorteAtivo = filtroTipologia.size > 0 || filtroCategoria.size > 0 || filtroGrupo.size > 0 || filtroSup.size > 0 || filtroOrigem.size > 0;
+  document.querySelectorAll('.chip-total-geral').forEach(function (chip) {
+    chip.textContent = algumFiltroDeRecorteAtivo ? 'SUBTOTAL' : 'TOTAL GERAL';
+  });
+  var linhas = document.querySelectorAll('#tabela-orcamento tbody tr');
+  linhas.forEach(function (linha) {
+    var combinaSerie = !filtroExclui(filtroSerie, linha.dataset.serie);
+    // Origem nunca mistura dentro de um SUP (ver renderLinhaTotalSup), então
+    // entra no mesmo grupo de combinação que Grupo/SUP -- filtrar por ela é
+    // equivalente a escolher um subconjunto de SUPs.
+    var combinaGrupoSup = !filtroExclui(filtroGrupo, linha.dataset.grupo) &&
+      !filtroExclui(filtroSup, linha.dataset.sup) &&
+      !filtroExclui(filtroOrigem, linha.dataset.origem);
+    var combinaTipologiaCategoria = !filtroExclui(filtroTipologia, linha.dataset.tipologia) &&
+      !filtroExclui(filtroCategoria, linha.dataset.categoria);
+    var ehTotalGeral = linha.dataset.totalGeral === '1';
+    var ehTotalGeralTipologia = linha.dataset.totalGeralTipologia === '1';
+    var ehTotalSup = linha.dataset.totalSup === '1';
+    var indices = ehTotalGeral ? indicesSubtotal : linha.dataset.registroIndices.split(',').map(Number);
+    var mostra;
+    if (ehTotalGeral) {
+      mostra = combinaSerie;
+    } else if (ehTotalGeralTipologia) {
+      // Total de UMA tipologia através de TODOS os grupos/SUPs/origens --
+      // mesma regra do total geral (some com filtro de grupo/SUP/origem,
+      // já que uma tipologia pode aparecer em SUPs de origens diferentes,
+      // ao contrário do total por SUP), mas os filtros de tipologia/
+      // categoria escolhem QUAIS blocos aparecem em vez de escondê-los.
+      mostra = filtroGrupo.size === 0 && filtroSup.size === 0 && filtroOrigem.size === 0 && combinaTipologiaCategoria && combinaSerie;
+    } else if (ehTotalSup) {
+      mostra = combinaGrupoSup && filtroTipologia.size === 0 && filtroCategoria.size === 0 && combinaSerie;
+    } else {
+      mostra = combinaGrupoSup && combinaTipologiaCategoria && combinaSerie;
+    }
+    linha.style.display = mostra ? '' : 'none';
+    if (mostra) {
+      var valoresLista = indices.map(function (idx) { return window.__REGISTROS__[idx][linha.dataset.serie]; });
+      preencherLinha(linha, valoresLista, linha.dataset.serie, linha.dataset.dimensao);
+    }
+  });
+  mesclarColunasRepetidas();
+  // Cada painel só entende UMA dimensão por vez (eixos/escala não fazem
+  // sentido misturando, por exemplo, Equipes e Financeiro no mesmo
+  // painel) -- mas com várias marcadas, monta um par de painéis POR
+  // dimensão, na ordem canônica, em vez de somar ou descartar as demais.
+  montarGraficos(window.__REGISTROS__, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem, filtroSerie, dimensoesEmOrdem(filtrosSelecionados.dimensao));
+}
+
+function limparFiltros() {
+  FILTROS_CONFIG.forEach(function (cfg) {
+    filtrosSelecionados[cfg.chave].clear();
+  });
+  filtrosSelecionados.dimensao.add('financeiro');
+  SERIES_PADRAO_ATIVAS.forEach(function (s) { filtrosSelecionados.serie.add(s); });
+  montarTodosFiltrosMulti(window.__REGISTROS__);
+  document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
+  recalcularTabela();
+  recalcularAlertas();
+}
+
+// Chamado uma vez, pelo gate de senha, assim que a senha certa decifra os
+// registros -- monta a tabela inteira e liga os filtros/botões.
+function montarDashboard(registros) {
+  montarTodosFiltrosMulti(registros);
+  FILTROS_ALERTAS_CONFIG.forEach(function (cfg) { montarFiltroMulti(cfg, registros, filtrosAlertas); });
+  configurarAberturaFiltrosMulti();
+  document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(registros, dimensoesEmOrdem(filtrosSelecionados.dimensao));
+  document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
+  document.getElementById('aba-tabela').addEventListener('click', function () { alternarAba('tabela'); });
+  document.getElementById('aba-grafico').addEventListener('click', function () { alternarAba('grafico'); });
+  document.getElementById('aba-alertas').addEventListener('click', function () { alternarAba('alertas'); });
+  document.getElementById('busca-alertas').addEventListener('input', aplicarBuscaAlertas);
+  inicializarTooltipGrafico();
+  recalcularTabela();
+  recalcularAlertas();
+}
+
+// ---- Atualização ao vivo (busca a Sheet espelho publicada, sem tocar no
+// .xlsx original) ----------------------------------------------------------
+// A Sheet espelho é mantida em dia por um Apps Script separado (ver
+// tools/orcamento/apps-script-espelho-matriz.gs) que roda a cada 30 min:
+// converte o .xlsx real numa cópia Sheets temporária pra ler os valores
+// calculados, copia a aba MATRIZ pra dentro da própria Sheet espelho, e
+// apaga a cópia. O botão aqui só busca o CSV publicado dessa Sheet -- o
+// arquivo .xlsx que você edita nunca é tocado por este fluxo.
+var URL_ESPELHO_MATRIZ = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRaOjGxPYWKj-as9RwErptIND7PE_zxsND19PReV1MdOup1ZY3iAu_DGrQ0gatPyYFEy3hg-LWE2esw/pub?gid=609773455&single=true&output=csv';
+
+// Parser CSV RFC4180 simples (aspas duplicadas escapam aspas, vírgula/quebra
+// de linha dentro de aspas não terminam o campo) -- suficiente pro que o
+// Google Sheets exporta, sem precisar de nenhuma lib externa.
+function parseCsvGrid(texto) {
+  var linhas = [];
+  var linha = [];
+  var campo = '';
+  var dentroAspas = false;
+  for (var i = 0; i < texto.length; i++) {
+    var c = texto[i];
+    if (dentroAspas) {
+      if (c === '"') {
+        if (texto[i + 1] === '"') { campo += '"'; i++; }
+        else dentroAspas = false;
+      } else {
+        campo += c;
+      }
+    } else if (c === '"') {
+      dentroAspas = true;
+    } else if (c === ',') {
+      linha.push(campo); campo = '';
+    } else if (c === '\r') {
+      // ignora -- o \n logo em seguida já fecha a linha
+    } else if (c === '\n') {
+      linha.push(campo); campo = '';
+      linhas.push(linha); linha = [];
+    } else {
+      campo += c;
+    }
+  }
+  if (campo !== '' || linha.length) { linha.push(campo); linhas.push(linha); }
+  return linhas;
+}
+
+// Converte uma célula do CSV pra número, ou null. Trata string vazia, erro
+// de fórmula (#NAME?/#REF!/#VALUE!/#N/A, que aparecem quando o Apps Script
+// converte o .xlsx pro formato Sheets e alguma fórmula específica do Excel
+// não tem equivalente direto lá) e "n/a" como "sem dado" -- nunca como 0,
+// pelo mesmo motivo de somarArraysMensais não confundir os dois.
+function numeroPtBr(valor) {
+  if (valor === undefined || valor === null) return null;
+  var texto = String(valor).trim();
+  if (texto === '' || texto.charAt(0) === '#' || texto.toLowerCase() === 'n/a') return null;
+  var numero = parseFloat(texto.replace(/\./g, '').replace(',', '.'));
+  return isNaN(numero) ? null : numero;
+}
+
+function celulaTexto(v) {
+  var t = (v === undefined || v === null) ? '' : String(v).trim();
+  return t === '' ? null : t;
+}
+
+// Réplica em JS de parse-matriz.js (locateColumns) -- acha cada coluna pelo
+// próprio rótulo da linha de cabeçalho, nunca por posição fixa, igual ao
+// lado servidor. Lançar erro cedo aqui evita ler dado desalinhado em
+// silêncio se a Sheet espelho mudar de forma.
+function acharColunaClient(headerRow, rotulo) {
+  for (var col = 0; col < headerRow.length; col++) {
+    if (String(headerRow[col] || '').trim() === rotulo) return col;
+  }
+  throw new Error('Coluna "' + rotulo + '" não encontrada no cabeçalho do espelho ao vivo');
+}
+function proximasNColunasClient(colunaAncora, quantidade) {
+  var cols = [];
+  for (var i = 0; i < quantidade; i++) cols.push(colunaAncora + 1 + i);
+  return cols;
+}
+function exigirRotuloClient(headerRow, col, esperado) {
+  var encontrado = String(headerRow[col] || '').trim();
+  if (encontrado !== esperado) {
+    throw new Error('Esperava a coluna "' + esperado + '" na posição ' + col + ' do espelho ao vivo, encontrei "' + encontrado + '" -- a forma da planilha pode ter mudado');
+  }
+}
+function locateColumnsClient(headerRow) {
+  var origem = acharColunaClient(headerRow, 'ORIGEM');
+  var grupo = acharColunaClient(headerRow, 'GRUPO');
+  var tomador = acharColunaClient(headerRow, 'TOMADOR');
+  var sup = acharColunaClient(headerRow, 'SUP');
+  var escopo = acharColunaClient(headerRow, 'ESCOPO');
+  var apoio = acharColunaClient(headerRow, 'APOIO');
+  var inicio = acharColunaClient(headerRow, 'INICIO');
+  var termino = acharColunaClient(headerRow, 'TERMINO');
+  var sondagem = acharColunaClient(headerRow, 'SONDAGEM');
+  var base = acharColunaClient(headerRow, 'BASE');
+
+  var equipesMeses = proximasNColunasClient(base, 12);
+  var pico = equipesMeses[11] + 1;
+  exigirRotuloClient(headerRow, pico, 'PICO');
+  var media = pico + 1;
+  exigirRotuloClient(headerRow, media, 'MÉDIA');
+  var prod = media + 1;
+  exigirRotuloClient(headerRow, prod, 'PROD.');
+  var dias = prod + 1;
+  exigirRotuloClient(headerRow, dias, 'DIAS');
+
+  var volumeMeses = proximasNColunasClient(dias, 12);
+  var volumeTotal = volumeMeses[11] + 1;
+  exigirRotuloClient(headerRow, volumeTotal, 'TOTAL');
+  var volumeTotalInicial = volumeTotal + 1;
+  var ticket = volumeTotalInicial + 1;
+  exigirRotuloClient(headerRow, ticket, 'TICKET');
+
+  var financeiroMeses = proximasNColunasClient(ticket, 12);
+  var financeiroTotal = financeiroMeses[11] + 1;
+  exigirRotuloClient(headerRow, financeiroTotal, 'TOTAL');
+  var financeiroTotalInicial = financeiroTotal + 1;
+
+  return {
+    origem: origem, grupo: grupo, tomador: tomador, sup: sup, escopo: escopo, apoio: apoio,
+    inicio: inicio, termino: termino, sondagem: sondagem, base: base,
+    equipesMeses: equipesMeses, equipesResumo: { pico: pico, media: media, prod: prod, dias: dias },
+    volumeMeses: volumeMeses, volumeResumo: { total: volumeTotal, totalInicial: volumeTotalInicial, ticket: ticket },
+    financeiroMeses: financeiroMeses, financeiroResumo: { total: financeiroTotal, totalInicial: financeiroTotalInicial },
+    observacao: financeiroTotalInicial + 1,
+  };
+}
+
+function extrairValoresLinhaClient(row, columns) {
+  return {
+    equipes: columns.equipesMeses.map(function (col) { return numeroPtBr(row[col]); }),
+    equipesResumo: {
+      pico: numeroPtBr(row[columns.equipesResumo.pico]) || 0,
+      media: numeroPtBr(row[columns.equipesResumo.media]) || 0,
+      prod: numeroPtBr(row[columns.equipesResumo.prod]) || 0,
+      dias: numeroPtBr(row[columns.equipesResumo.dias]) || 0,
+    },
+    volume: columns.volumeMeses.map(function (col) { return numeroPtBr(row[col]); }),
+    volumeResumo: {
+      total: numeroPtBr(row[columns.volumeResumo.total]) || 0,
+      totalInicial: numeroPtBr(row[columns.volumeResumo.totalInicial]) || 0,
+      ticket: numeroPtBr(row[columns.volumeResumo.ticket]) || 0,
+    },
+    financeiro: columns.financeiroMeses.map(function (col) { return numeroPtBr(row[col]); }),
+    financeiroResumo: {
+      total: numeroPtBr(row[columns.financeiroResumo.total]) || 0,
+      totalInicial: numeroPtBr(row[columns.financeiroResumo.totalInicial]) || 0,
+    },
+  };
+}
+
+var TIPOLOGIAS_RESUMO_CLIENTE = { MENSAL: true, ACUMULADO: true };
+function deveIncluirClient(registro) {
+  if (!registro.grupo || registro.grupo === 'Todos') return false;
+  if (!registro.tipologia || TIPOLOGIAS_RESUMO_CLIENTE[registro.tipologia]) return false;
+  return true;
+}
+
+// Réplica em JS de parse-matriz.js (parseMatriz) -- mesmo esquema de 3
+// linhas físicas por combinação (contrato, tipologia) identificadas pela
+// coluna BASE (P/R/T) e preenchimento "sticky" dos campos identificadores.
+// grid[0] é o cabeçalho (a exportação CSV não tem a linha 0 vazia que o
+// .xlsx real tem antes da linha 1).
+function parseMatrizClient(grid) {
+  var columns = locateColumnsClient(grid[0]);
+  var registros = [];
+  var estado = {
+    origem: null, grupo: null, tomador: null, sup: null, escopo: null,
+    apoio: null, inicio: null, termino: null, tipologia: null,
+  };
+  var atual = null;
+
+  for (var rowNum = 1; rowNum < grid.length; rowNum++) {
+    var row = grid[rowNum];
+    if (!row) continue;
+    var base = celulaTexto(row[columns.base]);
+    if (base === null) continue;
+
+    estado.origem = celulaTexto(row[columns.origem]) || estado.origem;
+    estado.grupo = celulaTexto(row[columns.grupo]) || estado.grupo;
+    estado.tomador = celulaTexto(row[columns.tomador]) || estado.tomador;
+    estado.sup = celulaTexto(row[columns.sup]) || estado.sup;
+    estado.escopo = celulaTexto(row[columns.escopo]) || estado.escopo;
+    estado.apoio = celulaTexto(row[columns.apoio]) || estado.apoio;
+    estado.inicio = celulaTexto(row[columns.inicio]) || estado.inicio;
+    estado.termino = celulaTexto(row[columns.termino]) || estado.termino;
+    estado.tipologia = celulaTexto(row[columns.sondagem]) || estado.tipologia;
+
+    if (base === 'P') {
+      atual = {
+        origem: estado.origem, grupo: estado.grupo, tomador: estado.tomador, sup: estado.sup,
+        escopo: estado.escopo, apoio: estado.apoio, inicio: estado.inicio, termino: estado.termino,
+        tipologia: estado.tipologia, observacao: null,
+        previsto: extrairValoresLinhaClient(row, columns), realizado: null, total: null,
+      };
+    } else if (base === 'R' && atual) {
+      atual.realizado = extrairValoresLinhaClient(row, columns);
+    } else if (base === 'T' && atual) {
+      atual.total = extrairValoresLinhaClient(row, columns);
+      atual.observacao = celulaTexto(row[columns.observacao]);
+      if (deveIncluirClient(atual)) registros.push(atual);
+      atual = null;
+    }
+  }
+  return registros;
+}
+
+function definirStatusAtualizacao(texto, ehErro) {
+  var el = document.getElementById('status-atualizacao');
+  if (!el) return;
+  el.textContent = texto;
+  el.classList.toggle('status-erro', !!ehErro);
+}
+
+// previstoInicial vem de um arquivo separado (o estudo original de linha
+// de base), lido só no build no servidor -- nunca da Sheet espelho/CSV que
+// o refresh ao vivo busca, e não tem por quê: é uma foto fixa, não muda
+// junto com a MATRIZ viva. Sem isso, os registros recém-buscados vêm sem
+// o campo (não zerado -- AUSENTE), e a linha Previsto Inicial ficaria em
+// branco a cada "Atualizar dados". Em vez de tentar rebuscar algo que não
+// muda, simplesmente transplanta o previstoInicial que os registros
+// ANTIGOS já tinham pros novos, casando por SUP+tipologia (mesma chave de
+// sempre) -- um SUP/tipologia novo que ainda não existia fica zerado, do
+// jeito que build-dashboard.js já zera quando não acha na linha de base.
+function preservarPrevistoInicial(registrosAntigos, registrosNovos) {
+  var zero12 = function () { return Array(12).fill(0); };
+  var zeroPadrao = {
+    equipes: zero12(), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+    volume: zero12(), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+    financeiro: zero12(), financeiroResumo: { total: 0, totalInicial: 0 },
+  };
+  var porChave = {};
+  registrosAntigos.forEach(function (r) {
+    if (r.previstoInicial) porChave[r.sup + '||' + r.tipologia] = r.previstoInicial;
+  });
+  registrosNovos.forEach(function (r) {
+    r.previstoInicial = porChave[r.sup + '||' + r.tipologia] || zeroPadrao;
+  });
+}
+
+function atualizarDadosAoVivo() {
+  definirStatusAtualizacao('Atualizando…', false);
+  fetch(URL_ESPELHO_MATRIZ + (URL_ESPELHO_MATRIZ.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now())
+    .then(function (resposta) {
+      if (!resposta.ok) throw new Error('HTTP ' + resposta.status);
+      return resposta.text();
+    })
+    .then(function (texto) {
+      var grid = parseCsvGrid(texto);
+      var registrosNovos = parseMatrizClient(grid);
+      if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho -- confira se o Apps Script já rodou pelo menos uma vez');
+
+      preservarPrevistoInicial(window.__REGISTROS__, registrosNovos);
+      window.__REGISTROS__ = registrosNovos;
+      window.__REGISTROS__ = fecharTendenciaVigente(window.__REGISTROS__, window.__VIGENTE_IDX__);
+      montarTodosFiltrosMulti(window.__REGISTROS__);
+      document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
+      recalcularTabela();
+      recalcularAlertas();
+
+      var agora = new Date();
+      definirStatusAtualizacao('Atualizado às ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), false);
+    })
+    .catch(function (erro) {
+      definirStatusAtualizacao('Falha ao atualizar: ' + erro.message, true);
+    });
+}
+
+document.getElementById('atualizar-dashboard').addEventListener('click', atualizarDadosAoVivo);
+</script>
+</body>
+</html>
