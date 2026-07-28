@@ -1,6 +1,6 @@
 'use strict';
-const { formatarMesAno, calcularVigenteIdx } = require('./datas.js');
-const { cifrarComSenha } = require('./criptografia.js');
+const { formatarMesAno, calcularVigenteIdx } = require('../comum/datas.js');
+const { cifrarComSenha } = require('../comum/criptografia.js');
 
 function escapeHtml(value) {
   return String(value ?? '')

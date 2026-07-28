@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { readXlsxSheet } = require('../tools/orcamento/xlsx-reader.js');
+const { readXlsxSheet } = require('../tools/comum/xlsx-reader.js');
 const { buildMinimalZip } = require('./helpers/build-zip.js');
 
 function buildTestXlsx({ sheetNames, activeSheetRows }) {
@@ -38,7 +38,7 @@ test('readXlsxSheet resolves a sheet by name through workbook.xml and rels, and 
   fs.writeFileSync(tmpFile, zip);
   try {
     const grid = readXlsxSheet(tmpFile, 'MATRIZ');
-    const { cell } = require('../tools/orcamento/xlsx-cells.js');
+    const { cell } = require('../tools/comum/xlsx-cells.js');
     assert.equal(cell(grid, 1, 'B'), 'PÁTRIA');
   } finally {
     fs.unlinkSync(tmpFile);
@@ -82,7 +82,7 @@ test('readXlsxSheet resolves sheet correctly when sheet element has r:id before 
   fs.writeFileSync(tmpFile, zip);
   try {
     const grid = readXlsxSheet(tmpFile, 'MATRIZ');
-    const { cell } = require('../tools/orcamento/xlsx-cells.js');
+    const { cell } = require('../tools/comum/xlsx-cells.js');
     assert.equal(cell(grid, 1, 'B'), 'PÁTRIA');
   } finally {
     fs.unlinkSync(tmpFile);
@@ -115,7 +115,7 @@ test('readXlsxSheet resolves sheet correctly when Relationship element has Targe
   fs.writeFileSync(tmpFile, zip);
   try {
     const grid = readXlsxSheet(tmpFile, 'MATRIZ');
-    const { cell } = require('../tools/orcamento/xlsx-cells.js');
+    const { cell } = require('../tools/comum/xlsx-cells.js');
     assert.equal(cell(grid, 1, 'B'), 'PÁTRIA');
   } finally {
     fs.unlinkSync(tmpFile);

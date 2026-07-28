@@ -2,11 +2,11 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { readXlsxSheet } = require('./xlsx-reader.js');
+const { readXlsxSheet } = require('../comum/xlsx-reader.js');
 const { parseMatriz, locateColumns } = require('./parse-matriz.js');
 const { parseBaseline } = require('./parse-baseline.js');
 const { renderDashboard } = require('./render-dashboard.js');
-const { excelSerialParaData } = require('./datas.js');
+const { excelSerialParaData } = require('../comum/datas.js');
 const config = require('./config.js');
 
 // LAB.C/LAB.E (rótulo da MATRIZ viva) equivalem a LAB./LAB. ESPECIAL na

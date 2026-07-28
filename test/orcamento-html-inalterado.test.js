@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const { construirHtmlGolden, normalizarVolatil, SENHA_FIXA } = require('./helpers/golden-orcamento.js');
-const { decifrarComSenha } = require('../tools/orcamento/criptografia.js');
+const { decifrarComSenha } = require('../tools/comum/criptografia.js');
 
 const GOLDEN = path.join(__dirname, 'fixtures', 'orcamento-golden.html');
 
