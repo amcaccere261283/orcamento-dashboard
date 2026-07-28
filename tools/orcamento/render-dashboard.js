@@ -1086,6 +1086,15 @@ function preencherLinha(linha, valoresLista, serie, dimensao) {
   // número (ver também renderLinhaAlerta).
   var casasDecimais = dimensao === 'produtividade' ? 2 : 0;
   var mensal = calcularMensal(valoresLista, serie, dimensao);
+  // Tendência (série "total") só existe na Tabela a partir do mês vigente
+  // em diante -- meses passados mostram só Previsto/Realizado, seguindo a
+  // MATRIZ base (regra confirmada com o usuário, 2026-07-28). O valor já
+  // FECHADO com o Realizado (fecharTendenciaVigente) continua existindo por
+  // baixo pros cálculos agregados (Total do ano abaixo, Alertas, conector do
+  // Acumulado no Gráfico) -- só a célula mensal escondida aqui, não o dado.
+  if (serie === 'total' && mensal && typeof window.__VIGENTE_IDX__ === 'number') {
+    mensal = mensal.map(function (v, idx) { return idx < window.__VIGENTE_IDX__ ? null : v; });
+  }
   var celulasMes = linha.querySelectorAll('.celula-mes');
   celulasMes.forEach(function (celula, idx) {
     celula.textContent = formatarNumero(mensal ? mensal[idx] : null, casasDecimais);

@@ -219,6 +219,7 @@ function extrairFuncoesPuras(html) {
     tomadorDoGrupo: sandbox.tomadorDoGrupo,
     fecharTendenciaVigente: sandbox.fecharTendenciaVigente,
     mediaEquipesPonderada: sandbox.mediaEquipesPonderada,
+    window: sandbox.window,
   };
 }
 
@@ -447,6 +448,36 @@ test('preencherLinha keeps every OTHER dimension a whole number (0 casas decimai
   preencherLinha(linha, [registro.previsto], 'previsto', 'financeiro');
   assert.equal(linha.celulas[0].textContent, '1.000');
   assert.equal(linha.celulaTotal.textContent, '12.000');
+});
+
+test('preencherLinha esconde a Tendência (série "total") nos meses ANTES do vigente -- meses passados mostram só Previsto/Realizado na Tabela, mesmo já fechada com o Realizado por baixo (regra confirmada com o usuário: Tendência só existe do mês vigente em diante, seguindo a MATRIZ base)', () => {
+  const registro = registroExemplo();
+  const html = renderComSenha([registro]);
+  const { preencherLinha, window: sandboxWindow } = extrairFuncoesPuras(html);
+  sandboxWindow.__VIGENTE_IDX__ = 6; // Jul/2026, mesmo vigenteIdx do renderComSenha default
+  const linha = criarLinhaFake(12);
+  preencherLinha(linha, [registro.total], 'total', 'financeiro');
+  ['0', '1', '2', '3', '4', '5'].forEach((_, idx) => {
+    assert.equal(linha.celulas[idx].textContent, '—', `mês ${idx} (antes do vigente) deveria estar em branco`);
+  });
+  assert.equal(linha.celulas[6].textContent, '900', 'mês vigente continua mostrando o valor fechado');
+  assert.equal(linha.celulas[11].textContent, '900', 'mês futuro continua mostrando o valor cru da linha T');
+  // O Total do ano (coluna da direita) NÃO esconde nada -- continua somando
+  // os 12 meses de baixo (Realizado nos passados, fechamento no vigente,
+  // projeção nos futuros), só a célula mensal individual é que fica em
+  // branco.
+  assert.equal(linha.celulaTotal.textContent, '10.800');
+});
+
+test('preencherLinha NÃO esconde meses passados de nenhuma outra série (Previsto Inicial/Previsto/Realizado) -- a regra é exclusiva da Tendência', () => {
+  const registro = registroExemplo();
+  const html = renderComSenha([registro]);
+  const { preencherLinha, window: sandboxWindow } = extrairFuncoesPuras(html);
+  sandboxWindow.__VIGENTE_IDX__ = 6;
+  const linha = criarLinhaFake(12);
+  preencherLinha(linha, [registro.realizado], 'realizado', 'financeiro');
+  assert.equal(linha.celulas[0].textContent, '800');
+  assert.equal(linha.celulas[5].textContent, '800');
 });
 
 test('calcularMensal, aggregating multiple tipologias, sums whatever contributors DO have data for a month (does not zero out just because one contributor is still blank that month) -- but stays null when EVERY contributor is blank', () => {
