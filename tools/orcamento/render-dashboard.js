@@ -324,20 +324,20 @@ function somarIntervaloEquipeDias(mensal, inicio, fim) {
 }
 
 // Valor de UMA série (previsto/realizado/total), pra UMA dimensão, bucketado
-// num período da aba Alertas -- generaliza calcularMensal/calcularTotalAno
-// (que só sabem fazer "todos os 12 meses" ou "1 mês") pra um intervalo
-// arbitrário. Dimensões de razão NUNCA fazem média das razões mensais --
-// somam numerador/denominador brutos no intervalo e só então dividem
-// (exatamente como calcularTotalAno já faz pro ano inteiro), exceto a
-// premissa fixa do Previsto de uma única tipologia, que independe do
-// período (mesmo caso especial de calcularMensal/calcularTotalAno).
-// (Exceção: dimensão Equipes nunca soma através de vários meses -- usa
-// mediaEquipesPonderada, ver o final da função.)
-function bucketPeriodo(valoresLista, serie, dimensao, periodo, vigenteIdx) {
+// num intervalo [inicio, fim) arbitrário -- generaliza calcularMensal/
+// calcularTotalAno (que só sabem fazer "todos os 12 meses" ou "1 mês").
+// Dimensões de razão NUNCA fazem média das razões mensais -- somam
+// numerador/denominador brutos no intervalo e só então dividem (exatamente
+// como calcularTotalAno já faz pro ano inteiro), exceto a premissa fixa do
+// Previsto de uma única tipologia, que independe do período (mesmo caso
+// especial de calcularMensal/calcularTotalAno). (Exceção: dimensão Equipes
+// nunca soma através de vários meses -- usa mediaEquipesPonderada, ver o
+// final da função.) Extraída de bucketPeriodo (aba Alertas) pra também
+// servir o Total do ano da Tendência na Tabela (ver preencherLinha), que
+// soma só do mês vigente em diante, não os 12 meses inteiros.
+function bucketIntervalo(valoresLista, serie, dimensao, inicio, fim) {
   var lista = valoresLista.filter(Boolean);
   if (!lista.length) return null;
-  var intervalo = PERIODOS_ALERTAS_INTERVALO[periodo](vigenteIdx);
-  var inicio = intervalo[0], fim = intervalo[1];
   var ratio = CAMPOS_RATIO[dimensao];
   if (ratio) {
     if (serie === 'previsto' && lista.length === 1) {
@@ -355,6 +355,14 @@ function bucketPeriodo(valoresLista, serie, dimensao, periodo, vigenteIdx) {
   }
   var mensal = somarArraysMensais(lista.map(function (v) { return v[dimensao]; }));
   return dimensao === 'equipes' ? mediaEquipesPonderada(mensal, inicio, fim) : somarIntervaloMensal(mensal, inicio, fim);
+}
+
+// Aba Alertas: mesmo bucketIntervalo acima, só resolvendo o [inicio, fim)
+// a partir de um dos períodos fixos (acumuladoAnterior/mesVigente/M+1..3/
+// acumuladoFuturo/acumuladoAteVigente/totalAno, ver PERIODOS_ALERTAS_INTERVALO).
+function bucketPeriodo(valoresLista, serie, dimensao, periodo, vigenteIdx) {
+  var intervalo = PERIODOS_ALERTAS_INTERVALO[periodo](vigenteIdx);
+  return bucketIntervalo(valoresLista, serie, dimensao, intervalo[0], intervalo[1]);
 }
 
 // Faixas fixas do semáforo (spec 2026-07-23) -- mesma regra pra todas as
@@ -1086,21 +1094,33 @@ function preencherLinha(linha, valoresLista, serie, dimensao) {
   // número (ver também renderLinhaAlerta).
   var casasDecimais = dimensao === 'produtividade' ? 2 : 0;
   var mensal = calcularMensal(valoresLista, serie, dimensao);
+  var vigenteIdx = window.__VIGENTE_IDX__;
+  var temVigente = typeof vigenteIdx === 'number';
   // Tendência (série "total") só existe na Tabela a partir do mês vigente
   // em diante -- meses passados mostram só Previsto/Realizado, seguindo a
   // MATRIZ base (regra confirmada com o usuário, 2026-07-28). O valor já
   // FECHADO com o Realizado (fecharTendenciaVigente) continua existindo por
-  // baixo pros cálculos agregados (Total do ano abaixo, Alertas, conector do
-  // Acumulado no Gráfico) -- só a célula mensal escondida aqui, não o dado.
-  if (serie === 'total' && mensal && typeof window.__VIGENTE_IDX__ === 'number') {
-    mensal = mensal.map(function (v, idx) { return idx < window.__VIGENTE_IDX__ ? null : v; });
+  // baixo pros cálculos agregados de Alertas e pro conector do Acumulado no
+  // Gráfico -- só a célula mensal (e o Total do ano logo abaixo) escondem
+  // os meses passados aqui, não o dado em si.
+  if (serie === 'total' && mensal && temVigente) {
+    mensal = mensal.map(function (v, idx) { return idx < vigenteIdx ? null : v; });
   }
   var celulasMes = linha.querySelectorAll('.celula-mes');
   celulasMes.forEach(function (celula, idx) {
     celula.textContent = formatarNumero(mensal ? mensal[idx] : null, casasDecimais);
   });
   var celulaTotal = linha.querySelector('.celula-total-linha');
-  if (celulaTotal) celulaTotal.textContent = formatarNumero(calcularTotalAno(valoresLista, serie, dimensao), casasDecimais);
+  // Total do ano da Tendência soma só do mês vigente em diante (mesmo corte
+  // do mensal acima) -- incluir os meses passados fechados com o Realizado
+  // dobraria a contagem desses meses (já aparecem no Total do ano da linha
+  // Realizado) e infla o Total muito além do que ainda falta projetar (bug
+  // real: SUP com T só em 3 meses futuros somando o ano inteiro por causa
+  // do fechamento). Toda outra série continua somando o ano cheio.
+  var totalAno = (serie === 'total' && temVigente)
+    ? bucketIntervalo(valoresLista, serie, dimensao, vigenteIdx, 12)
+    : calcularTotalAno(valoresLista, serie, dimensao);
+  if (celulaTotal) celulaTotal.textContent = formatarNumero(totalAno, casasDecimais);
 }
 
 // Dado um array de valores (na ordem das linhas visíveis de UMA coluna),

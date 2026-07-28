@@ -174,6 +174,7 @@ function extrairFuncoesPuras(html) {
       ' this.agruparIndicesAlertas = agruparIndicesAlertas;' +
       ' this.construirPainelGraficoHtml = construirPainelGraficoHtml;' +
       ' this.somarIntervaloMensal = somarIntervaloMensal; this.bucketPeriodo = bucketPeriodo;' +
+      ' this.bucketIntervalo = bucketIntervalo;' +
       ' this.classificarSemaforo = classificarSemaforo;' +
       ' this.colunasAlertas = colunasAlertas; this.calcularCelulaAlerta = calcularCelulaAlerta;' +
       ' this.renderCabecalhoAlertas = renderCabecalhoAlertas; this.renderCorpoAlertas = renderCorpoAlertas;' +
@@ -209,6 +210,7 @@ function extrairFuncoesPuras(html) {
     construirPainelGraficoHtml: sandbox.construirPainelGraficoHtml,
     somarIntervaloMensal: sandbox.somarIntervaloMensal,
     bucketPeriodo: sandbox.bucketPeriodo,
+    bucketIntervalo: sandbox.bucketIntervalo,
     classificarSemaforo: sandbox.classificarSemaforo,
     colunasAlertas: sandbox.colunasAlertas,
     calcularCelulaAlerta: sandbox.calcularCelulaAlerta,
@@ -462,11 +464,39 @@ test('preencherLinha esconde a Tendência (série "total") nos meses ANTES do vi
   });
   assert.equal(linha.celulas[6].textContent, '900', 'mês vigente continua mostrando o valor fechado');
   assert.equal(linha.celulas[11].textContent, '900', 'mês futuro continua mostrando o valor cru da linha T');
-  // O Total do ano (coluna da direita) NÃO esconde nada -- continua somando
-  // os 12 meses de baixo (Realizado nos passados, fechamento no vigente,
-  // projeção nos futuros), só a célula mensal individual é que fica em
-  // branco.
-  assert.equal(linha.celulaTotal.textContent, '10.800');
+  // O Total do ano (coluna da direita) segue o MESMO corte do mensal --
+  // soma só do mês vigente (6) em diante: 6 meses x 900 = 5.400, nunca os
+  // 12 meses inteiros (ver teste de regressão abaixo pro bug real que isso
+  // corrige: somar o ano cheio conta o Realizado fechado nos meses
+  // passados de novo, inflando o Total da Tendência).
+  assert.equal(linha.celulaTotal.textContent, '5.400');
+});
+
+test('preencherLinha: Total do ano da Tendência soma só do mês vigente em diante -- bug real (SUP-6498-23): a MATRIZ só tem T nos meses 6/7/8 (197.370+548.250+548.250=1.293.870), mas somar os 12 meses do valor já FECHADO com o Realizado (que preenche os meses passados com o fato real, para Alertas/Gráfico) inflava o Total pra 2.570.395', () => {
+  const registro = registroExemplo({
+    previsto: {
+      equipes: Array(12).fill(5), equipesResumo: { pico: 6, media: 5, prod: 1.5, dias: 25 },
+      volume: Array(12).fill(100), volumeResumo: { total: 1200, totalInicial: 1000, ticket: 1885.65 },
+      financeiro: [0, 0, 74755.05, 394382.9022, 290080.733605, 517306.5716750712, 197370, 548250, 548250, 0, 0, 0],
+    },
+    realizado: {
+      equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: [null, null, 74755.05, 394382.9022, 290080.733605, 517306.5716750712, 0, null, null, null, null, null],
+    },
+    total: {
+      equipes: Array(12).fill(4.5), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(90), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: [null, null, null, null, null, null, 197370, 548250, 548250, 0, 0, 0],
+    },
+  });
+  const html = renderComSenha([registro]);
+  const { preencherLinha, fecharTendenciaVigente, window: sandboxWindow } = extrairFuncoesPuras(html);
+  sandboxWindow.__VIGENTE_IDX__ = 6;
+  const [fechado] = fecharTendenciaVigente([registro], 6);
+  const linha = criarLinhaFake(12);
+  preencherLinha(linha, [fechado.total], 'total', 'financeiro');
+  assert.equal(linha.celulaTotal.textContent, '1.293.870');
 });
 
 test('preencherLinha NÃO esconde meses passados de nenhuma outra série (Previsto Inicial/Previsto/Realizado) -- a regra é exclusiva da Tendência', () => {
