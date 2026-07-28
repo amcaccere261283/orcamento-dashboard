@@ -1,6 +1,9 @@
 'use strict';
 const { formatarMesAno, calcularVigenteIdx } = require('../comum/datas.js');
 const { cifrarComSenha } = require('../comum/criptografia.js');
+const {
+  cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio,
+} = require('../comum/render-shell.js');
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -11,79 +14,16 @@ function renderCabecalhoMeses(periodos) {
   return periodos.map(data => `<th>${formatarMesAno(data)}</th>`).join('');
 }
 
-// A tabela inteira (linhas, filtros, cores de tipologia) é montada no
-// navegador -- ver o comentário logo abaixo de SCRIPT_CLIENTE_INICIO. Este
-// script SEMPRE roda (não depende de senha): implementa só o gate e, uma
-// vez decifrado, delega pro segundo script (SCRIPT_CLIENTE_TABELA) que faz
-// o trabalho de fato. Separados em duas strings só por legibilidade -- os
-// dois rodam como um script só na página.
-const SCRIPT_CLIENTE_GATE = `
-function base64ParaBytes(base64) {
-  var binario = atob(base64);
-  var bytes = new Uint8Array(binario.length);
-  for (var i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
-  return bytes;
-}
-
-// Espelha tools/orcamento/criptografia.js's decifrarComSenha, usando
-// crypto.subtle (Web Crypto) no lugar de node:crypto -- mesmo algoritmo
-// (PBKDF2-SHA256 pra derivar a chave, AES-256-GCM pra decifrar), mesmo
-// formato de pacote (tag de autenticação concatenada no fim dos dados
-// cifrados, que é o que crypto.subtle.decrypt espera por padrão).
-async function decifrarComSenha(pacote, senha) {
-  var salt = base64ParaBytes(pacote.salt);
-  var iv = base64ParaBytes(pacote.iv);
-  var dados = base64ParaBytes(pacote.dados);
-  var chaveBase = await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
-  var chave = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: salt, iterations: pacote.iteracoes, hash: 'SHA-256' },
-    chaveBase,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['decrypt']
-  );
-  var textoPlanoBuffer = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, chave, dados);
-  return new TextDecoder().decode(textoPlanoBuffer);
-}
-
-function mostrarErroSenha(msg) {
-  var erro = document.getElementById('gate-senha-erro');
-  erro.textContent = msg;
-  erro.style.display = 'block';
-}
-
-async function tentarDesbloquear() {
-  var campo = document.getElementById('campo-senha');
-  var botao = document.getElementById('btn-desbloquear');
-  var senha = campo.value;
-  botao.disabled = true;
-  botao.textContent = 'Verificando…';
-  try {
-    var jsonTexto = await decifrarComSenha(window.__DADOS_CIFRADOS__, senha);
-    window.__REGISTROS__ = JSON.parse(jsonTexto);
-    window.__REGISTROS__ = fecharTendenciaVigente(window.__REGISTROS__, window.__VIGENTE_IDX__);
-    document.getElementById('gate-senha').style.display = 'none';
-    document.getElementById('conteudo-protegido').style.display = '';
-    montarDashboard(window.__REGISTROS__);
-  } catch (e) {
-    mostrarErroSenha('Senha incorreta.');
-  } finally {
-    botao.disabled = false;
-    botao.textContent = 'Abrir';
-  }
-}
-
-document.getElementById('btn-desbloquear').addEventListener('click', tentarDesbloquear);
-document.getElementById('campo-senha').addEventListener('keydown', function (e) {
-  if (e.key === 'Enter') tentarDesbloquear();
-});
-document.getElementById('campo-senha').focus();
-`;
+// A página roda dois scripts, montados como um só: primeiro o gate de
+// senha, que SEMPRE roda (não depende de senha) e só destrava a página, e
+// depois o SCRIPT_CLIENTE_TABELA abaixo, que faz o trabalho de fato. O gate
+// virou casca compartilhada e mora em ../comum/render-shell.js
+// (scriptDesbloqueio); daqui ele entra pela chamada lá embaixo, no <script>.
 
 // Roda só DEPOIS que a senha certa decifra os registros (chamado por
-// montarDashboard, no fim de SCRIPT_CLIENTE_GATE). Reimplementa em JS de
-// navegador (sem require, HTML estático sem bundler) a mesma montagem de
-// linhas/cores/filtros que antes rodava no servidor em
+// montarDashboard, no fim do gate em ../comum/render-shell.js). Reimplementa
+// em JS de navegador (sem require, HTML estático sem bundler) a mesma
+// montagem de linhas/cores/filtros que antes rodava no servidor em
 // tools/orcamento/render-dashboard.js -- precisa ser assim porque os
 // PRÓPRIOS valores de SUP/Grupo/Tomador/Tipologia (não só os números
 // mensais) são dados protegidos pela senha; se a tabela viesse pronta do
@@ -2145,6 +2085,50 @@ function atualizarDadosAoVivo() {
 document.getElementById('atualizar-dashboard').addEventListener('click', atualizarDadosAoVivo);
 `;
 
+// Os sete filtros multi-select da barra principal e os cinco da aba
+// Alertas: só id e rótulo inicial, porque as opções de cada um são
+// montadas no cliente a partir dos registros decifrados.
+const FILTROS_PRINCIPAIS = [
+  { id: 'filtro-origem', rotulo: 'Todas as origens' },
+  { id: 'filtro-categoria', rotulo: 'Todas as categorias' },
+  { id: 'filtro-tipologia', rotulo: 'Todas as tipologias' },
+  { id: 'filtro-grupo', rotulo: 'Todos os grupos' },
+  { id: 'filtro-sup', rotulo: 'Todos os SUP' },
+  { id: 'filtro-serie', rotulo: 'Todas as séries' },
+  { id: 'seletor-dimensao', rotulo: 'Financeiro' },
+];
+
+const FILTROS_ALERTAS = [
+  { id: 'filtro-alertas-agrupar-por', rotulo: 'SUP' },
+  { id: 'filtro-alertas-numerico', rotulo: '2 selecionadas' },
+  { id: 'filtro-alertas-baseline', rotulo: 'Previsto' },
+  { id: 'filtro-alertas-periodo', rotulo: '2 selecionadas' },
+  { id: 'filtro-alertas-status', rotulo: 'Status' },
+];
+
+// As três abas de visualização, na ordem em que aparecem; Tabela abre
+// selecionada.
+const ABAS_VISUALIZACAO = [
+  { id: 'aba-tabela', rotulo: 'Tabela', ativa: true,
+    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>' },
+  { id: 'aba-grafico', rotulo: 'Gráfico', ativa: false,
+    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>' },
+  { id: 'aba-alertas', rotulo: 'Alertas', ativa: false,
+    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.9 21h16.2a2 2 0 0 0 1.79-2.96L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' },
+];
+
+// A faixa de ações da barra principal e a nota de premissa: markup pronto,
+// já com o recuo que tinham antes, porque são conteúdo do orçamento e não
+// da casca -- markupFiltros só encaixa os dois onde estavam.
+const MARKUP_ACOES = `      <div class="filtros-acoes">
+${markupAbas(ABAS_VISUALIZACAO, '        ')}
+        <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
+        <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
+        <span id="status-atualizacao" class="status-atualizacao"></span>
+      </div>`;
+
+const MARKUP_NOTA_PREMISSA = `      <div id="nota-premissa-produtividade" class="nota-premissa" style="display:none">Premissa: Produtividade = Volume ÷ (Equipes × dias do mês) — dias = 15 em Janeiro e Dezembro, 30 nos demais meses.</div>`;
+
 function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha }) {
   if (!senha) {
     throw new Error('renderDashboard requer "senha" -- o conteúdo (SUP/Grupo/Tomador/Tipologia/valores) é cifrado com ela antes de ir pro HTML.');
@@ -2172,272 +2156,18 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
 <meta charset="UTF-8">
 <title>ORÇAMENTO — MATRIZ</title>
 <style>
-  :root {
-    --surface-1: #1a1a19;
-    --page: #0d0d0d;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --muted: #898781;
-    --gridline: #2c2c2a;
-    --border: rgba(255,255,255,0.10);
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: var(--page);
-    color: var(--text-primary);
-    padding: 24px;
-  }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  .generated { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
-  .watermark {
-    position: fixed;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: min(70vw, 900px);
-    height: auto;
-    opacity: 0.16;
-    pointer-events: none;
-    z-index: 0;
-  }
-  .header-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
-  .header-bar img { height: 36px; width: auto; }
-  .header-bar-title { flex: 1 1 200px; min-width: 0; }
-  .gate-senha {
-    position: relative; z-index: 1;
-    display: flex; align-items: center; justify-content: center;
-    min-height: 40vh;
-  }
-  .gate-senha-box {
-    background: var(--surface-1); border: 2px solid #f6b53f; border-radius: 12px;
-    padding: 32px; max-width: 360px; width: 100%; text-align: center;
-  }
-  .gate-senha-box h2 { margin: 0 0 16px; font-size: 16px; }
-  .gate-senha-box input {
-    width: 100%; padding: 10px 12px; margin-bottom: 12px;
-    border: 1px solid var(--border); border-radius: 6px;
-    background: var(--page); color: var(--text-primary); font-size: 14px;
-  }
-  .gate-senha-box button {
-    width: 100%; padding: 10px 16px;
-    border: 2px solid #f6b53f; border-radius: 8px;
-    background: var(--surface-1); color: var(--text-primary);
-    font-size: 14px; font-weight: 600; cursor: pointer;
-  }
-  .gate-senha-box button:hover { background: rgba(246,181,63,0.1); }
-  .gate-senha-box button:disabled { opacity: 0.6; cursor: wait; }
-  .gate-senha-erro { color: #f0857a; font-size: 13px; margin-top: 10px; }
-  .filtros { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
-  .filtros-selecao { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  .filtros-acoes { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
-  .filtros select,
-  #limpar-filtros,
-  #atualizar-dashboard,
-  .abas-visualizacao button {
-    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease, box-shadow 150ms ease;
-  }
-  .filtros select:focus-visible,
-  #limpar-filtros:focus-visible,
-  #atualizar-dashboard:focus-visible,
-  .abas-visualizacao button:focus-visible,
-  .gate-senha-box input:focus-visible,
-  .gate-senha-box button:focus-visible {
-    outline: 2px solid #f6b53f; outline-offset: 2px;
-  }
-  .filtros select {
-    padding: 8px 30px 8px 10px; height: 36px;
-    border: 1px solid var(--border); border-radius: 6px;
-    background: var(--surface-1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23c3c2b7' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
-    color: var(--text-primary);
-    font-size: 13px; cursor: pointer;
-    appearance: none; -webkit-appearance: none; -moz-appearance: none;
-  }
-  .filtros select:hover { border-color: rgba(246,181,63,0.5); }
-  .filtro-multi { position: relative; }
-  .filtro-multi-trigger {
-    display: inline-flex; align-items: center; gap: 8px;
-    max-width: 190px;
-    padding: 8px 10px; height: 36px;
-    border: 1px solid var(--border); border-radius: 6px;
-    background: var(--surface-1); color: var(--text-primary);
-    font-size: 13px; cursor: pointer; white-space: nowrap;
-  }
-  .filtro-multi-trigger span,
-  .filtro-multi-trigger { overflow: hidden; text-overflow: ellipsis; }
-  .filtro-multi-seta { flex: none; margin-left: auto; color: #c3c2b7; transition: transform 150ms ease; }
-  .filtro-multi-trigger:hover { border-color: rgba(246,181,63,0.5); }
-  .filtro-multi.aberto .filtro-multi-trigger { border-color: #f6b53f; }
-  .filtro-multi.aberto .filtro-multi-seta { transform: rotate(180deg); }
-  .filtro-multi-painel {
-    position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
-    min-width: 210px; max-width: 300px; max-height: 260px; overflow-y: auto;
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-    padding: 6px;
-  }
-  .filtro-multi-painel[hidden] { display: none; }
-  .filtro-multi-busca {
-    position: sticky; top: 0; z-index: 1;
-    display: block; width: 100%; box-sizing: border-box;
-    margin-bottom: 6px; padding: 6px 8px;
-    border: 1px solid var(--border); border-radius: 4px;
-    background: var(--surface-1); color: var(--text-primary); font-size: 13px;
-  }
-  .filtro-multi-busca::placeholder { color: var(--text-secondary); }
-  .filtro-multi-busca:focus-visible { outline: 2px solid #f6b53f; outline-offset: 1px; }
-  .filtro-multi-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 7px 8px; border-radius: 4px; cursor: pointer;
-    font-size: 13px; color: var(--text-primary); white-space: nowrap;
-  }
-  .filtro-multi-item:hover { background: rgba(255,255,255,0.05); }
-  .filtro-multi-item input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; flex: none; }
-  .filtro-multi-vazio { padding: 7px 8px; font-size: 13px; color: var(--text-secondary); }
-  #limpar-filtros,
-  #atualizar-dashboard,
-  .abas-visualizacao button {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 13px; cursor: pointer; white-space: nowrap;
-  }
-  #limpar-filtros svg, #atualizar-dashboard svg, .abas-visualizacao button svg { flex: none; }
-  #limpar-filtros {
-    height: 36px; padding: 0 14px;
-    border: 1px solid var(--border); border-radius: 6px;
-    background: var(--surface-1); color: var(--text-secondary);
-  }
-  #limpar-filtros:hover { border-color: #f6b53f; color: var(--text-primary); background: rgba(255,255,255,0.04); }
-  #limpar-filtros:active { transform: translateY(1px); }
-  #atualizar-dashboard {
-    height: 38px; padding: 0 18px;
-    border: 2px solid #f6b53f; border-radius: 8px;
-    background: var(--surface-1); color: var(--text-primary);
-    font-weight: 600;
-    box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 2px 6px rgba(0,0,0,0.35);
-  }
-  #atualizar-dashboard:hover { background: rgba(246,181,63,0.14); box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 4px 10px rgba(0,0,0,0.4); transform: translateY(-1px); }
-  #atualizar-dashboard:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(0,0,0,0.3) inset; }
-  #atualizar-dashboard:active svg { transform: rotate(70deg); }
-  #atualizar-dashboard svg { transition: transform 300ms ease; }
-  .status-atualizacao { font-size: 12px; color: var(--text-secondary); margin-left: 8px; }
-  .status-atualizacao.status-erro { color: #e0684f; }
-  .nota-premissa {
-    width: 100%; margin-top: 10px; padding: 8px 12px;
-    border: 1px solid var(--border); border-radius: 6px;
-    background: rgba(255,255,255,0.03);
-    font-size: 12px; color: var(--text-secondary);
-  }
-  .abas-visualizacao {
-    display: flex; gap: 2px;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid var(--border); border-radius: 8px;
-    padding: 3px;
-  }
-  .abas-visualizacao button {
-    height: 30px; padding: 0 14px;
-    border: none; border-radius: 6px;
-    background: transparent; color: var(--text-secondary);
-  }
-  .abas-visualizacao button:hover { color: var(--text-primary); }
-  .abas-visualizacao button:active { transform: translateY(1px); }
-  .abas-visualizacao button.aba-ativa {
-    background: var(--surface-1); color: var(--text-primary); font-weight: 600;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(246,181,63,0.4) inset;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .filtros select, #limpar-filtros, #atualizar-dashboard, .abas-visualizacao button, #atualizar-dashboard svg { transition: none; }
-  }
-  #secao-grafico {
-    background: rgba(26,26,25,0.68); border-radius: 8px; padding: 16px 8px;
-    position: relative; z-index: 1;
-  }
-  .grafico-svg { width: 100%; height: auto; display: block; }
-  .grafico-painel { margin-bottom: 28px; }
-  .grafico-painel:last-child { margin-bottom: 0; }
-  .grafico-bloco-dimensao + .grafico-bloco-dimensao { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--border); }
-  .grafico-titulo { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
-  .grafico-eixo-texto { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
-  .grafico-gridline, .grafico-linha-guia { stroke: var(--gridline); stroke-width: 1; }
-  .grafico-linha { stroke-linecap: round; stroke-linejoin: round; }
-  .grafico-rotulo { fill: var(--text-secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
-  .grafico-rotulo-final { fill: var(--text-primary); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
-  .grafico-rotulo { paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
-  .grafico-hit { cursor: pointer; pointer-events: all; }
-  .grafico-marcador { pointer-events: none; }
-  .grafico-tooltip {
-    position: absolute; pointer-events: none;
-    background: #0d0d0d; border: 1px solid var(--border); border-radius: 6px;
-    padding: 6px 10px; font-size: 12px; color: var(--text-primary);
-    white-space: nowrap; z-index: 5; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-  }
-  .table-scroll { overflow-x: auto; border-radius: 8px; position: relative; z-index: 1; }
-  table { width: 100%; border-collapse: collapse; background: rgba(26,26,25,0.68); }
-  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--gridline); font-size: 13px; }
-  td.num { font-variant-numeric: tabular-nums; }
-  th {
-    color: var(--text-secondary); font-weight: 600; background: #141412;
-    position: sticky; top: 0; z-index: 1;
-    box-shadow: 0 1px 0 var(--gridline), 0 2px 6px rgba(0,0,0,0.3);
-  }
-  /* Primeira coluna (SUP) fixa ao rolar a tabela pro lado -- especificidade
-     igual à das regras de fundo por tipo de linha (.linha-total-sup td etc.)
-     abaixo, então essas continuam ganhando por ordem (vêm depois no CSS) e
-     a coluna fixa herda o tom certo em cada tipo de linha, em vez de travar
-     num fundo genérico. */
-  td:first-child, th:first-child { position: sticky; left: 0; z-index: 1; }
-  td:first-child { background: var(--surface-1); }
-  th:first-child { z-index: 2; }
-  #corpo-tabela tr:hover { filter: brightness(1.14); }
-  .tipologia-chip {
-    display: inline-block;
-    background: var(--chip-color); color: #fff;
-    border-radius: 4px; padding: 2px 8px;
-    font-size: 12px; font-weight: 600;
-  }
-  .tipologia-chip-total { background: rgba(26,26,25,0.6); color: var(--text-primary); border: 2px solid var(--text-secondary); }
-  .celula-mes { white-space: nowrap; }
-  .celula-total-linha { white-space: nowrap; font-weight: 700; border-left: 2px solid var(--border); }
-  .serie-label { font-weight: 700; border-left: 4px solid transparent; padding-left: 10px; white-space: nowrap; }
-  .linha-previsto-inicial .serie-label, .linha-previsto-inicial .celula-mes, .linha-previsto-inicial .celula-total-linha { color: #8b8a82; }
-  .linha-previsto-inicial .serie-label { border-left-color: #8b8a82; }
-  .linha-previsto .serie-label, .linha-previsto .celula-mes, .linha-previsto .celula-total-linha { color: #2f6ad0; }
-  .linha-previsto .serie-label { border-left-color: #2f6ad0; }
-  .linha-realizado .serie-label, .linha-realizado .celula-mes, .linha-realizado .celula-total-linha { color: #7fd858; }
-  .linha-realizado .serie-label { border-left-color: #7fd858; }
-  .linha-total .serie-label, .linha-total .celula-mes, .linha-total .celula-total-linha { color: #f6b53f; }
-  .linha-total .serie-label { border-left-color: #f6b53f; }
-  tr.linha-total td { border-bottom: 2px solid var(--gridline); }
-  .linha-total-sup td { background: rgba(0,0,0,0.32); }
-  .linha-total-geral td { background: rgba(246,181,63,0.10); }
-  tr.linha-total.linha-total-geral td { border-bottom: 2px solid #f6b53f; }
-  .linha-total-geral-tipologia td { background: rgba(255,255,255,0.03); }
-  tr.linha-total.linha-total-geral-tipologia td { border-bottom: 1px solid var(--gridline); }
-  .valor-repetido { color: rgba(255,255,255,0.14); }
-  .filtros-alertas { margin-bottom: 16px; }
-  .status-circulo {
-    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
-    margin-right: 6px; vertical-align: middle;
-  }
-  .busca-alertas {
-    display: block; width: 100%; max-width: 320px; box-sizing: border-box;
-    margin-bottom: 12px; padding: 8px 10px;
-    border: 1px solid var(--border); border-radius: 6px;
-    background: var(--surface-1); color: var(--text-primary); font-size: 13px;
-  }
-  .busca-alertas::placeholder { color: var(--text-secondary); }
-  .busca-alertas:focus-visible { outline: 2px solid #f6b53f; outline-offset: 1px; }
+${cssBase()}
 </style>
 </head>
 <body>
   ${watermarkImg}
   <main>
-  <div class="header-bar">
-    ${logoImg}
-    <div class="header-bar-title">
-      <h1>ORÇAMENTO — Previsto x Realizado x Tendência</h1>
-      <div class="generated">Gerado em ${escapeHtml(generatedAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}</div>
-    </div>
-  </div>
+${markupCabecalho({
+    titulo: 'ORÇAMENTO — Previsto x Realizado x Tendência',
+    subtitulo: `Gerado em ${escapeHtml(generatedAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}`,
+    logo: logoImg,
+    recuo: '  ',
+  })}
 
   <div id="gate-senha" class="gate-senha">
     <div class="gate-senha-box">
@@ -2449,28 +2179,9 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   </div>
 
   <div id="conteudo-protegido" style="display:none">
-    <div class="filtros">
-      <div class="filtros-selecao">
-        <div class="filtro-multi" id="filtro-origem"><button type="button" class="filtro-multi-trigger">Todas as origens<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-        <div class="filtro-multi" id="filtro-categoria"><button type="button" class="filtro-multi-trigger">Todas as categorias<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-        <div class="filtro-multi" id="filtro-tipologia"><button type="button" class="filtro-multi-trigger">Todas as tipologias<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-        <div class="filtro-multi" id="filtro-grupo"><button type="button" class="filtro-multi-trigger">Todos os grupos<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-        <div class="filtro-multi" id="filtro-sup"><button type="button" class="filtro-multi-trigger">Todos os SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-        <div class="filtro-multi" id="filtro-serie"><button type="button" class="filtro-multi-trigger">Todas as séries<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-        <div class="filtro-multi" id="seletor-dimensao"><button type="button" class="filtro-multi-trigger">Financeiro<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-      </div>
-      <div class="filtros-acoes">
-        <div class="abas-visualizacao">
-          <button id="aba-tabela" type="button" class="aba-ativa"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Tabela</button>
-          <button id="aba-grafico" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Gráfico</button>
-          <button id="aba-alertas" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.9 21h16.2a2 2 0 0 0 1.79-2.96L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>Alertas</button>
-        </div>
-        <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
-        <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
-        <span id="status-atualizacao" class="status-atualizacao"></span>
-      </div>
-      <div id="nota-premissa-produtividade" class="nota-premissa" style="display:none">Premissa: Produtividade = Volume ÷ (Equipes × dias do mês) — dias = 15 em Janeiro e Dezembro, 30 nos demais meses.</div>
-    </div>
+${markupFiltros(FILTROS_PRINCIPAIS, {
+      recuo: '    ', acoes: MARKUP_ACOES, extra: MARKUP_NOTA_PREMISSA,
+    })}
     <div id="secao-tabela">
     <div class="table-scroll">
     <table id="tabela-orcamento">
@@ -2484,15 +2195,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
       <div id="grafico-tooltip" class="grafico-tooltip" style="display:none"></div>
     </div>
     <div id="secao-alertas" style="display:none">
-      <div class="filtros filtros-alertas">
-        <div class="filtros-selecao">
-          <div class="filtro-multi" id="filtro-alertas-agrupar-por"><button type="button" class="filtro-multi-trigger">SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-          <div class="filtro-multi" id="filtro-alertas-numerico"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-          <div class="filtro-multi" id="filtro-alertas-baseline"><button type="button" class="filtro-multi-trigger">Previsto<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-          <div class="filtro-multi" id="filtro-alertas-periodo"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-          <div class="filtro-multi" id="filtro-alertas-status"><button type="button" class="filtro-multi-trigger">Status<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
-        </div>
-      </div>
+${markupFiltros(FILTROS_ALERTAS, { recuo: '      ', classes: 'filtros-alertas' })}
       <input id="busca-alertas" type="text" class="busca-alertas" placeholder="Buscar..." autocomplete="off">
       <div class="table-scroll">
       <table id="tabela-alertas">
@@ -2505,7 +2208,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
   </main>
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx};</script>
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
-  <script>${SCRIPT_CLIENTE_GATE}</script>
+  <script>${scriptDesbloqueio()}</script>
   <script>${SCRIPT_CLIENTE_TABELA}</script>
 </body>
 </html>`;
