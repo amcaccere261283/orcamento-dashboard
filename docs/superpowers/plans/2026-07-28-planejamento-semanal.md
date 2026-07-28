@@ -26,37 +26,88 @@
 Antes de mover qualquer linha, criar o teste que prova que o HTML do orçamento não mudou. Todas as tarefas seguintes dependem dele.
 
 **Files:**
-- Create: `test/helpers/build-golden.js`
+- Create: `test/helpers/golden-orcamento.js`
+- Create: `test/fixtures/registros-golden.json`
 - Create: `test/orcamento-html-inalterado.test.js`
 - Create: `test/fixtures/orcamento-golden.html`
 
 **Interfaces:**
-- Produces: `normalizarVolatil(html)` → `string` (o HTML com as duas linhas voláteis substituídas por marcadores fixos), consumido pelas Tasks 2, 3 e 4.
+- Produces:
+  - `normalizarVolatil(html)` → `string` — remove as diferenças legítimas entre dois builds do mesmo código.
+  - `construirHtmlGolden()` → `string` — renderiza o dashboard a partir do fixture versionado, com data e senha fixas.
+- Consumido pelas Tasks 2, 3 e 4.
 
-- [ ] **Step 1: Escrever o helper que constrói e normaliza**
+**Três armadilhas já medidas neste repositório em 2026-07-28** — o teste tem que tratar as três, ou falha por motivo errado:
 
-`test/helpers/build-golden.js`:
+1. O blob cifrado é um **objeto**, não uma string: `window.__DADOS_CIFRADOS__ = {"salt":"…","iv":"…","dados":"…"}`. `salt` e `iv` são aleatórios a cada build.
+2. O `dist/` versionado está em **CRLF** (conversão do git no Windows; não há `.gitattributes`), mas o build emite **LF**. Comparar sem normalizar acusa diferença em toda linha.
+3. `window.__VIGENTE_IDX__` depende da data corrente (6 em julho, 7 em agosto). Sem data fixa, o golden quebra na virada do mês.
+
+O golden **não** é uma cópia do `dist/`: é renderizado de um fixture versionado. Assim o teste roda em qualquer máquina — CI e colaboradores incluídos — sem `G:\` montado e sem a senha real.
+
+- [ ] **Step 1: Gerar o fixture de registros**
+
+Rodar uma vez, numa máquina com acesso ao `G:\`, e commitar o resultado:
+
+```bash
+node -e "
+const { parseMatriz } = require('./tools/orcamento/parse-matriz.js');
+const { readXlsxSheet } = require('./tools/orcamento/xlsx-reader.js');
+const config = require('./tools/orcamento/config.js');
+const fs = require('node:fs');
+const grid = readXlsxSheet(config.caminhoArquivo, config.nomeAba);
+const registros = parseMatriz(grid);
+// 6 registros bastam pra exercitar toda a casca (cabeçalho, filtros, abas,
+// as 3 tabelas); o golden protege o HTML gerado, não a planilha inteira.
+fs.writeFileSync('test/fixtures/registros-golden.json',
+  JSON.stringify(registros.slice(0, 6), null, 1));
+"
+```
+
+- [ ] **Step 2: Escrever o helper**
+
+`test/helpers/golden-orcamento.js`:
 
 ```js
 'use strict';
-const { readXlsxSheet } = require('../../tools/orcamento/xlsx-reader.js');
-const { parseMatriz } = require('../../tools/orcamento/parse-matriz.js');
-const { parseBaseline } = require('../../tools/orcamento/parse-baseline.js');
+const fs = require('node:fs');
+const path = require('node:path');
 const { renderDashboard } = require('../../tools/orcamento/render-dashboard.js');
 
-// As duas únicas linhas que mudam legitimamente entre dois builds do mesmo
-// código: o blob cifrado (nonce aleatório a cada execução) e o carimbo de
-// data. Tudo o mais tem que ser idêntico byte a byte.
-function normalizarVolatil(html) {
-  return html
-    .replace(/__DADOS_CIFRADOS__\s*=\s*"[^"]*"/, '__DADOS_CIFRADOS__="<NORMALIZADO>"')
-    .replace(/Gerado em[^<]*/g, 'Gerado em <NORMALIZADO>');
+const FIXTURE = path.join(__dirname, '..', 'fixtures', 'registros-golden.json');
+
+// Data fixa: __VIGENTE_IDX__ é derivado dela e mudaria na virada do mês.
+const DATA_FIXA = new Date(Date.UTC(2026, 6, 15));
+const SENHA_FIXA = 'golden-fake';
+const PERIODOS = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 1)));
+
+function construirHtmlGolden() {
+  return renderDashboard({
+    registros: JSON.parse(fs.readFileSync(FIXTURE, 'utf8')),
+    periodos: PERIODOS,
+    generatedAt: DATA_FIXA,
+    senha: SENHA_FIXA,
+    logoDataUri: 'data:image/png;base64,GOLDEN',
+    iconDataUri: 'data:image/png;base64,GOLDEN',
+  });
 }
 
-module.exports = { normalizarVolatil };
+// O que pode mudar legitimamente entre dois builds do MESMO código:
+// - salt e iv do blob cifrado, sorteados a cada execução;
+// - o carimbo "Gerado em";
+// - o fim de linha, que o git converte pra CRLF no Windows.
+// Qualquer outra diferença é regressão.
+function normalizarVolatil(html) {
+  return html
+    .replace(/\r\n/g, '\n')
+    .replace(/window\.__DADOS_CIFRADOS__\s*=\s*\{[^}]*\}/, 'window.__DADOS_CIFRADOS__ = {NORMALIZADO}')
+    .replace(/Gerado em[^<]*/g, 'Gerado em NORMALIZADO');
+}
+
+module.exports = { construirHtmlGolden, normalizarVolatil, SENHA_FIXA };
 ```
 
-- [ ] **Step 2: Escrever o teste que falha**
+- [ ] **Step 3: Escrever o teste que falha**
 
 `test/orcamento-html-inalterado.test.js`:
 
@@ -66,42 +117,61 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { normalizarVolatil } = require('./helpers/build-golden.js');
+const { construirHtmlGolden, normalizarVolatil, SENHA_FIXA } = require('./helpers/golden-orcamento.js');
 
 const GOLDEN = path.join(__dirname, 'fixtures', 'orcamento-golden.html');
 
 test('o HTML do orçamento continua byte-idêntico ao golden', () => {
-  const atual = fs.readFileSync(
-    path.join(__dirname, '..', 'dist', 'orcamento-dashboard.html'), 'utf8');
-  const golden = fs.readFileSync(GOLDEN, 'utf8');
-  assert.strictEqual(normalizarVolatil(atual), normalizarVolatil(golden));
+  const atual = normalizarVolatil(construirHtmlGolden());
+  const golden = normalizarVolatil(fs.readFileSync(GOLDEN, 'utf8'));
+  assert.strictEqual(atual, golden);
+});
+
+test('a normalização não engole o conteúdo que o golden protege', () => {
+  const html = normalizarVolatil(construirHtmlGolden());
+  assert.match(html, /abas-visualizacao/);
+  assert.match(html, /--text-primary/);
+  assert.match(html, /NORMALIZADO/);
+});
+
+test('dois builds seguidos do mesmo código normalizam para o mesmo texto', () => {
+  assert.strictEqual(
+    normalizarVolatil(construirHtmlGolden()),
+    normalizarVolatil(construirHtmlGolden()));
+});
+
+test('a senha fictícia não vaza no HTML', () => {
+  assert.doesNotMatch(construirHtmlGolden(), new RegExp(SENHA_FIXA));
 });
 ```
 
-- [ ] **Step 3: Rodar e confirmar que falha**
+- [ ] **Step 4: Rodar e confirmar que falha**
 
 Run: `node --test test/orcamento-html-inalterado.test.js`
-Expected: FAIL — `ENOENT` em `test/fixtures/orcamento-golden.html`, que ainda não existe.
+Expected: FAIL — `ENOENT` em `test/fixtures/orcamento-golden.html`.
 
-- [ ] **Step 4: Gerar o golden a partir do build atual**
+O teste "dois builds seguidos" tem que passar já nesta rodada: se falhar, a normalização está incompleta e **todas** as tarefas seguintes ficam sem rede. Não avance sem ele verde.
+
+- [ ] **Step 5: Gerar o golden**
 
 ```bash
-mkdir -p test/fixtures
-cp dist/orcamento-dashboard.html test/fixtures/orcamento-golden.html
+node -e "
+const fs = require('node:fs');
+const { construirHtmlGolden } = require('./test/helpers/golden-orcamento.js');
+fs.writeFileSync('test/fixtures/orcamento-golden.html', construirHtmlGolden());
+"
 ```
 
-O `dist/orcamento-dashboard.html` versionado é o build corrente e serve de referência. Não é preciso ter `ORCAMENTO_SENHA` nem acesso ao `G:\` para esta tarefa.
-
-- [ ] **Step 5: Rodar e confirmar que passa**
+- [ ] **Step 6: Rodar e confirmar que passa**
 
 Run: `node --test test/orcamento-html-inalterado.test.js`
-Expected: PASS.
+Expected: PASS, 4 testes.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add test/helpers/build-golden.js test/orcamento-html-inalterado.test.js test/fixtures/orcamento-golden.html
-git commit -m "Adicionar diff byte-a-byte do HTML do orçamento como rede de segurança"
+git add test/helpers/golden-orcamento.js test/orcamento-html-inalterado.test.js test/fixtures/
+git commit -m "Adicionar golden byte-a-byte do HTML do orçamento como rede de segurança"
 ```
 
 ---
@@ -112,7 +182,7 @@ git commit -m "Adicionar diff byte-a-byte do HTML do orçamento como rede de seg
 - Create: `tools/comum/xlsx-reader.js`, `tools/comum/zip-reader.js`, `tools/comum/xlsx-cells.js`, `tools/comum/criptografia.js`, `tools/comum/datas.js` (movidos, conteúdo inalterado)
 - Delete: os mesmos cinco arquivos em `tools/orcamento/`
 - Modify: `tools/orcamento/build-dashboard.js`, `tools/orcamento/parse-matriz.js`, `tools/orcamento/parse-baseline.js`, `tools/orcamento/render-dashboard.js` (só os caminhos de `require`)
-- Modify: `test/orcamento-xlsx-reader.test.js`, `test/orcamento-xlsx-cells.test.js`, `test/orcamento-zip-reader.test.js`, `test/orcamento-criptografia.test.js`, `test/orcamento-datas.test.js`, `test/helpers/build-golden.js` (caminhos)
+- Modify: `test/orcamento-xlsx-reader.test.js`, `test/orcamento-xlsx-cells.test.js`, `test/orcamento-zip-reader.test.js`, `test/orcamento-criptografia.test.js`, `test/orcamento-datas.test.js` (caminhos)
 
 **Interfaces:**
 - Consumes: `normalizarVolatil` da Task 1.
@@ -153,10 +223,10 @@ Expected: PASS, incluindo `orcamento-html-inalterado`.
 
 - [ ] **Step 5: Confirmar que o HTML não mudou**
 
-Run: `ORCAMENTO_SENHA='<senha real>' node tools/orcamento/build-dashboard.js && node --test test/orcamento-html-inalterado.test.js`
+Run: `node --test test/orcamento-html-inalterado.test.js`
 Expected: PASS. Mover arquivo não pode alterar um byte do HTML.
 
-Se não houver acesso ao `G:\` ou à senha, pular a reconstrução: o teste roda contra o `dist/` versionado e ainda assim prova que nada no caminho de render mudou.
+O golden renderiza do fixture versionado, então este passo não precisa do `G:\` nem da senha real.
 
 - [ ] **Step 6: Commit**
 
