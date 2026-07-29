@@ -1316,17 +1316,6 @@ function renderCorpoTabela(registros, dimensoes) {
   return html;
 }
 
-function linhasDistintas(registros, campo) {
-  var vistos = {};
-  var resultado = [];
-  registros.forEach(function (r) {
-    var v = r[campo];
-    if (v && !vistos[v]) { vistos[v] = true; resultado.push(v); }
-  });
-  resultado.sort();
-  return resultado;
-}
-
 // Os filtros (Origem/Tipologia/Categoria/Grupo/SUP/Série) são todos seleção
 // múltipla, num dropdown de checkboxes -- Origem/Tipologia/Grupo/SUP têm
 // opções dinâmicas (dependem dos registros decifrados); Categoria/Série têm
