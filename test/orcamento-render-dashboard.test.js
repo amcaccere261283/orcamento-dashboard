@@ -1915,8 +1915,15 @@ test('every filter change (recorte or Alertas-specific) recalculates BOTH recalc
   // mais/a menos) faria o match pular pro corpo de OUTRA função e o teste
   // continuar passando por engano. A barreira (?!\r?\n\}) proíbe atravessar
   // um "}" no início de linha, então só casa dentro do próprio corpo de
-  // aoMudarFiltroOrcamento -- ver também a nota logo abaixo desta asserção
-  // sobre o acoplamento com render-shell.js.
+  // aoMudarFiltroOrcamento.
+  //
+  // Acoplamento deliberado: esta asserção (e as duas de FILTROS_CONFIG/
+  // FILTROS_ALERTAS_CONFIG logo abaixo) checam o texto do 4º <script> da
+  // página, que é montarFiltroMulti/aoMudar (definidos em
+  // tools/comum/render-shell.js) concatenados com o resto do JS de cliente
+  // do orçamento -- um refactor futuro em render-shell.js que mude a forma
+  // desse callback precisa rodar este arquivo de teste também, não só
+  // test/comum-render-shell.test.js.
   assert.match(scriptTabela, /function aoMudarFiltroOrcamento\(cfg\) \{(?:(?!\r?\n\})[\s\S])*recalcularTabela\(\);\r?\n  recalcularAlertas\(\);\r?\n\}/, 'aoMudarFiltroOrcamento (o callback de verdade usado por esta página) deve chamar as duas funções incondicionalmente ao final');
   assert.match(scriptTabela, /FILTROS_CONFIG\.forEach\(function \(cfg\) \{ montarFiltroMulti\(cfg, registros, filtrosSelecionados, aoMudarFiltroOrcamento\); \}\);/, 'os filtros de recorte devem passar aoMudarFiltroOrcamento como callback');
   assert.match(scriptTabela, /FILTROS_ALERTAS_CONFIG\.forEach\(function \(cfg\) \{ montarFiltroMulti\(cfg, registros, filtrosAlertas, aoMudarFiltroOrcamento\); \}\);/, 'os filtros da aba Alertas também devem passar aoMudarFiltroOrcamento como callback -- é isso que corrige o bug de recorte nunca atualizar Alertas');
