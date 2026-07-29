@@ -72,6 +72,20 @@ semanal precisa.
 `bucketIntervalo`, `bucketPeriodo`, `calcularTotalAno` e todo o cálculo de Alertas
 **não** são extraídos: são do orçamento e só dele.
 
+### A exceção: uma regeneração deliberada do golden
+
+Uma função escapa da extração verbatim. `mesclarColunasRepetidas` (que esmaece
+valores repetidos nas colunas SUP/Grupo/Tomador/Tipologia, parte do layout que a
+tabela semanal precisa reproduzir) hardcoda o seletor `'#tabela-orcamento tbody tr'`.
+Não existe forma de compartilhá-la sem mudar um byte do HTML do orçamento.
+
+A saída é parametrizar o seletor numa global `SELETOR_LINHAS_TABELA`, definida por
+cada página, e **regenerar o golden de propósito** — o que o `CLAUDE.md` permite
+desde que o diff seja revisado linha a linha. O critério de aceite é que o diff
+contenha exatamente três coisas: a linha da global nova, o comentário de 3 linhas
+que a explica, e a substituição do seletor. Nada mais. Isso vira uma tarefa própria
+do plano, para que um revisor possa rejeitá-la sem rejeitar as extrações verbatim.
+
 ### O contrato entre a casca e a página
 
 `montarFiltroMulti` referencia como globais livres coisas que cada página define de
