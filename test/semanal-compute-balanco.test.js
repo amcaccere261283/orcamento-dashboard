@@ -66,6 +66,48 @@ test('base Previsto Inicial com baseline não vazio mas sem chave pra este SUP/t
   assert.strictEqual(linhas[0].desvio, null);
 });
 
+// --- Revisão final da branch: "base ausente != desvio zero" também na base
+// 'previsto' (que é o DEFAULT da aba, não a exceção) ---
+//
+// A regra só valia no ramo 'previstoInicial'. Com a base 'previsto' e o
+// intervalo inteiro em branco, saía desvio:null com semBase:false -- e o
+// gráfico caía no ramo normal, onde `linha.desvio || 0` desenha uma barra de
+// comprimento zero e o rótulo vira '—'. Na tela isso é idêntico a "o
+// realizado bateu a base exatamente", que é o oposto do que aconteceu.
+// É alcançável com dado real: parse-matriz.js emite null para célula em
+// branco, e um SUP com Realizado e sem Previsto fica ativo:true -- ou seja, o
+// filtro "somente ativos" (ligado por padrão) NÃO o esconde.
+test('base Previsto com o intervalo inteiro em branco marca semBase -- nunca desvio zero, que na tela é "o realizado bateu a base"', () => {
+  const mensalNulo = () => new Array(12).fill(null);
+  const previsto = { volume: mensalNulo(), equipes: mensalNulo(), financeiro: mensalNulo() };
+  const realizado = { volume: new Array(12).fill(0), equipes: new Array(12).fill(0), financeiro: new Array(12).fill(0) };
+  realizado.volume[6] = 120; realizado.equipes[6] = 3;
+
+  const linhas = calcularLinhas({
+    registros: [{ sup: 'SUP-0007-26', tipologia: 'ST', previsto, realizado, total: previsto }],
+    indices: [0], tipologia: 'ST', base: 'previsto', dimensao: 'volume', periodo: 'mesVigente',
+    vigenteIdx: 6, baseline: [],
+  });
+
+  assert.strictEqual(linhas[0].ativo, true, 'pré-condição: com realizado > 0 a linha é ativa, então o filtro padrão NÃO a esconde -- é por isso que o caso chega ao gráfico');
+  assert.strictEqual(linhas[0].semBase, true);
+  assert.strictEqual(linhas[0].valorBase, null);
+  assert.strictEqual(linhas[0].desvio, null);
+  assert.strictEqual(linhas[0].equipesBase, null);
+  assert.strictEqual(linhas[0].desvioEquipes, null);
+});
+
+// O contraste que impede a regra acima de virar grosseira demais: previsto
+// LANÇADO como zero é base de verdade (o contrato estava previsto para não
+// produzir nada), e aí desvio zero é a resposta certa, não "sem base".
+// somarIntervalo só devolve null quando NENHUM mês do intervalo tem valor.
+test('base Previsto igual a zero (lançada, não em branco) continua sendo base -- semBase false e desvio real', () => {
+  const linhas = calcularLinhas(cenario({ previstoVol: 0, realizadoVol: 40 }));
+  assert.strictEqual(linhas[0].semBase, false);
+  assert.strictEqual(linhas[0].valorBase, 0);
+  assert.strictEqual(linhas[0].desvio, 40);
+});
+
 // Achado 3: equipesBase/equipesRealizado/desvioEquipes não tinham asserção
 // própria -- só apareciam por leitura do brief. Cobertos agora, inclusive
 // no caso multi-mês que prova a média PONDERADA por dias (não a soma, nem a

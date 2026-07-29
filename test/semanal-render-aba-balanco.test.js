@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { renderGraficoTipologia, escalaIndependente } = require('../tools/semanal/render-aba-balanco.js');
+const { renderGraficoTipologia, escalaIndependente, renderAbaBalanco } = require('../tools/semanal/render-aba-balanco.js');
 
 const LINHAS = [
   { sup: 'SUP-A', valorBase: 105, valorRealizado: 205, desvio: 100, equipesBase: 2, equipesRealizado: 12, desvioEquipes: 10, ativo: true, semBase: false },
@@ -29,6 +29,30 @@ test('SUP sem base aparece rotulado, não como desvio zero', () => {
   const svg = renderGraficoTipologia('ST', [{ sup: 'SUP-C', desvio: null, semBase: true, ativo: true }], {});
   assert.match(svg, /sem base/i);
   assert.doesNotMatch(svg, /class="barra-acima"/);
+});
+
+// Fim a fim do achado acima, no nível do SVG: com a base 'previsto' (o
+// DEFAULT da aba) e o Previsto em branco, o gráfico tem que rotular "sem
+// base" -- antes desenhava barra de comprimento zero com rótulo '—', que é
+// visualmente idêntico a "o realizado bateu a base". Usa renderAbaBalanco
+// (não renderGraficoTipologia com linhas montadas à mão) de propósito: assim
+// o teste atravessa calcularLinhas, que é onde a regra mora.
+test('base Previsto em branco: o gráfico rotula "sem base", não desenha barra de comprimento zero', () => {
+  const mensalNulo = () => new Array(12).fill(null);
+  const previsto = { volume: mensalNulo(), equipes: mensalNulo(), financeiro: mensalNulo() };
+  const realizado = { volume: new Array(12).fill(0), equipes: new Array(12).fill(0), financeiro: new Array(12).fill(0) };
+  realizado.volume[6] = 120; realizado.equipes[6] = 3;
+
+  const registros = [{ sup: 'SUP-0007-26', tipologia: 'ST', previsto, realizado, total: previsto }];
+  const svg = renderAbaBalanco(registros, [0], {
+    periodo: 'mesVigente', base: 'previsto', dimensao: 'volume', somenteAtivos: true,
+    vigenteIdx: 6, baseline: [],
+  });
+
+  assert.match(svg, /SUP-0007-26/, 'pré-condição: a linha é ativa (realizado > 0) e não pode ter sido escondida pelo filtro');
+  assert.match(svg, /sem base/i);
+  assert.doesNotMatch(svg, /class="barra-acima"/, 'nenhuma barra pode ser desenhada -- comprimento zero pareceria "bateu a base certinho"');
+  assert.doesNotMatch(svg, /class="barra-abaixo"/);
 });
 
 test('com o filtro de ativos ligado, inativos não são desenhados', () => {

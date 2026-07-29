@@ -8,9 +8,11 @@ const { readXlsxSheet } = require('../comum/xlsx-reader.js');
 // semanas (ver tools/semanal/compute-semanal.js), não é uma planilha
 // separada. Por isso reaproveita parse-matriz.js/parse-baseline.js/
 // config.js de tools/orcamento/ em vez de duplicá-los aqui.
-const { parseMatriz } = require('../orcamento/parse-matriz.js');
+const { parseMatriz, locateColumns } = require('../orcamento/parse-matriz.js');
 const { parseBaseline } = require('../orcamento/parse-baseline.js');
 const { renderSemanal } = require('./render-semanal.js');
+const { excelSerialParaData } = require('../comum/datas.js');
+const { reconciliarLinhaBase } = require('../comum/linha-base.js');
 const config = require('../orcamento/config.js');
 
 // parseBaseline devolve um Map (porChave) -- JSON.stringify não sabe
@@ -21,8 +23,19 @@ const config = require('../orcamento/config.js');
 // já usa (baseline: []). Extraída como função pura (em vez de ficar inline
 // em build()) pra dar pra testar sem precisar montar um .xlsx sintético --
 // ver test/semanal-build-dashboard.test.js.
-function baselineParaCliente(porChave) {
-  return Array.from(porChave, ([chave, dados]) => ({ chave, ...dados }));
+//
+// As chaves que saem daqui são as da MATRIZ (`sup||tipologia` crus), NÃO as
+// do estudo de linha de base: reconciliarLinhaBase (tools/comum/linha-base.js)
+// aplica a MESMA tradução que o orçamento aplica em anexarPrevistoInicial
+// (LAB.C -> 'LAB.', LAB.E -> 'LAB. ESPECIAL', e os 7 SUPs renomeados/
+// renovados). Sem isso, chaveBaseline em compute-balanco.js -- que procura a
+// chave CRUA, e é o cliente, não pode carregar os mapas -- não acharia nada
+// para essas linhas e a base "Previsto Inicial" viraria semBase:true em ~1/3
+// da grade real, indistinguível de contrato novo. Por isso 'registros' é
+// obrigatório: é deles que sai o lado esquerdo da chave.
+function baselineParaCliente(porChave, registros) {
+  const { porChaveMatriz } = reconciliarLinhaBase(registros, porChave);
+  return Array.from(porChaveMatriz, ([chave, dados]) => ({ chave, ...dados }));
 }
 
 // A senha nunca vem de um arquivo do repositório -- só de variável de
@@ -37,11 +50,19 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   const grid = readXlsxSheet(config.caminhoArquivo, config.nomeAba);
   const registros = parseMatriz(grid);
 
+  // Os 12 meses da MATRIZ, como datas -- MESMA derivação de
+  // tools/orcamento/build-dashboard.js. renderSemanal precisa deles para
+  // calcularVigenteIdx (tools/comum/datas.js) saber se 'today' está dentro,
+  // antes ou depois do ano da planilha, em vez de assumir ano corrente.
+  const columns = locateColumns(grid);
+  const headerRow = grid[1];
+  const periodos = columns.equipesMeses.map(col => excelSerialParaData(headerRow[col]));
+
   const gridLinhaBase = readXlsxSheet(config.caminhoLinhaBase, config.nomeAbaLinhaBase);
   const { porChave } = parseBaseline(gridLinhaBase);
-  const baseline = baselineParaCliente(porChave);
+  const baseline = baselineParaCliente(porChave, registros);
 
-  const html = renderSemanal({ registros, baseline, senha, geradoEm: today });
+  const html = renderSemanal({ registros, baseline, periodos, senha, geradoEm: today });
 
   const resolvedOutPath = outPath || path.join(__dirname, '..', '..', 'dist', 'planejamento-semanal.html');
   fs.mkdirSync(path.dirname(resolvedOutPath), { recursive: true });

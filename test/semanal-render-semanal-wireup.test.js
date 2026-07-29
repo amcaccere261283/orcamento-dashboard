@@ -22,6 +22,11 @@ const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 // Senha fictícia -- nunca a real (ver CLAUDE.md/instruções do projeto).
 const SENHA_FAKE = 'senha-fake-de-teste-e2e-nao-e-a-real';
 
+// Os 12 meses da MATRIZ como datas -- em produção vêm do cabeçalho da
+// planilha (tools/semanal/build-dashboard.js) e alimentam calcularVigenteIdx
+// (tools/comum/datas.js). 2026 é o ano de todos os geradoEm deste arquivo.
+const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2026, mes, 1)));
+
 function registroSintetico(sup, tomador, financeiroMes) {
   const zeros = new Array(12).fill(0);
   const fin = new Array(12).fill(0);
@@ -93,7 +98,7 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
   ];
   const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
 
-  const html = renderSemanal({ registros, baseline: [], senha: SENHA_FAKE, geradoEm });
+  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
   // Antes de rodar qualquer script, a div está mesmo vazia no HTML cru --
   // nada pode estar montado antes da senha (dado de cliente vazaria num
@@ -139,7 +144,7 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
 test('com a senha errada, a aba Semanal continua vazia -- nunca monta antes de decifrar de verdade', async () => {
   const registros = [registroSintetico('SUP-0003-24', 'Tomador-Sintetico-Delta', 4000)];
   const geradoEm = new Date('2026-07-01T00:00:00Z');
-  const html = renderSemanal({ registros, baseline: [], senha: SENHA_FAKE, geradoEm });
+  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
   const { sandbox, documentoFalso } = montarSandbox(html);
   documentoFalso.getElementById('campo-senha').value = 'senha-errada-de-teste-tambem-fake';
@@ -151,7 +156,7 @@ test('com a senha errada, a aba Semanal continua vazia -- nunca monta antes de d
 
 test('a chamada a RenderAbaSemanal.renderAbaSemanal, com injeção em #secao-semanal, está no código-fonte de montarDashboard (prova estática, complementar à prova dinâmica acima)', () => {
   const registros = [registroSintetico('SUP-0005-24', 'Tomador-Sintetico-Zeta', 1000)];
-  const html = renderSemanal({ registros, baseline: [], senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
+  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   const scriptCliente = scripts[5][1]; // 6º <script>: SCRIPT_CLIENTE_SEMANAL
   assert.match(
@@ -162,7 +167,7 @@ test('a chamada a RenderAbaSemanal.renderAbaSemanal, com injeção em #secao-sem
 
 test('o HTML cru (antes de rodar qualquer script) nunca contém os identificadores dos registros em texto puro -- só o blob cifrado os carrega', () => {
   const registros = [registroSintetico('SUP-0004-24', 'Tomador-Sintetico-Epsilon', 9999)];
-  const html = renderSemanal({ registros, baseline: [], senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
+  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   assert.doesNotMatch(html, /Tomador-Sintetico-Epsilon/);
   assert.doesNotMatch(html, /Grupo-Sintetico-Beta/);
 });

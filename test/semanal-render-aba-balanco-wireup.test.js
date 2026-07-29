@@ -24,6 +24,11 @@ const { renderAbaBalanco } = require('../tools/semanal/render-aba-balanco.js');
 
 const SENHA_FAKE = 'senha-fake-de-teste-balanco-nao-e-a-real';
 
+// Os 12 meses da MATRIZ como datas -- em produção vêm do cabeçalho da
+// planilha (tools/semanal/build-dashboard.js) e alimentam calcularVigenteIdx
+// (tools/comum/datas.js). 2026 é o ano de todos os geradoEm deste arquivo.
+const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2026, mes, 1)));
+
 // Tipologia e identificadores sintéticos, longos e com hífen -- alvos
 // curtos colidem com o ruído base64 do blob cifrado (ver nota do brief).
 const TIPOLOGIA_SINTETICA = 'Tipologia-Sintetica-Rotativa';
@@ -103,7 +108,7 @@ test('depois da senha certa, a aba Balanço de massa desenha SVG de verdade em #
     registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Rho', TIPOLOGIA_SINTETICA, 4000, 1000, 2, 5),
   ];
   const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
-  const html = renderSemanal({ registros, baseline: [], senha: SENHA_FAKE, geradoEm });
+  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
   // Antes de rodar qualquer script, a div está vazia -- nada pode montar em
   // build-time (identificador de cliente vazaria num Pages público).
@@ -159,7 +164,7 @@ test('SEM a injeção de fonteParaCliente() antes do bundle, a mesma senha certa
     registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Sigma', TIPOLOGIA_SINTETICA, 3000, 3000, 2, 2),
   ];
   const geradoEm = new Date('2026-07-01T00:00:00Z');
-  const html = renderSemanal({ registros, baseline: [], senha: SENHA_FAKE, geradoEm });
+  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
   const blocos = extrairBlocos(html);
   assert.equal(blocos.length, 6);
@@ -191,7 +196,7 @@ test('o HTML cru (antes de rodar qualquer script) nunca contém a tipologia, o S
   const registros = [
     registroSintetico('SUP-0003-24', 'Tomador-Sintetico-Tau', TIPOLOGIA_SINTETICA, 5000, 2000, 3, 1),
   ];
-  const html = renderSemanal({ registros, baseline: [], senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
+  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
 
   assert.doesNotMatch(html, new RegExp(TIPOLOGIA_SINTETICA));
   assert.doesNotMatch(html, /SUP-0003-24/);

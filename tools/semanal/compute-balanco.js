@@ -62,13 +62,22 @@ function equipesNoIntervalo(mensal, intervalo) {
 }
 
 // Previsto Inicial é uma foto do início do projeto: procura por uma "chave"
-// exata (sup + '||' + tipologia) -- MESMA convenção de
-// tools/orcamento/parse-baseline.js (`${sup}||${tipologia}` como chave do
-// Map) e de baselineParaCliente em tools/semanal/build-dashboard.js, que
-// serializa esse Map como `{ chave, equipes, volume, financeiro }` (porque
-// JSON.stringify não sabe serializar Map -- ver o comentário lá). Contratos
-// que entraram depois do estudo original simplesmente não têm chave aqui
-// (ver a regra de semBase abaixo).
+// exata (sup + '||' + tipologia), com o SUP e a tipologia CRUS da MATRIZ.
+//
+// Isto só funciona porque baselineParaCliente (tools/semanal/build-dashboard.js)
+// entrega a linha de base JÁ RECHAVEADA pela MATRIZ, via reconciliarLinhaBase
+// (tools/comum/linha-base.js): o estudo original usa outros rótulos --
+// 'LAB.'/'LAB. ESPECIAL' no lugar de LAB.C/LAB.E, e 7 SUPs com nome antigo
+// ou descritivo. Casar a chave crua contra as chaves ORIGINAIS erraria em
+// silêncio ~1/3 da grade real, e cada erro sairia como semBase:true,
+// indistinguível do caso legítimo abaixo. A tradução NÃO pode acontecer
+// aqui: este módulo roda no navegador, dentro do bundle, e carregar os dois
+// mapas junto seria uma segunda cópia deles -- exatamente o que faria as
+// duas páginas divergirem com o tempo.
+//
+// Contratos que entraram depois do estudo original genuinamente não têm
+// chave aqui (ver a regra de semBase abaixo) -- esse é o único motivo que
+// deve sobrar para não achar nada.
 function chaveBaseline(sup, tipologia) {
   return sup + '||' + tipologia;
 }
@@ -116,12 +125,19 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
 
     var valorBase = null, equipesBase = null, semBase = false;
 
+    // Base ausente NUNCA vira desvio zero: "não havia base" e "o realizado
+    // bateu exatamente a base" são coisas opostas que apareceriam idênticas
+    // se ambas virassem zero. A regra vale para as DUAS bases, não só para
+    // 'previstoInicial': a MATRIZ também tem célula em branco (parse-matriz.js
+    // emite null, não 0), e um SUP com Realizado e sem Previsto no intervalo
+    // fica ativo:true -- ou seja, o filtro padrão NÃO o esconde e ele chegaria
+    // ao gráfico com desvio null desenhado como barra de comprimento zero e
+    // rótulo '—'. Zero de verdade (previsto lançado como 0) continua sendo
+    // base válida: somarIntervalo só devolve null quando NENHUM mês do
+    // intervalo tem valor.
     if (base === 'previstoInicial') {
       var entradaBaseline = achaBaseline(baseline, registro.sup, tipologia);
       if (!entradaBaseline) {
-        // Base ausente NUNCA vira desvio zero: "não havia base" e "o
-        // realizado bateu exatamente a base" são coisas opostas que
-        // apareceriam idênticas se ambas virassem zero.
         semBase = true;
       } else {
         valorBase = somarIntervalo(entradaBaseline[dimensao], intervalo);
@@ -131,6 +147,7 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
     } else {
       valorBase = previstoPeriodo;
       equipesBase = equipesNoIntervalo(registro.previsto && registro.previsto.equipes, intervalo);
+      if (valorBase === null) semBase = true;
     }
 
     var valorRealizado = realizadoPeriodo;

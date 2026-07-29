@@ -1,6 +1,6 @@
 'use strict';
 const path = require('node:path');
-const { formatarMesAno } = require('../comum/datas.js');
+const { formatarMesAno, calcularVigenteIdx } = require('../comum/datas.js');
 const { cifrarComSenha } = require('../comum/criptografia.js');
 const {
   cssBase, markupCabecalho, markupAbas, scriptDesbloqueio,
@@ -76,6 +76,26 @@ const CSS_BALANCO = `
   }
   .controle-balanco-check input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; }
   .graficos-balanco { display: flex; flex-direction: column; gap: 28px; }
+`;
+
+// CSS da aba Semanal. Só uma regra hoje: a 3ª linha da tabela
+// (renderLinhaSerie('Tendência', 'tendencia', ...) em render-aba-semanal.js)
+// emite a classe .linha-tendencia, que NÃO tem regra em cssBase() -- as
+// irmãs .linha-previsto/.linha-realizado têm, então a linha renderizava sem
+// cor nenhuma, como se fosse de outro tipo. Aqui ela ganha o MESMO dourado
+// (#f6b53f) que o orçamento usa na Tendência dele (.linha-total, em
+// cssBase()); só a cor é copiada, não a regra inteira -- o `border-bottom`
+// de `tr.linha-total td` marca o fim de um bloco de SUP na tabela do
+// orçamento e não faz sentido aqui.
+//
+// Assim como CSS_BALANCO, NÃO entra em cssBase(): aquela folha é
+// compartilhada com o orçamento e test/orcamento-html-inalterado.test.js
+// trava o HTML dele byte a byte. Usar diretamente a classe .linha-total no
+// markup seria a outra saída, mas custaria a legibilidade do nome (a linha é
+// "Tendência", não um total) e traria junto o border-bottom.
+const CSS_SEMANAL = `
+  .linha-tendencia .serie-label, .linha-tendencia .celula-total-linha { color: #f6b53f; }
+  .linha-tendencia .serie-label { border-left-color: #f6b53f; }
 `;
 
 // render-aba-semanal.js consome compute-semanal.js (require('./compute-semanal.js'))
@@ -235,30 +255,38 @@ function montarDashboard(registros) {
 `;
 
 // registros: array de registros da MATRIZ (mesmo formato do orçamento --
-// ver tools/orcamento/parse-matriz.js). baseline: dados da linha de base
-// (formato ainda em aberto -- só passa adiante, cifrado, pra tarefa futura
-// que decidir como usá-lo na aba Balanço de massa).
+// ver tools/orcamento/parse-matriz.js). baseline: a linha de base já
+// serializada e RECHAVEADA pela MATRIZ (baselineParaCliente, em
+// ./build-dashboard.js) -- só passa adiante, cifrada, para a aba Balanço de
+// massa consumir no navegador. periodos: os 12 meses da MATRIZ como datas
+// (mesma derivação do orçamento), usados só para calcularVigenteIdx.
 //
 // Os REGISTROS SÓ ENTRAM no HTML dentro do blob cifrado (dadosCifrados) --
 // nunca soltos no markup ou no JS de cliente -- porque SUP/Grupo/Tomador/
 // Tipologia são protegidos pela senha e este HTML vai pra um GitHub Pages
 // público.
-function renderSemanal({ registros, baseline, senha, geradoEm }) {
+function renderSemanal({ registros, baseline, periodos, senha, geradoEm }) {
   if (!senha) {
     throw new Error('renderSemanal requer "senha" -- os registros (SUP/Grupo/Tomador/Tipologia/valores) são cifrados com ela antes de ir pro HTML.');
+  }
+  if (!Array.isArray(periodos) || periodos.length === 0) {
+    throw new Error('renderSemanal requer "periodos" (os 12 meses da MATRIZ, como datas) -- é o que permite calcularVigenteIdx decidir o mês vigente sem assumir que os registros são do ano corrente.');
   }
 
   const dadosJson = JSON.stringify({ registros, baseline });
   const dadosCifrados = cifrarComSenha(dadosJson, senha);
   const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');
 
-  // vigenteIdx aqui é uma simplificação deliberada: ao contrário do
-  // orçamento (calcularVigenteIdx, que compara o ano de 'periodos' com o
-  // de 'geradoEm'), renderSemanal não recebe 'periodos' -- a interface da
-  // spec é só {registros, baseline, senha, geradoEm}. Assume-se que os
-  // registros são sempre do ano corrente (mesma premissa que o resto do
-  // projeto já faz), então o mês de geradoEm já É o mês vigente.
-  const vigenteIdx = geradoEm.getUTCMonth();
+  // MESMA função do orçamento (calcularVigenteIdx, tools/comum/datas.js).
+  // Antes daqui saía `geradoEm.getUTCMonth()`, o que assumia que os
+  // registros são sempre do ano corrente: em 2027-01, com a MATRIZ de 2026
+  // ainda no ar, isso devolveria 0 e a página mostraria JANEIRO DE 2026 como
+  // "mês vigente" -- errado, e em silêncio. calcularVigenteIdx compara o ano
+  // de periodos[0] com o de geradoEm e devolve -1 (ano inteiro ainda no
+  // futuro) ou 12 (ano inteiro já no passado) nos extremos, que é o que os
+  // consumidores de window.__VIGENTE_IDX__ precisam para não somar mês
+  // nenhum em vez de somar o mês errado.
+  const vigenteIdx = calcularVigenteIdx(periodos, geradoEm);
 
   const bundle = buildBrowserBundle(path.join(__dirname), BUNDLE_ARQUIVOS);
 
@@ -283,6 +311,7 @@ function renderSemanal({ registros, baseline, senha, geradoEm }) {
 <title>PLANEJAMENTO SEMANAL</title>
 <style>
 ${cssBase()}
+${CSS_SEMANAL}
 ${CSS_BALANCO}
 </style>
 </head>

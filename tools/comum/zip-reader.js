@@ -1,4 +1,4 @@
-// tools/orcamento/zip-reader.js
+// tools/comum/zip-reader.js
 'use strict';
 const zlib = require('node:zlib');
 
