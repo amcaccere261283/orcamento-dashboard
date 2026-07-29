@@ -8,10 +8,15 @@ const {
 const { buildBrowserBundle } = require('../comum/browser-bundle.js');
 
 // Esta é a 1ª entrega publicável da página nova: casca (cabeçalho + gate de
-// senha) e as duas abas da spec (Semanal / Balanço de massa), ainda sem
-// conteúdo -- cada uma é só um <div> vazio que uma tarefa futura preenche.
+// senha) e as duas abas da spec (Semanal / Balanço de massa). A aba Semanal
+// já monta a tabela do mês vigente em 4 semanas (ver SCRIPT_CLIENTE_SEMANAL,
+// montarDashboard); a aba Balanço de massa continua um <div> vazio que uma
+// tarefa futura preenche.
 // markupFiltros() NÃO entra aqui (ao contrário do orçamento): não faz
-// sentido oferecer um filtro antes de existir o que filtrar.
+// sentido oferecer um filtro antes de existir o que filtrar. Por isso a aba
+// Semanal, por ora, sempre agrega TODOS os registros (sem recorte) na
+// dimensão fixa 'financeiro' -- ver o comentário sobre DIMENSAO_PADRAO
+// abaixo.
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -40,23 +45,66 @@ const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js'];
 // assim que a senha certa decifra os dados -- as duas PRECISAM existir no
 // escopo global da página, senão o desbloqueio quebra com ReferenceError.
 //
-// fecharTendenciaVigente aqui é identidade (devolve os registros como
-// vieram): a página ainda não tem nenhuma série "Tendência" própria pra
-// fechar -- isso é conteúdo de uma tarefa futura (a aba Balanço de massa,
-// ou uma versão semanal do fechamento que o orçamento já faz). Não
-// reaproveita a versão do orçamento porque aquela mexe em campos
-// (registro.total) que só fazem sentido no contexto da tabela mensal dele.
+// fecharTendenciaVigente NÃO é mais identidade pura (era, até a Task 8
+// consumir 'registros' de verdade -- ver achado abaixo): a página ainda não
+// tem nenhuma série "Tendência" própria pra fechar -- isso continua
+// conteúdo de uma tarefa futura (a aba Balanço de massa, ou uma versão
+// semanal do fechamento que o orçamento já faz). Não reaproveita a versão
+// do orçamento porque aquela mexe em campos (registro.total) que só fazem
+// sentido no contexto da tabela mensal dele.
 //
-// montarDashboard, com as duas abas vazias, só liga a troca de aba -- não
-// tem tabela/gráfico pra montar ainda.
+// ACHADO (corrigido nesta task): o gate (scriptDesbloqueio, casca
+// compartilhada com o orçamento -- NÃO pode mudar, ver
+// test/orcamento-html-inalterado.test.js) faz
+// `window.__REGISTROS__ = JSON.parse(jsonTexto)` e passa isso DIRETO pra
+// fecharTendenciaVigente. No orçamento jsonTexto decifra pro array de
+// registros puro; aqui (renderSemanal) decifra pra `{registros, baseline}`
+// -- os dois SÓ entram no HTML dentro do mesmo blob cifrado (ver o
+// comentário grande abaixo de renderSemanal). Task 7 nunca notou porque
+// montarDashboard não usava o argumento; a Task 8 usa, e sem desembrulhar
+// aqui a aba somaria sempre null (o objeto inteiro vira "registros[0]"
+// undefined). fecharTendenciaVigente agora desembrulha e guarda o baseline
+// em window.__BASELINE__ (não descarta -- fica pronto pra tarefa futura da
+// aba Balanço de massa, que ainda não foi escrita).
+//
+// montarDashboard liga a troca de aba E desenha a aba Semanal (a Balanço de
+// massa continua vazia -- conteúdo de tarefa futura). Roda só DEPOIS que a
+// senha certa decifra os dados (chamado de dentro de tentarDesbloquear, em
+// scriptDesbloqueio -- ver ../comum/render-shell.js): é a ÚNICA vez que
+// #secao-semanal recebe HTML, e ela recebe os registros já decifrados --
+// nunca em build (renderSemanal só cifra) nem antes do clique em
+// "Abrir", quando SUP/Grupo/Tomador/Tipologia ainda não existem em
+// texto plano no navegador.
 const SCRIPT_CLIENTE_SEMANAL = `
-// MODULOS['compute-semanal.js'] já está definido pelo bundle (ver o
-// <script> anterior a este) -- guardado aqui só pra tarefas futuras não
-// precisarem repetir a busca em MODULOS.
+// MODULOS['compute-semanal.js'] e MODULOS['render-aba-semanal.js'] já estão
+// definidos pelo bundle (ver o <script> anterior a este) -- guardados aqui
+// só pra este script (e tarefas futuras) não precisarem repetir a busca em
+// MODULOS. RenderAbaSemanal.renderAbaSemanal já embute a divisão em 4
+// semanas (compute-semanal.js), então ComputeSemanal fica sem uso direto
+// aqui -- mantido pro consumo futuro da aba Balanço de massa.
 var ComputeSemanal = MODULOS['compute-semanal.js'];
+var RenderAbaSemanal = MODULOS['render-aba-semanal.js'];
 
-function fecharTendenciaVigente(registros) {
-  return registros;
+// Fixa em 'financeiro' (mesmo default do orçamento: abre mostrando dinheiro,
+// não headcount) porque esta página ainda não tem seletor de dimensão --
+// markupFiltros() não entra aqui (ver comentário no topo do arquivo). Uma
+// tarefa futura que adicionar o seletor troca este valor fixo pelo estado
+// escolhido pelo usuário.
+var DIMENSAO_PADRAO_SEMANAL = 'financeiro';
+
+function indicesTodos(registros) {
+  var indices = [];
+  for (var i = 0; i < registros.length; i++) indices.push(i);
+  return indices;
+}
+
+// dados: o que o gate acabou de JSON.parse -- {registros, baseline} (ver o
+// ACHADO documentado acima desta constante). Guarda baseline à parte
+// (window.__BASELINE__) e devolve só o array de registros, que é o que o
+// resto do gate (e montarDashboard) espera em window.__REGISTROS__.
+function fecharTendenciaVigente(dados) {
+  window.__BASELINE__ = dados && dados.baseline;
+  return dados && dados.registros ? dados.registros : dados;
 }
 
 function alternarAba(aba) {
@@ -66,9 +114,17 @@ function alternarAba(aba) {
   document.getElementById('aba-balanco').classList.toggle('aba-ativa', aba === 'balanco');
 }
 
+// registros: já decifrados (só é chamada de dentro de tentarDesbloquear,
+// depois de decifrarComSenha) -- ver o comentário grande acima desta
+// constante. indices cobre TODOS os registros: sem filtro de recorte ainda,
+// a aba mostra sempre o agregado do mês vigente inteiro (ver
+// previstoMesVigente em render-aba-semanal.js).
 function montarDashboard(registros) {
   document.getElementById('aba-semanal').addEventListener('click', function () { alternarAba('semanal'); });
   document.getElementById('aba-balanco').addEventListener('click', function () { alternarAba('balanco'); });
+  document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(
+    registros, indicesTodos(registros), DIMENSAO_PADRAO_SEMANAL, window.__VIGENTE_IDX__
+  );
 }
 `;
 
