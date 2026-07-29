@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { cifrarComSenha, decifrarComSenha } = require('../tools/orcamento/criptografia.js');
+const { cifrarComSenha, decifrarComSenha } = require('../tools/comum/criptografia.js');
 
 test('cifrarComSenha + decifrarComSenha round-trips the original text with the correct password', () => {
   const original = JSON.stringify([{ sup: 'SUP-1', grupo: 'X', tomador: 'Y' }]);

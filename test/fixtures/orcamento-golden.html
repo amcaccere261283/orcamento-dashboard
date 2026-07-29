@@ -1,46 +1,405 @@
-'use strict';
-const { formatarMesAno, calcularVigenteIdx } = require('../comum/datas.js');
-const { cifrarComSenha } = require('../comum/criptografia.js');
-const {
-  cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio,
-} = require('../comum/render-shell.js');
-const { trechosParaCliente } = require('../comum/calculo-equipes.js');
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>ORÇAMENTO — MATRIZ</title>
+<style>
+  :root {
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --muted: #898781;
+    --gridline: #2c2c2a;
+    --border: rgba(255,255,255,0.10);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--text-primary);
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .generated { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
+  .watermark {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(70vw, 900px);
+    height: auto;
+    opacity: 0.16;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .header-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .header-bar img { height: 36px; width: auto; }
+  .header-bar-title { flex: 1 1 200px; min-width: 0; }
+  .gate-senha {
+    position: relative; z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 40vh;
+  }
+  .gate-senha-box {
+    background: var(--surface-1); border: 2px solid #f6b53f; border-radius: 12px;
+    padding: 32px; max-width: 360px; width: 100%; text-align: center;
+  }
+  .gate-senha-box h2 { margin: 0 0 16px; font-size: 16px; }
+  .gate-senha-box input {
+    width: 100%; padding: 10px 12px; margin-bottom: 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--page); color: var(--text-primary); font-size: 14px;
+  }
+  .gate-senha-box button {
+    width: 100%; padding: 10px 16px;
+    border: 2px solid #f6b53f; border-radius: 8px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .gate-senha-box button:hover { background: rgba(246,181,63,0.1); }
+  .gate-senha-box button:disabled { opacity: 0.6; cursor: wait; }
+  .gate-senha-erro { color: #f0857a; font-size: 13px; margin-top: 10px; }
+  .filtros { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .filtros-selecao { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .filtros-acoes { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .filtros select,
+  #limpar-filtros,
+  #atualizar-dashboard,
+  .abas-visualizacao button {
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease, box-shadow 150ms ease;
+  }
+  .filtros select:focus-visible,
+  #limpar-filtros:focus-visible,
+  #atualizar-dashboard:focus-visible,
+  .abas-visualizacao button:focus-visible,
+  .gate-senha-box input:focus-visible,
+  .gate-senha-box button:focus-visible {
+    outline: 2px solid #f6b53f; outline-offset: 2px;
+  }
+  .filtros select {
+    padding: 8px 30px 8px 10px; height: 36px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23c3c2b7' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+    color: var(--text-primary);
+    font-size: 13px; cursor: pointer;
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  }
+  .filtros select:hover { border-color: rgba(246,181,63,0.5); }
+  .filtro-multi { position: relative; }
+  .filtro-multi-trigger {
+    display: inline-flex; align-items: center; gap: 8px;
+    max-width: 190px;
+    padding: 8px 10px; height: 36px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .filtro-multi-trigger span,
+  .filtro-multi-trigger { overflow: hidden; text-overflow: ellipsis; }
+  .filtro-multi-seta { flex: none; margin-left: auto; color: #c3c2b7; transition: transform 150ms ease; }
+  .filtro-multi-trigger:hover { border-color: rgba(246,181,63,0.5); }
+  .filtro-multi.aberto .filtro-multi-trigger { border-color: #f6b53f; }
+  .filtro-multi.aberto .filtro-multi-seta { transform: rotate(180deg); }
+  .filtro-multi-painel {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
+    min-width: 210px; max-width: 300px; max-height: 260px; overflow-y: auto;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    padding: 6px;
+  }
+  .filtro-multi-painel[hidden] { display: none; }
+  .filtro-multi-busca {
+    position: sticky; top: 0; z-index: 1;
+    display: block; width: 100%; box-sizing: border-box;
+    margin-bottom: 6px; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface-1); color: var(--text-primary); font-size: 13px;
+  }
+  .filtro-multi-busca::placeholder { color: var(--text-secondary); }
+  .filtro-multi-busca:focus-visible { outline: 2px solid #f6b53f; outline-offset: 1px; }
+  .filtro-multi-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 8px; border-radius: 4px; cursor: pointer;
+    font-size: 13px; color: var(--text-primary); white-space: nowrap;
+  }
+  .filtro-multi-item:hover { background: rgba(255,255,255,0.05); }
+  .filtro-multi-item input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; flex: none; }
+  .filtro-multi-vazio { padding: 7px 8px; font-size: 13px; color: var(--text-secondary); }
+  #limpar-filtros,
+  #atualizar-dashboard,
+  .abas-visualizacao button {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  #limpar-filtros svg, #atualizar-dashboard svg, .abas-visualizacao button svg { flex: none; }
+  #limpar-filtros {
+    height: 36px; padding: 0 14px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-secondary);
+  }
+  #limpar-filtros:hover { border-color: #f6b53f; color: var(--text-primary); background: rgba(255,255,255,0.04); }
+  #limpar-filtros:active { transform: translateY(1px); }
+  #atualizar-dashboard {
+    height: 38px; padding: 0 18px;
+    border: 2px solid #f6b53f; border-radius: 8px;
+    background: var(--surface-1); color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 2px 6px rgba(0,0,0,0.35);
+  }
+  #atualizar-dashboard:hover { background: rgba(246,181,63,0.14); box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 4px 10px rgba(0,0,0,0.4); transform: translateY(-1px); }
+  #atualizar-dashboard:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(0,0,0,0.3) inset; }
+  #atualizar-dashboard:active svg { transform: rotate(70deg); }
+  #atualizar-dashboard svg { transition: transform 300ms ease; }
+  .status-atualizacao { font-size: 12px; color: var(--text-secondary); margin-left: 8px; }
+  .status-atualizacao.status-erro { color: #e0684f; }
+  .nota-premissa {
+    width: 100%; margin-top: 10px; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: rgba(255,255,255,0.03);
+    font-size: 12px; color: var(--text-secondary);
+  }
+  .abas-visualizacao {
+    display: flex; gap: 2px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 3px;
+  }
+  .abas-visualizacao button {
+    height: 30px; padding: 0 14px;
+    border: none; border-radius: 6px;
+    background: transparent; color: var(--text-secondary);
+  }
+  .abas-visualizacao button:hover { color: var(--text-primary); }
+  .abas-visualizacao button:active { transform: translateY(1px); }
+  .abas-visualizacao button.aba-ativa {
+    background: var(--surface-1); color: var(--text-primary); font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(246,181,63,0.4) inset;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .filtros select, #limpar-filtros, #atualizar-dashboard, .abas-visualizacao button, #atualizar-dashboard svg { transition: none; }
+  }
+  #secao-grafico {
+    background: rgba(26,26,25,0.68); border-radius: 8px; padding: 16px 8px;
+    position: relative; z-index: 1;
+  }
+  .grafico-svg { width: 100%; height: auto; display: block; }
+  .grafico-painel { margin-bottom: 28px; }
+  .grafico-painel:last-child { margin-bottom: 0; }
+  .grafico-bloco-dimensao + .grafico-bloco-dimensao { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--border); }
+  .grafico-titulo { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .grafico-eixo-texto { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .grafico-gridline, .grafico-linha-guia { stroke: var(--gridline); stroke-width: 1; }
+  .grafico-linha { stroke-linecap: round; stroke-linejoin: round; }
+  .grafico-rotulo { fill: var(--text-secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .grafico-rotulo-final { fill: var(--text-primary); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
+  .grafico-rotulo { paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
+  .grafico-hit { cursor: pointer; pointer-events: all; }
+  .grafico-marcador { pointer-events: none; }
+  .grafico-tooltip {
+    position: absolute; pointer-events: none;
+    background: #0d0d0d; border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; color: var(--text-primary);
+    white-space: nowrap; z-index: 5; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .table-scroll { overflow-x: auto; border-radius: 8px; position: relative; z-index: 1; }
+  table { width: 100%; border-collapse: collapse; background: rgba(26,26,25,0.68); }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--gridline); font-size: 13px; }
+  td.num { font-variant-numeric: tabular-nums; }
+  th {
+    color: var(--text-secondary); font-weight: 600; background: #141412;
+    position: sticky; top: 0; z-index: 1;
+    box-shadow: 0 1px 0 var(--gridline), 0 2px 6px rgba(0,0,0,0.3);
+  }
+  /* Primeira coluna (SUP) fixa ao rolar a tabela pro lado -- especificidade
+     igual à das regras de fundo por tipo de linha (.linha-total-sup td etc.)
+     abaixo, então essas continuam ganhando por ordem (vêm depois no CSS) e
+     a coluna fixa herda o tom certo em cada tipo de linha, em vez de travar
+     num fundo genérico. */
+  td:first-child, th:first-child { position: sticky; left: 0; z-index: 1; }
+  td:first-child { background: var(--surface-1); }
+  th:first-child { z-index: 2; }
+  #corpo-tabela tr:hover { filter: brightness(1.14); }
+  .tipologia-chip {
+    display: inline-block;
+    background: var(--chip-color); color: #fff;
+    border-radius: 4px; padding: 2px 8px;
+    font-size: 12px; font-weight: 600;
+  }
+  .tipologia-chip-total { background: rgba(26,26,25,0.6); color: var(--text-primary); border: 2px solid var(--text-secondary); }
+  .celula-mes { white-space: nowrap; }
+  .celula-total-linha { white-space: nowrap; font-weight: 700; border-left: 2px solid var(--border); }
+  .serie-label { font-weight: 700; border-left: 4px solid transparent; padding-left: 10px; white-space: nowrap; }
+  .linha-previsto-inicial .serie-label, .linha-previsto-inicial .celula-mes, .linha-previsto-inicial .celula-total-linha { color: #8b8a82; }
+  .linha-previsto-inicial .serie-label { border-left-color: #8b8a82; }
+  .linha-previsto .serie-label, .linha-previsto .celula-mes, .linha-previsto .celula-total-linha { color: #2f6ad0; }
+  .linha-previsto .serie-label { border-left-color: #2f6ad0; }
+  .linha-realizado .serie-label, .linha-realizado .celula-mes, .linha-realizado .celula-total-linha { color: #7fd858; }
+  .linha-realizado .serie-label { border-left-color: #7fd858; }
+  .linha-total .serie-label, .linha-total .celula-mes, .linha-total .celula-total-linha { color: #f6b53f; }
+  .linha-total .serie-label { border-left-color: #f6b53f; }
+  tr.linha-total td { border-bottom: 2px solid var(--gridline); }
+  .linha-total-sup td { background: rgba(0,0,0,0.32); }
+  .linha-total-geral td { background: rgba(246,181,63,0.10); }
+  tr.linha-total.linha-total-geral td { border-bottom: 2px solid #f6b53f; }
+  .linha-total-geral-tipologia td { background: rgba(255,255,255,0.03); }
+  tr.linha-total.linha-total-geral-tipologia td { border-bottom: 1px solid var(--gridline); }
+  .valor-repetido { color: rgba(255,255,255,0.14); }
+  .filtros-alertas { margin-bottom: 16px; }
+  .status-circulo {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle;
+  }
+  .busca-alertas {
+    display: block; width: 100%; max-width: 320px; box-sizing: border-box;
+    margin-bottom: 12px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1); color: var(--text-primary); font-size: 13px;
+  }
+  .busca-alertas::placeholder { color: var(--text-secondary); }
+  .busca-alertas:focus-visible { outline: 2px solid #f6b53f; outline-offset: 1px; }
+</style>
+</head>
+<body>
+  <img class="watermark" src="data:image/png;base64,GOLDEN" alt="">
+  <main>
+  <div class="header-bar">
+    <img src="data:image/png;base64,GOLDEN" alt="Suporte Infra">
+    <div class="header-bar-title">
+      <h1>ORÇAMENTO — Previsto x Realizado x Tendência</h1>
+      <div class="generated">Gerado em 14/07/2026, 21:00:00</div>
+    </div>
+  </div>
 
-// O cálculo de equipes (DIAS_PREMISSA_MES, mediaEquipesPonderada e
-// somarIntervaloEquipeDias) mora em ../comum/calculo-equipes.js, onde é um
-// módulo Node de verdade, coberto por teste -- daqui ele volta pro JS de
-// cliente como TEXTO, inlinado nas mesmas posições em que as definições
-// estavam. Cada trecho já vem com quebra de linha nas duas pontas, então a
-// interpolação ocupa uma linha sozinha e reproduz o espaçamento de antes
-// (o HTML emitido continua byte-a-byte idêntico -- ver
-// test/orcamento-html-inalterado.test.js).
-const [TRECHO_DIAS_PREMISSA, TRECHO_EQUIPES] = trechosParaCliente();
+  <div id="gate-senha" class="gate-senha">
+    <div class="gate-senha-box">
+      <h2>Digite a senha para abrir o dashboard</h2>
+      <input type="password" id="campo-senha" autocomplete="off" placeholder="Senha">
+      <button id="btn-desbloquear" type="button">Abrir</button>
+      <div id="gate-senha-erro" class="gate-senha-erro" style="display:none"></div>
+    </div>
+  </div>
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  <div id="conteudo-protegido" style="display:none">
+    <div class="filtros">
+      <div class="filtros-selecao">
+        <div class="filtro-multi" id="filtro-origem"><button type="button" class="filtro-multi-trigger">Todas as origens<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-categoria"><button type="button" class="filtro-multi-trigger">Todas as categorias<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-tipologia"><button type="button" class="filtro-multi-trigger">Todas as tipologias<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-grupo"><button type="button" class="filtro-multi-trigger">Todos os grupos<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-sup"><button type="button" class="filtro-multi-trigger">Todos os SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="filtro-serie"><button type="button" class="filtro-multi-trigger">Todas as séries<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        <div class="filtro-multi" id="seletor-dimensao"><button type="button" class="filtro-multi-trigger">Financeiro<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+      </div>
+      <div class="filtros-acoes">
+        <div class="abas-visualizacao">
+          <button id="aba-tabela" type="button" class="aba-ativa"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Tabela</button>
+          <button id="aba-grafico" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>Gráfico</button>
+          <button id="aba-alertas" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.9 21h16.2a2 2 0 0 0 1.79-2.96L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>Alertas</button>
+        </div>
+        <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
+        <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
+        <span id="status-atualizacao" class="status-atualizacao"></span>
+      </div>
+      <div id="nota-premissa-produtividade" class="nota-premissa" style="display:none">Premissa: Produtividade = Volume ÷ (Equipes × dias do mês) — dias = 15 em Janeiro e Dezembro, 30 nos demais meses.</div>
+    </div>
+    <div id="secao-tabela">
+    <div class="table-scroll">
+    <table id="tabela-orcamento">
+      <thead><tr><th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th><th>Jan/2026</th><th>Fev/2026</th><th>Mar/2026</th><th>Abr/2026</th><th>Mai/2026</th><th>Jun/2026</th><th>Jul/2026</th><th>Ago/2026</th><th>Set/2026</th><th>Out/2026</th><th>Nov/2026</th><th>Dez/2026</th><th>Total</th></tr></thead>
+      <tbody id="corpo-tabela"></tbody>
+    </table>
+    </div>
+    </div>
+    <div id="secao-grafico" style="display:none">
+      <div id="graficos-container"></div>
+      <div id="grafico-tooltip" class="grafico-tooltip" style="display:none"></div>
+    </div>
+    <div id="secao-alertas" style="display:none">
+      <div class="filtros filtros-alertas">
+        <div class="filtros-selecao">
+          <div class="filtro-multi" id="filtro-alertas-agrupar-por"><button type="button" class="filtro-multi-trigger">SUP<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-numerico"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-baseline"><button type="button" class="filtro-multi-trigger">Previsto<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-periodo"><button type="button" class="filtro-multi-trigger">2 selecionadas<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+          <div class="filtro-multi" id="filtro-alertas-status"><button type="button" class="filtro-multi-trigger">Status<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="filtro-multi-painel" hidden></div></div>
+        </div>
+      </div>
+      <input id="busca-alertas" type="text" class="busca-alertas" placeholder="Buscar..." autocomplete="off">
+      <div class="table-scroll">
+      <table id="tabela-alertas">
+        <thead id="cabecalho-alertas"></thead>
+        <tbody id="corpo-alertas"></tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+  </main>
+  <script>window.__VIGENTE_IDX__ = 6;</script>
+  <script>window.__DADOS_CIFRADOS__ = {"salt":"s5ISFFr0fZjYGtLrwawyNg==","iv":"B61WuaxwflCdJmVo","dados":"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","iteracoes":250000};</script>
+  <script>
+function base64ParaBytes(base64) {
+  var binario = atob(base64);
+  var bytes = new Uint8Array(binario.length);
+  for (var i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  return bytes;
 }
 
-function renderCabecalhoMeses(periodos) {
-  return periodos.map(data => `<th>${formatarMesAno(data)}</th>`).join('');
+// Espelha tools/orcamento/criptografia.js's decifrarComSenha, usando
+// crypto.subtle (Web Crypto) no lugar de node:crypto -- mesmo algoritmo
+// (PBKDF2-SHA256 pra derivar a chave, AES-256-GCM pra decifrar), mesmo
+// formato de pacote (tag de autenticação concatenada no fim dos dados
+// cifrados, que é o que crypto.subtle.decrypt espera por padrão).
+async function decifrarComSenha(pacote, senha) {
+  var salt = base64ParaBytes(pacote.salt);
+  var iv = base64ParaBytes(pacote.iv);
+  var dados = base64ParaBytes(pacote.dados);
+  var chaveBase = await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
+  var chave = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: salt, iterations: pacote.iteracoes, hash: 'SHA-256' },
+    chaveBase,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  );
+  var textoPlanoBuffer = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, chave, dados);
+  return new TextDecoder().decode(textoPlanoBuffer);
 }
 
-// A página roda dois scripts, montados como um só: primeiro o gate de
-// senha, que SEMPRE roda (não depende de senha) e só destrava a página, e
-// depois o SCRIPT_CLIENTE_TABELA abaixo, que faz o trabalho de fato. O gate
-// virou casca compartilhada e mora em ../comum/render-shell.js
-// (scriptDesbloqueio); daqui ele entra pela chamada lá embaixo, no <script>.
+function mostrarErroSenha(msg) {
+  var erro = document.getElementById('gate-senha-erro');
+  erro.textContent = msg;
+  erro.style.display = 'block';
+}
 
-// Roda só DEPOIS que a senha certa decifra os registros (chamado por
-// montarDashboard, no fim do gate em ../comum/render-shell.js). Reimplementa
-// em JS de navegador (sem require, HTML estático sem bundler) a mesma
-// montagem de linhas/cores/filtros que antes rodava no servidor em
-// tools/orcamento/render-dashboard.js -- precisa ser assim porque os
-// PRÓPRIOS valores de SUP/Grupo/Tomador/Tipologia (não só os números
-// mensais) são dados protegidos pela senha; se a tabela viesse pronta do
-// servidor, esses nomes apareceriam em texto puro no código-fonte da
-// página mesmo sem a senha certa.
-const SCRIPT_CLIENTE_TABELA = `
+async function tentarDesbloquear() {
+  var campo = document.getElementById('campo-senha');
+  var botao = document.getElementById('btn-desbloquear');
+  var senha = campo.value;
+  botao.disabled = true;
+  botao.textContent = 'Verificando…';
+  try {
+    var jsonTexto = await decifrarComSenha(window.__DADOS_CIFRADOS__, senha);
+    window.__REGISTROS__ = JSON.parse(jsonTexto);
+    window.__REGISTROS__ = fecharTendenciaVigente(window.__REGISTROS__, window.__VIGENTE_IDX__);
+    document.getElementById('gate-senha').style.display = 'none';
+    document.getElementById('conteudo-protegido').style.display = '';
+    montarDashboard(window.__REGISTROS__);
+  } catch (e) {
+    mostrarErroSenha('Senha incorreta.');
+  } finally {
+    botao.disabled = false;
+    botao.textContent = 'Abrir';
+  }
+}
+
+document.getElementById('btn-desbloquear').addEventListener('click', tentarDesbloquear);
+document.getElementById('campo-senha').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') tentarDesbloquear();
+});
+document.getElementById('campo-senha').focus();
+</script>
+  <script>
 function escapeHtml(valor) {
   return String(valor === null || valor === undefined ? '' : valor)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -82,7 +441,16 @@ var CAMPOS_RATIO = {
   produtividade: { numerador: 'volume', denominador: 'equipes' },
   ticketMedio: { numerador: 'financeiro', denominador: 'volume' },
 };
-${TRECHO_DIAS_PREMISSA}
+
+// Premissa de dias úteis considerados por mês, pra Produtividade virar uma
+// taxa por EQUIPE-DIA (volume ÷ (equipes × dias)), não só por equipe-mês --
+// Jan/Dez usam 15 (meses parciais), os outros 10 usam 30. Confirmado com o
+// usuário. Só entra na conta de Realizado/Tendência (e num Previsto
+// agregando várias tipologias) -- a premissa de Previsto de UMA tipologia
+// (equipesResumo.prod, abaixo) já vem pronta como taxa diária da própria
+// planilha, não passa por aqui.
+var DIAS_PREMISSA_MES = [15, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 15];
+
 // Fecha a Tendência (série "total") do mês vigente combinando o Realizado
 // parcial já ocorrido com a projeção da própria linha T da planilha pra
 // completar o mês -- meses já fechados (antes do vigente) passam a valer
@@ -234,7 +602,37 @@ function somarIntervaloMensal(mensal, inicio, fim) {
   }
   return soma;
 }
-${TRECHO_EQUIPES}
+
+// Equipes é uma foto por mês, não um fluxo -- acumular vários meses deve
+// ser uma MÉDIA ponderada pelos dias de cada mês (mesma premissa de
+// DIAS_PREMISSA_MES do denominador de Produtividade), não uma soma bruta
+// (que produziria um "equipe-meses" sem significado prático). Um único mês
+// no intervalo devolve o próprio valor do mês (peso 1, sem diferença de
+// comportamento pros buckets de 1 mês só).
+function mediaEquipesPonderada(mensal, inicio, fim) {
+  var somaEquipeDias = null, somaDias = 0;
+  var ini = Math.max(0, inicio), lim = Math.min(mensal.length, fim);
+  for (var i = ini; i < lim; i++) {
+    if (mensal[i] === null || mensal[i] === undefined) continue;
+    somaEquipeDias = (somaEquipeDias === null ? 0 : somaEquipeDias) + mensal[i] * DIAS_PREMISSA_MES[i];
+    somaDias += DIAS_PREMISSA_MES[i];
+  }
+  return somaDias ? somaEquipeDias / somaDias : null;
+}
+
+// produtividade soma equipe-DIAS no intervalo (não só equipes), mesma
+// premissa de DIAS_PREMISSA_MES que calcularTotalAno já usa pro ano
+// inteiro -- generalizada aqui pra qualquer intervalo de meses.
+function somarIntervaloEquipeDias(mensal, inicio, fim) {
+  var soma = null;
+  var ini = Math.max(0, inicio), lim = Math.min(mensal.length, fim);
+  for (var i = ini; i < lim; i++) {
+    if (mensal[i] === null || mensal[i] === undefined) continue;
+    soma = (soma === null ? 0 : soma) + mensal[i] * DIAS_PREMISSA_MES[i];
+  }
+  return soma;
+}
+
 // Valor de UMA série (previsto/realizado/total), pra UMA dimensão, bucketado
 // num intervalo [inicio, fim) arbitrário -- generaliza calcularMensal/
 // calcularTotalAno (que só sabem fazer "todos os 12 meses" ou "1 mês").
@@ -401,7 +799,7 @@ function calcularAcumulado(mensal) {
   });
 }
 
-// Índice (0=Jan..11=Dez) do último mês com dado real em \`mensal\` -- -1 se
+// Índice (0=Jan..11=Dez) do último mês com dado real em `mensal` -- -1 se
 // nenhum mês tem dado. Usado pra achar onde Realizado "parou" de ser
 // reportado, tanto pra parar de desenhar Realizado dali em diante quanto
 // pra saber onde a Tendência deve começar (ver construirPainelGraficoHtml).
@@ -488,7 +886,7 @@ function filtroExclui(filtro, valor) {
   return !!(filtro && filtro.size > 0 && !filtro.has(valor));
 }
 
-// Devolve os índices de \`registros\` que combinam com os filtros de
+// Devolve os índices de `registros` que combinam com os filtros de
 // tipologia/categoria/grupo/SUP/origem atuais, calculada aqui direto sobre
 // os registros crus, sem depender de uma linha <tr> já renderizada, pra o
 // gráfico poder agregar o recorte atual sem precisar de uma linha "molde"
@@ -661,7 +1059,7 @@ function resolverColisoesRotulos(rotulos) {
 // 2px entre colunas vizinhas (nunca encostadas). Rótulo sempre visível em
 // cada coluna (a pedido) -- fica denso com 3 séries, mas o valor exato
 // também mora no tooltip (hover/foco) e na aba Tabela. Os candidatos a
-// rótulo são só ACUMULADOS em \`rotulos\` -- desenhados depois, junto com os
+// rótulo são só ACUMULADOS em `rotulos` -- desenhados depois, junto com os
 // da linha, numa única passada de anti-colisão (ver construirGraficoSvg).
 function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, margem, usarMilhares, rotulos, casasDecimais) {
   var svg = '';
@@ -694,7 +1092,7 @@ function construirColunasSvg(dadosPorSerie, escala, alturaPlot, larguraMes, marg
 // Linhas (usadas pro acumulado, e pro mensal das dimensões-razão) --
 // marcador de 8px com anel na cor da superfície (fica legível cruzando
 // outra linha ou uma coluna). Rótulo em CADA ponto (a pedido), também só
-// acumulado em \`rotulos\` -- ver construirColunasSvg acima pro porquê.
+// acumulado em `rotulos` -- ver construirColunasSvg acima pro porquê.
 // Um mês null (sem dado reportado ainda, ver somarArraysMensais) quebra a
 // linha em vez de "cair" até a base -- desenha um <polyline> por trecho
 // contínuo de meses com dado, não um só ligando os 12 pontos.
@@ -738,7 +1136,7 @@ function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraMes
 }
 
 // Monta o SVG final de um painel a partir das marcas (colunas OU linhas,
-// já em \`svgMarcas\`) + candidatos a rótulo acumulados em \`rotulos\` --
+// já em `svgMarcas`) + candidatos a rótulo acumulados em `rotulos` --
 // resolve a colisão uma vez, no conjunto inteiro do painel, e desenha os
 // <text> por último (por cima de tudo, incluindo o halo).
 function finalizarPainelSvg(svgMarcas, rotulos, altura) {
@@ -1119,7 +1517,7 @@ function tipologiaColor(tipologia) {
   var key = raw.toUpperCase();
   if (TIPOLOGIA_COLOR[key]) return TIPOLOGIA_COLOR[key];
   if (TIPOLOGIA_COMPOSTA_COLOR[key]) return TIPOLOGIA_COMPOSTA_COLOR[key];
-  var parenMatch = raw.match(/\\(([^)]+)\\)\\s*$/);
+  var parenMatch = raw.match(/\(([^)]+)\)\s*$/);
   if (parenMatch) {
     var viaParen = TIPOLOGIA_COLOR[parenMatch[1].trim().toUpperCase()];
     if (viaParen) return viaParen;
@@ -1470,9 +1868,9 @@ SERIES_PADRAO_ATIVAS.forEach(function (s) { filtrosSelecionados.serie.add(s); })
 // "CONTRATO VIGENTE" -> "Contrato Vigente" -- só cosmético pro rótulo do
 // checkbox (o VALOR que efetivamente filtra continua o texto original em
 // caixa alta, exatamente como vem da coluna ORIGEM da MATRIZ). Sem regex
-// com \\s/\\S de propósito -- esses escapes viram "s"/"S" literal depois
+// com \s/\S de propósito -- esses escapes viram "s"/"S" literal depois
 // de atravessar o template literal externo deste arquivo (mesma pegadinha
-// de \\r/\\n/\\. documentada nas outras funções client-side), então
+// de \r/\n/\. documentada nas outras funções client-side), então
 // split/join simples é mais seguro que arriscar o regex sair errado.
 function capitalizarPalavras(texto) {
   return (texto || '').toString().toLowerCase().split(' ').map(function (palavra) {
@@ -1532,9 +1930,9 @@ function atualizarRotuloFiltro(cfg, opcoes, estado) {
 // Normaliza texto pra comparação de busca -- minúsculas e sem acento, pra
 // "iguacu" achar "Iguaçu" e "sao" achar "São" sem o usuário precisar
 // digitar o acento certo. Filtra por código Unicode em vez de regex com
-// \\uNNNN pra evitar o problema de escapes sendo "comidos" pelo template
+// \uNNNN pra evitar o problema de escapes sendo "comidos" pelo template
 // literal externo deste arquivo antes de virar código do cliente (mesma
-// pegadinha de \\r/\\n/\\. documentada nas outras funções client-side).
+// pegadinha de \r/\n/\. documentada nas outras funções client-side).
 function normalizarBusca(texto) {
   var normalizado = (texto || '').toString().toLowerCase().normalize('NFD');
   var resultado = '';
@@ -1818,9 +2216,9 @@ function parseCsvGrid(texto) {
       dentroAspas = true;
     } else if (c === ',') {
       linha.push(campo); campo = '';
-    } else if (c === '\\r') {
-      // ignora -- o \\n logo em seguida já fecha a linha
-    } else if (c === '\\n') {
+    } else if (c === '\r') {
+      // ignora -- o \n logo em seguida já fecha a linha
+    } else if (c === '\n') {
       linha.push(campo); campo = '';
       linhas.push(linha); linha = [];
     } else {
@@ -1840,7 +2238,7 @@ function numeroPtBr(valor) {
   if (valor === undefined || valor === null) return null;
   var texto = String(valor).trim();
   if (texto === '' || texto.charAt(0) === '#' || texto.toLowerCase() === 'n/a') return null;
-  var numero = parseFloat(texto.replace(/\\./g, '').replace(',', '.'));
+  var numero = parseFloat(texto.replace(/\./g, '').replace(',', '.'));
   return isNaN(numero) ? null : numero;
 }
 
@@ -2055,135 +2453,6 @@ function atualizarDadosAoVivo() {
 }
 
 document.getElementById('atualizar-dashboard').addEventListener('click', atualizarDadosAoVivo);
-`;
-
-// Os sete filtros multi-select da barra principal e os cinco da aba
-// Alertas: só id e rótulo inicial, porque as opções de cada um são
-// montadas no cliente a partir dos registros decifrados.
-const FILTROS_PRINCIPAIS = [
-  { id: 'filtro-origem', rotulo: 'Todas as origens' },
-  { id: 'filtro-categoria', rotulo: 'Todas as categorias' },
-  { id: 'filtro-tipologia', rotulo: 'Todas as tipologias' },
-  { id: 'filtro-grupo', rotulo: 'Todos os grupos' },
-  { id: 'filtro-sup', rotulo: 'Todos os SUP' },
-  { id: 'filtro-serie', rotulo: 'Todas as séries' },
-  { id: 'seletor-dimensao', rotulo: 'Financeiro' },
-];
-
-const FILTROS_ALERTAS = [
-  { id: 'filtro-alertas-agrupar-por', rotulo: 'SUP' },
-  { id: 'filtro-alertas-numerico', rotulo: '2 selecionadas' },
-  { id: 'filtro-alertas-baseline', rotulo: 'Previsto' },
-  { id: 'filtro-alertas-periodo', rotulo: '2 selecionadas' },
-  { id: 'filtro-alertas-status', rotulo: 'Status' },
-];
-
-// As três abas de visualização, na ordem em que aparecem; Tabela abre
-// selecionada.
-const ABAS_VISUALIZACAO = [
-  { id: 'aba-tabela', rotulo: 'Tabela', ativa: true,
-    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>' },
-  { id: 'aba-grafico', rotulo: 'Gráfico', ativa: false,
-    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>' },
-  { id: 'aba-alertas', rotulo: 'Alertas', ativa: false,
-    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.9 21h16.2a2 2 0 0 0 1.79-2.96L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' },
-];
-
-// A faixa de ações da barra principal e a nota de premissa: markup pronto,
-// já com o recuo que tinham antes, porque são conteúdo do orçamento e não
-// da casca -- markupFiltros só encaixa os dois onde estavam.
-const MARKUP_ACOES = `      <div class="filtros-acoes">
-${markupAbas(ABAS_VISUALIZACAO, '        ')}
-        <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
-        <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
-        <span id="status-atualizacao" class="status-atualizacao"></span>
-      </div>`;
-
-const MARKUP_NOTA_PREMISSA = `      <div id="nota-premissa-produtividade" class="nota-premissa" style="display:none">Premissa: Produtividade = Volume ÷ (Equipes × dias do mês) — dias = 15 em Janeiro e Dezembro, 30 nos demais meses.</div>`;
-
-function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha }) {
-  if (!senha) {
-    throw new Error('renderDashboard requer "senha" -- o conteúdo (SUP/Grupo/Tomador/Tipologia/valores) é cifrado com ela antes de ir pro HTML.');
-  }
-  const vigenteIdx = calcularVigenteIdx(periodos, generatedAt);
-  const registrosJson = JSON.stringify(registros.map(r => ({
-    sup: r.sup, grupo: r.grupo, tomador: r.tomador, escopo: r.escopo, tipologia: r.tipologia, origem: r.origem,
-    previstoInicial: r.previstoInicial, previsto: r.previsto, realizado: r.realizado, total: r.total,
-  })));
-  const dadosCifrados = cifrarComSenha(registrosJson, senha);
-  const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');
-
-  const logoImg = logoDataUri ? `<img src="${logoDataUri}" alt="Suporte Infra">` : '';
-  const watermarkImg = iconDataUri ? `<img class="watermark" src="${iconDataUri}" alt="">` : '';
-
-  // Mesmo sistema visual (tema escuro, header com logo, chips, tabela) da
-  // matriz de equipes (tools/matriz/render-dashboard.js) -- cores, fonte e
-  // classes principais copiadas de lá pra manter os dois dashboards
-  // consistentes entre si. Diferença deliberada: o fundo da tabela aqui é
-  // translúcido, pra a marca d'água central aparecer por trás -- pedido
-  // explícito do usuário, a matriz de equipes não faz isso.
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<title>ORÇAMENTO — MATRIZ</title>
-<style>
-${cssBase()}
-</style>
-</head>
-<body>
-  ${watermarkImg}
-  <main>
-${markupCabecalho({
-    titulo: 'ORÇAMENTO — Previsto x Realizado x Tendência',
-    subtitulo: `Gerado em ${escapeHtml(generatedAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}`,
-    logo: logoImg,
-    recuo: '  ',
-  })}
-
-  <div id="gate-senha" class="gate-senha">
-    <div class="gate-senha-box">
-      <h2>Digite a senha para abrir o dashboard</h2>
-      <input type="password" id="campo-senha" autocomplete="off" placeholder="Senha">
-      <button id="btn-desbloquear" type="button">Abrir</button>
-      <div id="gate-senha-erro" class="gate-senha-erro" style="display:none"></div>
-    </div>
-  </div>
-
-  <div id="conteudo-protegido" style="display:none">
-${markupFiltros(FILTROS_PRINCIPAIS, {
-      recuo: '    ', acoes: MARKUP_ACOES, extra: MARKUP_NOTA_PREMISSA,
-    })}
-    <div id="secao-tabela">
-    <div class="table-scroll">
-    <table id="tabela-orcamento">
-      <thead><tr><th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th><th>Série</th>${renderCabecalhoMeses(periodos)}<th>Total</th></tr></thead>
-      <tbody id="corpo-tabela"></tbody>
-    </table>
-    </div>
-    </div>
-    <div id="secao-grafico" style="display:none">
-      <div id="graficos-container"></div>
-      <div id="grafico-tooltip" class="grafico-tooltip" style="display:none"></div>
-    </div>
-    <div id="secao-alertas" style="display:none">
-${markupFiltros(FILTROS_ALERTAS, { recuo: '      ', classes: 'filtros-alertas' })}
-      <input id="busca-alertas" type="text" class="busca-alertas" placeholder="Buscar..." autocomplete="off">
-      <div class="table-scroll">
-      <table id="tabela-alertas">
-        <thead id="cabecalho-alertas"></thead>
-        <tbody id="corpo-alertas"></tbody>
-      </table>
-      </div>
-    </div>
-  </div>
-  </main>
-  <script>window.__VIGENTE_IDX__ = ${vigenteIdx};</script>
-  <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
-  <script>${scriptDesbloqueio()}</script>
-  <script>${SCRIPT_CLIENTE_TABELA}</script>
+</script>
 </body>
-</html>`;
-}
-
-module.exports = { renderDashboard };
+</html>

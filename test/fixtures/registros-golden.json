@@ -1,0 +1,1078 @@
+[
+ {
+  "origem": "Sondagem",
+  "grupo": "GRUPO A",
+  "tomador": "Concessionária Exemplo S.A",
+  "sup": "SUP-0001-24",
+  "escopo": "Sondagem a percussão - trecho piloto",
+  "apoio": "Equipe própria",
+  "inicio": "2026-01-01",
+  "termino": "2026-12-31",
+  "tipologia": "ST",
+  "observacao": "Registro sintético para teste automatizado",
+  "previsto": {
+   "equipes": [
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2
+   ],
+   "equipesResumo": {
+    "pico": 2,
+    "media": 2,
+    "prod": 12.5,
+    "dias": 20
+   },
+   "volume": [
+    50,
+    55,
+    60,
+    65,
+    70,
+    75,
+    80,
+    85,
+    90,
+    95,
+    100,
+    105
+   ],
+   "volumeResumo": {
+    "total": 930,
+    "totalInicial": 930,
+    "ticket": 350
+   },
+   "financeiro": [
+    20000,
+    21500,
+    23000,
+    24500,
+    26000,
+    27500,
+    29000,
+    30500,
+    32000,
+    33500,
+    35000,
+    36500
+   ],
+   "financeiroResumo": {
+    "total": 339000,
+    "totalInicial": 339000
+   }
+  },
+  "realizado": {
+   "equipes": [
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2
+   ],
+   "equipesResumo": {
+    "pico": 2,
+    "media": 2,
+    "prod": 12.5,
+    "dias": 20
+   },
+   "volume": [
+    50,
+    55,
+    60,
+    65,
+    70,
+    75,
+    80,
+    85,
+    90,
+    95,
+    100,
+    105
+   ],
+   "volumeResumo": {
+    "total": 930,
+    "totalInicial": 930,
+    "ticket": 350
+   },
+   "financeiro": [
+    20000,
+    21500,
+    23000,
+    24500,
+    26000,
+    27500,
+    29000,
+    30500,
+    32000,
+    33500,
+    35000,
+    36500
+   ],
+   "financeiroResumo": {
+    "total": 339000,
+    "totalInicial": 339000
+   }
+  },
+  "total": {
+   "equipes": [
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2
+   ],
+   "equipesResumo": {
+    "pico": 2,
+    "media": 2,
+    "prod": 12.5,
+    "dias": 20
+   },
+   "volume": [
+    50,
+    55,
+    60,
+    65,
+    70,
+    75,
+    80,
+    85,
+    90,
+    95,
+    100,
+    105
+   ],
+   "volumeResumo": {
+    "total": 930,
+    "totalInicial": 930,
+    "ticket": 350
+   },
+   "financeiro": [
+    20000,
+    21500,
+    23000,
+    24500,
+    26000,
+    27500,
+    29000,
+    30500,
+    32000,
+    33500,
+    35000,
+    36500
+   ],
+   "financeiroResumo": {
+    "total": 339000,
+    "totalInicial": 339000
+   }
+  }
+ },
+ {
+  "origem": "Sondagem",
+  "grupo": "GRUPO A",
+  "tomador": "Rodovia Exemplo Ltda",
+  "sup": "SUP-0002-24",
+  "escopo": "Sondagem a trado",
+  "apoio": "Subcontratada",
+  "inicio": "2026-02-01",
+  "termino": "2026-11-30",
+  "tipologia": "SP",
+  "observacao": "Meses futuros ainda sem realizado reportado",
+  "previsto": {
+   "equipes": [
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3
+   ],
+   "equipesResumo": {
+    "pico": 3,
+    "media": 3,
+    "prod": 13.5,
+    "dias": 21
+   },
+   "volume": [
+    51,
+    56,
+    61,
+    66,
+    71,
+    76,
+    81,
+    86,
+    91,
+    96,
+    101,
+    106
+   ],
+   "volumeResumo": {
+    "total": 942,
+    "totalInicial": 942,
+    "ticket": 360
+   },
+   "financeiro": [
+    20001,
+    21501,
+    23001,
+    24501,
+    26001,
+    27501,
+    29001,
+    30501,
+    32001,
+    33501,
+    35001,
+    36501
+   ],
+   "financeiroResumo": {
+    "total": 339012,
+    "totalInicial": 339012
+   }
+  },
+  "realizado": {
+   "equipes": [
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    null,
+    null
+   ],
+   "equipesResumo": {
+    "pico": 3,
+    "media": 3,
+    "prod": 13.5,
+    "dias": 21
+   },
+   "volume": [
+    51,
+    56,
+    61,
+    66,
+    71,
+    76,
+    81,
+    86,
+    91,
+    96,
+    null,
+    null
+   ],
+   "volumeResumo": {
+    "total": 735,
+    "totalInicial": 735,
+    "ticket": 360
+   },
+   "financeiro": [
+    20001,
+    21501,
+    23001,
+    24501,
+    26001,
+    27501,
+    29001,
+    30501,
+    32001,
+    33501,
+    null,
+    null
+   ],
+   "financeiroResumo": {
+    "total": 267510,
+    "totalInicial": 267510
+   }
+  },
+  "total": {
+   "equipes": [
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    null,
+    null
+   ],
+   "equipesResumo": {
+    "pico": 3,
+    "media": 3,
+    "prod": 13.5,
+    "dias": 21
+   },
+   "volume": [
+    51,
+    56,
+    61,
+    66,
+    71,
+    76,
+    81,
+    86,
+    91,
+    96,
+    null,
+    null
+   ],
+   "volumeResumo": {
+    "total": 735,
+    "totalInicial": 735,
+    "ticket": 360
+   },
+   "financeiro": [
+    20001,
+    21501,
+    23001,
+    24501,
+    26001,
+    27501,
+    29001,
+    30501,
+    32001,
+    33501,
+    null,
+    null
+   ],
+   "financeiroResumo": {
+    "total": 267510,
+    "totalInicial": 267510
+   }
+  }
+ },
+ {
+  "origem": "Laboratório",
+  "grupo": "GRUPO B",
+  "tomador": "Consórcio Exemplo de Obras",
+  "sup": "SUP-0003-24",
+  "escopo": "Ensaios de laboratório convencional",
+  "apoio": null,
+  "inicio": "2026-01-15",
+  "termino": "2026-10-15",
+  "tipologia": "LAB.C",
+  "observacao": null,
+  "previsto": {
+   "equipes": [
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4
+   ],
+   "equipesResumo": {
+    "pico": 4,
+    "media": 4,
+    "prod": 14.5,
+    "dias": 22
+   },
+   "volume": [
+    52,
+    57,
+    62,
+    67,
+    72,
+    77,
+    82,
+    87,
+    92,
+    97,
+    102,
+    107
+   ],
+   "volumeResumo": {
+    "total": 954,
+    "totalInicial": 954,
+    "ticket": 370
+   },
+   "financeiro": [
+    20002,
+    21502,
+    23002,
+    24502,
+    26002,
+    27502,
+    29002,
+    30502,
+    32002,
+    33502,
+    35002,
+    36502
+   ],
+   "financeiroResumo": {
+    "total": 339024,
+    "totalInicial": 339024
+   }
+  },
+  "realizado": {
+   "equipes": [
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4
+   ],
+   "equipesResumo": {
+    "pico": 4,
+    "media": 4,
+    "prod": 14.5,
+    "dias": 22
+   },
+   "volume": [
+    52,
+    57,
+    62,
+    67,
+    72,
+    77,
+    82,
+    87,
+    92,
+    97,
+    102,
+    107
+   ],
+   "volumeResumo": {
+    "total": 954,
+    "totalInicial": 954,
+    "ticket": 370
+   },
+   "financeiro": [
+    20002,
+    21502,
+    23002,
+    24502,
+    26002,
+    27502,
+    29002,
+    30502,
+    32002,
+    33502,
+    35002,
+    36502
+   ],
+   "financeiroResumo": {
+    "total": 339024,
+    "totalInicial": 339024
+   }
+  },
+  "total": {
+   "equipes": [
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4
+   ],
+   "equipesResumo": {
+    "pico": 4,
+    "media": 4,
+    "prod": 14.5,
+    "dias": 22
+   },
+   "volume": [
+    52,
+    57,
+    62,
+    67,
+    72,
+    77,
+    82,
+    87,
+    92,
+    97,
+    102,
+    107
+   ],
+   "volumeResumo": {
+    "total": 954,
+    "totalInicial": 954,
+    "ticket": 370
+   },
+   "financeiro": [
+    20002,
+    21502,
+    23002,
+    24502,
+    26002,
+    27502,
+    29002,
+    30502,
+    32002,
+    33502,
+    35002,
+    36502
+   ],
+   "financeiroResumo": {
+    "total": 339024,
+    "totalInicial": 339024
+   }
+  }
+ },
+ {
+  "origem": "Laboratório",
+  "grupo": "GRUPO B",
+  "tomador": "Engenharia Exemplo S.A",
+  "sup": "SUP-0004-24",
+  "escopo": "Ensaios especiais",
+  "apoio": "Equipe própria",
+  "inicio": "2026-03-01",
+  "termino": "2026-12-31",
+  "tipologia": "LAB.E",
+  "observacao": "Contrato ainda sem linha de Realizado na planilha de origem",
+  "previsto": {
+   "equipes": [
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5
+   ],
+   "equipesResumo": {
+    "pico": 5,
+    "media": 5,
+    "prod": 15.5,
+    "dias": 23
+   },
+   "volume": [
+    53,
+    58,
+    63,
+    68,
+    73,
+    78,
+    83,
+    88,
+    93,
+    98,
+    103,
+    108
+   ],
+   "volumeResumo": {
+    "total": 966,
+    "totalInicial": 966,
+    "ticket": 380
+   },
+   "financeiro": [
+    20003,
+    21503,
+    23003,
+    24503,
+    26003,
+    27503,
+    29003,
+    30503,
+    32003,
+    33503,
+    35003,
+    36503
+   ],
+   "financeiroResumo": {
+    "total": 339036,
+    "totalInicial": 339036
+   }
+  },
+  "realizado": null,
+  "total": {
+   "equipes": [
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5
+   ],
+   "equipesResumo": {
+    "pico": 5,
+    "media": 5,
+    "prod": 15.5,
+    "dias": 23
+   },
+   "volume": [
+    53,
+    58,
+    63,
+    68,
+    73,
+    78,
+    83,
+    88,
+    93,
+    98,
+    103,
+    108
+   ],
+   "volumeResumo": {
+    "total": 966,
+    "totalInicial": 966,
+    "ticket": 380
+   },
+   "financeiro": [
+    20003,
+    21503,
+    23003,
+    24503,
+    26003,
+    27503,
+    29003,
+    30503,
+    32003,
+    33503,
+    35003,
+    36503
+   ],
+   "financeiroResumo": {
+    "total": 339036,
+    "totalInicial": 339036
+   }
+  }
+ },
+ {
+  "origem": "Sondagem",
+  "grupo": "GRUPO C",
+  "tomador": "Infraestrutura Exemplo Participações",
+  "sup": "SUP-0005-24",
+  "escopo": "Sondagem a percussão com SPT",
+  "apoio": "Subcontratada",
+  "inicio": "2026-01-01",
+  "termino": "2026-09-30",
+  "tipologia": "BL",
+  "observacao": null,
+  "previsto": {
+   "equipes": [
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6
+   ],
+   "equipesResumo": {
+    "pico": 6,
+    "media": 6,
+    "prod": 16.5,
+    "dias": 24
+   },
+   "volume": [
+    54,
+    59,
+    64,
+    69,
+    74,
+    79,
+    84,
+    89,
+    94,
+    99,
+    104,
+    109
+   ],
+   "volumeResumo": {
+    "total": 978,
+    "totalInicial": 978,
+    "ticket": 390
+   },
+   "financeiro": [
+    20004,
+    21504,
+    23004,
+    24504,
+    26004,
+    27504,
+    29004,
+    30504,
+    32004,
+    33504,
+    35004,
+    36504
+   ],
+   "financeiroResumo": {
+    "total": 339048,
+    "totalInicial": 339048
+   }
+  },
+  "realizado": {
+   "equipes": [
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6
+   ],
+   "equipesResumo": {
+    "pico": 6,
+    "media": 6,
+    "prod": 16.5,
+    "dias": 24
+   },
+   "volume": [
+    54,
+    59,
+    64,
+    69,
+    74,
+    79,
+    84,
+    89,
+    94,
+    99,
+    104,
+    109
+   ],
+   "volumeResumo": {
+    "total": 978,
+    "totalInicial": 978,
+    "ticket": 390
+   },
+   "financeiro": [
+    20004,
+    21504,
+    23004,
+    24504,
+    26004,
+    27504,
+    29004,
+    30504,
+    32004,
+    33504,
+    35004,
+    36504
+   ],
+   "financeiroResumo": {
+    "total": 339048,
+    "totalInicial": 339048
+   }
+  },
+  "total": {
+   "equipes": [
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6
+   ],
+   "equipesResumo": {
+    "pico": 6,
+    "media": 6,
+    "prod": 16.5,
+    "dias": 24
+   },
+   "volume": [
+    54,
+    59,
+    64,
+    69,
+    74,
+    79,
+    84,
+    89,
+    94,
+    99,
+    104,
+    109
+   ],
+   "volumeResumo": {
+    "total": 978,
+    "totalInicial": 978,
+    "ticket": 390
+   },
+   "financeiro": [
+    20004,
+    21504,
+    23004,
+    24504,
+    26004,
+    27504,
+    29004,
+    30504,
+    32004,
+    33504,
+    35004,
+    36504
+   ],
+   "financeiroResumo": {
+    "total": 339048,
+    "totalInicial": 339048
+   }
+  }
+ },
+ {
+  "origem": "Sondagem",
+  "grupo": "GRUPO C",
+  "tomador": "Terraplenagem Exemplo S.A",
+  "sup": "SUP-0006-24",
+  "escopo": "CPTu",
+  "apoio": "Equipe própria",
+  "inicio": "2026-04-01",
+  "termino": "2026-12-31",
+  "tipologia": "CPTU",
+  "observacao": "Registro sintético com buraco no meio da série",
+  "previsto": {
+   "equipes": [
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7
+   ],
+   "equipesResumo": {
+    "pico": 7,
+    "media": 7,
+    "prod": 17.5,
+    "dias": 25
+   },
+   "volume": [
+    55,
+    60,
+    65,
+    70,
+    75,
+    80,
+    85,
+    90,
+    95,
+    100,
+    105,
+    110
+   ],
+   "volumeResumo": {
+    "total": 990,
+    "totalInicial": 990,
+    "ticket": 400
+   },
+   "financeiro": [
+    20005,
+    21505,
+    23005,
+    24505,
+    26005,
+    27505,
+    29005,
+    30505,
+    32005,
+    33505,
+    35005,
+    36505
+   ],
+   "financeiroResumo": {
+    "total": 339060,
+    "totalInicial": 339060
+   }
+  },
+  "realizado": {
+   "equipes": [
+    7,
+    7,
+    7,
+    7,
+    7,
+    null,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7
+   ],
+   "equipesResumo": {
+    "pico": 7,
+    "media": 7,
+    "prod": 17.5,
+    "dias": 25
+   },
+   "volume": [
+    55,
+    60,
+    65,
+    70,
+    75,
+    null,
+    85,
+    90,
+    95,
+    100,
+    105,
+    110
+   ],
+   "volumeResumo": {
+    "total": 910,
+    "totalInicial": 910,
+    "ticket": 400
+   },
+   "financeiro": [
+    20005,
+    21505,
+    23005,
+    24505,
+    26005,
+    null,
+    29005,
+    30505,
+    32005,
+    33505,
+    35005,
+    36505
+   ],
+   "financeiroResumo": {
+    "total": 311555,
+    "totalInicial": 311555
+   }
+  },
+  "total": {
+   "equipes": [
+    7,
+    7,
+    7,
+    7,
+    7,
+    null,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7
+   ],
+   "equipesResumo": {
+    "pico": 7,
+    "media": 7,
+    "prod": 17.5,
+    "dias": 25
+   },
+   "volume": [
+    55,
+    60,
+    65,
+    70,
+    75,
+    null,
+    85,
+    90,
+    95,
+    100,
+    105,
+    110
+   ],
+   "volumeResumo": {
+    "total": 910,
+    "totalInicial": 910,
+    "ticket": 400
+   },
+   "financeiro": [
+    20005,
+    21505,
+    23005,
+    24505,
+    26005,
+    null,
+    29005,
+    30505,
+    32005,
+    33505,
+    35005,
+    36505
+   ],
+   "financeiroResumo": {
+    "total": 311555,
+    "totalInicial": 311555
+   }
+  }
+ }
+]

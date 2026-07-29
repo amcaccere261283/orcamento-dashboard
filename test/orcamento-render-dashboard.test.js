@@ -3,8 +3,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const { renderDashboard } = require('../tools/orcamento/render-dashboard.js');
-const { decifrarComSenha } = require('../tools/orcamento/criptografia.js');
-const { excelSerialParaData } = require('../tools/orcamento/datas.js');
+const { decifrarComSenha } = require('../tools/comum/criptografia.js');
+const { excelSerialParaData } = require('../tools/comum/datas.js');
 
 const SENHA_TESTE = 'senha-fake-de-teste-abc';
 

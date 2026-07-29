@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseSharedStrings, parseSheetGrid, columnLetterToIndex, cell } = require('../tools/orcamento/xlsx-cells.js');
+const { parseSharedStrings, parseSheetGrid, columnLetterToIndex, cell } = require('../tools/comum/xlsx-cells.js');
 
 test('columnLetterToIndex converts single and double letter columns to 0-based indices', () => {
   assert.equal(columnLetterToIndex('A'), 0);

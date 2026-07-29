@@ -2,7 +2,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { listZipEntries, readZipEntry } = require('../tools/orcamento/zip-reader.js');
+const { listZipEntries, readZipEntry } = require('../tools/comum/zip-reader.js');
 const { buildMinimalZip } = require('./helpers/build-zip.js');
 
 test('listZipEntries finds a stored (uncompressed) entry with its metadata', () => {

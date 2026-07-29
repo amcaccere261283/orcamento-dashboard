@@ -155,7 +155,7 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
     // O conteúdo real (tipologia/grupo) fica cifrado no HTML -- decifra com
     // node:crypto (via criptografia.js) pra verificar as mesmas regras de
     // skip que antes eram checadas direto no HTML.
-    const { decifrarComSenha } = require('../tools/orcamento/criptografia.js');
+    const { decifrarComSenha } = require('../tools/comum/criptografia.js');
     const match = html.match(/window\.__DADOS_CIFRADOS__\s*=\s*(\{[\s\S]*?\});/);
     assert.ok(match, 'window.__DADOS_CIFRADOS__ not found in the built HTML');
     const registros = JSON.parse(decifrarComSenha(JSON.parse(match[1]), senha));

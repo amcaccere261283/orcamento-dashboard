@@ -2,44 +2,28 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { readXlsxSheet } = require('./xlsx-reader.js');
+const { readXlsxSheet } = require('../comum/xlsx-reader.js');
 const { parseMatriz, locateColumns } = require('./parse-matriz.js');
 const { parseBaseline } = require('./parse-baseline.js');
 const { renderDashboard } = require('./render-dashboard.js');
-const { excelSerialParaData } = require('./datas.js');
+const { excelSerialParaData } = require('../comum/datas.js');
+// Os dois mapas de reconciliação (TIP_MAP_LINHA_BASE/SUP_MAP_LINHA_BASE)
+// moravam AQUI e, por isso, a página do Planejamento Semanal casava chaves
+// cruas e errava em silêncio em ~1/3 da grade. Agora vivem em
+// tools/comum/linha-base.js, consumidos pelas duas páginas -- ver o
+// comentário de cabeçalho de lá.
+const { reconciliarLinhaBase, chaveMatriz } = require('../comum/linha-base.js');
 const config = require('./config.js');
-
-// LAB.C/LAB.E (rótulo da MATRIZ viva) equivalem a LAB./LAB. ESPECIAL na
-// linha de base (mesma tradução usada em toda a integração com arquivos
-// externos deste projeto -- ver o Apps Script e a análise da MATRIZ real).
-const TIP_MAP_LINHA_BASE = { 'LAB.C': 'LAB.', 'LAB.E': 'LAB. ESPECIAL' };
-
-// SUP da MATRIZ viva -> nome/código correspondente na linha de base --
-// preenchido cruzando manualmente com o usuário os 70 pares SUP+tipologia
-// que não bateram por conta de renomeação/renovação de contrato desde o
-// estudo original, ou porque a linha de base usa um nome descritivo em vez
-// de um código SUP-nnnn-aa. Só entra em uso como FALLBACK (ver
-// anexarPrevistoInicial) -- nenhum destes tinha uma chave direta própria
-// na linha de base, confirmado antes de mapear, então não existe risco de
-// sobrescrever um match correto que já existisse.
-const SUP_MAP_LINHA_BASE = {
-  'SUP-8437-26': 'EPR - Iguaçu',
-  'SUP-6830-23': 'SUP-6830-24',
-  'SUP-8370-25': 'SUP-8224-25 (SR)',
-  'SUP-8224-25': 'MOTIVA - BID 2.0',
-  'Diversos': 'DIVERSOS',
-  'SUP-8276-25': 'ECOVIAS - Nova Raposo - Lote 04',
-  'SUP-8413-26': 'ECOVIAS - Nova Raposo - Pacote 02',
-};
 
 const RESUMO_ZERO = { pico: 0, media: 0, prod: 0, dias: 0 };
 
 // Anexa previstoInicial em cada registro, casando por SUP+tipologia com a
-// linha de base -- tenta o SUP da própria MATRIZ primeiro; se não achar
-// (nem com a tipologia traduzida), tenta o nome mapeado em
-// SUP_MAP_LINHA_BASE antes de desistir. Sem match nenhum, fica tudo zero
-// (não null: "não fazia parte do estudo original" é uma resposta certa,
-// diferente de "não tinha dado reportado ainda" nas outras séries).
+// linha de base via reconciliarLinhaBase (tools/comum/linha-base.js): tenta
+// o SUP da própria MATRIZ primeiro; se não achar (nem com a tipologia
+// traduzida), tenta o nome mapeado em SUP_MAP_LINHA_BASE antes de desistir.
+// Sem match nenhum, fica tudo zero (não null: "não fazia parte do estudo
+// original" é uma resposta certa, diferente de "não tinha dado reportado
+// ainda" nas outras séries).
 // Devolve também as chaves da linha de base que NINGUÉM na MATRIZ atual
 // reivindicou (mesmo depois do mapeamento manual) -- essa soma nunca
 // aparece na coluna Previsto Inicial da tabela hoje, então é informação
@@ -47,18 +31,9 @@ const RESUMO_ZERO = { pico: 0, media: 0, prod: 0, dias: 0 };
 // saber que uma fatia ficou de fora por não casar, não por ser zero de verdade.
 function anexarPrevistoInicial(registros, baseline) {
   const zero12 = () => Array(12).fill(0);
-  const chavesUsadas = new Set();
+  const { porChaveMatriz, chavesUsadas } = reconciliarLinhaBase(registros, baseline.porChave);
   registros.forEach(registro => {
-    const tipologiaBaseline = TIP_MAP_LINHA_BASE[registro.tipologia] || registro.tipologia;
-    const chaveDireta = `${registro.sup}||${tipologiaBaseline}`;
-    let dados = baseline.porChave.get(chaveDireta);
-    let chaveUsada = chaveDireta;
-    if (!dados && SUP_MAP_LINHA_BASE[registro.sup]) {
-      const chaveMapeada = `${SUP_MAP_LINHA_BASE[registro.sup]}||${tipologiaBaseline}`;
-      dados = baseline.porChave.get(chaveMapeada);
-      if (dados) chaveUsada = chaveMapeada;
-    }
-    chavesUsadas.add(chaveUsada);
+    const dados = porChaveMatriz.get(chaveMatriz(registro.sup, registro.tipologia));
     registro.previstoInicial = {
       equipes: dados ? dados.equipes : zero12(),
       equipesResumo: RESUMO_ZERO,

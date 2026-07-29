@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { excelSerialParaData, formatarMesAno, calcularVigenteIdx } = require('../tools/orcamento/datas.js');
+const { excelSerialParaData, formatarMesAno, calcularVigenteIdx } = require('../tools/comum/datas.js');
 
 test('excelSerialParaData converts a known Excel serial (46023, seen in the real MATRIZ header) to 01/01/2026 UTC', () => {
   const data = excelSerialParaData(46023);
