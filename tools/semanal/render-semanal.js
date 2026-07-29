@@ -36,6 +36,48 @@ const ABAS_VISUALIZACAO = [
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>' },
 ];
 
+// CSS dos 4 controles da aba Balanço de massa (renderControles, em
+// render-aba-balanco.js: período/base/dimensão/somente ativos) e do
+// contêiner dos gráficos. NÃO entra em cssBase() (tools/comum/render-shell.js)
+// de propósito: aquela folha é compartilhada com o orçamento e
+// test/orcamento-html-inalterado.test.js trava o HTML dele byte a byte --
+// qualquer linha a mais ali reprovaria o golden. Este bloco é só desta
+// página, injetado num <style> à parte (ver o final de renderSemanal()).
+//
+// Segue as mesmas convenções visuais de cssBase(): mesmos tokens de cor
+// (--surface-1/--border/--text-primary/--text-secondary), mesmo layout
+// flex+gap de .filtros-selecao, e o MESMO ícone de seta em data-URI que
+// .filtros select já usa (copiado, não referenciado -- os dois blocos de
+// CSS nunca se importam um do outro, cada `<style>` é independente).
+// .grafico-painel (o invólucro de cada gráfico de tipologia) e .grafico-svg
+// (a tag <svg> em si) já têm regra em cssBase() -- não duplicados aqui.
+const CSS_BALANCO = `
+  .controles-balanco {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px;
+    margin-bottom: 20px;
+  }
+  .controle-balanco {
+    display: flex; flex-direction: column; gap: 6px;
+    font-size: 12px; color: var(--text-secondary);
+  }
+  .controle-balanco select {
+    padding: 8px 30px 8px 10px; height: 36px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23c3c2b7' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+    color: var(--text-primary);
+    font-size: 13px; cursor: pointer;
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  }
+  .controle-balanco select:hover { border-color: rgba(246,181,63,0.5); }
+  .controle-balanco select:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
+  .controle-balanco-check {
+    flex-direction: row; align-items: center; gap: 8px;
+    height: 36px; font-size: 13px; color: var(--text-primary);
+  }
+  .controle-balanco-check input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; }
+  .graficos-balanco { display: flex; flex-direction: column; gap: 28px; }
+`;
+
 // render-aba-semanal.js consome compute-semanal.js (require('./compute-semanal.js'))
 // -- por isso vem depois na lista: a ordem aqui é a ordem de dependência, e
 // buildBrowserBundle não resolve isso sozinho (ver o comentário no topo dele).
@@ -241,6 +283,7 @@ function renderSemanal({ registros, baseline, senha, geradoEm }) {
 <title>PLANEJAMENTO SEMANAL</title>
 <style>
 ${cssBase()}
+${CSS_BALANCO}
 </style>
 </head>
 <body>

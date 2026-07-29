@@ -100,7 +100,12 @@ function renderGraficoTipologia(tipologia, linhas, opcoes) {
   var altura = ALTURA_CABECALHO + Math.max(linhasOrdenadas.length, 1) * ALTURA_LINHA + ALTURA_RODAPE;
   var patternId = 'hachura-equipes-' + slug(tipologia);
 
-  var svg = '<svg class="grafico-balanco" viewBox="0 0 ' + LARGURA_SVG + ' ' + altura + '" width="100%" height="' + altura + '" role="img" aria-label="Balanço de massa -- ' + escapeHtml(tipologia) + '">';
+  // 'grafico-svg' é a classe que cssBase() (casca compartilhada com o
+  // orçamento) já estiliza (width:100%; height:auto; display:block;) --
+  // reaproveitada aqui de propósito, em vez de duplicar a regra numa folha
+  // à parte. 'grafico-balanco' é só o gancho específico deste gráfico
+  // (nenhuma regra própria hoje).
+  var svg = '<svg class="grafico-svg grafico-balanco" viewBox="0 0 ' + LARGURA_SVG + ' ' + altura + '" width="100%" height="' + altura + '" role="img" aria-label="Balanço de massa -- ' + escapeHtml(tipologia) + '">';
 
   svg += '<defs><pattern id="' + patternId + '" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">'
     + '<rect width="6" height="6" fill="' + COR_EQUIPES + '"></rect>'
