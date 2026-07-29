@@ -927,7 +927,7 @@ function recalcularAlertas() {
 // nunca refaz a busca de dados (bucketPeriodo etc.), só esconde/mostra
 // <tr> pelo data-search que renderLinhaAlerta já embutiu. Termo vazio
 // mostra tudo (mesma convenção do campo de busca dentro de cada
-// filtro-multi, ver montarFiltroMulti).
+// filtro-multi, ver montarFiltroMulti, agora em tools/comum/render-shell.js).
 function aplicarBuscaAlertas() {
   var termo = normalizarBusca(document.getElementById('busca-alertas').value);
   document.querySelectorAll('#tabela-alertas tbody tr').forEach(function (tr) {
@@ -1098,12 +1098,6 @@ function tipologiaColor(tipologia) {
   return '#898781';
 }
 
-// Agrupamento fixo das 8 tipologias reais em 4 categorias -- Lab.
-// Convencional (LAB.C) e Lab. Especial (LAB.E) são suas próprias
-// categorias; entre as sondagens, CPTu/BL/SH/VT são "Especial" e todo o
-// resto (SP, SM/SM.F/SR, ST, PI) é "Convencional" -- regra confirmada com
-// o usuário, não uma inferência.
-
 var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência', realizadoPrevistoInicial: 'Realizado + Previsto Inicial' };
 // ORDEM_SERIES gera as linhas por registro da TABELA (renderBlocosDimensao)
 // -- fica só com as 4 séries originais de propósito. ORDEM_SERIES_GRAFICO
@@ -1116,7 +1110,8 @@ var CLASSE_SERIE = { previstoInicial: 'previsto-inicial', previsto: 'previsto', 
 // Estado inicial do filtro de série: Previsto Inicial começa DESMARCADO (é
 // a referência de fundo, não o dado do dia a dia) -- as outras 3 começam
 // marcadas. Precisa ser um Set não-vazio logo de cara pra excluir Previsto
-// Inicial (Set vazio = "sem filtro" = mostra tudo, ver filtroExclui).
+// Inicial (Set vazio = "sem filtro" = mostra tudo, ver filtroExclui, que
+// agora mora em tools/comum/render-shell.js).
 var SERIES_PADRAO_ATIVAS = ['previsto', 'realizado', 'total'];
 
 // Ordem fixa e canônica das dimensões -- quando várias estão marcadas, os
@@ -1134,7 +1129,8 @@ DIMENSOES_CONFIG.forEach(function (d) { DIMENSOES_ROTULO[d.valor] = d.rotulo; })
 
 // Devolve as dimensões marcadas (Set), na ordem canônica -- nunca vazio na
 // prática (o checkbox de dimensão nunca deixa desmarcar a última, ver
-// montarFiltroMulti), mas cai pra Financeiro se por algum motivo estiver.
+// montarFiltroMulti, agora em tools/comum/render-shell.js), mas cai pra
+// Financeiro se por algum motivo estiver.
 function dimensoesEmOrdem(selecionadas) {
   var ordenadas = DIMENSOES_CONFIG.filter(function (d) { return selecionadas.has(d.valor); }).map(function (d) { return d.valor; });
   return ordenadas.length ? ordenadas : ['financeiro'];
@@ -1158,8 +1154,9 @@ var PERIODO_LABELS = {
 
 // "Agrupar por" precisa ler categoria (derivada de tipologia, nunca
 // guardada no registro) do mesmo jeito que indicesFiltrados/opcoesFiltro
-// já fazem pro filtro de categoria -- generalizado aqui pra qualquer campo
-// de agrupamento, não só os campos que existem direto no registro.
+// (ambas agora em tools/comum/render-shell.js) já fazem pro filtro de
+// categoria -- generalizado aqui pra qualquer campo de agrupamento, não só
+// os campos que existem direto no registro.
 function campoAgrupamento(registro, agruparPor) {
   return agruparPor === 'categoria' ? categoriaTipologia(registro.tipologia) : registro[agruparPor];
 }
@@ -1237,7 +1234,8 @@ function renderLinhaTotalSup(sup, grupo, tomador, origem, indices, dimensoes) {
 // TIPOLOGIA (que somem quando um filtro de recorte estreita os dados,
 // porque os índices que eles somam foram fixados na hora da montagem),
 // este NUNCA some: recalcularTabela recalcula os índices a cada chamada a
-// partir dos filtros atuais (ver indicesFiltrados), então o "TOTAL GERAL"
+// partir dos filtros atuais (ver indicesFiltrados, agora em
+// tools/comum/render-shell.js), então o "TOTAL GERAL"
 // vira "SUBTOTAL" (rótulo trocado em tempo real, ver .chip-total-geral) e
 // mostra a soma exata do que está filtrado no momento -- sempre visível,
 // sempre correto, no topo da tabela onde é mais fácil de achar.
@@ -1324,9 +1322,10 @@ var FILTROS_CONFIG = [
   // Origem vem direto da coluna ORIGEM da MATRIZ (CONTRATO VIGENTE /
   // NOVOS NEGÓCIOS hoje) -- dinâmico como tipologia/grupo/SUP, não fixo
   // como categoria/série, porque é texto cru da planilha, não uma
-  // classificação computada pelo dashboard (ver capitalizarPalavras pro
-  // rótulo bonito; o VALOR do checkbox continua sendo o texto original,
-  // já que é isso que os registros carregam).
+  // classificação computada pelo dashboard (ver capitalizarPalavras, agora
+  // em tools/comum/render-shell.js, pro rótulo bonito; o VALOR do checkbox
+  // continua sendo o texto original, já que é isso que os registros
+  // carregam).
   { id: 'filtro-origem', chave: 'origem', rotuloPadrao: 'Todas as origens', campo: 'origem', rotuloCapitalizado: true },
   { id: 'filtro-categoria', chave: 'categoria', rotuloPadrao: 'Todas as categorias', opcoesFixas: [
     { valor: 'labConvencional', rotulo: 'Lab. Convencional' },
@@ -1335,8 +1334,9 @@ var FILTROS_CONFIG = [
     { valor: 'sondagemEspecial', rotulo: 'Sondagem Especial' },
   ] },
   // Em cascata com Categoria -- só lista as tipologias que pertencem à(s)
-  // categoria(s) marcada(s) (ver opcoesFiltro), pra não deixar escolher uma
-  // combinação impossível (ex.: categoria=Lab. Especial + tipologia=SP).
+  // categoria(s) marcada(s) (ver opcoesFiltro, agora em
+  // tools/comum/render-shell.js), pra não deixar escolher uma combinação
+  // impossível (ex.: categoria=Lab. Especial + tipologia=SP).
   { id: 'filtro-tipologia', chave: 'tipologia', rotuloPadrao: 'Todas as tipologias', campo: 'tipologia' },
   { id: 'filtro-grupo', chave: 'grupo', rotuloPadrao: 'Todos os grupos', campo: 'grupo' },
   // Rótulo de cada opção traz Tomador/Escopo junto do código (o código
@@ -1355,20 +1355,24 @@ var FILTROS_CONFIG = [
   ] },
   // Diferente dos outros -- não é um FILTRO que estreita quais linhas
   // aparecem, decide qual(is) valor(es) elas mostram, então nunca pode
-  // ficar vazio (ver montarFiltroMulti, que trava a última desmarcação) e
-  // começa com Financeiro já marcado, não vazio como os demais.
+  // ficar vazio (ver montarFiltroMulti, agora em tools/comum/render-shell.js,
+  // que trava a última desmarcação) e começa com Financeiro já marcado, não
+  // vazio como os demais.
   { id: 'seletor-dimensao', chave: 'dimensao', rotuloPadrao: 'Selecione ao menos 1', opcoesFixas: DIMENSOES_CONFIG, minimoUm: true },
 ];
 
 // Config dos 4 seletores próprios da aba Alertas -- mesmo componente
 // visual (filtro-multi) dos filtros de recorte, mas com estado PRÓPRIO
 // (filtrosAlertas, não filtrosSelecionados) e, pra Agrupar por/Dimensão,
-// exclusivo:true (single-choice, ver montarFiltroMulti). Toda mudança em
-// QUALQUER filtro (este ou um de recorte) recalcula Tabela E Alertas
-// incondicionalmente (ver o fim do handler de mudança em montarFiltroMulti)
-// -- bug real corrigido aqui: antes só estes 5 tinham um mecanismo próprio
-// que acionava recalcularAlertas, então filtrar por SUP na barra de cima
-// nunca atualizava a aba Alertas.
+// exclusivo:true (single-choice, ver montarFiltroMulti, agora em
+// tools/comum/render-shell.js). Toda mudança em QUALQUER filtro (este ou um
+// de recorte) recalcula Tabela E Alertas incondicionalmente -- quem decide
+// isso é aoMudarFiltroOrcamento (logo abaixo), o callback que esta página
+// passa pra montarFiltroMulti chamar ao final de toda mudança de checkbox,
+// não mais um handler hardcoded dentro dela -- bug real corrigido aqui:
+// antes só estes 5 tinham um mecanismo próprio que acionava
+// recalcularAlertas, então filtrar por SUP na barra de cima nunca
+// atualizava a aba Alertas.
 var FILTROS_ALERTAS_CONFIG = [
   { id: 'filtro-alertas-agrupar-por', chave: 'agruparPor', rotuloPadrao: 'Agrupar por', exclusivo: true, opcoesFixas: [
     { valor: 'sup', rotulo: 'SUP' },

@@ -474,6 +474,11 @@ function escapeHtml(value) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Agrupamento fixo das 8 tipologias reais em 4 categorias -- Lab.
+// Convencional (LAB.C) e Lab. Especial (LAB.E) são suas próprias
+// categorias; entre as sondagens, CPTu/BL/SH/VT são "Especial" e todo o
+// resto (SP, SM/SM.F/SR, ST, PI) é "Convencional" -- regra confirmada com
+// o usuário, não uma inferência.
 var TIPOLOGIAS_SONDAGEM_ESPECIAL = { CPTU: true, BL: true, SH: true, VT: true };
 function categoriaTipologia(tipologia) {
   var key = String(tipologia || '').trim().toUpperCase();
@@ -590,6 +595,7 @@ function indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGru
 // página decide o que recalcular. estado é sempre obrigatório (chave ->
 // Set); cada página passa o seu (não existe mais fallback pra um global).
 function montarFiltroMulti(cfg, registros, estado, aoMudar) {
+  if (typeof aoMudar !== 'function') throw new Error('montarFiltroMulti: aoMudar precisa ser uma function (recebido: ' + typeof aoMudar + ')');
   var opcoes = opcoesFiltro(cfg, registros, estado);
   var valoresValidos = {};
   opcoes.forEach(function (o) { valoresValidos[o.valor] = true; });
