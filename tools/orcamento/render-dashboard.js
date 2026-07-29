@@ -4,6 +4,17 @@ const { cifrarComSenha } = require('../comum/criptografia.js');
 const {
   cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio,
 } = require('../comum/render-shell.js');
+const { trechosParaCliente } = require('../comum/calculo-equipes.js');
+
+// O cálculo de equipes (DIAS_PREMISSA_MES, mediaEquipesPonderada e
+// somarIntervaloEquipeDias) mora em ../comum/calculo-equipes.js, onde é um
+// módulo Node de verdade, coberto por teste -- daqui ele volta pro JS de
+// cliente como TEXTO, inlinado nas mesmas posições em que as definições
+// estavam. Cada trecho já vem com quebra de linha nas duas pontas, então a
+// interpolação ocupa uma linha sozinha e reproduz o espaçamento de antes
+// (o HTML emitido continua byte-a-byte idêntico -- ver
+// test/orcamento-html-inalterado.test.js).
+const [TRECHO_DIAS_PREMISSA, TRECHO_EQUIPES] = trechosParaCliente();
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -71,16 +82,7 @@ var CAMPOS_RATIO = {
   produtividade: { numerador: 'volume', denominador: 'equipes' },
   ticketMedio: { numerador: 'financeiro', denominador: 'volume' },
 };
-
-// Premissa de dias úteis considerados por mês, pra Produtividade virar uma
-// taxa por EQUIPE-DIA (volume ÷ (equipes × dias)), não só por equipe-mês --
-// Jan/Dez usam 15 (meses parciais), os outros 10 usam 30. Confirmado com o
-// usuário. Só entra na conta de Realizado/Tendência (e num Previsto
-// agregando várias tipologias) -- a premissa de Previsto de UMA tipologia
-// (equipesResumo.prod, abaixo) já vem pronta como taxa diária da própria
-// planilha, não passa por aqui.
-var DIAS_PREMISSA_MES = [15, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 15];
-
+${TRECHO_DIAS_PREMISSA}
 // Fecha a Tendência (série "total") do mês vigente combinando o Realizado
 // parcial já ocorrido com a projeção da própria linha T da planilha pra
 // completar o mês -- meses já fechados (antes do vigente) passam a valer
@@ -232,37 +234,7 @@ function somarIntervaloMensal(mensal, inicio, fim) {
   }
   return soma;
 }
-
-// Equipes é uma foto por mês, não um fluxo -- acumular vários meses deve
-// ser uma MÉDIA ponderada pelos dias de cada mês (mesma premissa de
-// DIAS_PREMISSA_MES do denominador de Produtividade), não uma soma bruta
-// (que produziria um "equipe-meses" sem significado prático). Um único mês
-// no intervalo devolve o próprio valor do mês (peso 1, sem diferença de
-// comportamento pros buckets de 1 mês só).
-function mediaEquipesPonderada(mensal, inicio, fim) {
-  var somaEquipeDias = null, somaDias = 0;
-  var ini = Math.max(0, inicio), lim = Math.min(mensal.length, fim);
-  for (var i = ini; i < lim; i++) {
-    if (mensal[i] === null || mensal[i] === undefined) continue;
-    somaEquipeDias = (somaEquipeDias === null ? 0 : somaEquipeDias) + mensal[i] * DIAS_PREMISSA_MES[i];
-    somaDias += DIAS_PREMISSA_MES[i];
-  }
-  return somaDias ? somaEquipeDias / somaDias : null;
-}
-
-// produtividade soma equipe-DIAS no intervalo (não só equipes), mesma
-// premissa de DIAS_PREMISSA_MES que calcularTotalAno já usa pro ano
-// inteiro -- generalizada aqui pra qualquer intervalo de meses.
-function somarIntervaloEquipeDias(mensal, inicio, fim) {
-  var soma = null;
-  var ini = Math.max(0, inicio), lim = Math.min(mensal.length, fim);
-  for (var i = ini; i < lim; i++) {
-    if (mensal[i] === null || mensal[i] === undefined) continue;
-    soma = (soma === null ? 0 : soma) + mensal[i] * DIAS_PREMISSA_MES[i];
-  }
-  return soma;
-}
-
+${TRECHO_EQUIPES}
 // Valor de UMA série (previsto/realizado/total), pra UMA dimensão, bucketado
 // num intervalo [inicio, fim) arbitrário -- generaliza calcularMensal/
 // calcularTotalAno (que só sabem fazer "todos os 12 meses" ou "1 mês").
