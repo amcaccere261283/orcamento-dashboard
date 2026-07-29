@@ -1909,7 +1909,15 @@ test('every filter change (recorte or Alertas-specific) recalculates BOTH recalc
   // change em si, que chama recalcularTabela/recalcularAlertas.
   assert.doesNotMatch(scriptTabela, /cfg\.aoMudar/, 'cfg.aoMudar (o mecanismo antigo, um campo por config) não deve existir mais em lugar nenhum');
   assert.match(scriptTabela, /aoMudar\(cfg\);\s*\n\s*\}\);/, 'o handler de mudança de checkbox deve chamar aoMudar(cfg) incondicionalmente ao final, sem depender de nenhum cfg.aoMudar');
-  assert.match(scriptTabela, /function aoMudarFiltroOrcamento\(cfg\) \{[\s\S]*?recalcularTabela\(\);\s*\n\s*recalcularAlertas\(\);\s*\n\}/, 'aoMudarFiltroOrcamento (o callback de verdade usado por esta página) deve chamar as duas funções incondicionalmente ao final');
+  // O [\s\S]*? original era lazy mas sem barreira: como recalcularTabela()/
+  // recalcularAlertas() também fecham limparFiltros e montarDashboard (fim
+  // idêntico), um corte acidental no corpo desta função (por ex. um "}" a
+  // mais/a menos) faria o match pular pro corpo de OUTRA função e o teste
+  // continuar passando por engano. A barreira (?!\r?\n\}) proíbe atravessar
+  // um "}" no início de linha, então só casa dentro do próprio corpo de
+  // aoMudarFiltroOrcamento -- ver também a nota logo abaixo desta asserção
+  // sobre o acoplamento com render-shell.js.
+  assert.match(scriptTabela, /function aoMudarFiltroOrcamento\(cfg\) \{(?:(?!\r?\n\})[\s\S])*recalcularTabela\(\);\r?\n  recalcularAlertas\(\);\r?\n\}/, 'aoMudarFiltroOrcamento (o callback de verdade usado por esta página) deve chamar as duas funções incondicionalmente ao final');
   assert.match(scriptTabela, /FILTROS_CONFIG\.forEach\(function \(cfg\) \{ montarFiltroMulti\(cfg, registros, filtrosSelecionados, aoMudarFiltroOrcamento\); \}\);/, 'os filtros de recorte devem passar aoMudarFiltroOrcamento como callback');
   assert.match(scriptTabela, /FILTROS_ALERTAS_CONFIG\.forEach\(function \(cfg\) \{ montarFiltroMulti\(cfg, registros, filtrosAlertas, aoMudarFiltroOrcamento\); \}\);/, 'os filtros da aba Alertas também devem passar aoMudarFiltroOrcamento como callback -- é isso que corrige o bug de recorte nunca atualizar Alertas');
 });
