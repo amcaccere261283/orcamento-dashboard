@@ -550,7 +550,7 @@ git commit -m "Wire the ORÇAMENTO chart into a Tabela/Gráfico tab toggle"
 
 Run (PowerShell):
 ```
-$env:ORCAMENTO_SENHA = "spt@2026"; node tools/orcamento/build-dashboard.js
+$env:ORCAMENTO_SENHA = '<a senha -- nunca em arquivo do repo>'; node tools/orcamento/build-dashboard.js
 ```
 
 - [ ] **Step 2: Serve locally and verify via Playwright**

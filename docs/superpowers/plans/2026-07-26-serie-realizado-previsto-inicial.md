@@ -550,7 +550,7 @@ Expected: PASS, every test.
 - [ ] **Step 2: Rebuild with the real password**
 
 ```bash
-ORCAMENTO_SENHA='spt@2026' node tools/orcamento/build-dashboard.js
+ORCAMENTO_SENHA='<a senha -- nunca em arquivo do repo>' node tools/orcamento/build-dashboard.js
 ```
 
 - [ ] **Step 3: Visual check with Playwright**

@@ -487,12 +487,12 @@ Expected: PASS, 0 falhas, em todos os arquivos de teste do repositório (não s�
 
 - [ ] **Step 2: Rebuild real contra a planilha ao vivo**
 
-Run: `ORCAMENTO_SENHA=spt@2026 node tools/orcamento/build-dashboard.js` (ajuste o caminho de saída se o script pedir; ver `tools/orcamento/build-dashboard.js` pro nome exato do argumento/variável de output se não for automático).
+Run: `ORCAMENTO_SENHA='<a senha -- nunca em arquivo do repo>' node tools/orcamento/build-dashboard.js` (ajuste o caminho de saída se o script pedir; ver `tools/orcamento/build-dashboard.js` pro nome exato do argumento/variável de output se não for automático).
 Expected: sucesso, gera `dist/orcamento-dashboard.html`.
 
 - [ ] **Step 3: Verificação no navegador**
 
-Abra `dist/orcamento-dashboard.html`, digite a senha (`spt@2026`), e confirme:
+Abra `dist/orcamento-dashboard.html`, digite a senha (a senha, fora do repo), e confirme:
 - A aba Alertas mostra só 1 seletor "Dimensão" no total (o da barra de cima) -- não 2.
 - Trocar a dimensão da barra de cima muda o resultado da aba Alertas sem precisar de nenhum controle próprio nela.
 - "Tendência ÷ Previsto — Acumulado até Vigente" não aparece mais artificialmente baixo/zerado nos SUPs que antes mostravam isso -- os números devem bater com Realizado nos meses passados + a linha T no vigente/futuro.
