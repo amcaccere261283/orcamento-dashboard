@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio } = require('../tools/comum/render-shell.js');
+const { cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio, scriptFiltros } = require('../tools/comum/render-shell.js');
 
 test('cssBase traz os tokens e os componentes compartilhados', () => {
   const css = cssBase();
@@ -123,4 +123,27 @@ test('a casca não carrega nada de origem externa nem senha embutida', () => {
   const tudo = cssBase() + scriptDesbloqueio() + markupFiltros([]) + markupAbas([]);
   assert.doesNotMatch(tudo, /https?:\/\/(?!www\.w3\.org)/);
   assert.doesNotMatch(tudo, /senha\s*=\s*['"][^'"]/);
+});
+
+test('scriptFiltros traz todas as primitivas de filtro esperadas, como declarações globais', () => {
+  const js = scriptFiltros();
+  for (const nome of [
+    'escapeHtml', 'categoriaTipologia', 'linhasDistintas', 'capitalizarPalavras',
+    'opcoesFiltro', 'atualizarRotuloFiltro', 'normalizarBusca', 'aplicarSelecaoExclusiva',
+    'filtroExclui', 'indicesFiltrados', 'montarFiltroMulti', 'configurarAberturaFiltrosMulti',
+  ]) {
+    assert.match(js, new RegExp('function ' + nome + '\\('));
+  }
+});
+
+test('scriptFiltros não vaza senha nem dado identificador', () => {
+  const js = scriptFiltros();
+  assert.doesNotMatch(js, /senha\s*=\s*['"][^'"]/);
+  assert.doesNotMatch(js, /SUP-/);
+});
+
+test('montarFiltroMulti recebe estado e aoMudar como parâmetros explícitos -- sem fallback pra nenhum global fixo (é o que permite reusar entre páginas com estados diferentes)', () => {
+  const js = scriptFiltros();
+  assert.match(js, /function montarFiltroMulti\(cfg, registros, estado, aoMudar\)/);
+  assert.doesNotMatch(js, /estado \|\| filtrosSelecionados/);
 });

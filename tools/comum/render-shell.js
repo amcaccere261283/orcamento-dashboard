@@ -450,10 +450,249 @@ function scriptDesbloqueio() {
   return SCRIPT_CLIENTE_GATE;
 }
 
+// Lógica de interação dos filtros multi-select (Set de valores selecionados
+// por campo, indicesFiltrados, montarFiltroMulti). Extraída de
+// tools/orcamento/render-dashboard.js na Fase 2 do Planejamento Semanal (ver
+// docs/superpowers/specs/2026-07-29-planejamento-semanal-filtros-design.md)
+// -- markupFiltros()/markupFiltroMulti() (acima) só geram o esqueleto HTML
+// vazio; isto aqui é o que liga os checkboxes de verdade.
+//
+// Generalizado na extração (por isso o HTML do orçamento deixou de ser
+// byte-a-byte idêntico ao golden anterior -- o golden foi regenerado de
+// propósito, com o diff revisado linha a linha, ver
+// test/orcamento-html-inalterado.test.js):
+//   - `estado` (chave -> Set de valores marcados) é sempre parâmetro
+//     explícito agora, nunca cai de volta pra um global fixo -- cada página
+//     tem o seu (filtrosSelecionados/filtrosAlertas no orçamento).
+//   - montarFiltroMulti ganhou `aoMudar(cfg)`, chamado no fim de toda
+//     mudança de checkbox -- antes disso ficar recalcularTabela() e
+//     recalcularAlertas() hardcoded, o que impedia qualquer outra página de
+//     reusar a função (ela não tem Tabela nem Alertas).
+const SCRIPT_CLIENTE_FILTROS = `
+function escapeHtml(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+var TIPOLOGIAS_SONDAGEM_ESPECIAL = { CPTU: true, BL: true, SH: true, VT: true };
+function categoriaTipologia(tipologia) {
+  var key = String(tipologia || '').trim().toUpperCase();
+  if (key === 'LAB.C') return 'labConvencional';
+  if (key === 'LAB.E') return 'labEspecial';
+  if (TIPOLOGIAS_SONDAGEM_ESPECIAL[key]) return 'sondagemEspecial';
+  return 'sondagemConvencional';
+}
+
+function linhasDistintas(registros, campo) {
+  var vistos = {};
+  var resultado = [];
+  registros.forEach(function (r) {
+    var v = r[campo];
+    if (v && !vistos[v]) { vistos[v] = true; resultado.push(v); }
+  });
+  resultado.sort();
+  return resultado;
+}
+
+function capitalizarPalavras(texto) {
+  return (texto || '').toString().toLowerCase().split(' ').map(function (palavra) {
+    return palavra ? palavra.charAt(0).toUpperCase() + palavra.slice(1) : palavra;
+  }).join(' ');
+}
+
+// cfg.chave === 'tipologia' com estado.categoria não-vazio: cascata em
+// relação à Categoria, listando só as tipologias que pertencem à(s)
+// categoria(s) marcada(s). Só se aplica se a página tiver os dois campos
+// (categoria e tipologia) na mesma config -- senão estado.categoria é
+// undefined e o \`&&\` curto-circuita antes de acessar .size.
+function opcoesFiltro(cfg, registros, estado) {
+  if (cfg.opcoesFixas) return cfg.opcoesFixas;
+
+  if (cfg.chave === 'tipologia' && estado.categoria && estado.categoria.size > 0) {
+    var tipologiasDaCategoria = linhasDistintas(registros, 'tipologia').filter(function (t) {
+      return estado.categoria.has(categoriaTipologia(t));
+    });
+    return tipologiasDaCategoria.map(function (v) { return { valor: v, rotulo: v }; });
+  }
+
+  if (cfg.rotuloComposto) {
+    var vistoSup = {};
+    var opcoes = [];
+    registros.forEach(function (r) {
+      if (!r[cfg.campo] || vistoSup[r[cfg.campo]]) return;
+      vistoSup[r[cfg.campo]] = true;
+      var partes = [r.tomador, r.escopo].filter(Boolean).join(' / ');
+      opcoes.push({ valor: r[cfg.campo], rotulo: partes ? r[cfg.campo] + ' — ' + partes : r[cfg.campo] });
+    });
+    opcoes.sort(function (a, b) { return a.valor < b.valor ? -1 : a.valor > b.valor ? 1 : 0; });
+    return opcoes;
+  }
+
+  if (cfg.rotuloCapitalizado) {
+    return linhasDistintas(registros, cfg.campo).map(function (v) { return { valor: v, rotulo: capitalizarPalavras(v) }; });
+  }
+
+  return linhasDistintas(registros, cfg.campo).map(function (v) { return { valor: v, rotulo: v }; });
+}
+
+function atualizarRotuloFiltro(cfg, opcoes, estado) {
+  var trigger = document.querySelector('#' + cfg.id + ' .filtro-multi-trigger');
+  var seta = trigger.querySelector('.filtro-multi-seta');
+  var selecionados = estado[cfg.chave];
+  var texto;
+  if (selecionados.size === 0) {
+    texto = cfg.rotuloPadrao;
+  } else if (selecionados.size === 1) {
+    var valor = selecionados.values().next().value;
+    var opcao = opcoes.filter(function (o) { return o.valor === valor; })[0];
+    texto = opcao ? opcao.rotulo : valor;
+  } else {
+    texto = selecionados.size + ' selecionadas';
+  }
+  trigger.textContent = texto;
+  trigger.appendChild(seta);
+}
+
+function normalizarBusca(texto) {
+  var normalizado = (texto || '').toString().toLowerCase().normalize('NFD');
+  var resultado = '';
+  for (var i = 0; i < normalizado.length; i++) {
+    var codigo = normalizado.charCodeAt(i);
+    if (codigo < 768 || codigo > 879) resultado += normalizado[i];
+  }
+  return resultado;
+}
+
+function aplicarSelecaoExclusiva(estadoSet, valor) {
+  estadoSet.clear();
+  estadoSet.add(valor);
+}
+
+function filtroExclui(filtro, valor) {
+  return !!(filtro && filtro.size > 0 && !filtro.has(valor));
+}
+
+function indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem) {
+  var indices = [];
+  registros.forEach(function (registro, indice) {
+    if (filtroExclui(filtroTipologia, registro.tipologia)) return;
+    if (filtroExclui(filtroCategoria, categoriaTipologia(registro.tipologia))) return;
+    if (filtroExclui(filtroGrupo, registro.grupo)) return;
+    if (filtroExclui(filtroSup, registro.sup)) return;
+    if (filtroExclui(filtroOrigem, registro.origem)) return;
+    indices.push(indice);
+  });
+  return indices;
+}
+
+// aoMudar(cfg): chamado 1x por mudança de checkbox, depois do Set/rótulo já
+// atualizados (e depois do remount de exclusivo, se for o caso) -- é onde a
+// página decide o que recalcular. estado é sempre obrigatório (chave ->
+// Set); cada página passa o seu (não existe mais fallback pra um global).
+function montarFiltroMulti(cfg, registros, estado, aoMudar) {
+  var opcoes = opcoesFiltro(cfg, registros, estado);
+  var valoresValidos = {};
+  opcoes.forEach(function (o) { valoresValidos[o.valor] = true; });
+  estado[cfg.chave].forEach(function (v) {
+    if (!valoresValidos[v]) estado[cfg.chave].delete(v);
+  });
+
+  var painel = document.querySelector('#' + cfg.id + ' .filtro-multi-painel');
+  var listaHtml = opcoes.length
+    ? opcoes.map(function (o) {
+        var marcado = estado[cfg.chave].has(o.valor) ? ' checked' : '';
+        return '<label class="filtro-multi-item"><input type="checkbox" value="' + escapeHtml(o.valor) + '"' + marcado + '>' + escapeHtml(o.rotulo) + '</label>';
+      }).join('')
+    : '<div class="filtro-multi-vazio">Nenhuma opção</div>';
+  painel.innerHTML =
+    (opcoes.length ? '<input type="text" class="filtro-multi-busca" placeholder="Buscar..." autocomplete="off">' : '') +
+    listaHtml +
+    '<div class="filtro-multi-vazio filtro-multi-vazio-busca" hidden>Nenhum resultado</div>';
+
+  var busca = painel.querySelector('.filtro-multi-busca');
+  if (busca) {
+    busca.addEventListener('input', function () {
+      var termo = normalizarBusca(busca.value);
+      var algumVisivel = false;
+      painel.querySelectorAll('.filtro-multi-item').forEach(function (item) {
+        var combina = normalizarBusca(item.textContent).indexOf(termo) !== -1;
+        item.style.display = combina ? '' : 'none';
+        if (combina) algumVisivel = true;
+      });
+      painel.querySelector('.filtro-multi-vazio-busca').hidden = algumVisivel || termo === '';
+    });
+  }
+
+  painel.querySelectorAll('input[type="checkbox"]').forEach(function (checkbox) {
+    checkbox.addEventListener('change', function () {
+      if ((cfg.minimoUm || cfg.exclusivo) && !checkbox.checked && estado[cfg.chave].size === 1) {
+        checkbox.checked = true;
+        return;
+      }
+      if (checkbox.checked) {
+        if (cfg.exclusivo) aplicarSelecaoExclusiva(estado[cfg.chave], checkbox.value);
+        else estado[cfg.chave].add(checkbox.value);
+      } else {
+        estado[cfg.chave].delete(checkbox.value);
+      }
+      atualizarRotuloFiltro(cfg, opcoes, estado);
+      if (cfg.exclusivo) montarFiltroMulti(cfg, registros, estado, aoMudar);
+      aoMudar(cfg);
+    });
+  });
+  atualizarRotuloFiltro(cfg, opcoes, estado);
+}
+
+function configurarAberturaFiltrosMulti() {
+  document.querySelectorAll('.filtro-multi-trigger').forEach(function (trigger) {
+    trigger.addEventListener('click', function (evento) {
+      evento.stopPropagation();
+      var container = trigger.closest('.filtro-multi');
+      var jaAberto = container.classList.contains('aberto');
+      document.querySelectorAll('.filtro-multi.aberto').forEach(function (el) {
+        el.classList.remove('aberto');
+        el.querySelector('.filtro-multi-painel').hidden = true;
+      });
+      if (!jaAberto) {
+        container.classList.add('aberto');
+        var painelAberto = container.querySelector('.filtro-multi-painel');
+        painelAberto.hidden = false;
+        var buscaAberto = painelAberto.querySelector('.filtro-multi-busca');
+        if (buscaAberto) {
+          buscaAberto.value = '';
+          painelAberto.querySelectorAll('.filtro-multi-item').forEach(function (item) { item.style.display = ''; });
+          var vazioBusca = painelAberto.querySelector('.filtro-multi-vazio-busca');
+          if (vazioBusca) vazioBusca.hidden = true;
+          buscaAberto.focus();
+        }
+      }
+    });
+  });
+  document.querySelectorAll('.filtro-multi-painel').forEach(function (painel) {
+    painel.addEventListener('click', function (evento) { evento.stopPropagation(); });
+  });
+  document.addEventListener('click', function () {
+    document.querySelectorAll('.filtro-multi.aberto').forEach(function (el) {
+      el.classList.remove('aberto');
+      el.querySelector('.filtro-multi-painel').hidden = true;
+    });
+  });
+}
+`;
+
+// O JS de cliente da lógica de filtros -- ver o comentário grande acima de
+// SCRIPT_CLIENTE_FILTROS. Depende de a página já ter as <div class="filtro-multi">
+// no HTML (markupFiltros, acima, já cuida disso) e de rodar ANTES de
+// qualquer script que CHAME montarFiltroMulti/indicesFiltrados/etc.
+function scriptFiltros() {
+  return SCRIPT_CLIENTE_FILTROS;
+}
+
 module.exports = {
   cssBase,
   markupCabecalho,
   markupFiltros,
   markupAbas,
   scriptDesbloqueio,
+  scriptFiltros,
 };
