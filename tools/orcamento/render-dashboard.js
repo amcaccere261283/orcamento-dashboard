@@ -2,7 +2,7 @@
 const { formatarMesAno, calcularVigenteIdx } = require('../comum/datas.js');
 const { cifrarComSenha } = require('../comum/criptografia.js');
 const {
-  cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio,
+  cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio, scriptFiltros,
 } = require('../comum/render-shell.js');
 const { trechosParaCliente } = require('../comum/calculo-equipes.js');
 
@@ -41,10 +41,6 @@ function renderCabecalhoMeses(periodos) {
 // servidor, esses nomes apareceriam em texto puro no código-fonte da
 // página mesmo sem a senha certa.
 const SCRIPT_CLIENTE_TABELA = `
-function escapeHtml(valor) {
-  return String(valor === null || valor === undefined ? '' : valor)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 // casasDecimais default 2 (mantém o comportamento de sempre pra quem já
 // chama sem o argumento) -- Equipes usa 0 (arredonda pra inteiro: "número
@@ -477,33 +473,6 @@ function removerZerosFinaisNaoReportados(mensal) {
 function cortarAcumuladoNoUltimoDado(acumulado, mensal) {
   var ultimo = ultimoIndiceComDado(mensal);
   return acumulado.map(function (v, i) { return i <= ultimo ? v : null; });
-}
-
-// Um filtro é um Set de valores selecionados -- Set vazio (ou ausente)
-// significa "sem filtro" (não exclui nada), igual ao "" do <select> antigo.
-// Com o filtro ativo, um valor passa se estiver em QUALQUER um dos
-// selecionados (OR dentro do mesmo filtro -- "Tipologia = SP ou ST"),
-// combinando com AND entre filtros diferentes (mesmo esquema de sempre).
-function filtroExclui(filtro, valor) {
-  return !!(filtro && filtro.size > 0 && !filtro.has(valor));
-}
-
-// Devolve os índices de \`registros\` que combinam com os filtros de
-// tipologia/categoria/grupo/SUP/origem atuais, calculada aqui direto sobre
-// os registros crus, sem depender de uma linha <tr> já renderizada, pra o
-// gráfico poder agregar o recorte atual sem precisar de uma linha "molde"
-// no DOM.
-function indicesFiltrados(registros, filtroTipologia, filtroCategoria, filtroGrupo, filtroSup, filtroOrigem) {
-  var indices = [];
-  registros.forEach(function (registro, indice) {
-    if (filtroExclui(filtroTipologia, registro.tipologia)) return;
-    if (filtroExclui(filtroCategoria, categoriaTipologia(registro.tipologia))) return;
-    if (filtroExclui(filtroGrupo, registro.grupo)) return;
-    if (filtroExclui(filtroSup, registro.sup)) return;
-    if (filtroExclui(filtroOrigem, registro.origem)) return;
-    indices.push(indice);
-  });
-  return indices;
 }
 
 // Mesmo cinza claro usado na linha "Previsto Inicial" da tabela (.linha-previsto-inicial),
@@ -1134,14 +1103,6 @@ function tipologiaColor(tipologia) {
 // categorias; entre as sondagens, CPTu/BL/SH/VT são "Especial" e todo o
 // resto (SP, SM/SM.F/SR, ST, PI) é "Convencional" -- regra confirmada com
 // o usuário, não uma inferência.
-var TIPOLOGIAS_SONDAGEM_ESPECIAL = { CPTU: true, BL: true, SH: true, VT: true };
-function categoriaTipologia(tipologia) {
-  var key = String(tipologia || '').trim().toUpperCase();
-  if (key === 'LAB.C') return 'labConvencional';
-  if (key === 'LAB.E') return 'labEspecial';
-  if (TIPOLOGIAS_SONDAGEM_ESPECIAL[key]) return 'sondagemEspecial';
-  return 'sondagemConvencional';
-}
 
 var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência', realizadoPrevistoInicial: 'Realizado + Previsto Inicial' };
 // ORDEM_SERIES gera as linhas por registro da TABELA (renderBlocosDimensao)
@@ -1467,230 +1428,28 @@ FILTROS_CONFIG.forEach(function (cfg) { filtrosSelecionados[cfg.chave] = new Set
 filtrosSelecionados.dimensao.add('financeiro');
 SERIES_PADRAO_ATIVAS.forEach(function (s) { filtrosSelecionados.serie.add(s); });
 
-// "CONTRATO VIGENTE" -> "Contrato Vigente" -- só cosmético pro rótulo do
-// checkbox (o VALOR que efetivamente filtra continua o texto original em
-// caixa alta, exatamente como vem da coluna ORIGEM da MATRIZ). Sem regex
-// com \\s/\\S de propósito -- esses escapes viram "s"/"S" literal depois
-// de atravessar o template literal externo deste arquivo (mesma pegadinha
-// de \\r/\\n/\\. documentada nas outras funções client-side), então
-// split/join simples é mais seguro que arriscar o regex sair errado.
-function capitalizarPalavras(texto) {
-  return (texto || '').toString().toLowerCase().split(' ').map(function (palavra) {
-    return palavra ? palavra.charAt(0).toUpperCase() + palavra.slice(1) : palavra;
-  }).join(' ');
-}
-
-function opcoesFiltro(cfg, registros) {
-  if (cfg.opcoesFixas) return cfg.opcoesFixas;
-
-  if (cfg.chave === 'tipologia' && filtrosSelecionados.categoria.size > 0) {
-    var tipologiasDaCategoria = linhasDistintas(registros, 'tipologia').filter(function (t) {
-      return filtrosSelecionados.categoria.has(categoriaTipologia(t));
-    });
-    return tipologiasDaCategoria.map(function (v) { return { valor: v, rotulo: v }; });
+// Reproduz exatamente o que o final de montarFiltroMulti fazia hardcoded
+// antes da extração pra tools/comum/render-shell.js: cascata de
+// categoria->tipologia, rebuild da estrutura da tabela quando a dimensão
+// muda, e recálculo incondicional de Tabela + Alertas. Serve tanto pros
+// filtros de recorte (FILTROS_CONFIG) quanto pros da aba Alertas
+// (FILTROS_ALERTAS_CONFIG) -- pra estes últimos as duas condições de cima
+// nunca batem (nenhum cfg de Alertas tem chave 'categoria' nem id
+// 'seletor-dimensao'), então só o recálculo final roda, igual sempre foi.
+function aoMudarFiltroOrcamento(cfg) {
+  if (cfg.chave === 'categoria') {
+    var cfgTipologia = FILTROS_CONFIG.filter(function (c) { return c.chave === 'tipologia'; })[0];
+    montarFiltroMulti(cfgTipologia, window.__REGISTROS__, filtrosSelecionados, aoMudarFiltroOrcamento);
   }
-
-  if (cfg.rotuloComposto) {
-    var vistoSup = {};
-    var opcoes = [];
-    registros.forEach(function (r) {
-      if (!r[cfg.campo] || vistoSup[r[cfg.campo]]) return;
-      vistoSup[r[cfg.campo]] = true;
-      var partes = [r.tomador, r.escopo].filter(Boolean).join(' / ');
-      opcoes.push({ valor: r[cfg.campo], rotulo: partes ? r[cfg.campo] + ' — ' + partes : r[cfg.campo] });
-    });
-    opcoes.sort(function (a, b) { return a.valor < b.valor ? -1 : a.valor > b.valor ? 1 : 0; });
-    return opcoes;
+  if (cfg.id === 'seletor-dimensao') {
+    document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
   }
-
-  if (cfg.rotuloCapitalizado) {
-    return linhasDistintas(registros, cfg.campo).map(function (v) { return { valor: v, rotulo: capitalizarPalavras(v) }; });
-  }
-
-  return linhasDistintas(registros, cfg.campo).map(function (v) { return { valor: v, rotulo: v }; });
-}
-
-function atualizarRotuloFiltro(cfg, opcoes, estado) {
-  var estadoFiltros = estado || filtrosSelecionados;
-  var trigger = document.querySelector('#' + cfg.id + ' .filtro-multi-trigger');
-  var seta = trigger.querySelector('.filtro-multi-seta');
-  var selecionados = estadoFiltros[cfg.chave];
-  var texto;
-  if (selecionados.size === 0) {
-    texto = cfg.rotuloPadrao;
-  } else if (selecionados.size === 1) {
-    var valor = selecionados.values().next().value;
-    var opcao = opcoes.filter(function (o) { return o.valor === valor; })[0];
-    texto = opcao ? opcao.rotulo : valor;
-  } else {
-    texto = selecionados.size + ' selecionadas';
-  }
-  trigger.textContent = texto;
-  trigger.appendChild(seta);
-}
-
-// Normaliza texto pra comparação de busca -- minúsculas e sem acento, pra
-// "iguacu" achar "Iguaçu" e "sao" achar "São" sem o usuário precisar
-// digitar o acento certo. Filtra por código Unicode em vez de regex com
-// \\uNNNN pra evitar o problema de escapes sendo "comidos" pelo template
-// literal externo deste arquivo antes de virar código do cliente (mesma
-// pegadinha de \\r/\\n/\\. documentada nas outras funções client-side).
-function normalizarBusca(texto) {
-  var normalizado = (texto || '').toString().toLowerCase().normalize('NFD');
-  var resultado = '';
-  for (var i = 0; i < normalizado.length; i++) {
-    var codigo = normalizado.charCodeAt(i);
-    if (codigo < 768 || codigo > 879) resultado += normalizado[i];
-  }
-  return resultado;
-}
-
-// Modo "exclusivo" de um filtro-multi (Agrupar por / Dimensão da aba
-// Alertas): checar um valor esvazia o Set antes de adicionar, deixando
-// exatamente 1 marcado -- as 5 opções continuam sendo checkboxes (mesmo
-// componente visual dos outros filtros), só o COMPORTAMENTO vira
-// radio-like. Função separada (sem DOM) pra poder testar sozinha.
-function aplicarSelecaoExclusiva(estadoSet, valor) {
-  estadoSet.clear();
-  estadoSet.add(valor);
-}
-
-// Monta (ou remonta, ex.: depois de um refresh ao vivo com dados novos) o
-// painel de checkboxes de UM filtro -- descarta seleções que não existem
-// mais nas opções atuais em vez de deixá-las "fantasma" (marcadas mas sem
-// checkbox visível pra desmarcar). Painéis com opção têm um campo de busca
-// fixo no topo (útil sobretudo em SUP/Grupo/Tipologia, que podem ter muitas
-// opções) pra filtrar a lista por texto digitado, sem afetar a seleção.
-// O 3º parâmetro (estado) permite reusar este mesmo componente com um objeto
-// de seleção próprio (ex.: os filtros da aba Alertas), sem tocar no
-// filtrosSelecionados global que controla Tabela/Gráfico -- todo call site
-// existente omite o argumento e continua operando sobre o global de sempre.
-function montarFiltroMulti(cfg, registros, estado) {
-  var estadoFiltros = estado || filtrosSelecionados;
-  var opcoes = opcoesFiltro(cfg, registros);
-  var valoresValidos = {};
-  opcoes.forEach(function (o) { valoresValidos[o.valor] = true; });
-  estadoFiltros[cfg.chave].forEach(function (v) {
-    if (!valoresValidos[v]) estadoFiltros[cfg.chave].delete(v);
-  });
-
-  var painel = document.querySelector('#' + cfg.id + ' .filtro-multi-painel');
-  var listaHtml = opcoes.length
-    ? opcoes.map(function (o) {
-        var marcado = estadoFiltros[cfg.chave].has(o.valor) ? ' checked' : '';
-        return '<label class="filtro-multi-item"><input type="checkbox" value="' + escapeHtml(o.valor) + '"' + marcado + '>' + escapeHtml(o.rotulo) + '</label>';
-      }).join('')
-    : '<div class="filtro-multi-vazio">Nenhuma opção</div>';
-  painel.innerHTML =
-    (opcoes.length ? '<input type="text" class="filtro-multi-busca" placeholder="Buscar..." autocomplete="off">' : '') +
-    listaHtml +
-    '<div class="filtro-multi-vazio filtro-multi-vazio-busca" hidden>Nenhum resultado</div>';
-
-  var busca = painel.querySelector('.filtro-multi-busca');
-  if (busca) {
-    busca.addEventListener('input', function () {
-      var termo = normalizarBusca(busca.value);
-      var algumVisivel = false;
-      painel.querySelectorAll('.filtro-multi-item').forEach(function (item) {
-        var combina = normalizarBusca(item.textContent).indexOf(termo) !== -1;
-        item.style.display = combina ? '' : 'none';
-        if (combina) algumVisivel = true;
-      });
-      painel.querySelector('.filtro-multi-vazio-busca').hidden = algumVisivel || termo === '';
-    });
-  }
-
-  painel.querySelectorAll('input[type="checkbox"]').forEach(function (checkbox) {
-    checkbox.addEventListener('change', function () {
-      // Dimensão (e qualquer filtro exclusivo) nunca pode ficar sem nenhuma
-      // marcada -- não faz sentido mostrar uma tabela sem nenhum valor, nem
-      // um exclusivo sem opção escolhida. Trava a desmarcação da última em
-      // vez de deixar o Set esvaziar.
-      if ((cfg.minimoUm || cfg.exclusivo) && !checkbox.checked && estadoFiltros[cfg.chave].size === 1) {
-        checkbox.checked = true;
-        return;
-      }
-      if (checkbox.checked) {
-        if (cfg.exclusivo) aplicarSelecaoExclusiva(estadoFiltros[cfg.chave], checkbox.value);
-        else estadoFiltros[cfg.chave].add(checkbox.value);
-      } else {
-        estadoFiltros[cfg.chave].delete(checkbox.value);
-      }
-      atualizarRotuloFiltro(cfg, opcoes, estadoFiltros);
-      // Exclusivo mudou -- remonta o painel pra refletir visualmente que só
-      // 1 checkbox ficou marcado (o Set já mudou, mas o atributo "checked"
-      // dos outros checkboxes não se atualiza sozinho).
-      if (cfg.exclusivo) montarFiltroMulti(cfg, registros, estado);
-      // Categoria mudou -- remonta o painel de Tipologia (cascata) pra
-      // refletir a lista nova de opções válidas, e descartar qualquer
-      // tipologia marcada que não pertença mais à(s) categoria(s) atual(is).
-      if (cfg.chave === 'categoria') {
-        var cfgTipologia = FILTROS_CONFIG.filter(function (c) { return c.chave === 'tipologia'; })[0];
-        montarFiltroMulti(cfgTipologia, registros);
-      }
-      // Dimensão mudou -- a quantidade de linhas por registro depende de
-      // quantas estão marcadas, então a estrutura da tabela (não só os
-      // valores) precisa ser remontada antes do preenchimento normal.
-      if (cfg.id === 'seletor-dimensao') {
-        document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(window.__REGISTROS__, dimensoesEmOrdem(filtrosSelecionados.dimensao));
-      }
-      recalcularTabela();
-      recalcularAlertas();
-    });
-  });
-  atualizarRotuloFiltro(cfg, opcoes, estadoFiltros);
+  recalcularTabela();
+  recalcularAlertas();
 }
 
 function montarTodosFiltrosMulti(registros) {
-  FILTROS_CONFIG.forEach(function (cfg) { montarFiltroMulti(cfg, registros); });
-}
-
-// Abre/fecha o painel ao clicar no botão-gatilho (fechando qualquer outro
-// que já estivesse aberto) e fecha ao clicar fora -- ligado uma vez só, no
-// carregamento (os botões-gatilho são fixos; só o CONTEÚDO do painel é
-// remontado por montarFiltroMulti).
-function configurarAberturaFiltrosMulti() {
-  document.querySelectorAll('.filtro-multi-trigger').forEach(function (trigger) {
-    trigger.addEventListener('click', function (evento) {
-      evento.stopPropagation();
-      var container = trigger.closest('.filtro-multi');
-      var jaAberto = container.classList.contains('aberto');
-      document.querySelectorAll('.filtro-multi.aberto').forEach(function (el) {
-        el.classList.remove('aberto');
-        el.querySelector('.filtro-multi-painel').hidden = true;
-      });
-      if (!jaAberto) {
-        container.classList.add('aberto');
-        var painelAberto = container.querySelector('.filtro-multi-painel');
-        painelAberto.hidden = false;
-        // Reabrir sempre limpo -- se o usuário buscou algo da última vez
-        // que abriu esse painel, não faz sentido a lista continuar
-        // filtrada (ou o campo continuar com texto) numa abertura nova.
-        var buscaAberto = painelAberto.querySelector('.filtro-multi-busca');
-        if (buscaAberto) {
-          buscaAberto.value = '';
-          painelAberto.querySelectorAll('.filtro-multi-item').forEach(function (item) { item.style.display = ''; });
-          var vazioBusca = painelAberto.querySelector('.filtro-multi-vazio-busca');
-          if (vazioBusca) vazioBusca.hidden = true;
-          buscaAberto.focus();
-        }
-      }
-    });
-  });
-  // O painel (container fixo -- só o conteúdo dos checkboxes é remontado
-  // por montarFiltroMulti) para a propagação de qualquer clique dentro
-  // dele, senão marcar um checkbox borbulharia até o listener do document
-  // logo abaixo e fecharia o painel a cada clique, impedindo marcar mais
-  // de uma opção.
-  document.querySelectorAll('.filtro-multi-painel').forEach(function (painel) {
-    painel.addEventListener('click', function (evento) { evento.stopPropagation(); });
-  });
-  document.addEventListener('click', function () {
-    document.querySelectorAll('.filtro-multi.aberto').forEach(function (el) {
-      el.classList.remove('aberto');
-      el.querySelector('.filtro-multi-painel').hidden = true;
-    });
-  });
+  FILTROS_CONFIG.forEach(function (cfg) { montarFiltroMulti(cfg, registros, filtrosSelecionados, aoMudarFiltroOrcamento); });
 }
 
 function recalcularTabela() {
@@ -1774,7 +1533,7 @@ function limparFiltros() {
 // registros -- monta a tabela inteira e liga os filtros/botões.
 function montarDashboard(registros) {
   montarTodosFiltrosMulti(registros);
-  FILTROS_ALERTAS_CONFIG.forEach(function (cfg) { montarFiltroMulti(cfg, registros, filtrosAlertas); });
+  FILTROS_ALERTAS_CONFIG.forEach(function (cfg) { montarFiltroMulti(cfg, registros, filtrosAlertas, aoMudarFiltroOrcamento); });
   configurarAberturaFiltrosMulti();
   document.getElementById('corpo-tabela').innerHTML = renderCorpoTabela(registros, dimensoesEmOrdem(filtrosSelecionados.dimensao));
   document.getElementById('limpar-filtros').addEventListener('click', limparFiltros);
@@ -2181,7 +1940,7 @@ ${markupFiltros(FILTROS_ALERTAS, { recuo: '      ', classes: 'filtros-alertas' }
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx};</script>
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
   <script>${scriptDesbloqueio()}</script>
-  <script>${SCRIPT_CLIENTE_TABELA}</script>
+  <script>${scriptFiltros()}${SCRIPT_CLIENTE_TABELA}</script>
 </body>
 </html>`;
 }
