@@ -69,6 +69,41 @@ retomar, parta destas descobertas em vez de investigar de novo:
   precisa de caminho próprio e parser novo — reaproveitaria `readXlsxSheet`/`listZipEntries`
   de `xlsx-reader.js`, mas não `parse-matriz.js`.
 
+## Planejamento Semanal (segunda página, publicada em 2026-07-29)
+
+`docs/planejamento-semanal.html` — aba 1 com o mês vigente dividido em 4 semanas, aba 2
+com o gráfico Balanço de massa (barras divergentes por tipologia). Build:
+`ORCAMENTO_SENHA='...' node tools/semanal/build-dashboard.js`, e **sempre**
+`cp dist/planejamento-semanal.html docs/planejamento-semanal.html` antes de commitar.
+`test/publicacao-docs-sincronizado.test.js` trava essa cópia para as duas páginas.
+
+A casca visual (`tools/comum/render-shell.js`) e os utilitários são compartilhados com o
+orçamento. `cssBase()` **não** é uma base neutra: cerca de 79 das 254 linhas são CSS
+exclusivo do orçamento, que a página semanal herda sem usar. Dividir exigiria regenerar o
+golden de propósito — está documentado no topo do próprio módulo.
+
+**A reconciliação da linha de base vive em `tools/comum/linha-base.js`**, e as duas páginas
+passam por ela. Não monte a chave `sup||tipologia` crua: `LAB.C` e `LAB.E` têm nomes
+diferentes no estudo, e 7 SUPs foram renomeados. Sem os mapas, 68 das 340 linhas viram
+"sem base", indistinguível de "contrato entrou depois do estudo" — foi o Critical que a
+revisão final pegou.
+
+### Pendências conhecidas
+
+**Fase 2 — os filtros.** O spec prometia "mesma barra de filtros e mesmo seletor de
+dimensão do orçamento" nas duas abas. **Não foi entregue.** Hoje a aba 1 tem dimensão fixa
+em `financeiro`, sem barra de filtros e sem agrupamento, e a aba 2 mostra todas as
+tipologias. `markupFiltros()` existe na casca e é deliberadamente não chamada. Publicado
+assim por decisão do dono em 2026-07-29; é o primeiro item da fase 2.
+
+**A página semanal não tem carimbo "Gerado em"**, ao contrário do orçamento. Sem ele não
+dá para confirmar um deploy pelo conteúdo — que é justamente a verificação que este
+arquivo exige por causa do incidente de 2026-07-22. Vale acrescentar.
+
+**`fecharMes` com semanas parcialmente nulas** faz média/soma só dos válidos. Ninguém
+exercita isso hoje (Realizado e Tendência são nulos até a planilha semanal existir), mas
+decida a semântica da semana corrente incompleta **antes** de escrever `parse-semanal.js`.
+
 ## Estilo de trabalho
 
 Vale o mesmo do repositório principal: decidir e implementar sem parar para perguntar
