@@ -3,15 +3,22 @@ const { mediaEquipesPonderada } = require('../comum/calculo-equipes.js');
 
 // Este módulo roda tanto no Node (testes) quanto embrulhado no navegador via
 // buildBrowserBundle -- por isso 'var'/'function', não 'const'/arrow (ver o
-// mesmo aviso em render-aba-semanal.js). O require acima está na forma que o
-// Node resolve sem problema, mas ATENÇÃO pra quem ligar este módulo ao bundle
-// (Task 10): a regex de transformaModulo em tools/comum/browser-bundle.js só
-// reescreve `require('./arquivo.js')` (mesmo diretório); `../comum/...` não
-// bate no padrão e ficaria um `require` literal no navegador -- ReferenceError
-// em produção. Duas saídas possíveis: estender a regex pra aceitar `../`, ou
-// reaproveitar o padrão de fonteParaCliente()/trechosParaCliente() que
-// render-dashboard.js já usa pra injetar mediaEquipesPonderada como global
-// antes deste módulo rodar (mesmo mecanismo, sem passar por MODULOS).
+// mesmo aviso em render-aba-semanal.js).
+//
+// O require acima é de um arquivo FORA do diretório que buildBrowserBundle
+// concatena (tools/comum/, não tools/semanal/) -- a regex de transformaModulo
+// em tools/comum/browser-bundle.js foi estendida pra reconhecer esse padrão e
+// simplesmente REMOVER a linha no bundle (não vira MODULOS['...']: calculo-
+// equipes.js não pode ser bundlado como um MODULOS comum porque importa o
+// módulo node:fs no próprio topo, usado só por trechosParaCliente()/
+// fonteParaCliente() -- ver o comentário de transformaModulo). Quem monta a
+// página (Task 10, em render-semanal.js) precisa injetar fonteParaCliente()
+// (mesmo mecanismo que tools/orcamento/render-dashboard.js já usa pra este
+// MESMO módulo) num <script> ANTES do bundle que contém compute-balanco.js,
+// pra que `mediaEquipesPonderada` já exista como função global quando este
+// código rodar. No Node (testes) o require funciona normalmente, sem
+// depender de nada disso -- ver a prova em
+// test/comum-browser-bundle.test.js ("compute-balanco.js bundlado...").
 
 // Gráfico Balanço de massa: um gráfico por tipologia, uma linha por SUP. A
 // base (linha central) é 'previsto' ou 'previstoInicial' -- Tendência NÃO
@@ -54,14 +61,24 @@ function equipesNoIntervalo(mensal, intervalo) {
   return mediaEquipesPonderada(mensal, intervalo.inicio, intervalo.fim);
 }
 
-// Previsto Inicial é uma foto do início do projeto: procura por (sup,
-// tipologia) exatos, não por índice de registro -- contratos que entraram
-// depois simplesmente não têm entrada aqui (ver a regra de semBase abaixo).
+// Previsto Inicial é uma foto do início do projeto: procura por uma "chave"
+// exata (sup + '||' + tipologia) -- MESMA convenção de
+// tools/orcamento/parse-baseline.js (`${sup}||${tipologia}` como chave do
+// Map) e de baselineParaCliente em tools/semanal/build-dashboard.js, que
+// serializa esse Map como `{ chave, equipes, volume, financeiro }` (porque
+// JSON.stringify não sabe serializar Map -- ver o comentário lá). Contratos
+// que entraram depois do estudo original simplesmente não têm chave aqui
+// (ver a regra de semBase abaixo).
+function chaveBaseline(sup, tipologia) {
+  return sup + '||' + tipologia;
+}
+
 function achaBaseline(baseline, sup, tipologia) {
+  var chave = chaveBaseline(sup, tipologia);
   var lista = baseline || [];
   for (var i = 0; i < lista.length; i++) {
     var item = lista[i];
-    if (item && item.sup === sup && item.tipologia === tipologia) return item;
+    if (item && item.chave === chave) return item;
   }
   return null;
 }

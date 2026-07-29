@@ -26,6 +26,26 @@ function transformaModulo(codigoFonte) {
     /const\s*\{([^}]+)\}\s*=\s*require\(['"]\.\/([^'"]+)['"]\);?\r?\n/g,
     (match, nomes, dependencia) => `const {${nomes.trim()}} = MODULOS['${dependencia}'];\n`
   );
+  // Dependência FORA do diretório do bundle (ex.: tools/semanal/compute-
+  // balanco.js consumindo tools/comum/calculo-equipes.js) -- buildBrowserBundle
+  // só concatena UM diretório (ver comentário no topo do arquivo), então isso
+  // nunca vira uma entrada de MODULOS; nem poderia sempre virar uma, porque
+  // alguns desses arquivos (caso de calculo-equipes.js) têm `require('node:fs')`
+  // no próprio topo, e bundlar isso como um MODULOS comum executaria aquele
+  // require na hora zero da IIFE, quebrando o bundle inteiro com
+  // ReferenceError no navegador -- não só este módulo, TODOS os que vierem
+  // depois dele no mesmo <script>.
+  //
+  // Em vez disso, a linha inteira é REMOVIDA: assume-se que os nomes
+  // destruturados já existem como função global na página antes deste bundle
+  // rodar -- mesmo padrão que tools/orcamento/render-dashboard.js já usa pra
+  // calculo-equipes.js hoje (fonteParaCliente(), injetado num <script>
+  // anterior). O require em si continua funcionando no Node normalmente, que
+  // nunca passa por esta função.
+  codigo = codigo.replace(
+    /const\s*\{[^}]+\}\s*=\s*require\(['"]\.\.\/[^'"]+['"]\);?\r?\n/g,
+    ''
+  );
   codigo = codigo.replace(/module\.exports\s*=\s*([\s\S]*?);\s*$/, 'return $1;');
   return codigo;
 }
