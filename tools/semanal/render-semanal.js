@@ -28,11 +28,12 @@ const ABAS_VISUALIZACAO = [
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>' },
 ];
 
-// Só compute-semanal.js por enquanto -- é o único módulo de tools/semanal/
-// que o navegador precisa hoje. Uma tarefa futura que adicionar outro
-// módulo de cliente entra nesta lista, respeitando a ordem de dependência
-// (ver o comentário no topo de buildBrowserBundle).
-const BUNDLE_ARQUIVOS = ['compute-semanal.js'];
+// render-aba-semanal.js consome compute-semanal.js (require('./compute-semanal.js'))
+// -- por isso vem depois na lista: a ordem aqui é a ordem de dependência, e
+// buildBrowserBundle não resolve isso sozinho (ver o comentário no topo dele).
+// Uma tarefa futura que adicionar outro módulo de cliente (ex.: o parser da
+// planilha semanal, ou a aba Balanço de massa) entra nesta lista do mesmo jeito.
+const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js'];
 
 // O gate de senha (scriptDesbloqueio, casca compartilhada) sempre chama
 // fecharTendenciaVigente(registros, vigenteIdx) e montarDashboard(registros)
