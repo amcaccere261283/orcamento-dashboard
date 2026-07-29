@@ -6,17 +6,20 @@ const {
   cssBase, markupCabecalho, markupAbas, scriptDesbloqueio,
 } = require('../comum/render-shell.js');
 const { buildBrowserBundle } = require('../comum/browser-bundle.js');
+const { fonteParaCliente } = require('../comum/calculo-equipes.js');
 
 // Esta é a 1ª entrega publicável da página nova: casca (cabeçalho + gate de
 // senha) e as duas abas da spec (Semanal / Balanço de massa). A aba Semanal
 // já monta a tabela do mês vigente em 4 semanas (ver SCRIPT_CLIENTE_SEMANAL,
-// montarDashboard); a aba Balanço de massa continua um <div> vazio que uma
-// tarefa futura preenche.
-// markupFiltros() NÃO entra aqui (ao contrário do orçamento): não faz
-// sentido oferecer um filtro antes de existir o que filtrar. Por isso a aba
-// Semanal, por ora, sempre agrega TODOS os registros (sem recorte) na
-// dimensão fixa 'financeiro' -- ver o comentário sobre DIMENSAO_PADRAO
-// abaixo.
+// montarDashboard); a Task 10 fecha a aba Balanço de massa, que agora desenha
+// de verdade (RenderAbaBalanco.renderAbaBalanco, chamada por
+// montarAbaBalanco) com seus próprios controles (período/base/dimensão/
+// somente ativos) embutidos no HTML que ela mesma produz -- não via
+// markupFiltros() da casca compartilhada.
+// markupFiltros() (da casca) continua NÃO entrando aqui: a aba Semanal, por
+// ora, sempre agrega TODOS os registros (sem recorte) na dimensão fixa
+// 'financeiro' -- ver o comentário sobre DIMENSAO_PADRAO abaixo. Só a aba
+// Balanço de massa ganhou controles nesta tarefa.
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -36,9 +39,18 @@ const ABAS_VISUALIZACAO = [
 // render-aba-semanal.js consome compute-semanal.js (require('./compute-semanal.js'))
 // -- por isso vem depois na lista: a ordem aqui é a ordem de dependência, e
 // buildBrowserBundle não resolve isso sozinho (ver o comentário no topo dele).
-// Uma tarefa futura que adicionar outro módulo de cliente (ex.: o parser da
-// planilha semanal, ou a aba Balanço de massa) entra nesta lista do mesmo jeito.
-const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js'];
+// Mesma regra para o par da Task 10: render-aba-balanco.js consome
+// compute-balanco.js (require('./compute-balanco.js')), então vem depois.
+//
+// compute-balanco.js TAMBÉM consome tools/comum/calculo-equipes.js
+// (mediaEquipesPonderada), um require '../' que o bundle REMOVE em vez de
+// reescrever (ver o comentário no topo de compute-balanco.js e em
+// transformaModulo, tools/comum/browser-bundle.js) -- por isso
+// fonteParaCliente() é injetada num <script> À PARTE, ANTES deste bundle,
+// lá embaixo em renderSemanal(). Sem isso a aba Balanço de massa quebra em
+// produção com ReferenceError, mesmo com os testes em Node passando (Node
+// resolve o require normalmente).
+const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js', 'compute-balanco.js', 'render-aba-balanco.js'];
 
 // O gate de senha (scriptDesbloqueio, casca compartilhada) sempre chama
 // fecharTendenciaVigente(registros, vigenteIdx) e montarDashboard(registros)
@@ -48,10 +60,12 @@ const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js'];
 // fecharTendenciaVigente NÃO é mais identidade pura (era, até a Task 8
 // consumir 'registros' de verdade -- ver achado abaixo): a página ainda não
 // tem nenhuma série "Tendência" própria pra fechar -- isso continua
-// conteúdo de uma tarefa futura (a aba Balanço de massa, ou uma versão
-// semanal do fechamento que o orçamento já faz). Não reaproveita a versão
-// do orçamento porque aquela mexe em campos (registro.total) que só fazem
-// sentido no contexto da tabela mensal dele.
+// conteúdo de uma tarefa futura (uma versão semanal do fechamento que o
+// orçamento já faz). A aba Balanço de massa (Task 10) NÃO precisa disso:
+// Tendência foi descartada explicitamente pelo dono do projeto como opção
+// de base (ver compute-balanco.js) -- só Previsto/Previsto Inicial entram.
+// Não reaproveita a versão do orçamento porque aquela mexe em campos
+// (registro.total) que só fazem sentido no contexto da tabela mensal dele.
 //
 // ACHADO (corrigido nesta task): o gate (scriptDesbloqueio, casca
 // compartilhada com o orçamento -- NÃO pode mudar, ver
@@ -64,33 +78,47 @@ const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js'];
 // montarDashboard não usava o argumento; a Task 8 usa, e sem desembrulhar
 // aqui a aba somaria sempre null (o objeto inteiro vira "registros[0]"
 // undefined). fecharTendenciaVigente agora desembrulha e guarda o baseline
-// em window.__BASELINE__ (não descarta -- fica pronto pra tarefa futura da
-// aba Balanço de massa, que ainda não foi escrita).
+// em window.__BASELINE__ -- é de lá que montarAbaBalanco (Task 10) lê,
+// quando a base escolhida é 'previstoInicial'.
 //
-// montarDashboard liga a troca de aba E desenha a aba Semanal (a Balanço de
-// massa continua vazia -- conteúdo de tarefa futura). Roda só DEPOIS que a
-// senha certa decifra os dados (chamado de dentro de tentarDesbloquear, em
+// montarDashboard liga a troca de aba E desenha as duas abas (Semanal e,
+// desde a Task 10, Balanço de massa). Roda só DEPOIS que a senha certa
+// decifra os dados (chamado de dentro de tentarDesbloquear, em
 // scriptDesbloqueio -- ver ../comum/render-shell.js): é a ÚNICA vez que
-// #secao-semanal recebe HTML, e ela recebe os registros já decifrados --
-// nunca em build (renderSemanal só cifra) nem antes do clique em
-// "Abrir", quando SUP/Grupo/Tomador/Tipologia ainda não existem em
-// texto plano no navegador.
+// #secao-semanal/#secao-balanco recebem HTML, e recebem os registros já
+// decifrados -- nunca em build (renderSemanal só cifra) nem antes do clique
+// em "Abrir", quando SUP/Grupo/Tomador/Tipologia ainda não existem em texto
+// plano no navegador.
 const SCRIPT_CLIENTE_SEMANAL = `
-// MODULOS['compute-semanal.js'] e MODULOS['render-aba-semanal.js'] já estão
-// definidos pelo bundle (ver o <script> anterior a este) -- guardados aqui
-// só pra este script (e tarefas futuras) não precisarem repetir a busca em
-// MODULOS. RenderAbaSemanal.renderAbaSemanal já embute a divisão em 4
-// semanas (compute-semanal.js), então ComputeSemanal fica sem uso direto
-// aqui -- mantido pro consumo futuro da aba Balanço de massa.
+// MODULOS['compute-semanal.js'], ['render-aba-semanal.js'],
+// ['compute-balanco.js'] e ['render-aba-balanco.js'] já estão definidos
+// pelo bundle (ver o <script> anterior a este) -- guardados aqui só pra
+// este script não precisar repetir a busca em MODULOS. RenderAbaSemanal.
+// renderAbaSemanal já embute a divisão em 4 semanas (compute-semanal.js),
+// então ComputeSemanal fica sem uso direto aqui. Mesma coisa pro par da
+// Task 10: RenderAbaBalanco.renderAbaBalanco já chama calcularLinhas por
+// dentro, então ComputeBalanco também fica sem uso direto aqui -- os dois
+// só existem pra deixar claro, pra quem ler o bundle no navegador, que
+// esses módulos estão carregados.
 var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaSemanal = MODULOS['render-aba-semanal.js'];
+var ComputeBalanco = MODULOS['compute-balanco.js'];
+var RenderAbaBalanco = MODULOS['render-aba-balanco.js'];
 
 // Fixa em 'financeiro' (mesmo default do orçamento: abre mostrando dinheiro,
-// não headcount) porque esta página ainda não tem seletor de dimensão --
+// não headcount) porque a aba Semanal ainda não tem seletor de dimensão --
 // markupFiltros() não entra aqui (ver comentário no topo do arquivo). Uma
 // tarefa futura que adicionar o seletor troca este valor fixo pelo estado
 // escolhido pelo usuário.
 var DIMENSAO_PADRAO_SEMANAL = 'financeiro';
+
+// Estado dos controles da aba Balanço de massa (Task 10). somenteAtivos
+// começa LIGADO -- a grade de origem é densa (34 SUPs x 10 tipologias, todo
+// SUP presente em toda tipologia, a maioria zerada); desligado por padrão,
+// cada gráfico abriria com a maioria das linhas em comprimento zero (ver o
+// mesmo raciocínio em render-aba-balanco.js). Tendência não é opção de base
+// -- descartada explicitamente pelo dono do projeto (ver compute-balanco.js).
+var ESTADO_BALANCO = { periodo: 'mesVigente', base: 'previsto', dimensao: 'financeiro', somenteAtivos: true };
 
 function indicesTodos(registros) {
   var indices = [];
@@ -114,17 +142,53 @@ function alternarAba(aba) {
   document.getElementById('aba-balanco').classList.toggle('aba-ativa', aba === 'balanco');
 }
 
+// Redesenha #secao-balanco inteira (controles + um gráfico por tipologia)
+// com o estado atual de ESTADO_BALANCO, e religa os 4 controles -- eles são
+// recriados a cada innerHTML novo (renderControles, em render-aba-balanco.js),
+// então os listeners da renderização anterior morreram junto com os
+// elementos antigos e precisam ser religados toda vez, depois do innerHTML.
+function montarAbaBalanco(registros) {
+  var indices = indicesTodos(registros);
+  document.getElementById('secao-balanco').innerHTML = RenderAbaBalanco.renderAbaBalanco(registros, indices, {
+    periodo: ESTADO_BALANCO.periodo,
+    base: ESTADO_BALANCO.base,
+    dimensao: ESTADO_BALANCO.dimensao,
+    somenteAtivos: ESTADO_BALANCO.somenteAtivos,
+    vigenteIdx: window.__VIGENTE_IDX__,
+    baseline: window.__BASELINE__,
+  });
+
+  document.getElementById('balanco-periodo').addEventListener('change', function (e) {
+    ESTADO_BALANCO.periodo = e.target.value;
+    montarAbaBalanco(registros);
+  });
+  document.getElementById('balanco-base').addEventListener('change', function (e) {
+    ESTADO_BALANCO.base = e.target.value;
+    montarAbaBalanco(registros);
+  });
+  document.getElementById('balanco-dimensao').addEventListener('change', function (e) {
+    ESTADO_BALANCO.dimensao = e.target.value;
+    montarAbaBalanco(registros);
+  });
+  document.getElementById('balanco-somente-ativos').addEventListener('change', function (e) {
+    ESTADO_BALANCO.somenteAtivos = e.target.checked;
+    montarAbaBalanco(registros);
+  });
+}
+
 // registros: já decifrados (só é chamada de dentro de tentarDesbloquear,
 // depois de decifrarComSenha) -- ver o comentário grande acima desta
 // constante. indices cobre TODOS os registros: sem filtro de recorte ainda,
-// a aba mostra sempre o agregado do mês vigente inteiro (ver
-// previstoMesVigente em render-aba-semanal.js).
+// as duas abas mostram sempre o agregado de todos os registros (ver
+// previstoMesVigente em render-aba-semanal.js e listarTipologias em
+// render-aba-balanco.js).
 function montarDashboard(registros) {
   document.getElementById('aba-semanal').addEventListener('click', function () { alternarAba('semanal'); });
   document.getElementById('aba-balanco').addEventListener('click', function () { alternarAba('balanco'); });
   document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(
     registros, indicesTodos(registros), DIMENSAO_PADRAO_SEMANAL, window.__VIGENTE_IDX__
   );
+  montarAbaBalanco(registros);
 }
 `;
 
@@ -156,6 +220,20 @@ function renderSemanal({ registros, baseline, senha, geradoEm }) {
 
   const bundle = buildBrowserBundle(path.join(__dirname), BUNDLE_ARQUIVOS);
 
+  // fonteParaCliente() (tools/comum/calculo-equipes.js) precisa entrar num
+  // <script> ANTES do bundle: compute-balanco.js (dentro do bundle) usa
+  // mediaEquipesPonderada, mas o require dela ('../comum/calculo-equipes.js')
+  // é REMOVIDO por buildBrowserBundle, não reescrito (ver o comentário no
+  // topo de transformaModulo, tools/comum/browser-bundle.js, e o mesmo
+  // aviso em compute-balanco.js) -- a função só existe se já estiver
+  // definida como global no escopo da página quando o bundle rodar. Mesmo
+  // mecanismo que tools/orcamento/render-dashboard.js já usa pra este
+  // MESMO módulo (lá via trechosParaCliente(), aqui via fonteParaCliente(),
+  // que concatena os dois trechos porque esta página nova não tem os dois
+  // pontos de injeção separados que o orçamento tem). Sem isto, a aba
+  // Balanço de massa quebra em produção com ReferenceError -- e os testes
+  // em Node passam do mesmo jeito, porque lá o require resolve de verdade
+  // (ver a prova em test/semanal-render-aba-balanco-wireup.test.js).
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -191,6 +269,7 @@ ${markupAbas(ABAS_VISUALIZACAO, '    ')}
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx};</script>
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
   <script>${scriptDesbloqueio()}</script>
+  <script>${fonteParaCliente()}</script>
   <script>${bundle}</script>
   <script>${SCRIPT_CLIENTE_SEMANAL}</script>
 </body>

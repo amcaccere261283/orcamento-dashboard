@@ -68,11 +68,14 @@ function criarDocumentoFalso() {
 
 // Extrai e roda, num Realm isolado (vm.Context), TODOS os <script> inline do
 // HTML gerado, na mesma ordem em que um navegador executaria (vigenteIdx,
-// dados cifrados, gate, bundle, SCRIPT_CLIENTE_SEMANAL) -- nenhum reescrito,
-// nenhum resumido.
+// dados cifrados, gate, fonteParaCliente, bundle, SCRIPT_CLIENTE_SEMANAL) --
+// nenhum reescrito, nenhum resumido. A Task 10 acrescentou o <script> de
+// fonteParaCliente() (mediaEquipesPonderada como global, consumida por
+// compute-balanco.js dentro do bundle) ANTES do bundle -- por isso 6
+// blocos agora, não mais 5.
 function montarSandbox(html) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
-  assert.equal(blocos.length, 5, 'esperava exatamente 5 <script> (vigenteIdx, dados cifrados, gate, bundle, cliente)');
+  assert.equal(blocos.length, 6, 'esperava exatamente 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
   const codigo = blocos.join('\n;\n');
 
   const documentoFalso = criarDocumentoFalso();
@@ -150,7 +153,7 @@ test('a chamada a RenderAbaSemanal.renderAbaSemanal, com injeção em #secao-sem
   const registros = [registroSintetico('SUP-0005-24', 'Tomador-Sintetico-Zeta', 1000)];
   const html = renderSemanal({ registros, baseline: [], senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptCliente = scripts[4][1]; // 5º <script>: SCRIPT_CLIENTE_SEMANAL
+  const scriptCliente = scripts[5][1]; // 6º <script>: SCRIPT_CLIENTE_SEMANAL
   assert.match(
     scriptCliente,
     /document\.getElementById\('secao-semanal'\)\.innerHTML = RenderAbaSemanal\.renderAbaSemanal\(/
