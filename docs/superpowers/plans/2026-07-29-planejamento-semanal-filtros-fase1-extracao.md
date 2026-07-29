@@ -528,7 +528,7 @@ EOF
 ### Task 3: Rewire `tools/orcamento/render-dashboard.js` to consume the shared logic
 
 **Files:**
-- Modify: `tools/orcamento/render-dashboard.js:4-7` (import), `tools/orcamento/render-dashboard.js:482-507` (remove `filtroExclui`/`indicesFiltrados`), `tools/orcamento/render-dashboard.js:1137-1144` (remove `categoriaTipologia`/`TIPOLOGIAS_SONDAGEM_ESPECIAL`), `tools/orcamento/render-dashboard.js:1470-1481` (remove `capitalizarPalavras`), `tools/orcamento/render-dashboard.js:1483-1511` (remove `opcoesFiltro`), `tools/orcamento/render-dashboard.js:1513-1546` (remove `atualizarRotuloFiltro`/`normalizarBusca`), `tools/orcamento/render-dashboard.js:1548-1646` (remove `aplicarSelecaoExclusiva`/`montarFiltroMulti`, keep+modify `montarTodosFiltrosMulti`, add `aoMudarFiltroOrcamento`), `tools/orcamento/render-dashboard.js:1648-1694` (remove `configurarAberturaFiltrosMulti`), `tools/orcamento/render-dashboard.js:1777` (Alertas wiring call site), `tools/orcamento/render-dashboard.js:2184` (script-tag concatenation)
+- Modify: `tools/orcamento/render-dashboard.js:4-7` (import), `tools/orcamento/render-dashboard.js:44-47` (remove the now-redundant client-side `escapeHtml`), `tools/orcamento/render-dashboard.js:482-507` (remove `filtroExclui`/`indicesFiltrados`), `tools/orcamento/render-dashboard.js:1137-1144` (remove `categoriaTipologia`/`TIPOLOGIAS_SONDAGEM_ESPECIAL`), `tools/orcamento/render-dashboard.js:1470-1481` (remove `capitalizarPalavras`), `tools/orcamento/render-dashboard.js:1483-1511` (remove `opcoesFiltro`), `tools/orcamento/render-dashboard.js:1513-1546` (remove `atualizarRotuloFiltro`/`normalizarBusca`), `tools/orcamento/render-dashboard.js:1548-1646` (remove `aplicarSelecaoExclusiva`/`montarFiltroMulti`, keep+modify `montarTodosFiltrosMulti`, add `aoMudarFiltroOrcamento`), `tools/orcamento/render-dashboard.js:1648-1694` (remove `configurarAberturaFiltrosMulti`), `tools/orcamento/render-dashboard.js:1777` (Alertas wiring call site), `tools/orcamento/render-dashboard.js:2184` (script-tag concatenation)
 
 **Interfaces:**
 - Consumes: `scriptFiltros` from `tools/comum/render-shell.js` (Task 1) — but only as a *build-time* import to splice its returned string into the HTML; the functions it defines (`montarFiltroMulti`, `indicesFiltrados`, etc.) become available in the *browser* global scope once that script runs, exactly like `scriptDesbloqueio()`'s functions already are.
@@ -544,21 +544,36 @@ const {
 } = require('../comum/render-shell.js');
 ```
 
-- [ ] **Step 2: Remove `filtroExclui`/`indicesFiltrados` (now in `scriptFiltros()`)**
+- [ ] **Step 2: Remove the now-redundant client-side `escapeHtml` at the top of `SCRIPT_CLIENTE_TABELA`**
+
+`SCRIPT_CLIENTE_TABELA` currently opens with its own `escapeHtml`, at lines 44-47:
+
+```js
+function escapeHtml(valor) {
+  return String(valor === null || valor === undefined ? '' : valor)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+```
+
+`scriptFiltros()` (Task 1) already defines an identical `escapeHtml`, and Step 8 below concatenates `scriptFiltros()` *before* `SCRIPT_CLIENTE_TABELA` in the same `<script>` tag — so by the time this line would run, the function is already defined. Leaving both would be a verbatim duplicate declaration in the shipped page for no reason (unlike `scriptFiltros()` itself, which duplicates `escapeHtml` internally on purpose, so it stays self-contained for a future consumer — the semanal page — that has no `escapeHtml` of its own yet).
+
+Delete lines 44-47 from `tools/orcamento/render-dashboard.js`. The opening `` const SCRIPT_CLIENTE_TABELA = `  `` (line 43) and the blank line + `formatarNumero` comment that follow (currently lines 48-53) stay, now immediately after the backtick.
+
+- [ ] **Step 3: Remove `filtroExclui`/`indicesFiltrados` (now in `scriptFiltros()`)**
 
 Delete lines 482-507 (the comment block + both functions) from `tools/orcamento/render-dashboard.js`. The line before (481, blank) and the line after (509, comment starting "Mesmo cinza claro...") stay.
 
-- [ ] **Step 3: Remove `TIPOLOGIAS_SONDAGEM_ESPECIAL`/`categoriaTipologia`**
+- [ ] **Step 4: Remove `TIPOLOGIAS_SONDAGEM_ESPECIAL`/`categoriaTipologia`**
 
 Delete lines 1137-1144 from `tools/orcamento/render-dashboard.js` (the `var TIPOLOGIAS_SONDAGEM_ESPECIAL = ...` line through `categoriaTipologia`'s closing `}`). The blank line 1145 and `var SERIE_LABELS = ...` at 1146 stay untouched.
 
-- [ ] **Step 4: Remove `capitalizarPalavras`, `opcoesFiltro`, `atualizarRotuloFiltro`, `normalizarBusca`, `aplicarSelecaoExclusiva`, `montarFiltroMulti`, `configurarAberturaFiltrosMulti`**
+- [ ] **Step 5: Remove `capitalizarPalavras`, `opcoesFiltro`, `atualizarRotuloFiltro`, `normalizarBusca`, `aplicarSelecaoExclusiva`, `montarFiltroMulti`, `configurarAberturaFiltrosMulti`**
 
 Delete lines 1470-1481 (`capitalizarPalavras` comment+function), 1483-1511 (`opcoesFiltro`), 1513-1530 (`atualizarRotuloFiltro`), 1532-1546 (`normalizarBusca` comment+function), 1548-1556 (`aplicarSelecaoExclusiva` comment+function), 1558-1642 (`montarFiltroMulti` comment+function), 1648-1694 (`configurarAberturaFiltrosMulti` comment+function) from `tools/orcamento/render-dashboard.js`.
 
 Leave `FILTROS_CONFIG` (1373-1411), `FILTROS_ALERTAS_CONFIG` (1413-1450), `filtrosAlertas` init (1452-1459), and `filtrosSelecionados` init (1461-1468) exactly as they are — these stay orçamento-specific.
 
-- [ ] **Step 5: Replace `montarTodosFiltrosMulti` and add `aoMudarFiltroOrcamento`**
+- [ ] **Step 6: Replace `montarTodosFiltrosMulti` and add `aoMudarFiltroOrcamento`**
 
 Where `montarTodosFiltrosMulti` used to be (originally lines 1644-1646), write:
 
@@ -588,7 +603,7 @@ function montarTodosFiltrosMulti(registros) {
 }
 ```
 
-- [ ] **Step 6: Update the Alertas filter wiring call site**
+- [ ] **Step 7: Update the Alertas filter wiring call site**
 
 Modify `tools/orcamento/render-dashboard.js:1777` (inside `montarDashboard`), from:
 
@@ -602,7 +617,7 @@ to:
   FILTROS_ALERTAS_CONFIG.forEach(function (cfg) { montarFiltroMulti(cfg, registros, filtrosAlertas, aoMudarFiltroOrcamento); });
 ```
 
-- [ ] **Step 7: Splice `scriptFiltros()` into the rendered HTML**
+- [ ] **Step 8: Splice `scriptFiltros()` into the rendered HTML**
 
 Modify `tools/orcamento/render-dashboard.js:2184`, from:
 
@@ -616,13 +631,13 @@ to:
   <script>${scriptFiltros()}${SCRIPT_CLIENTE_TABELA}</script>
 ```
 
-- [ ] **Step 8: Run the full existing suite and confirm what passes/fails**
+- [ ] **Step 9: Run the full existing suite and confirm what passes/fails**
 
 Run: `node --test test/*.test.js`
 
-Expected: every test file passes **except** `test/orcamento-html-inalterado.test.js`, which fails on the byte-identical assertion (`o HTML do orçamento continua byte-idêntico ao golden`) — this is the expected, deliberate failure this plan's Task 4 resolves by regenerating the golden fixture. If any *other* test fails, stop and investigate before continuing (it means the extraction changed real behavior, not just source layout) — the most likely culprits are a typo in one of the deleted line ranges (Step 2-4) leaving a dangling reference, or a missed `estadoFiltros` → `estado` rename inside a function this plan intended to delete but didn't fully remove.
+Expected: every test file passes **except** `test/orcamento-html-inalterado.test.js`, which fails on the byte-identical assertion (`o HTML do orçamento continua byte-idêntico ao golden`) — this is the expected, deliberate failure this plan's Task 4 resolves by regenerating the golden fixture. If any *other* test fails, stop and investigate before continuing (it means the extraction changed real behavior, not just source layout) — the most likely culprits are a typo in one of the deleted line ranges (Steps 2-5) leaving a dangling reference, or a missed `estadoFiltros` → `estado` rename inside a function this plan intended to delete but didn't fully remove.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add tools/orcamento/render-dashboard.js
@@ -672,7 +687,7 @@ Run: `git diff test/fixtures/orcamento-golden.html`
 
 Expected diff content, and nothing else:
 - The `window.__DADOS_CIFRADOS__` blob differs (salt/iv are random per build — already true before this plan, unrelated to it).
-- Inside the single `<script>` tag that used to hold only `SCRIPT_CLIENTE_TABELA`: the filter-related functions (`categoriaTipologia`, `linhasDistintas`, `capitalizarPalavras`, `opcoesFiltro`, `atualizarRotuloFiltro`, `normalizarBusca`, `aplicarSelecaoExclusiva`, `filtroExclui`, `indicesFiltrados`, `montarFiltroMulti`, `configurarAberturaFiltrosMulti`, plus a second `escapeHtml` declaration) now appear **before** the rest of the table/graph/alerts code instead of interleaved with it, and `montarFiltroMulti`'s body ends in `aoMudar(cfg)` instead of the inlined cascade/rebuild/recalculate calls; a new `aoMudarFiltroOrcamento` function appears; `montarTodosFiltrosMulti`'s and the Alertas `forEach`'s `montarFiltroMulti(...)` calls now pass `filtrosSelecionados`/`filtrosAlertas` and `aoMudarFiltroOrcamento` explicitly.
+- Inside the single `<script>` tag that used to hold only `SCRIPT_CLIENTE_TABELA`: the filter-related functions (`escapeHtml`, `categoriaTipologia`, `linhasDistintas`, `capitalizarPalavras`, `opcoesFiltro`, `atualizarRotuloFiltro`, `normalizarBusca`, `aplicarSelecaoExclusiva`, `filtroExclui`, `indicesFiltrados`, `montarFiltroMulti`, `configurarAberturaFiltrosMulti`) now appear **before** the rest of the table/graph/alerts code instead of interleaved with it (and `SCRIPT_CLIENTE_TABELA`'s own former `escapeHtml` is gone — it's the same function, now defined once, earlier); `montarFiltroMulti`'s body ends in `aoMudar(cfg)` instead of the inlined cascade/rebuild/recalculate calls; a new `aoMudarFiltroOrcamento` function appears; `montarTodosFiltrosMulti`'s and the Alertas `forEach`'s `montarFiltroMulti(...)` calls now pass `filtrosSelecionados`/`filtrosAlertas` and `aoMudarFiltroOrcamento` explicitly.
 - If the diff shows **anything else** — a changed number, a changed CSS rule, a changed HTML tag outside the `<script>` block, a changed table row — stop; that means Task 3 introduced a real behavior change, not just a reorganization, and must be fixed before regenerating the golden again.
 
 - [ ] **Step 3: Run the full suite again**
