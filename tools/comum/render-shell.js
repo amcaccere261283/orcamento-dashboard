@@ -1,7 +1,13 @@
 'use strict';
 
-// Casca visual compartilhada pelos dashboards deste repositório: tokens de
-// cor/tipografia, reset, os componentes de filtro/abas e o gate de senha.
+// Casca visual compartilhada pelos dashboards deste repositório: a header-bar,
+// a barra de filtros multi-select, o seletor de abas, o gate de senha e o CSS
+// que sustenta tudo isso.
+//
+// ATENÇÃO ao CSS: cssBase() NÃO é uma base neutra. Ela devolve o CSS INTEIRO
+// do dashboard de orçamento, inclusive as ~79 linhas que só ele usa (gráfico,
+// tabela, chips de tipologia, alertas). Ver o comentário em cima de cssBase()
+// antes de reaproveitá-la numa página nova.
 //
 // O texto aqui foi RECORTADO de tools/orcamento/render-dashboard.js sem
 // nenhuma reformatação -- o dashboard de orçamento já está publicado, e
@@ -270,8 +276,30 @@ const CSS_BASE = `  :root {
   .busca-alertas::placeholder { color: var(--text-secondary); }
   .busca-alertas:focus-visible { outline: 2px solid #f6b53f; outline-offset: 1px; }`;
 
-// Os tokens, o reset e os estilos de .filtros / .abas-visualizacao /
-// .filtro-multi-item. Sem as tags <style>: quem monta a página as escreve.
+// O CSS do dashboard, sem as tags <style> -- quem monta a página as escreve.
+//
+// O nome promete menos do que a função entrega, e isso é intencional por ora.
+// Do literal acima, só uma parte é de fato compartilhável:
+//
+//   compartilhável  tokens de :root, reset, body/h1/.generated, .watermark,
+//                   .header-bar*, .gate-senha*, .filtros*, .filtro-multi*,
+//                   .abas-visualizacao*, @media (prefers-reduced-motion)
+//   só do orçamento #limpar-filtros e #atualizar-dashboard (o markup dos dois
+//                   ficou em render-dashboard.js, em MARKUP_ACOES);
+//                   #secao-grafico, .grafico-*, table/th/td, .tipologia-chip*,
+//                   .celula-*, .serie-label, .linha-*, .valor-repetido,
+//                   .status-circulo, .busca-alertas*, .filtros-alertas
+//
+// A segunda parte são ~79 das 254 linhas, e quem chamar cssBase() herda todas
+// -- CSS morto, mas inofensivo (são seletores que a página nova não usa).
+//
+// Não dividi o literal porque partir a string mudaria os bytes do HTML do
+// orçamento, que já está publicado e é o que o golden protege
+// (test/orcamento-html-inalterado.test.js). A divisão é possível, mas é
+// trabalho próprio: separar em cssBase() + cssTabelaOrcamento(), conferir que
+// a concatenação na ordem certa reproduz o texto atual e, só então, regenerar
+// o golden DE PROPÓSITO, com o diff revisado linha a linha. Até lá, herdar o
+// CSS inteiro é o preço de manter a prova de que o dashboard não mudou.
 function cssBase() {
   return CSS_BASE;
 }
@@ -280,6 +308,12 @@ function cssBase() {
 // 'logo' é markup pronto (<img ...>) ou '' -- quando vazio a linha fica só
 // com o recuo, exatamente como o template original, que interpolava uma
 // string vazia ali.
+//
+// ESCAPE É DO CHAMADOR: 'titulo' e 'subtitulo' entram crus no HTML, sem
+// passar por escapeHtml. É assim porque o orçamento já escapa o que precisa
+// antes de chamar (o subtítulo tem data formatada), e escapar aqui mudaria o
+// texto gerado. Quem passar valor vindo de planilha ou de usuário escapa
+// antes.
 function markupCabecalho({ titulo, subtitulo, logo, recuo }) {
   var r = recuo === undefined ? '' : recuo;
   var img = logo === undefined || logo === null ? '' : logo;
@@ -297,7 +331,10 @@ function markupCabecalho({ titulo, subtitulo, logo, recuo }) {
 const SETA_FILTRO_MULTI = '<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 // Um filtro multi-select: gatilho com o rótulo do estado atual e o painel
-// vazio, que o JS de cliente preenche com as opções.
+// vazio, que o JS de cliente preenche com as opções. Interna: só markupFiltros
+// chama -- não está no module.exports porque ninguém de fora precisa dela.
+//
+// ESCAPE É DO CHAMADOR, como em markupCabecalho: 'filtro.rotulo' entra cru.
 function markupFiltroMulti(filtro) {
   return '<div class="filtro-multi" id="' + filtro.id + '">'
     + '<button type="button" class="filtro-multi-trigger">' + filtro.rotulo + SETA_FILTRO_MULTI + '</button>'
@@ -416,7 +453,6 @@ function scriptDesbloqueio() {
 module.exports = {
   cssBase,
   markupCabecalho,
-  markupFiltroMulti,
   markupFiltros,
   markupAbas,
   scriptDesbloqueio,
