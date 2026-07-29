@@ -13,6 +13,18 @@ const { parseBaseline } = require('../orcamento/parse-baseline.js');
 const { renderSemanal } = require('./render-semanal.js');
 const config = require('../orcamento/config.js');
 
+// parseBaseline devolve um Map (porChave) -- JSON.stringify não sabe
+// serializar Map (viraria "{}", perdendo os dados em silêncio dentro do
+// blob cifrado). renderSemanal só faz JSON.stringify({registros, baseline}),
+// então quem chama precisa entregar algo que sobreviva a isso: um array
+// simples de entradas, no mesmo formato que test/semanal-build-dashboard.test.js
+// já usa (baseline: []). Extraída como função pura (em vez de ficar inline
+// em build()) pra dar pra testar sem precisar montar um .xlsx sintético --
+// ver test/semanal-build-dashboard.test.js.
+function baselineParaCliente(porChave) {
+  return Array.from(porChave, ([chave, dados]) => ({ chave, ...dados }));
+}
+
 // A senha nunca vem de um arquivo do repositório -- só de variável de
 // ambiente, lida na hora do build e descartada depois (mesmo raciocínio de
 // tools/orcamento/build-dashboard.js: dist/planejamento-semanal.html também
@@ -27,13 +39,7 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
 
   const gridLinhaBase = readXlsxSheet(config.caminhoLinhaBase, config.nomeAbaLinhaBase);
   const { porChave } = parseBaseline(gridLinhaBase);
-  // parseBaseline devolve um Map (porChave) -- JSON.stringify não sabe
-  // serializar Map (viraria "{}", perdendo os dados em silêncio dentro do
-  // blob cifrado). renderSemanal só faz JSON.stringify({registros, baseline}),
-  // então quem chama precisa entregar algo que sobreviva a isso: um array
-  // simples de entradas, no mesmo formato que test/semanal-build-dashboard.test.js
-  // já usa (baseline: []).
-  const baseline = Array.from(porChave, ([chave, dados]) => ({ chave, ...dados }));
+  const baseline = baselineParaCliente(porChave);
 
   const html = renderSemanal({ registros, baseline, senha, geradoEm: today });
 
@@ -53,4 +59,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build };
+module.exports = { build, baselineParaCliente };
