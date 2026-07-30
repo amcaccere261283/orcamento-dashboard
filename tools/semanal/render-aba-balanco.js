@@ -72,6 +72,7 @@ var COR_EQUIPES = '#f6b53f'; // mesmo laranja/dourado do resto da UI
 var COR_TEXTO_SECUNDARIO = '#c3c2b7';
 var COR_TEXTO = '#ffffff';
 var COR_EIXO = '#2c2c2a';
+var COR_DIVISORIA = 'rgba(255,255,255,0.10)'; // mesmo valor de --border em cssBase()
 
 // tipologia: string (cabeçalho do gráfico). linhas: array no formato que
 // calcularLinhas() (compute-balanco.js) produz -- consumido diretamente,
@@ -124,7 +125,24 @@ function renderGraficoTipologia(tipologia, linhas, opcoes) {
   linhasOrdenadas.forEach(function (linha, i) {
     var y = ALTURA_CABECALHO + i * ALTURA_LINHA + ALTURA_LINHA / 2;
 
-    svg += '<text x="8" y="' + (y + 4) + '" fill="' + COR_TEXTO + '" font-size="12">' + escapeHtml(linha.sup) + '</text>';
+    // Divisória entre linhas -- nunca antes da primeira (o eixo/cabeçalho já
+    // marca esse limite). Facilita a leitura com muitos SUPs na tela.
+    if (i > 0) {
+      var yDivisoria = ALTURA_CABECALHO + i * ALTURA_LINHA;
+      svg += '<line x1="0" y1="' + yDivisoria + '" x2="' + LARGURA_SVG + '" y2="' + yDivisoria + '" stroke="' + COR_DIVISORIA + '" stroke-width="1"></line>';
+    }
+
+    // Fonte menor (era 12) pra caber o Tomador na mesma linha sem espremer.
+    // <tspan> em vez de escapeHtml simples porque SUP e Tomador têm cores
+    // diferentes (SUP em destaque, Tomador em cor secundária) dentro do
+    // MESMO <text> -- é assim que SVG mistura estilo numa linha só.
+    // "Facilita a leitura quando o filtro estiver sem SUP específico
+    // selecionado" (dono do projeto) -- com muitas linhas visíveis de uma
+    // vez, o tomador ajuda a identificar rápido de quem é cada uma.
+    svg += '<text x="8" y="' + (y + 4) + '" font-size="11">'
+      + '<tspan fill="' + COR_TEXTO + '">' + escapeHtml(linha.sup) + '</tspan>'
+      + (linha.tomador ? '<tspan fill="' + COR_TEXTO_SECUNDARIO + '"> — ' + escapeHtml(linha.tomador) + '</tspan>' : '')
+      + '</text>';
 
     if (linha.semBase) {
       // "Não havia base" e "o realizado bateu a base" são opostos -- por

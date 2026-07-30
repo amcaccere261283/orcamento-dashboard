@@ -101,3 +101,27 @@ test('a barra de equipes usa uma escala DE FATO separada no SVG desenhado -- nã
     'com escalas independentes, o desvio de equipes da SUP-A (10, o próprio máximo da série de equipes) deveria ocupar a MESMA largura máxima que o desvio de volume da SUP-A (100, o próprio máximo da série de volume) -- se as duas dividirem uma escala comum, a barra de equipes encolhe pra uma fração de traço (largura equipes = ' + larguraEquipes + ', largura volume = ' + larguraVolume + ')'
   );
 });
+
+test('o rótulo composto SUP — Tomador aparece no SVG quando a linha tem tomador', () => {
+  const linhas = [{ sup: 'SUP-A', tomador: 'Concessionária Exemplo S.A', valorBase: 105, valorRealizado: 205, desvio: 100, equipesBase: 2, equipesRealizado: 12, desvioEquipes: 10, ativo: true, semBase: false }];
+  const svg = renderGraficoTipologia('ST', linhas, {});
+  assert.match(svg, /SUP-A/);
+  assert.match(svg, /Concessionária Exemplo S\.A/);
+});
+
+test('linha sem tomador (undefined) não quebra e não deixa um "— undefined" no SVG', () => {
+  const svg = renderGraficoTipologia('ST', LINHAS, {}); // LINHAS não tem campo tomador
+  assert.doesNotMatch(svg, /undefined/);
+});
+
+test('fonte do rótulo de SUP é 11px (menor que antes), e há uma linha divisória entre a 1ª e a 2ª linha do gráfico', () => {
+  const svg = renderGraficoTipologia('ST', LINHAS, {}); // LINHAS tem 2 entradas
+  assert.match(svg, /<text x="8"[^>]*font-size="11"/);
+  // Regex ancorada no stroke da divisória (COR_DIVISORIA), não só em
+  // '<line x1="0"': o <defs><pattern> de hachura das equipes também emite
+  // uma <line x1="0" y1="0" ...> (stroke preto, diagonal do padrão) em TODO
+  // gráfico, com ou sem divisórias -- contar só '<line x1="0"' inflava a
+  // contagem em +1 e escondia uma quebra real do guard 'i > 0'.
+  const linhasDivisoria = (svg.match(/<line x1="0"[^>]*stroke="rgba\(255,255,255,0\.10\)"/g) || []).length;
+  assert.strictEqual(linhasDivisoria, 1, 'com 2 linhas de SUP, espera-se exatamente 1 divisória entre elas (nunca antes da primeira)');
+});

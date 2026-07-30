@@ -158,6 +158,7 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
 
     linhas.push({
       sup: registro.sup,
+      tomador: registro.tomador,
       valorBase: semBase ? null : valorBase,
       valorRealizado: valorRealizado,
       desvio: desvio,
