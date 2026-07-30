@@ -3,7 +3,7 @@ const path = require('node:path');
 const { formatarMesAno, calcularVigenteIdx } = require('../comum/datas.js');
 const { cifrarComSenha } = require('../comum/criptografia.js');
 const {
-  cssBase, markupCabecalho, markupAbas, scriptDesbloqueio,
+  cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio, scriptFiltros,
 } = require('../comum/render-shell.js');
 const { buildBrowserBundle } = require('../comum/browser-bundle.js');
 const { fonteParaCliente } = require('../comum/calculo-equipes.js');
@@ -16,10 +16,6 @@ const { fonteParaCliente } = require('../comum/calculo-equipes.js');
 // montarAbaBalanco) com seus próprios controles (período/base/dimensão/
 // somente ativos) embutidos no HTML que ela mesma produz -- não via
 // markupFiltros() da casca compartilhada.
-// markupFiltros() (da casca) continua NÃO entrando aqui: a aba Semanal, por
-// ora, sempre agrega TODOS os registros (sem recorte) na dimensão fixa
-// 'financeiro' -- ver o comentário sobre DIMENSAO_PADRAO abaixo. Só a aba
-// Balanço de massa ganhou controles nesta tarefa.
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -34,6 +30,20 @@ const ABAS_VISUALIZACAO = [
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>' },
   { id: 'aba-balanco', rotulo: 'Balanço de massa', ativa: false,
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>' },
+];
+
+// Os 6 filtros multi-select da barra compartilhada entre as duas abas: só
+// id e rótulo inicial (mesmo padrão de FILTROS_PRINCIPAIS no orçamento) --
+// as opções de cada um são montadas no cliente a partir dos registros
+// decifrados. Sem filtro-serie (a Tabela semanal não tem colunas
+// alternáveis -- ver docs/superpowers/specs/2026-07-29-planejamento-semanal-filtros-design.md).
+const FILTROS_SEMANAL = [
+  { id: 'filtro-origem', rotulo: 'Todas as origens' },
+  { id: 'filtro-categoria', rotulo: 'Todas as categorias' },
+  { id: 'filtro-tipologia', rotulo: 'Todas as tipologias' },
+  { id: 'filtro-grupo', rotulo: 'Todos os grupos' },
+  { id: 'filtro-sup', rotulo: 'Todos os SUP' },
+  { id: 'seletor-dimensao', rotulo: 'Financeiro' },
 ];
 
 // CSS dos 4 controles da aba Balanço de massa (renderControles, em
@@ -96,6 +106,8 @@ const CSS_BALANCO = `
 const CSS_SEMANAL = `
   .linha-tendencia .serie-label, .linha-tendencia .celula-total-linha { color: #f6b53f; }
   .linha-tendencia .serie-label { border-left-color: #f6b53f; }
+  .bloco-dimensao-semanal + .bloco-dimensao-semanal { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--border); }
+  .tabela-semanal-titulo { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
 `;
 
 // render-aba-semanal.js consome compute-semanal.js (require('./compute-semanal.js'))
@@ -152,41 +164,52 @@ const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js', 'compute
 // em "Abrir", quando SUP/Grupo/Tomador/Tipologia ainda não existem em texto
 // plano no navegador.
 const SCRIPT_CLIENTE_SEMANAL = `
-// MODULOS['compute-semanal.js'], ['render-aba-semanal.js'],
-// ['compute-balanco.js'] e ['render-aba-balanco.js'] já estão definidos
-// pelo bundle (ver o <script> anterior a este) -- guardados aqui só pra
-// este script não precisar repetir a busca em MODULOS. RenderAbaSemanal.
-// renderAbaSemanal já embute a divisão em 4 semanas (compute-semanal.js),
-// então ComputeSemanal fica sem uso direto aqui. Mesma coisa pro par da
-// Task 10: RenderAbaBalanco.renderAbaBalanco já chama calcularLinhas por
-// dentro, então ComputeBalanco também fica sem uso direto aqui -- os dois
-// só existem pra deixar claro, pra quem ler o bundle no navegador, que
-// esses módulos estão carregados.
 var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaSemanal = MODULOS['render-aba-semanal.js'];
 var ComputeBalanco = MODULOS['compute-balanco.js'];
 var RenderAbaBalanco = MODULOS['render-aba-balanco.js'];
 
-// Fixa em 'financeiro' (mesmo default do orçamento: abre mostrando dinheiro,
-// não headcount) porque a aba Semanal ainda não tem seletor de dimensão --
-// markupFiltros() não entra aqui (ver comentário no topo do arquivo). Uma
-// tarefa futura que adicionar o seletor troca este valor fixo pelo estado
-// escolhido pelo usuário.
-var DIMENSAO_PADRAO_SEMANAL = 'financeiro';
+// As 3 dimensões que a aba Semanal expõe -- subconjunto das 5 do orçamento
+// (sem produtividade/ticketMedio, que não fazem sentido pra uma tabela
+// semanal). Ordem canônica: sempre nesta ordem quando várias estão
+// marcadas, nunca na ordem em que a pessoa marcou os checkboxes -- mesmo
+// raciocínio de DIMENSOES_CONFIG/dimensoesEmOrdem no orçamento.
+var DIMENSOES_CONFIG_SEMANAL = [
+  { valor: 'equipes', rotulo: 'Equipes' },
+  { valor: 'volume', rotulo: 'Volume' },
+  { valor: 'financeiro', rotulo: 'Financeiro' },
+];
 
-// Estado dos controles da aba Balanço de massa (Task 10). somenteAtivos
-// começa LIGADO -- a grade de origem é densa (34 SUPs x 10 tipologias, todo
-// SUP presente em toda tipologia, a maioria zerada); desligado por padrão,
-// cada gráfico abriria com a maioria das linhas em comprimento zero (ver o
-// mesmo raciocínio em render-aba-balanco.js). Tendência não é opção de base
-// -- descartada explicitamente pelo dono do projeto (ver compute-balanco.js).
-var ESTADO_BALANCO = { periodo: 'mesVigente', base: 'previsto', dimensao: 'financeiro', somenteAtivos: true };
-
-function indicesTodos(registros) {
-  var indices = [];
-  for (var i = 0; i < registros.length; i++) indices.push(i);
-  return indices;
+function dimensoesEmOrdemSemanal(selecionadas) {
+  var ordenadas = DIMENSOES_CONFIG_SEMANAL.filter(function (d) { return selecionadas.has(d.valor); }).map(function (d) { return d.valor; });
+  return ordenadas.length ? ordenadas : ['financeiro'];
 }
+
+// Réplica do FILTROS_CONFIG do orçamento, com uma omissão deliberada: sem
+// filtro-serie (ver docs/superpowers/specs/2026-07-29-planejamento-semanal-filtros-design.md,
+// "Escopo de campos -- aba 1"). categoriaTipologia/opcoesFiltro/
+// indicesFiltrados/montarFiltroMulti vêm de scriptFiltros() (tools/comum/render-shell.js),
+// concatenado ANTES deste script na mesma <script> tag.
+var FILTROS_CONFIG_SEMANAL = [
+  { id: 'filtro-origem', chave: 'origem', rotuloPadrao: 'Todas as origens', campo: 'origem', rotuloCapitalizado: true },
+  { id: 'filtro-categoria', chave: 'categoria', rotuloPadrao: 'Todas as categorias', opcoesFixas: [
+    { valor: 'labConvencional', rotulo: 'Lab. Convencional' },
+    { valor: 'labEspecial', rotulo: 'Lab. Especial' },
+    { valor: 'sondagemConvencional', rotulo: 'Sondagem Convencional' },
+    { valor: 'sondagemEspecial', rotulo: 'Sondagem Especial' },
+  ] },
+  { id: 'filtro-tipologia', chave: 'tipologia', rotuloPadrao: 'Todas as tipologias', campo: 'tipologia' },
+  { id: 'filtro-grupo', chave: 'grupo', rotuloPadrao: 'Todos os grupos', campo: 'grupo' },
+  { id: 'filtro-sup', chave: 'sup', rotuloPadrao: 'Todos os SUP', campo: 'sup', rotuloComposto: true },
+  { id: 'seletor-dimensao', chave: 'dimensao', rotuloPadrao: 'Selecione ao menos 1', opcoesFixas: DIMENSOES_CONFIG_SEMANAL, minimoUm: true },
+];
+
+// chave -> Set dos valores marcados -- Set vazio significa "sem filtro,
+// mostra tudo", igual ao orçamento (ver filtroExclui em scriptFiltros()).
+// dimensao começa com Financeiro marcado (nunca pode ficar vazio, minimoUm:true).
+var filtrosSelecionadosSemanal = {};
+FILTROS_CONFIG_SEMANAL.forEach(function (cfg) { filtrosSelecionadosSemanal[cfg.chave] = new Set(); });
+filtrosSelecionadosSemanal.dimensao.add('financeiro');
 
 // dados: o que o gate acabou de JSON.parse -- {registros, baseline} (ver o
 // ACHADO documentado acima desta constante). Guarda baseline à parte
@@ -204,13 +227,25 @@ function alternarAba(aba) {
   document.getElementById('aba-balanco').classList.toggle('aba-ativa', aba === 'balanco');
 }
 
-// Redesenha #secao-balanco inteira (controles + um gráfico por tipologia)
-// com o estado atual de ESTADO_BALANCO, e religa os 4 controles -- eles são
-// recriados a cada innerHTML novo (renderControles, em render-aba-balanco.js),
-// então os listeners da renderização anterior morreram junto com os
-// elementos antigos e precisam ser religados toda vez, depois do innerHTML.
-function montarAbaBalanco(registros) {
-  var indices = indicesTodos(registros);
+// Estado dos controles PRÓPRIOS da aba Balanço de massa (Período/Base/
+// Dimensão-2/Ativos) -- continuam locais a esta aba, aplicados DEPOIS do
+// indices que a barra compartilhada já filtrou (ver "Fluxo de dados" no
+// spec). somenteAtivos começa LIGADO -- a grade de origem é densa (34 SUPs
+// x 10 tipologias, todo SUP presente em toda tipologia, a maioria zerada);
+// desligado por padrão, cada gráfico abriria com a maioria das linhas em
+// comprimento zero. Tendência não é opção de base -- descartada
+// explicitamente pelo dono do projeto (ver compute-balanco.js).
+var ESTADO_BALANCO = { periodo: 'mesVigente', base: 'previsto', dimensao: 'financeiro', somenteAtivos: true };
+
+// Redesenha #secao-balanco inteira (controles + um gráfico por tipologia
+// presente em 'indices') com o estado atual de ESTADO_BALANCO, e religa os 4
+// controles -- eles são recriados a cada innerHTML novo (renderControles, em
+// render-aba-balanco.js), então os listeners da renderização anterior
+// morreram junto com os elementos antigos e precisam ser religados toda
+// vez, depois do innerHTML. 'indices' vem da barra de filtros compartilhada
+// (ver recalcularSemanal) -- os 4 controles desta aba filtram ainda mais
+// dentro dele, nunca o substituem.
+function montarAbaBalanco(registros, indices) {
   document.getElementById('secao-balanco').innerHTML = RenderAbaBalanco.renderAbaBalanco(registros, indices, {
     periodo: ESTADO_BALANCO.periodo,
     base: ESTADO_BALANCO.base,
@@ -222,35 +257,69 @@ function montarAbaBalanco(registros) {
 
   document.getElementById('balanco-periodo').addEventListener('change', function (e) {
     ESTADO_BALANCO.periodo = e.target.value;
-    montarAbaBalanco(registros);
+    montarAbaBalanco(registros, indices);
   });
   document.getElementById('balanco-base').addEventListener('change', function (e) {
     ESTADO_BALANCO.base = e.target.value;
-    montarAbaBalanco(registros);
+    montarAbaBalanco(registros, indices);
   });
   document.getElementById('balanco-dimensao').addEventListener('change', function (e) {
     ESTADO_BALANCO.dimensao = e.target.value;
-    montarAbaBalanco(registros);
+    montarAbaBalanco(registros, indices);
   });
   document.getElementById('balanco-somente-ativos').addEventListener('change', function (e) {
     ESTADO_BALANCO.somenteAtivos = e.target.checked;
-    montarAbaBalanco(registros);
+    montarAbaBalanco(registros, indices);
   });
+}
+
+// Recalcula o recorte a partir da barra de filtros compartilhada e redesenha
+// as DUAS abas com o mesmo 'indices' -- é a única função que decide "o que
+// recalcular" quando um filtro muda (equivalente a recalcularTabela +
+// recalcularAlertas no orçamento, só que aqui é uma função só pras duas
+// abas, já que nenhuma delas tem o custo de montagem incremental que a
+// Tabela do orçamento tem -- as duas são full re-render via innerHTML).
+function recalcularSemanal() {
+  var indices = indicesFiltrados(
+    window.__REGISTROS__,
+    filtrosSelecionadosSemanal.tipologia,
+    filtrosSelecionadosSemanal.categoria,
+    filtrosSelecionadosSemanal.grupo,
+    filtrosSelecionadosSemanal.sup,
+    filtrosSelecionadosSemanal.origem
+  );
+  var dimensoes = dimensoesEmOrdemSemanal(filtrosSelecionadosSemanal.dimensao);
+  document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(window.__REGISTROS__, indices, dimensoes, window.__VIGENTE_IDX__);
+  montarAbaBalanco(window.__REGISTROS__, indices);
+}
+
+// Callback de mudança de filtro (aoMudar, ver montarFiltroMulti em
+// scriptFiltros()) -- reproduz a cascata categoria->tipologia que o
+// orçamento também precisa (aoMudarFiltroOrcamento, tools/orcamento/render-dashboard.js):
+// opcoesFiltro só recalcula a lista de tipologias válidas quando CHAMADA de
+// novo, então mudar a categoria exige remontar o painel de tipologia pra
+// essa cascata aparecer na tela.
+function aoMudarSemanal(cfg) {
+  if (cfg.chave === 'categoria') {
+    var cfgTipologia = FILTROS_CONFIG_SEMANAL.filter(function (c) { return c.chave === 'tipologia'; })[0];
+    montarFiltroMulti(cfgTipologia, window.__REGISTROS__, filtrosSelecionadosSemanal, aoMudarSemanal);
+  }
+  recalcularSemanal();
+}
+
+function montarTodosFiltrosMultiSemanal(registros) {
+  FILTROS_CONFIG_SEMANAL.forEach(function (cfg) { montarFiltroMulti(cfg, registros, filtrosSelecionadosSemanal, aoMudarSemanal); });
 }
 
 // registros: já decifrados (só é chamada de dentro de tentarDesbloquear,
 // depois de decifrarComSenha) -- ver o comentário grande acima desta
-// constante. indices cobre TODOS os registros: sem filtro de recorte ainda,
-// as duas abas mostram sempre o agregado de todos os registros (ver
-// previstoMesVigente em render-aba-semanal.js e listarTipologias em
-// render-aba-balanco.js).
+// constante.
 function montarDashboard(registros) {
   document.getElementById('aba-semanal').addEventListener('click', function () { alternarAba('semanal'); });
   document.getElementById('aba-balanco').addEventListener('click', function () { alternarAba('balanco'); });
-  document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(
-    registros, indicesTodos(registros), DIMENSAO_PADRAO_SEMANAL, window.__VIGENTE_IDX__
-  );
-  montarAbaBalanco(registros);
+  montarTodosFiltrosMultiSemanal(registros);
+  configurarAberturaFiltrosMulti();
+  recalcularSemanal();
 }
 `;
 
@@ -333,6 +402,7 @@ ${markupCabecalho({
   </div>
 
   <div id="conteudo-protegido" style="display:none">
+${markupFiltros(FILTROS_SEMANAL, { recuo: '    ' })}
 ${markupAbas(ABAS_VISUALIZACAO, '    ')}
     <div id="secao-semanal"></div>
     <div id="secao-balanco" style="display:none"></div>
@@ -343,7 +413,7 @@ ${markupAbas(ABAS_VISUALIZACAO, '    ')}
   <script>${scriptDesbloqueio()}</script>
   <script>${fonteParaCliente()}</script>
   <script>${bundle}</script>
-  <script>${SCRIPT_CLIENTE_SEMANAL}</script>
+  <script>${scriptFiltros()}${SCRIPT_CLIENTE_SEMANAL}</script>
 </body>
 </html>`;
 }
