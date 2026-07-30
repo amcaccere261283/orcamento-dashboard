@@ -120,6 +120,29 @@ const CSS_DEMANDAS = `
   .tabela-demandas { width: 100%; border-collapse: collapse; }
   .tabela-demandas th, .tabela-demandas td { padding: 6px 8px; font-size: 12px; }
   .tabela-demandas .num { text-align: right; }
+  /* cssBase() fixa "th, td { text-align: left }" pro dashboard inteiro, e a
+     regra acima só alcança <td class="num"> -- os <th> dos 12 meses e da
+     coluna de fechamento (renderCabecalho, render-aba-demandas.js) não têm
+     classe nenhuma, então ficavam à esquerda por cima de números alinhados à
+     direita. Só o primeiro <th> (cabeçalho vazio da coluna de rótulo) fica de
+     fora, porque não tem número embaixo dele. */
+  .tabela-demandas th:not(:first-child) { text-align: right; }
+  /* .linha-demandas é emitida em toda linha de tipologia (renderLinha,
+     render-aba-demandas.js) e não tinha regra de cor nenhuma -- diferente das
+     tabelas irmãs (.linha-previsto/.linha-realizado em cssBase(),
+     .linha-tendencia em CSS_SEMANAL acima), que sempre colorem .serie-label e
+     dão um acento no border-left. Verde por ser a mesma cor de .linha-realizado
+     (cssBase()): esta aba inteira É execução (furo por furo), nunca previsão --
+     ver a nota "É a única fonte de EXECUÇÃO do repositório" no CLAUDE.md. Uma
+     cor só para as 5 tabelas porque render-aba-demandas.js não emite um nome de
+     classe por bloco/série -- todas as linhas de tipologia usam o mesmo
+     'linha-demandas', então não há como colorir por série sem mexer no render
+     (fora do escopo deste ajuste, que é só CSS_DEMANDAS).
+     .linha-total-demandas fica como já estava (negrito + borda), sem herdar
+     esta cor -- ela já se destingue das linhas de tipologia por peso e borda,
+     igual .linha-total-sup em cssBase() não ganha cor de série própria. */
+  .linha-demandas .serie-label, .linha-demandas .celula-total-linha { color: #7fd858; }
+  .linha-demandas .serie-label { border-left-color: #7fd858; }
   .linha-total-demandas td { font-weight: 600; border-top: 1px solid var(--border); }
 `;
 
