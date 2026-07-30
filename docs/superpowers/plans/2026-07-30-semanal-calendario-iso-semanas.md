@@ -53,7 +53,7 @@ bundle do navegador (`compute-semanal.js`, `render-aba-semanal.js`).
 
 ---
 
-### Tarefa 1: Calendário ISO em `compute-semanal.js`
+### Task 1: Calendário ISO em `compute-semanal.js`
 
 **Files:**
 - Modify: `tools/semanal/compute-semanal.js`
@@ -367,7 +367,7 @@ EOF
 
 ---
 
-### Tarefa 2: Lista de eventos em `compute-demandas.js`
+### Task 2: Lista de eventos em `compute-demandas.js`
 
 **Files:**
 - Modify: `tools/comum/datas.js` (adiciona `diaEpoch`, versão canônica em Node)
@@ -575,7 +575,7 @@ EOF
 
 ---
 
-### Tarefa 3: `render-aba-semanal.js` consome tudo, remove o antigo
+### Task 3: `render-aba-semanal.js` consome tudo, remove o antigo
 
 Esta é a tarefa que troca de vez a divisão nominal por 4 pelas semanas reais. Toca 3
 arquivos de produção (o rewrite principal, mais a limpeza do que ficou obsoleto nas duas
@@ -1258,7 +1258,7 @@ EOF
 
 ---
 
-### Tarefa 4: Fiação no cliente — `render-semanal.js`
+### Task 4: Fiação no cliente — `render-semanal.js`
 
 **Files:**
 - Modify: `tools/semanal/render-semanal.js`
