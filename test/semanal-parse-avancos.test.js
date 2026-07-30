@@ -14,6 +14,7 @@ CABECALHO[9] = 'Tipo';
 CABECALHO[11] = 'Status';
 CABECALHO[13] = 'Termino Sondagem';
 CABECALHO[14] = 'Conclusão';
+CABECALHO[15] = 'Cancelamento';
 CABECALHO[16] = 'Atualizado';
 
 // 2026-03-10, 2026-03-12, 2026-04-02, 2026-04-05 em serial Excel.
@@ -26,7 +27,7 @@ function grade(linhas) {
   return grid;
 }
 
-function furo({ sup = 'SUP-0001-24', tipo = 'SP', status = 'CONCLUIDO', criacao = MAR10, termino = MAR12, conclusao = ABR02, atualizado = ABR05 } = {}) {
+function furo({ sup = 'SUP-0001-24', tipo = 'SP', status = 'CONCLUIDO', criacao = MAR10, termino = MAR12, conclusao = ABR02, cancelamento = '', atualizado = ABR05 } = {}) {
   const linha = [];
   linha[0] = sup;
   linha[8] = criacao;
@@ -34,6 +35,7 @@ function furo({ sup = 'SUP-0001-24', tipo = 'SP', status = 'CONCLUIDO', criacao 
   linha[11] = status;
   linha[13] = termino;
   linha[14] = conclusao;
+  linha[15] = cancelamento;
   linha[16] = atualizado;
   return linha;
 }
@@ -115,7 +117,8 @@ test('as colunas são achadas pelo NOME, não por posição fixa', () => {
   deslocado[1][6] = 'Status';
   deslocado[1][7] = 'Termino Sondagem';
   deslocado[1][8] = 'Conclusão';
-  deslocado[1][9] = 'Atualizado';
+  deslocado[1][9] = 'Cancelamento';
+  deslocado[1][10] = 'Atualizado';
   deslocado[2] = [];
   deslocado[2][3] = 'SUP-9999-26';
   deslocado[2][4] = MAR10;
@@ -124,4 +127,47 @@ test('as colunas são achadas pelo NOME, não por posição fixa', () => {
   const { furos } = parseAvancos(deslocado);
   assert.strictEqual(furos[0].sup, 'SUP-9999-26');
   assert.strictEqual(furos[0].tipologia, 'ST');
+});
+
+test('cancelamento é lido de texto dd/MM/yyyy, não de serial Excel', () => {
+  const { furos } = parseAvancos(grade([furo({ status: 'CANCELADO', cancelamento: '27/02/2025' })]));
+  assert.strictEqual(furos[0].cancelamento.toISOString().slice(0, 10), '2025-02-27',
+    'dd/MM/yyyy: 27 é o dia e 02 é o mês, nunca o contrário');
+});
+
+test('cancelamento vazio vira null', () => {
+  const { furos } = parseAvancos(grade([furo({ cancelamento: '' })]));
+  assert.strictEqual(furos[0].cancelamento, null);
+});
+
+test('cancelamento em serial Excel NÃO é aceito -- a coluna é texto na planilha real', () => {
+  const { furos, cancelamentoIlegivel } = parseAvancos(grade([furo({ status: 'CANCELADO', cancelamento: 46091 })]));
+  assert.strictEqual(furos[0].cancelamento, null);
+  assert.strictEqual(cancelamentoIlegivel, 1);
+});
+
+test('cancelamento ilegível NUNCA vira Invalid Date -- ele compararia false contra qualquer data, em silêncio', () => {
+  const { furos, cancelamentoIlegivel } = parseAvancos(grade([furo({ status: 'CANCELADO', cancelamento: '31/31/2025' })]));
+  assert.strictEqual(furos[0].cancelamento, null);
+  assert.strictEqual(cancelamentoIlegivel, 1);
+});
+
+test('cancelamentoIlegivel só conta linha CANCELADO -- texto perdido em linha não cancelada não é anomalia', () => {
+  const { cancelamentoIlegivel } = parseAvancos(grade([
+    furo({ status: 'CONCLUIDO', cancelamento: 'lixo' }),
+    furo({ status: 'CANCELADO', cancelamento: 'lixo' }),
+  ]));
+  assert.strictEqual(cancelamentoIlegivel, 1);
+});
+
+test('data de cancelamento com espaço em volta ainda parseia', () => {
+  const { furos } = parseAvancos(grade([furo({ status: 'CANCELADO', cancelamento: ' 05/11/2024 ' })]));
+  assert.strictEqual(furos[0].cancelamento.toISOString().slice(0, 10), '2024-11-05');
+});
+
+test('a coluna Cancelamento é achada pelo NOME, como as outras', () => {
+  const semCancelamento = [];
+  semCancelamento[1] = CABECALHO.map(rotulo => (rotulo === 'Cancelamento' ? 'Outra coisa' : rotulo));
+  semCancelamento[2] = furo();
+  assert.throws(() => parseAvancos(semCancelamento), /Cancelamento/);
 });

@@ -11,15 +11,11 @@ const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 //
 // Colunas usadas, com o nome EXATO da planilha (medido em 2026-07-29):
 // Contrato(A) · Criação da OS(I) · Tipo(J) · Status(L) · Termino Sondagem(N,
-// sem acento em "Termino") · Conclusão(O) · Atualizado(Q).
+// sem acento em "Termino") · Conclusão(O) · Cancelamento(P) · Atualizado(Q).
 //
-// Duas colunas de propósito NÃO usadas:
+// Uma coluna de propósito NÃO usada:
 // - Inicio Sondagem(M): 3.929 das 61.927 linhas têm data fora de 2023-2027
 //   (de 1901 a 2078). Nenhuma série ancora nela.
-// - Cancelamento(P): apesar do nome, está VAZIA em todas as 4.331 linhas
-//   CANCELADO e PREENCHIDA em todas as 50.662 CONCLUIDO, tipicamente cerca de
-//   um ano depois da conclusão -- comporta-se como prazo contratual, não como
-//   data de evento. É por isso que canceladas ancoram em Atualizado(Q).
 
 // Janela de sanidade de data. A planilha só tem operação a partir de
 // 2023-02; qualquer serial fora daqui é lixo (a coluna Inicio Sondagem tem
@@ -34,6 +30,7 @@ const COLUNAS_OBRIGATORIAS = {
   status: 'Status',
   terminoSondagem: 'Termino Sondagem',
   conclusao: 'Conclusão',
+  cancelamento: 'Cancelamento',
   atualizado: 'Atualizado',
 };
 
@@ -65,11 +62,35 @@ function dataSaneada(valor) {
   return excelSerialParaData(serial);
 }
 
+// A coluna Cancelamento é a ÚNICA data desta aba gravada como texto
+// (dd/MM/yyyy), não como serial Excel. Medido em 2026-07-30: as 4.331 linhas
+// CANCELADO têm valor e todas as 4.331 parseiam. Number() num "27/02/2025"
+// devolve NaN -- foi assim que uma sondagem anterior concluiu, errado, que a
+// coluna estava vazia, e o spec chegou a declarar Q (Atualizado) como âncora
+// proxy das canceladas. Ver o bloco "Correção de 2026-07-30" no spec.
+//
+// Valida os componentes DEPOIS de montar a data: `new Date(Date.UTC(2025, 30, 31))`
+// não é Invalid Date, é uma data deslocada para outro mês. Um Invalid Date
+// solto seria pior que null -- ele compara `false` contra qualquer data, então
+// o furo sairia da série de canceladas E do estoque, sem erro nenhum.
+function dataDeTexto(valor) {
+  const bruto = texto(valor);
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(bruto);
+  if (!m) return null;
+  const dia = Number(m[1]);
+  const mes = Number(m[2]);
+  const ano = Number(m[3]);
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  if (data.getUTCFullYear() !== ano || data.getUTCMonth() !== mes - 1 || data.getUTCDate() !== dia) return null;
+  return data;
+}
+
 function parseAvancos(grid) {
   const cols = locateColunasAvancos(grid[1]);
   const furos = [];
   let descartadas = 0;
   let semDataTermino = 0;
+  let cancelamentoIlegivel = 0;
 
   for (let r = 2; r < grid.length; r++) {
     const linha = grid[r];
@@ -94,6 +115,13 @@ function parseAvancos(grid) {
       semDataTermino++;
     }
 
+    const cancelamento = dataDeTexto(linha[cols.cancelamento]);
+    // Só é anomalia quando a linha ESTÁ cancelada: nas outras a coluna é
+    // legitimamente vazia. Uma cancelada sem data legível fica fora da série de
+    // canceladas e, de propósito, DENTRO do estoque -- "não sei quando saiu" é
+    // mais honesto que "saiu no começo".
+    if (status === 'CANCELADO' && cancelamento === null) cancelamentoIlegivel++;
+
     furos.push({
       sup,
       tipologia,
@@ -101,11 +129,14 @@ function parseAvancos(grid) {
       criacaoOS: dataSaneada(linha[cols.criacaoOS]),
       terminoSondagem,
       conclusao: dataSaneada(linha[cols.conclusao]),
+      cancelamento,
       atualizado: dataSaneada(linha[cols.atualizado]),
     });
   }
 
-  return { furos, descartadas, semDataTermino };
+  return { furos, descartadas, semDataTermino, cancelamentoIlegivel };
 }
 
-module.exports = { parseAvancos, locateColunasAvancos, SERIAL_MIN, SERIAL_MAX };
+module.exports = {
+  parseAvancos, locateColunasAvancos, dataDeTexto, SERIAL_MIN, SERIAL_MAX,
+};

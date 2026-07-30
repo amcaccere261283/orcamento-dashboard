@@ -12,7 +12,7 @@ function furo(over = {}) {
   return Object.assign({
     sup: 'SUP-0001-24', tipologia: 'SP', status: 'CONCLUIDO',
     criacaoOS: d(2026, 1, 10), terminoSondagem: d(2026, 2, 10),
-    conclusao: d(2026, 3, 10), atualizado: d(2026, 3, 12),
+    conclusao: d(2026, 3, 10), cancelamento: null, atualizado: d(2026, 3, 12),
   }, over);
 }
 
@@ -53,23 +53,65 @@ test('EXECUTADO conta como sondagem realizada -- campo feito, relatório pendent
   assert.strictEqual(serieDe(saida, 'SP', 'sondagemRealizada')[1], 1);
 });
 
-test('relatório concluído exige status CONCLUIDO: 798 das 811 linhas EXECUTADO têm data de Conclusão preenchida e NÃO podem contar', () => {
+test('relatório concluído exige status CONCLUIDO: medido em 2026-07-30, 0 das 811 linhas EXECUTADO têm Conclusão preenchida -- mas o filtro é por status mesmo assim, porque é o status que carrega o significado da etapa, e a planilha pode passar a preencher Conclusão em linha EXECUTADO sem avisar', () => {
   const saida = computeDemandas([furo({ status: 'EXECUTADO' })], PERIODOS_2026);
   assert.strictEqual(serieDe(saida, 'SP', 'relatorioConcluido')[2], 0);
 });
 
-test('canceladas ancoram em Atualizado, a única data que existe nelas', () => {
+test('canceladas ancoram em cancelamento (coluna P), não em atualizado (coluna Q)', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null, atualizado: d(2026, 5, 20) }),
+    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null,
+           cancelamento: d(2026, 2, 20), atualizado: d(2026, 11, 30) }),
   ], PERIODOS_2026);
-  assert.strictEqual(serieDe(saida, 'SP', 'canceladas')[4], 1);
+  assert.strictEqual(serieDe(saida, 'SP', 'canceladas')[1], 1, 'fevereiro, o mês do cancelamento');
+  assert.strictEqual(serieDe(saida, 'SP', 'canceladas')[11], 0, 'dezembro é só a última alteração da linha');
+});
+
+test('cancelada sem data legível fica fora da série de canceladas', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null, cancelamento: null }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'canceladas'), new Array(12).fill(0));
 });
 
 test('cancelada NÃO entra no estoque de pendentes, em nenhum mês', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null, atualizado: d(2026, 5, 20) }),
+    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null, cancelamento: d(2026, 1, 5) }),
   ], PERIODOS_2026);
   assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(0));
+});
+
+test('cancelada sai do estoque NO MÊS do cancelamento -- estava aberta antes disso', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 10), terminoSondagem: null,
+           conclusao: null, cancelamento: d(2026, 4, 15) }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes').slice(0, 6), [1, 1, 1, 0, 0, 0],
+    'aberta jan-mar, fora a partir de abril');
+});
+
+test('cancelada SEM data legível continua no estoque -- "não sei quando saiu" não é "saiu no começo"', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 10), terminoSondagem: null,
+           conclusao: null, cancelamento: null }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(1));
+});
+
+test('cancelada cujo cancelamento é anterior ao ano nunca entra no estoque de 2026', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2025, 6, 1), terminoSondagem: null,
+           conclusao: null, cancelamento: d(2025, 8, 1) }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(0));
+});
+
+test('término vence cancelamento posterior: quem terminou a sondagem saiu do estoque ali', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 5), terminoSondagem: d(2026, 2, 10),
+           conclusao: null, cancelamento: d(2026, 6, 1) }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes').slice(0, 4), [1, 0, 0, 0]);
 });
 
 test('estoque é SALDO: o furo aberto em janeiro conta em todo mês até o término', () => {
@@ -166,11 +208,11 @@ test('reconciliarSups não muda o agregado: SUP fora da MATRIZ continua contando
     'nada é descartado por não casar com a MATRIZ -- foi o Critical da Fase 1');
 });
 
-test('canceladas exige status CANCELADO: não-cancelados com atualizado válido NÃO contam', () => {
+test('canceladas exige status CANCELADO: não-cancelados com cancelamento válido NÃO contam', () => {
   const saida = computeDemandas([
-    furo({ status: 'CONCLUIDO', atualizado: d(2026, 3, 12) }),
-    furo({ status: 'EXECUTADO', atualizado: d(2026, 4, 15) }),
-    furo({ status: 'PENDENTE', atualizado: d(2026, 2, 20) }),
+    furo({ status: 'CONCLUIDO', cancelamento: d(2026, 3, 12) }),
+    furo({ status: 'EXECUTADO', cancelamento: d(2026, 4, 15) }),
+    furo({ status: 'PENDENTE', cancelamento: d(2026, 2, 20) }),
   ], PERIODOS_2026);
   assert.deepStrictEqual(serieDe(saida, 'SP', 'canceladas'), new Array(12).fill(0),
     'guard protege: o if(cancelado) é essencial');

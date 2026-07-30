@@ -75,9 +75,9 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   } catch (err) {
     throw new Error(`Não consegui ler a aba "${configDemandas.nomeAba}" de ${configDemandas.caminhoArquivo} (o Google Drive está montado em G:?). Erro original: ${err.message}`);
   }
-  const { furos, descartadas, semDataTermino } = parseAvancos(gridAvancos);
+  const { furos, descartadas, semDataTermino, cancelamentoIlegivel } = parseAvancos(gridAvancos);
   const demandas = computeDemandas(furos, periodos);
-  console.log(`Demandas: ${furos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque).`);
+  console.log(`Demandas: ${furos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
 
   // Relatório dos DOIS lados do desencontro de SUP. Nada é descartado -- isto
   // é só visibilidade, e existe porque silenciar o que não casa foi o Critical

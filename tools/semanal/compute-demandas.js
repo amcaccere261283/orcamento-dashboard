@@ -75,19 +75,22 @@ function computeDemandas(furos, periodos) {
     }
 
     if (cancelado) {
-      const iCancel = indiceDoMes(f.atualizado, periodos);
+      const iCancel = indiceDoMes(f.cancelamento, periodos);
       if (iCancel >= 0) series.canceladas[iCancel] += 1;
     }
 
-    // Estoque: aberto no fim do mês = chegou até ali e a sondagem não
-    // terminou até ali. Cancelada sai por STATUS, não por data, porque data
-    // de cancelamento não existe na planilha -- limitação declarada no spec
-    // (o saldo histórico subestima em até 4.331 furos no pior caso).
-    if (!cancelado && f.criacaoOS) {
+    // Estoque: aberto no fim do mês = chegou até ali, e nem a sondagem terminou
+    // nem o cancelamento ocorreu até ali. Cancelada sai pela DATA (coluna P), não
+    // por status: um furo cancelado em julho estava de fato aberto em janeiro, e o
+    // saldo de janeiro tem que dizer isso. Cancelada sem data legível permanece no
+    // estoque de propósito -- "não sei quando saiu" é mais honesto que "saiu no
+    // começo", e o build reporta a contagem.
+    if (f.criacaoOS) {
       for (let i = 0; i < n; i++) {
         if (f.criacaoOS > fins[i]) continue;
         const terminou = f.terminoSondagem && f.terminoSondagem <= fins[i];
-        if (!terminou) series.pendentes[i] += 1;
+        const cancelou = f.cancelamento && f.cancelamento <= fins[i];
+        if (!terminou && !cancelou) series.pendentes[i] += 1;
       }
     }
   }
