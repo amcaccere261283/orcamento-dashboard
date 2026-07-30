@@ -235,3 +235,33 @@ test('a soma S1+S2+S3+S4 do Previsto continua batendo com o mês vigente mesmo c
   assert.deepStrictEqual(s1a_s4, [1000, 1000, 1000, 1000]);
   assert.strictEqual(s1a_s4.reduce((a, b) => a + b, 0), 4000);
 });
+
+test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume está marcada e demandas.porRegistro tem dado real', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
+  const demandas = {
+    // tipologias/totais: renderSemanal exige o formato {tipologias, totais}
+    // de compute-demandas.js (ver DEMANDAS_VAZIAS acima) -- vazios aqui
+    // porque este teste não olha a aba Demandas, só o wire-up de
+    // Realizado/Tendência via porRegistro em window.__DEMANDAS__.
+    tipologias: [], totais: {},
+    porRegistro: { 'SUP-0001-24||ST': { sondagemRealizada: [0, 0, 0, 0, 0, 0, 800, 0, 0, 0, 0, 0], pendentes: [0, 0, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0] } },
+  };
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // Marca a dimensão Volume no seletor (Financeiro continua marcado também --
+  // seletor-dimensao é multi-select, minimoUm:true, não substitui).
+  const painelDimensao = documentoFalso.getElementById('seletor-dimensao-painel');
+  const checkboxVolume = painelDimensao.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'volume')[0];
+  assert.ok(checkboxVolume, 'esperava um checkbox "volume" no seletor de dimensão');
+  checkboxVolume.checked = true;
+  checkboxVolume.listeners.change();
+
+  const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
+  assert.match(htmlMontado, /Demandas Pendentes/, 'a linha nova precisa aparecer no bloco Volume depois de marcar a dimensão');
+  assert.doesNotMatch(htmlMontado.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0], /sem-dado/, 'Realizado (Volume) precisa vir preenchido, não sem-dado, com demandas.porRegistro real');
+});
