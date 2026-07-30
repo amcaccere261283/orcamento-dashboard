@@ -82,7 +82,7 @@ descartadas, com o motivo:
 | `tools/comum/tipologias-avancos.js` | **Criar.** O mapa de tipologia crua → rótulo do dashboard, e só isso. Em `comum/` porque a ingestão de laboratório vai precisar do mesmo mapa. |
 | `tools/semanal/compute-demandas.js` | **Criar.** Função pura, sem I/O: recebe os furos e os 12 períodos, devolve `(tipologia, mês) → 5 séries`. |
 | `tools/semanal/render-aba-demandas.js` | **Criar.** A tabela: um bloco por série, uma linha por tipologia, 12 colunas de mês + total, com alternância Mensal/Acumulado. |
-| `tools/semanal/render-semanal.js` | **Modificar, 2 linhas.** Registrar a aba no seletor e chamar o render. Nada além disso — ver "Convivência com a Fase 2". |
+| `tools/semanal/render-semanal.js` | **Modificar, ~10 linhas, todas aditivas.** `alternarAba` e `montarDashboard` são escritas aba por aba, não genéricas: entram a entrada em `ABAS_VISUALIZACAO`, a `<div id="secao-demandas">`, duas linhas em `alternarAba`, o listener e a chamada em `montarDashboard`, a entrada em `BUNDLE_ARQUIVOS` e o `<style>` próprio. Nenhuma linha existente muda de comportamento — ver "Convivência com a Fase 2". |
 | `tools/semanal/build-dashboard.js` | **Modificar.** Ler a nova fonte e passar `demandas` para `renderSemanal`. |
 
 ### O agregado no blob
@@ -212,10 +212,15 @@ Tudo abaixo foi medido na planilha real em 2026-07-29, não suposto:
 
 ## A aba Demandas
 
-Um bloco por série, linha por tipologia, 12 colunas de mês mais a coluna de total, e um
-controle **Mensal / Acumulado**. No modo acumulado, o bloco de pendentes troca o rótulo da
-coluna de total de "Total" para "Saldo" — mesmo cuidado que a aba 1 já toma ao trocar
-"Total" por "Média" na dimensão equipes, para ninguém somar o que não se soma.
+Um bloco por série, linha por tipologia, 12 colunas de mês mais a coluna de fechamento, e um
+controle **Mensal / Acumulado**.
+
+A coluna de fechamento segue a natureza da série, não o modo: em fluxo ela é **Total** (soma
+dos 12 no modo mensal, último valor no acumulado — o mesmo número); em estoque ela é
+**Saldo**, sempre o último mês, nos dois modos. Somar 12 saldos mensais produziria
+exatamente o número sem significado que este spec evita, e chamá-lo de "Total" no modo
+mensal só esconderia isso atrás de um rótulo. Mesmo cuidado que a aba 1 já toma ao trocar
+"Total" por "Média" na dimensão equipes.
 
 Sem barra de filtros nesta aba. Quando a Fase 2 entregar a barra compartilhada, ela recorta
 esta aba pelo mesmo caminho das outras — mas não antes, e não neste spec.
