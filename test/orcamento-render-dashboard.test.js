@@ -1900,8 +1900,33 @@ test('every filter change (recorte or Alertas-specific) recalculates BOTH recalc
   const html = renderComSenha([registroExemplo()]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   const scriptTabela = scripts[3][1];
-  assert.doesNotMatch(scriptTabela, /aoMudar/, 'aoMudar não deve existir mais em lugar nenhum -- nem no config, nem no handler');
-  assert.match(scriptTabela, /recalcularTabela\(\);\s*\n\s*recalcularAlertas\(\);\s*\n\s*\}\);\s*\n\s*\}\);\s*\n\s*atualizarRotuloFiltro\(cfg, opcoes, estadoFiltros\);/, 'o final do handler de mudança de checkbox deve chamar as duas funções incondicionalmente, sem depender de cfg.aoMudar');
+  // O mecanismo antigo era cfg.aoMudar (um campo por config) -- esse sim
+  // continua removido. Desde a extração pra tools/comum/render-shell.js
+  // (ver Fase 2 do Planejamento Semanal), montarFiltroMulti ganhou um
+  // aoMudar(cfg) de VERDADE como parâmetro -- sempre o mesmo callback,
+  // aoMudarFiltroOrcamento, passado explicitamente em todo call site desta
+  // página (recorte e Alertas). É esse callback, não mais o handler de
+  // change em si, que chama recalcularTabela/recalcularAlertas.
+  assert.doesNotMatch(scriptTabela, /cfg\.aoMudar/, 'cfg.aoMudar (o mecanismo antigo, um campo por config) não deve existir mais em lugar nenhum');
+  assert.match(scriptTabela, /aoMudar\(cfg\);\s*\n\s*\}\);/, 'o handler de mudança de checkbox deve chamar aoMudar(cfg) incondicionalmente ao final, sem depender de nenhum cfg.aoMudar');
+  // O [\s\S]*? original era lazy mas sem barreira: como recalcularTabela()/
+  // recalcularAlertas() também fecham limparFiltros e montarDashboard (fim
+  // idêntico), um corte acidental no corpo desta função (por ex. um "}" a
+  // mais/a menos) faria o match pular pro corpo de OUTRA função e o teste
+  // continuar passando por engano. A barreira (?!\r?\n\}) proíbe atravessar
+  // um "}" no início de linha, então só casa dentro do próprio corpo de
+  // aoMudarFiltroOrcamento.
+  //
+  // Acoplamento deliberado: esta asserção (e as duas de FILTROS_CONFIG/
+  // FILTROS_ALERTAS_CONFIG logo abaixo) checam o texto do 4º <script> da
+  // página, que é montarFiltroMulti/aoMudar (definidos em
+  // tools/comum/render-shell.js) concatenados com o resto do JS de cliente
+  // do orçamento -- um refactor futuro em render-shell.js que mude a forma
+  // desse callback precisa rodar este arquivo de teste também, não só
+  // test/comum-render-shell.test.js.
+  assert.match(scriptTabela, /function aoMudarFiltroOrcamento\(cfg\) \{(?:(?!\r?\n\})[\s\S])*recalcularTabela\(\);\r?\n  recalcularAlertas\(\);\r?\n\}/, 'aoMudarFiltroOrcamento (o callback de verdade usado por esta página) deve chamar as duas funções incondicionalmente ao final');
+  assert.match(scriptTabela, /FILTROS_CONFIG\.forEach\(function \(cfg\) \{ montarFiltroMulti\(cfg, registros, filtrosSelecionados, aoMudarFiltroOrcamento\); \}\);/, 'os filtros de recorte devem passar aoMudarFiltroOrcamento como callback');
+  assert.match(scriptTabela, /FILTROS_ALERTAS_CONFIG\.forEach\(function \(cfg\) \{ montarFiltroMulti\(cfg, registros, filtrosAlertas, aoMudarFiltroOrcamento\); \}\);/, 'os filtros da aba Alertas também devem passar aoMudarFiltroOrcamento como callback -- é isso que corrige o bug de recorte nunca atualizar Alertas');
 });
 
 test('aplicarBuscaAlertas (extraído do HTML real gerado) hides rows whose data-search does not contain the normalized search term, and shows all rows when the term is empty', () => {

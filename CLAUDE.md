@@ -126,11 +126,15 @@ seguinte), e duas decisões de design foram tomadas em cima deles. Está registr
 
 ### Pendências conhecidas
 
-**Fase 2 — os filtros.** O spec prometia "mesma barra de filtros e mesmo seletor de
-dimensão do orçamento" nas duas abas. **Não foi entregue.** Hoje a aba 1 tem dimensão fixa
-em `financeiro`, sem barra de filtros e sem agrupamento, e a aba 2 mostra todas as
-tipologias. `markupFiltros()` existe na casca e é deliberadamente não chamada. Publicado
-assim por decisão do dono em 2026-07-29; é o primeiro item da fase 2.
+**Fase 2 — os filtros: lógica compartilhada extraída, semanal ainda não
+consome.** `tools/comum/render-shell.js` agora exporta `scriptFiltros()`
+(estado, `indicesFiltrados`, `montarFiltroMulti` com `aoMudar(cfg)`) --
+ver docs/superpowers/specs/2026-07-29-planejamento-semanal-filtros-design.md
+e docs/superpowers/plans/2026-07-29-planejamento-semanal-filtros-fase1-extracao.md.
+O orçamento já consome (comportamento idêntico, golden regenerado de
+propósito). A página semanal (aba 1 com a barra completa + seletor de
+dimensão, aba 2 só com o filtro de tipologia da mesma barra) ainda não foi
+ligada -- é o Plano 2, a escrever separadamente.
 
 **A página semanal não tem carimbo "Gerado em"**, ao contrário do orçamento. Sem ele não
 dá para confirmar um deploy pelo conteúdo — que é justamente a verificação que este

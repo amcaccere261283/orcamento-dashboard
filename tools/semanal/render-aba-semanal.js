@@ -1,6 +1,12 @@
 'use strict';
 const { SEMANAS, dividirEmSemanas, fecharMes } = require('./compute-semanal.js');
 
+// Rótulo de exibição de cada dimensão -- só as 3 que a barra de filtros da
+// semanal expõe (ver FILTROS_CONFIG_SEMANAL/DIMENSOES_CONFIG_SEMANAL em
+// render-semanal.js); "produtividade"/"ticketMedio" do orçamento não têm
+// equivalente aqui.
+var DIMENSOES_ROTULO_SEMANAL = { equipes: 'Equipes', volume: 'Volume', financeiro: 'Financeiro' };
+
 // Este módulo roda tanto no Node (testes) quanto embrulhado no navegador via
 // buildBrowserBundle -- por isso 'var'/'function', não 'const'/arrow, e o
 // require acima na forma EXATA que a reescrita de tools/comum/browser-bundle.js
@@ -74,10 +80,14 @@ function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento) {
 }
 
 // registros/indices: mesmo par que o orçamento já usa (registros: array
-// completo da MATRIZ; indices: quais entram nesta tabela -- aqui sempre "o
-// mês vigente inteiro", já que a aba ainda não tem filtro próprio).
-// dimensao: 'volume' | 'financeiro' | 'equipes'. vigenteIdx: índice 0-11 do
-// mês vigente dentro dos arrays mensais de cada registro.
+// completo da MATRIZ; indices: quais entram nesta tabela -- agora vem
+// filtrado pela barra compartilhada, ver render-semanal.js). dimensoes:
+// array de 'volume' | 'financeiro' | 'equipes', na ordem a renderizar --
+// várias marcadas ao mesmo tempo produzem um bloco empilhado por dimensão,
+// mesmo padrão visual de .grafico-bloco-dimensao no orçamento (CSS próprio
+// em CSS_SEMANAL, ver render-semanal.js -- não entra em cssBase()).
+// vigenteIdx: índice 0-11 do mês vigente dentro dos arrays mensais de cada
+// registro.
 //
 // Previsto vem de dividirEmSemanas (Task 6) aplicado à soma do Previsto do
 // mês vigente através dos registros selecionados. Realizado e Tendência
@@ -85,19 +95,23 @@ function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento) {
 // disponibilizá-la depois); as colunas são renderizadas vazias, com a
 // classe sem-dado, prontas para um parser futuro preencher os 4 valores por
 // semana sem precisar mudar a estrutura da tabela.
-function renderAbaSemanal(registros, indices, dimensao, vigenteIdx) {
-  var mesVigente = previstoMesVigente(registros, indices, dimensao, vigenteIdx);
-  var semanasPrevisto = dividirEmSemanas(mesVigente, dimensao);
-  var fechamentoPrevisto = fecharMes(semanasPrevisto, dimensao);
-  var semanasSemDado = new Array(SEMANAS).fill(null);
+function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx) {
+  return dimensoes.map(function (dimensao) {
+    var mesVigente = previstoMesVigente(registros, indices, dimensao, vigenteIdx);
+    var semanasPrevisto = dividirEmSemanas(mesVigente, dimensao);
+    var fechamentoPrevisto = fecharMes(semanasPrevisto, dimensao);
+    var semanasSemDado = new Array(SEMANAS).fill(null);
 
-  return '<table class="tabela-semanal">'
-    + renderCabecalho(dimensao)
-    + '<tbody>'
-    + renderLinhaSerie('Previsto', 'previsto', semanasPrevisto, fechamentoPrevisto)
-    + renderLinhaSerie('Realizado', 'realizado', semanasSemDado, null)
-    + renderLinhaSerie('Tendência', 'tendencia', semanasSemDado, null)
-    + '</tbody></table>';
+    return '<div class="bloco-dimensao-semanal">'
+      + '<div class="tabela-semanal-titulo">' + escapeHtml(DIMENSOES_ROTULO_SEMANAL[dimensao] || dimensao) + '</div>'
+      + '<table class="tabela-semanal">'
+      + renderCabecalho(dimensao)
+      + '<tbody>'
+      + renderLinhaSerie('Previsto', 'previsto', semanasPrevisto, fechamentoPrevisto)
+      + renderLinhaSerie('Realizado', 'realizado', semanasSemDado, null)
+      + renderLinhaSerie('Tendência', 'tendencia', semanasSemDado, null)
+      + '</tbody></table></div>';
+  }).join('');
 }
 
 module.exports = { renderAbaSemanal, rotuloColunaFechamento };

@@ -6,6 +6,7 @@ const { baselineParaCliente } = require('../tools/semanal/build-dashboard.js');
 const { calcularLinhas } = require('../tools/semanal/compute-balanco.js');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaBalanco } = require('../tools/semanal/render-aba-balanco.js');
+const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 
 // A COSTURA que ninguém atravessava: build-dashboard.js/baselineParaCliente
 // (que serializa a linha de base) -> compute-balanco.js/chaveBaseline (que a
@@ -150,21 +151,6 @@ test('a costura fecha: o que baselineParaCliente produz é achado por chaveBasel
 // cobertura" -- é a mesma costura: fecharTendenciaVigente desembrulha
 // {registros, baseline} e guarda o baseline ali, e é de lá que
 // montarAbaBalanco o lê quando a base escolhida é 'previstoInicial'.
-
-function criarDocumentoFalso() {
-  const elementos = {};
-  function elemento(id) {
-    if (!elementos[id]) {
-      elementos[id] = {
-        id, style: {}, classList: { toggle() {} }, listeners: {},
-        addEventListener(tipo, fn) { this.listeners[tipo] = fn; },
-        focus() {}, value: '', checked: false, textContent: '', innerHTML: '', disabled: false,
-      };
-    }
-    return elementos[id];
-  }
-  return { elementos, getElementById: elemento };
-}
 
 function rodarPagina(html) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);

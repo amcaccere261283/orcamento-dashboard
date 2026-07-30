@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const vm = require('node:vm');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaBalanco } = require('../tools/semanal/render-aba-balanco.js');
+const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 
 // Task 10 liga a aba Balanço de massa de ponta a ponta. O achado crítico da
 // Task 9 (ver progress.md) é que compute-balanco.js depende de
@@ -60,34 +61,6 @@ function registroSintetico(sup, tomador, tipologia, previstoMes, realizadoMes, e
     realizado: bloco(eqReal, zeros, finReal, realizadoMes),
     total: bloco(zeros, zeros, zeros, 0),
   };
-}
-
-// Mesmo DOM mínimo do arquivo irmão (semanal-render-semanal-wireup.test.js):
-// getElementById devolve sempre o MESMO objeto por id, com listeners
-// memoizados por tipo de evento -- suficiente para addEventListener/
-// classList.toggle/style/value/innerHTML/focus, que é tudo que os scripts
-// de cliente desta página usam.
-function criarDocumentoFalso() {
-  const elementos = {};
-  function elemento(id) {
-    if (!elementos[id]) {
-      elementos[id] = {
-        id,
-        style: {},
-        classList: { toggle() {} },
-        listeners: {},
-        addEventListener(tipo, fn) { this.listeners[tipo] = fn; },
-        focus() {},
-        value: '',
-        checked: false,
-        textContent: '',
-        innerHTML: '',
-        disabled: false,
-      };
-    }
-    return elementos[id];
-  }
-  return { elementos, getElementById: elemento };
 }
 
 // blocos: array de trechos de <script> (já sem as tags). Roda-os, na ordem
@@ -207,4 +180,30 @@ test('o HTML cru (antes de rodar qualquer script) nunca contém a tipologia, o S
   assert.doesNotMatch(html, /SUP-0003-24/);
   assert.doesNotMatch(html, /Grupo-Sintetico-Balanco/);
   assert.doesNotMatch(html, /Tomador-Sintetico-Tau/);
+});
+
+test('filtrar por tipologia na barra compartilhada faz a aba Balanço de massa mostrar só os gráficos das tipologias marcadas', async () => {
+  const registros = [
+    registroSintetico('SUP-0010-24', 'Tomador-Sintetico-Um', TIPOLOGIA_SINTETICA, 4000, 1000, 2, 5),
+    registroSintetico('SUP-0011-24', 'Tomador-Sintetico-Dois', 'OUTRA-TIPOLOGIA', 3000, 3000, 2, 2),
+  ];
+  const geradoEm = new Date('2026-07-01T00:00:00Z');
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+
+  const blocos = extrairBlocos(html);
+  const { sandbox, documentoFalso } = rodarBlocos(blocos);
+
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const painelTipologia = documentoFalso.getElementById('filtro-tipologia-painel');
+  const checkboxes = painelTipologia.querySelectorAll('input[type="checkbox"]');
+  const checkboxSintetica = checkboxes.filter((c) => c.value === TIPOLOGIA_SINTETICA)[0];
+  assert.ok(checkboxSintetica, 'esperava um checkbox pra ' + TIPOLOGIA_SINTETICA + ' no painel montado');
+  checkboxSintetica.checked = true;
+  checkboxSintetica.listeners.change();
+
+  const htmlMontado = documentoFalso.getElementById('secao-balanco').innerHTML;
+  assert.match(htmlMontado, new RegExp(TIPOLOGIA_SINTETICA), 'o gráfico da tipologia marcada deve continuar aparecendo');
+  assert.doesNotMatch(htmlMontado, /OUTRA-TIPOLOGIA/, 'a tipologia não marcada não deve aparecer -- prova que a aba Balanço recebeu o indices já filtrado, não todos os registros');
 });

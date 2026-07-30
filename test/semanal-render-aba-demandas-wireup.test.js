@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const vm = require('node:vm');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaDemandas } = require('../tools/semanal/render-aba-demandas.js');
+const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 
 // Mesma prova que test/semanal-render-aba-balanco-wireup.test.js faz para a
 // aba Balanço de massa: gerar a página, rodar os <script> de cliente num
@@ -46,28 +47,16 @@ function registroSintetico() {
   };
 }
 
-// DOM falso e sandbox: MESMA forma de test/semanal-render-semanal-wireup.test.js
-// (que é a referência do repositório para isto). Dois detalhes que precisam
-// bater com ela, senão o teste não roda:
-// - `addEventListener` guarda em `this.listeners[tipo]`, e é assim que o teste
-//   dispara o `change` do <select> mais abaixo.
-// - `window` É o objeto global do sandbox, como no navegador -- e o gate
-//   (scriptDesbloqueio, da casca) define `tentarDesbloquear` nesse global.
-function criarDocumentoFalso() {
-  const elementos = {};
-  function elemento(id) {
-    if (!elementos[id]) {
-      elementos[id] = {
-        id, style: {}, classList: { toggle() {} }, listeners: {},
-        addEventListener(tipo, fn) { this.listeners[tipo] = fn; },
-        focus() {}, value: '', textContent: '', innerHTML: '', disabled: false,
-      };
-    }
-    return elementos[id];
-  }
-  return { elementos, getElementById: elemento };
-}
-
+// DOM falso: test/helpers/dom-falso-semanal.js (compartilhado com os outros
+// arquivos de wire-up da semanal). Precisou virar o helper compartilhado, e
+// não mais uma cópia local minimalista, porque montarDashboard agora TAMBÉM
+// monta a barra de filtros compartilhada (montarTodosFiltrosMultiSemanal +
+// configurarAberturaFiltrosMulti, da Fase 2) antes de montarAbaDemandas --
+// um DOM falso sem querySelector/querySelectorAll faz essas duas chamadas
+// lançarem, o erro é engolido pelo try/catch de tentarDesbloquear, e a aba
+// Demandas nunca chega a montar (sintoma: "senha incorreta" com a senha
+// certa). `window` É o objeto global do sandbox, como no navegador -- e o
+// gate (scriptDesbloqueio, da casca) define `tentarDesbloquear` nesse global.
 function montarSandbox(html) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   // Continua 6: a aba Demandas entra no bundle EXISTENTE (BUNDLE_ARQUIVOS) e

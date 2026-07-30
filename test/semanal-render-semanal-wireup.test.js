@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const vm = require('node:vm');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
+const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 
 // Task 8 originalmente deixou o módulo pronto no bundle mas NUNCA chamado --
 // a aba Semanal abria vazia no navegador (achado do coordenador). Este
@@ -11,7 +12,7 @@ const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 // os <script> de cliente de dentro dela (gate + bundle + SCRIPT_CLIENTE_SEMANAL)
 // num vm.Context à parte, simula a senha certa sendo digitada e confirma que
 // #secao-semanal acaba com o HTML exato que renderAbaSemanal(registros
-// decifrados, todos os índices, 'financeiro', vigenteIdx) produz -- não só
+// decifrados, todos os índices, ['financeiro'], vigenteIdx) produz -- não só
 // que a <div> existe.
 //
 // Usa o Web Crypto NATIVO do Node (globalThis.crypto/atob/btoa/TextEncoder/
@@ -48,32 +49,6 @@ function registroSintetico(sup, tomador, financeiroMes) {
     realizado: bloco(new Array(12).fill(0), zeros, zeros),
     total: bloco(new Array(12).fill(0), zeros, zeros),
   };
-}
-
-// DOM mínimo o bastante pro script de cliente rodar de ponta a ponta:
-// getElementById devolve sempre o MESMO objeto por id (memoizado), com só o
-// que scriptDesbloqueio()/SCRIPT_CLIENTE_SEMANAL de fato usam --
-// addEventListener, classList.toggle, style, value, innerHTML, focus.
-function criarDocumentoFalso() {
-  const elementos = {};
-  function elemento(id) {
-    if (!elementos[id]) {
-      elementos[id] = {
-        id,
-        style: {},
-        classList: { toggle() {} },
-        listeners: {},
-        addEventListener(tipo, fn) { this.listeners[tipo] = fn; },
-        focus() {},
-        value: '',
-        textContent: '',
-        innerHTML: '',
-        disabled: false,
-      };
-    }
-    return elementos[id];
-  }
-  return { elementos, getElementById: elemento };
 }
 
 // Extrai e roda, num Realm isolado (vm.Context), TODOS os <script> inline do
@@ -126,13 +101,13 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
 
   const vigenteIdx = geradoEm.getUTCMonth();
   const indicesTodos = registros.map((_, i) => i);
-  const esperado = renderAbaSemanal(registros, indicesTodos, 'financeiro', vigenteIdx);
+  const esperado = renderAbaSemanal(registros, indicesTodos, ['financeiro'], vigenteIdx);
 
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
   assert.notEqual(htmlMontado, '', '#secao-semanal continua vazia depois da senha certa -- reproduziria exatamente o bug relatado pelo coordenador');
   assert.equal(
     htmlMontado, esperado,
-    'o HTML injetado em #secao-semanal precisa ser exatamente o que renderAbaSemanal(registros decifrados, TODOS os índices, "financeiro", vigenteIdx) produz -- prova que os argumentos passados batem, não só que ALGUM HTML foi injetado'
+    'o HTML injetado em #secao-semanal precisa ser exatamente o que renderAbaSemanal(registros decifrados, TODOS os índices, ["financeiro"], vigenteIdx) produz -- prova que os argumentos passados batem, não só que ALGUM HTML foi injetado'
   );
 
   // Prova de conteúdo, não só de igualdade de string: soma dos 2 registros
@@ -142,8 +117,8 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
   const seiscentos = (6000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const milEQuinhentos = (1500).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   assert.match(htmlMontado, /S1/);
-  assert.match(htmlMontado, new RegExp(milEQuinhentos.replace('.', '\\.')));
-  assert.match(htmlMontado, new RegExp(seiscentos.replace('.', '\\.')));
+  assert.match(htmlMontado, new RegExp(milEQuinhentos.replace(/\./g, '\\.')));
+  assert.match(htmlMontado, new RegExp(seiscentos.replace(/\./g, '\\.')));
 });
 
 test('com a senha errada, a aba Semanal continua vazia -- nunca monta antes de decifrar de verdade', async () => {
@@ -159,7 +134,7 @@ test('com a senha errada, a aba Semanal continua vazia -- nunca monta antes de d
   assert.equal(documentoFalso.getElementById('secao-semanal').innerHTML, '', 'com senha errada a tabela não pode ter sido montada em nenhum momento');
 });
 
-test('a chamada a RenderAbaSemanal.renderAbaSemanal, com injeção em #secao-semanal, está no código-fonte de montarDashboard (prova estática, complementar à prova dinâmica acima)', () => {
+test('a chamada a RenderAbaSemanal.renderAbaSemanal, com injeção em #secao-semanal, está no código-fonte de recalcularSemanal (prova estática, complementar à prova dinâmica acima)', () => {
   const registros = [registroSintetico('SUP-0005-24', 'Tomador-Sintetico-Zeta', 1000)];
   const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
@@ -195,4 +170,68 @@ test('com três abas, abrir Demandas esconde as outras duas seções -- alternar
   documentoFalso.getElementById('aba-semanal').listeners.click();
   assert.equal(documentoFalso.getElementById('secao-demandas').style.display, 'none');
   assert.equal(documentoFalso.getElementById('secao-semanal').style.display, '');
+});
+
+test('filtrar por SUP na barra compartilhada recalcula a aba Semanal só com os registros daquele SUP', async () => {
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 2000),
+  ];
+  const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // Simula marcar o checkbox de SUP-0001-24 no painel de filtro-sup --
+  // painel já populado (opções vêm dos 2 registros), então o checkbox
+  // sintético existe; disparar seu 'change' é o mesmo caminho que um clique
+  // real percorreria dentro de montarFiltroMulti.
+  const painelSup = documentoFalso.getElementById('filtro-sup-painel');
+  const checkboxes = painelSup.querySelectorAll('input[type="checkbox"]');
+  const checkboxAlfa = checkboxes.filter((c) => c.value === 'SUP-0001-24')[0];
+  assert.ok(checkboxAlfa, 'esperava um checkbox pro SUP-0001-24 no painel montado');
+  checkboxAlfa.checked = true;
+  checkboxAlfa.listeners.change();
+
+  const vigenteIdx = geradoEm.getUTCMonth();
+  const esperado = renderAbaSemanal(registros, [0], ['financeiro'], vigenteIdx); // só o índice 0 (SUP-0001-24)
+  const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
+  assert.equal(htmlMontado, esperado, 'depois de filtrar por SUP-0001-24, a Tabela semanal deve recalcular só com esse registro, não os 2');
+
+  // Prova de conteúdo: 4000 ÷ 4 = 1000 por semana (só o SUP-0001-24), não
+  // 1500 (que seria 6000 ÷ 4, a soma dos 2 registros sem filtro).
+  const mil = (1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  assert.match(htmlMontado, new RegExp(mil.replace(/\./g, '\\.')));
+});
+
+test('a soma S1+S2+S3+S4 do Previsto continua batendo com o mês vigente mesmo com um filtro de recorte ativo, não só sem filtro', async () => {
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 2000),
+  ];
+  const geradoEm = new Date('2026-07-01T00:00:00Z');
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const painelSup = documentoFalso.getElementById('filtro-sup-painel');
+  const checkboxAlfa = painelSup.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'SUP-0001-24')[0];
+  checkboxAlfa.checked = true;
+  checkboxAlfa.listeners.change();
+
+  const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
+  const numeros = (htmlMontado.match(/<td class="num">([\d.,]+)<\/td>/g) || [])
+    .map((td) => td.match(/>([\d.,]+)</)[1])
+    .map((n) => Number(n.replace(/\./g, '').replace(',', '.')));
+  // As 4 primeiras células numéricas da linha Previsto: S1..S4. Cada uma
+  // deve ser 1000 (4000 ÷ 4, só o SUP-0001-24 depois do filtro), e a soma
+  // das 4 deve bater com o 4000 do mês vigente filtrado -- não com os 6000
+  // de antes do filtro.
+  const s1a_s4 = numeros.slice(0, 4);
+  assert.deepStrictEqual(s1a_s4, [1000, 1000, 1000, 1000]);
+  assert.strictEqual(s1a_s4.reduce((a, b) => a + b, 0), 4000);
 });
