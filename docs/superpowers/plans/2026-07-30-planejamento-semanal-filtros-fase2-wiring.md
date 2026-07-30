@@ -498,10 +498,12 @@ EOF
 ### Task 3: Atualizar os testes de wire-up + cobrir comportamento com filtro ativo
 
 **Files:**
-- Modify: `test/semanal-render-semanal-wireup.test.js`, `test/semanal-render-aba-balanco-wireup.test.js`
+- Modify: `test/semanal-render-semanal-wireup.test.js`, `test/semanal-render-aba-balanco-wireup.test.js`, `test/semanal-build-dashboard.test.js`, `test/semanal-linha-base-costura.test.js`
 
 **Interfaces:**
 - Consumes: the rewired `render-semanal.js` from Task 2, `renderAbaSemanal(registros, indices, dimensoes, vigenteIdx)` from Task 1.
+
+**Scope note (added after Task 2's review):** Task 1's signature change (`renderAbaSemanal`'s 3rd argument going from a string to an array) broke two additional test files that neither Task 1 nor Task 2's briefs named — `test/semanal-build-dashboard.test.js` (one direct call site still passes a bare string) and `test/semanal-linha-base-costura.test.js` (its full-page sandbox test hits the same "fake DOM has no `querySelector`" gap as the two files already in scope, now that `montarDashboard` mounts the shared filter bar). Both are confirmed pre-existing regressions from Task 1, not caused by Task 2 — see the SDD ledger. This task's scope is widened to close both, since they're the same class of fix already being done here.
 
 - [ ] **Step 1: Upgrade the fake DOM in both wire-up test files to support `querySelector`/`querySelectorAll` and real checkbox synthesis**
 
@@ -594,6 +596,33 @@ function criarDocumentoFalso() {
 ```
 
 Apply the identical replacement to `test/semanal-render-aba-balanco-wireup.test.js`'s `criarDocumentoFalso` (currently lines 65-86) — same reasoning: its call site (inside `rodarBlocos`) already does `const documentoFalso = criarDocumentoFalso();` then `sandbox.document = documentoFalso`, unchanged.
+
+- [ ] **Step 1b: Fix the one-line old-signature call site in `test/semanal-build-dashboard.test.js`**
+
+This file doesn't run any client-side script through a sandbox — it calls `renderAbaSemanal` directly, so it needs no DOM changes, only the signature fix. In `test/semanal-build-dashboard.test.js:129`, change:
+
+```js
+const tabela = renderAbaSemanal(REGISTROS, [0], 'financeiro', 0);
+```
+
+to:
+
+```js
+const tabela = renderAbaSemanal(REGISTROS, [0], ['financeiro'], 0);
+```
+
+Nothing else in this file changes.
+
+- [ ] **Step 1c: Apply the same fake-DOM upgrade to `test/semanal-linha-base-costura.test.js`**
+
+This file's full-page sandbox test (`'na página gerada, a base "Previsto Inicial" só marca "sem base"...'`) drives `tentarDesbloquear()` → `montarDashboard()` → `montarTodosFiltrosMultiSemanal()`, which now needs `document.querySelector`/`painel.querySelectorAll` — the same gap Step 1 closed for the other two files. This test never interacts with the shared filter bar's checkboxes (it only flips the aba 2 `balanco-base` `<select>`), so it needs the DOM upgrade but no new filter-interaction assertions.
+
+Replace `criarDocumentoFalso` (currently lines 149-162) with the **exact same function** written in Step 1 for `test/semanal-render-semanal-wireup.test.js` (identical code, same reasoning — copy it verbatim into this file too). Its call site, inside `rodarPagina` (currently lines 164-173), already does `const documentoFalso = criarDocumentoFalso();` then `sandbox.document = documentoFalso` — unchanged, no call-site edit needed here either.
+
+- [ ] **Step 1d: Run these two files in isolation to confirm they pass again**
+
+Run: `node --test test/semanal-build-dashboard.test.js test/semanal-linha-base-costura.test.js`
+Expected: PASS, all tests in both files (this re-establishes the baseline Task 1 accidentally broke, before continuing with the rest of this task's own new work in Steps 2-5 below).
 
 - [ ] **Step 2: Update the existing "sem filtro" assertions to reflect the new signature**
 
@@ -741,12 +770,12 @@ test('a soma S1+S2+S3+S4 do Previsto continua batendo com o mês vigente mesmo c
 - [ ] **Step 6: Run the full suite**
 
 Run: `node --test test/*.test.js`
-Expected: PASS, all tests (Task 1's, Task 2's now-fixed wire-up tests, and this task's new filtered-behavior/invariant tests).
+Expected: PASS, every test — including `test/semanal-build-dashboard.test.js` and `test/semanal-linha-base-costura.test.js` (fixed in Steps 1b-1d, closing the gap Task 1 accidentally left open), Task 1's own test file, Task 2's now-fixed wire-up tests, and this task's new filtered-behavior/invariant tests.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add test/semanal-render-semanal-wireup.test.js test/semanal-render-aba-balanco-wireup.test.js
+git add test/semanal-render-semanal-wireup.test.js test/semanal-render-aba-balanco-wireup.test.js test/semanal-build-dashboard.test.js test/semanal-linha-base-costura.test.js
 git commit -m "$(cat <<'EOF'
 Atualizar os testes de wire-up da semanal para a barra de filtros
 
@@ -756,6 +785,12 @@ filtro" passam a cobrir o novo formato de array de dimensões, e dois
 casos novos provam filtro ativo de ponta a ponta: SUP recalculando só
 a Tabela semanal, tipologia escondendo o gráfico da aba Balanço não
 marcada. Estende também o invariante S1..S4 pra rodar sob filtro.
+
+Também fecha 2 regressões que a Task 1 (mudança de assinatura de
+renderAbaSemanal) deixou passar sem querer, achadas só na revisão da
+Task 2: uma chamada com string antiga em semanal-build-dashboard.test.js
+e o mesmo gap de DOM fake (sem querySelector) em
+semanal-linha-base-costura.test.js.
 EOF
 )"
 ```
