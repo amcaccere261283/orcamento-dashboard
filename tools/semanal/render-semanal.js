@@ -439,6 +439,9 @@ function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoE
   if (!demandas || !Array.isArray(demandas.tipologias)) {
     throw new Error('renderSemanal requer "demandas" ({tipologias, totais}, de tools/semanal/compute-demandas.js) -- sem isso a aba Demandas montaria vazia no navegador sem nenhum erro no build.');
   }
+  if (!demandas.porRegistro || typeof demandas.porRegistro !== 'object') {
+    throw new Error('renderSemanal requer "demandas.porRegistro" (de tools/semanal/compute-demandas.js) -- sem isso Realizado/Tendência/Demandas Pendentes desapareceriam da Tabela Semanal sem nenhum erro no build.');
+  }
 
   const dadosJson = JSON.stringify({ registros, baseline, demandas });
   const dadosCifrados = cifrarComSenha(dadosJson, senha);

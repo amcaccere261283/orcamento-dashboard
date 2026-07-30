@@ -31,7 +31,7 @@ const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2
 // A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
 // ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
 // tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
-const DEMANDAS_VAZIAS = { tipologias: [], totais: {} };
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistro: {} };
 
 function registroSintetico(sup, tomador, financeiroMes) {
   const zeros = new Array(12).fill(0);
@@ -101,6 +101,10 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
 
   const vigenteIdx = geradoEm.getUTCMonth();
   const indicesTodos = registros.map((_, i) => i);
+  // Este teste só é válido enquanto o seletor de dimensão abrir em
+  // "financeiro" por padrão -- Volume ativaria Realizado/Tendência/Pendentes
+  // no lado real (5 args) sem equivalente aqui (4 args), e este assert
+  // quebraria com um diff de HTML sem pista da causa.
   const esperado = renderAbaSemanal(registros, indicesTodos, ['financeiro'], vigenteIdx);
 
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
@@ -196,6 +200,10 @@ test('filtrar por SUP na barra compartilhada recalcula a aba Semanal só com os 
   checkboxAlfa.listeners.change();
 
   const vigenteIdx = geradoEm.getUTCMonth();
+  // Este teste só é válido enquanto o seletor de dimensão abrir em
+  // "financeiro" por padrão -- Volume ativaria Realizado/Tendência/Pendentes
+  // no lado real (5 args) sem equivalente aqui (4 args), e este assert
+  // quebraria com um diff de HTML sem pista da causa.
   const esperado = renderAbaSemanal(registros, [0], ['financeiro'], vigenteIdx); // só o índice 0 (SUP-0001-24)
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
   assert.equal(htmlMontado, esperado, 'depois de filtrar por SUP-0001-24, a Tabela semanal deve recalcular só com esse registro, não os 2');
@@ -243,8 +251,12 @@ test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume e
     // tipologias/totais: renderSemanal exige o formato {tipologias, totais}
     // de compute-demandas.js (ver DEMANDAS_VAZIAS acima) -- vazios aqui
     // porque este teste não olha a aba Demandas, só o wire-up de
-    // Realizado/Tendência via porRegistro em window.__DEMANDAS__.
-    tipologias: [], totais: {},
+    // Realizado/Tendência via porRegistro em window.__DEMANDAS__. totais
+    // precisa refletir o mesmo comprimento/serie de porRegistro (revisão
+    // final da branch): demandasMesVigente usa demandas.totais[serie] só
+    // pra saber o tamanho do ano e validar vigenteIdx -- {} vazio faria
+    // vigenteIdx=6 parecer "fora do intervalo" por engano.
+    tipologias: [], totais: { sondagemRealizada: [0, 0, 0, 0, 0, 0, 800, 0, 0, 0, 0, 0], pendentes: [0, 0, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0] },
     porRegistro: { 'SUP-0001-24||ST': { sondagemRealizada: [0, 0, 0, 0, 0, 0, 800, 0, 0, 0, 0, 0], pendentes: [0, 0, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0] } },
   };
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });

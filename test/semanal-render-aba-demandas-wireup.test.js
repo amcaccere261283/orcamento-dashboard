@@ -31,6 +31,10 @@ const DEMANDAS = {
     canceladas: [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     pendentes: [5, 7, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
   },
+  // Revisão final da branch: renderSemanal agora exige demandas.porRegistro
+  // (mesmo padrão de demandas.tipologias) -- este arquivo testa só a aba
+  // Demandas, não Realizado/Tendência, então vazio já satisfaz o guard.
+  porRegistro: {},
 };
 
 function registroSintetico() {

@@ -73,7 +73,15 @@ function demandasFixture(sup, tipologia, sondagemRealizadaMes, pendentesMes) {
   const zeros = new Array(12).fill(0);
   const sondagem = zeros.slice(); sondagem[6] = sondagemRealizadaMes;
   const pendentes = zeros.slice(); pendentes[6] = pendentesMes;
-  return { porRegistro: { [`${sup}||${tipologia}`]: { sondagemRealizada: sondagem, pendentes: pendentes } } };
+  return {
+    // totais espelha o mesmo agregado que compute-demandas.js sempre produz
+    // (serieVazia(n), nunca ausente) -- o guard de vigenteIdx fora do ano em
+    // demandasMesVigente usa demandas.totais[serie] pra saber o tamanho do
+    // ano; sem isto aqui, toda fixture deste arquivo pareceria "fora do
+    // intervalo" e cairia pra sem-dado por engano.
+    totais: { sondagemRealizada: sondagem, pendentes: pendentes },
+    porRegistro: { [`${sup}||${tipologia}`]: { sondagemRealizada: sondagem, pendentes: pendentes } },
+  };
 }
 
 test('sem o 5º parâmetro, o comportamento é idêntico ao de hoje -- Realizado/Tendência sem-dado, sem linha de Pendentes', () => {
@@ -94,7 +102,7 @@ test('com demandas SEM a chave porRegistro (ex.: {tipologias:[],totais:{}}, o fo
 // linha nova, com zero, não sem-dado. A distinção entre "chave ausente" e
 // "objeto vazio" é proposital (ver demandasMesVigente/temDadosDemandas).
 test('com demandas.porRegistro presente mas vazio ({}), a linha Demandas Pendentes aparece com zero, não fica escondida', () => {
-  const html = renderAbaSemanal([registro(400)], [0], ['volume'], 6, { demandas: { porRegistro: {} }, diaDoMes: 10, diasNoMes: 28 });
+  const html = renderAbaSemanal([registro(400)], [0], ['volume'], 6, { demandas: { totais: { sondagemRealizada: new Array(12).fill(0), pendentes: new Array(12).fill(0) }, porRegistro: {} }, diaDoMes: 10, diasNoMes: 28 });
   assert.match(html, /Demandas Pendentes/, 'porRegistro:{} é um agregado real (zero furos casaram), diferente de porRegistro ausente -- a linha deve aparecer, mostrando 0');
   const linhaPendentes = html.match(/<tr class="linha-serie-semanal linha-pendentes-demandas">[\s\S]*?<\/tr>/)[0];
   assert.match(linhaPendentes, /celula-total-linha">0,00/);
@@ -160,4 +168,42 @@ test('registro cuja combinação (sup, tipologia) não existe em demandas.porReg
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   assert.doesNotMatch(linhaRealizado, /sem-dado/, 'indices não está vazio -- deve somar 0, não cair pra sem-dado, já que "sem furo" é uma contagem real, não uma lacuna');
   assert.match(linhaRealizado, /<td class="num">0,00<\/td>/);
+});
+
+// --- Revisão final da branch -------------------------------------------------
+
+test('vigenteIdx fora do intervalo do ano (12 ou -1) deixa Realizado/Tendência/Pendentes sem-dado, não 0,00', () => {
+  const demandas = { totais: { sondagemRealizada: new Array(12).fill(0), pendentes: new Array(12).fill(0) }, porRegistro: { 'SUP-0001-24||ST': { sondagemRealizada: [0,0,0,0,0,0,800,0,0,0,0,0], pendentes: [0,0,0,0,0,0,50,0,0,0,0,0] } } };
+  const registros = [{ sup: 'SUP-0001-24', tipologia: 'ST', previsto: { volume: [0,0,0,0,0,0,800,0,0,0,0,0], equipes: new Array(12).fill(0), financeiro: new Array(12).fill(0) } }];
+  const html = renderAbaSemanal(registros, [0], ['volume'], 12, { demandas, diaDoMes: 10, diasNoMes: 28 });
+  assert.doesNotMatch(html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0], /800,00|0,00/, 'com vigenteIdx=12 (fora do ano), Realizado não pode aparecer nem como valor real nem como 0,00 fabricado');
+  assert.match(html, /Demandas Pendentes/, 'a linha ainda aparece (Volume + porRegistro presente), só as células ficam sem-dado');
+});
+
+test('Tendência nunca fica negativa quando Realizado já passou o Previsto -- continua no ritmo já realizado, não projeta furos negativos', () => {
+  const demandas = { totais: { sondagemRealizada: new Array(12).fill(0), pendentes: new Array(12).fill(0) }, porRegistro: { 'SUP-0001-24||ST': { sondagemRealizada: [0,0,0,0,0,0,400,0,0,0,0,0], pendentes: new Array(12).fill(0) } } };
+  const registros = [{ sup: 'SUP-0001-24', tipologia: 'ST', previsto: { volume: [0,0,0,0,0,0,100,0,0,0,0,0], equipes: new Array(12).fill(0), financeiro: new Array(12).fill(0) } }];
+  const html = renderAbaSemanal(registros, [0], ['volume'], 6, { demandas, diaDoMes: 10, diasNoMes: 31 }); // dia 10/31 -> semana 2
+  const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
+  // /-/ cru bateria também nos hífens de "linha-serie-semanal"/"linha-tendencia"
+  // (nomes de classe, não números) -- ">-" isola o caso real: um valor
+  // negativo sempre começa logo depois do "<td ...>" de abertura da célula.
+  assert.doesNotMatch(linhaTendencia, />-/, 'nenhum valor negativo deve aparecer na linha de Tendência');
+  const cem = (100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  assert.strictEqual((linhaTendencia.match(new RegExp(cem.replace('.', '\\.'), 'g')) || []).length, 4, 'realizado=400/4=100 por semana; as 2 semanas passadas mostram 100 (Realizado) e as 2 futuras também mostram 100 (ritmo mantido) -- 4 ocorrências de "100,00" na linha inteira');
+});
+
+test('Tendência: na última semana do mês (sem semana futura), a soma bate exatamente com o Realizado', () => {
+  const demandas = { totais: { sondagemRealizada: new Array(12).fill(0), pendentes: new Array(12).fill(0) }, porRegistro: { 'SUP-0001-24||ST': { sondagemRealizada: [0,0,0,0,0,0,600,0,0,0,0,0], pendentes: new Array(12).fill(0) } } };
+  const registros = [{ sup: 'SUP-0001-24', tipologia: 'ST', previsto: { volume: [0,0,0,0,0,0,800,0,0,0,0,0], equipes: new Array(12).fill(0), financeiro: new Array(12).fill(0) } }];
+  const html = renderAbaSemanal(registros, [0], ['volume'], 6, { demandas, diaDoMes: 28, diasNoMes: 28 }); // último dia -> semana 4, sem semana futura
+  const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
+  const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
+  // Comparar as linhas inteiras (só trocando o nome da classe) esbarraria no
+  // rótulo visível ("Tendência" vs "Realizado"), que nunca vai bater -- o
+  // que a asserção realmente quer garantir é que os NÚMEROS das 2 linhas
+  // são idênticos, não o texto do rótulo. Extrai só as células <td class="num...">.
+  const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">[^<]*<\/td>/g);
+  const numerosRealizado = linhaRealizado.match(/<td class="num[^"]*">[^<]*<\/td>/g);
+  assert.deepStrictEqual(numerosTendencia, numerosRealizado, 'na última semana, sem saldo futuro pra projetar, Tendência precisa mostrar os mesmos números que Realizado');
 });

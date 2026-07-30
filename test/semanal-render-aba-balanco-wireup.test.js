@@ -37,7 +37,7 @@ const TIPOLOGIA_SINTETICA = 'Tipologia-Sintetica-Rotativa';
 // A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
 // ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
 // tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
-const DEMANDAS_VAZIAS = { tipologias: [], totais: {} };
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistro: {} };
 
 function registroSintetico(sup, tomador, tipologia, previstoMes, realizadoMes, equipesPrevisto, equipesRealizado) {
   const zeros = new Array(12).fill(0);

@@ -72,8 +72,31 @@ function chaveDemandas(sup, tipologia) {
 // combinação ausente é uma contagem real de zero. null só quando 'indices'
 // está vazio (nenhum registro selecionado) -- mesma regra de
 // previstoMesVigente.
+//
+// Assume (sup, tipologia) único por registro selecionado -- se a MATRIZ um
+// dia tiver 2 linhas com a mesma combinação ambas somariam o mesmo balde de
+// porRegistro, dobrando o Realizado/Pendentes. Não verificado neste código;
+// parse-matriz.js documenta 3 linhas físicas por combinação hoje.
+//
+// Também assume que registro.tipologia (MATRIZ) é a mesma etiqueta que
+// chega em furo.tipologia (Avanços, já mapeada por rotularTipologia) -- só
+// as tipologias que a MATRIZ conhece aparecem aqui. Tipologias que só
+// existem nos Avanços (ex.: SEG.A/SEG.V, acionadas sob demanda) nunca
+// contribuem pra Realizado/Pendentes na Tabela Semanal -- mesmo escopo que
+// o Previsto já tem hoje, não é uma lacuna nova desta task.
 function demandasMesVigente(registros, indices, demandas, serie, vigenteIdx) {
   if (!indices || !indices.length) return null;
+  // vigenteIdx pode vir fora do intervalo do ano da planilha (12 = ano
+  // inteiro no passado, -1 = ano inteiro no futuro -- calcularVigenteIdx em
+  // tools/comum/datas.js). Nesse caso não existe "mês vigente" real: sem
+  // este guard, entrada[serie][vigenteIdx] vira undefined pra TODO registro
+  // e "|| 0" transformaria isso num 0,00 real -- indistinguível de "mês
+  // vigente existe e teve zero furos". demandas.totais[serie] tem o mesmo
+  // comprimento de periodos (sempre presente, mesmo com porRegistro vazio),
+  // então serve de fonte confiável do tamanho do ano sem precisar de um
+  // parâmetro novo.
+  var totalSerie = demandas.totais && demandas.totais[serie];
+  if (!Array.isArray(totalSerie) || vigenteIdx < 0 || vigenteIdx >= totalSerie.length) return null;
   var soma = 0;
   indices.forEach(function (i) {
     var registro = registros[i];
@@ -97,7 +120,15 @@ function calcularTendenciaSemanal(previstoMes, realizadoMes, semanasRealizado, s
   var realizadoAteAgora = (realizadoMes / SEMANAS) * semanaAtualNum;
   var semanasRestantes = SEMANAS - semanaAtualNum;
   var saldoRestante = previstoMes - realizadoAteAgora;
-  var tendenciaFutura = semanasRestantes > 0 ? saldoRestante / semanasRestantes : 0;
+  // Realizado já bateu (ou passou) o Previsto do mês até a semana atual:
+  // saldoRestante fica <= 0, e dividir isso pelas semanas futuras projetaria
+  // furos NEGATIVOS -- sem sentido. Nesse caso a Tendência passa a seguir o
+  // mesmo ritmo já realizado (realizadoMes/SEMANAS) em vez do saldo, então o
+  // mês fecha em realizadoMes (o que já foi feito), não seria coerente
+  // fechar em algo menor que o já realizado.
+  var tendenciaFutura = semanasRestantes > 0
+    ? (saldoRestante > 0 ? saldoRestante / semanasRestantes : realizadoMes / SEMANAS)
+    : 0;
   var saida = [];
   for (var s = 1; s <= SEMANAS; s++) {
     saida.push(s <= semanaAtualNum ? semanasRealizado[s - 1] : tendenciaFutura);
