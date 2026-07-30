@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const {
   computeDemandas, SERIES, SERIE_ESTOQUE, reconciliarSups,
 } = require('../tools/semanal/compute-demandas.js');
+const { diaEpoch } = require('../tools/comum/datas.js');
 
 const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2026, mes, 1)));
 const d = (ano, mes, dia) => new Date(Date.UTC(ano, mes - 1, dia));
@@ -253,4 +254,67 @@ test('pendentes em porRegistro fecha com o mesmo saldo por (sup, tipologia) que 
   const periodos = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 1)));
   const { porRegistro, totais } = computeDemandas(furos, periodos);
   assert.deepStrictEqual(porRegistro['SUP-0001-24||ST'].pendentes, totais.pendentes, 'com um único (sup, tipologia) na planilha, o saldo por registro tem que bater com o saldo total');
+});
+
+test('porRegistroEventos: chegada tem um dia por furo (qualquer status), sondagemRealizada só CONCLUIDO/EXECUTADO', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 5), terminoSondagem: d(2026, 2, 10) }),
+    furo({ status: 'PENDENTE', criacaoOS: d(2026, 1, 6), terminoSondagem: null, conclusao: null }),
+  ], PERIODOS_2026);
+  const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
+  assert.strictEqual(entrada.chegada.length, 2, 'os 2 furos têm criacaoOS, PENDENTE inclusive');
+  assert.strictEqual(entrada.sondagemRealizada.length, 1, 'só o CONCLUIDO conta pro fluxo Realizado');
+});
+
+test('porRegistroEventos: saidaEstoque é o MENOR entre término e cancelamento, nunca os dois separados -- furos CANCELADO com término preenchido existem na planilha real (16, ver spec)', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), terminoSondagem: d(2026, 2, 1), cancelamento: d(2026, 3, 1), conclusao: null }),
+  ], PERIODOS_2026);
+  const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
+  assert.strictEqual(entrada.saidaEstoque.length, 1, 'um furo só sai do estoque uma vez, mesmo com 2 datas candidatas');
+  assert.strictEqual(entrada.saidaEstoque[0], diaEpoch(d(2026, 2, 1)), 'usa a data mais cedo (término), não o cancelamento');
+});
+
+test('porRegistroEventos: cancelamento antes do término também usa o menor (o cancelamento)', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), terminoSondagem: d(2026, 5, 1), cancelamento: d(2026, 2, 1), conclusao: null }),
+  ], PERIODOS_2026);
+  const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
+  assert.strictEqual(entrada.saidaEstoque.length, 1);
+  assert.strictEqual(entrada.saidaEstoque[0], diaEpoch(d(2026, 2, 1)));
+});
+
+test('porRegistroEventos: furo sem término nem cancelamento nunca aparece em saidaEstoque (nunca sai do estoque)', () => {
+  const saida = computeDemandas([
+    furo({ status: 'PENDENTE', criacaoOS: d(2026, 1, 1), terminoSondagem: null, cancelamento: null, conclusao: null }),
+  ], PERIODOS_2026);
+  const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
+  assert.deepStrictEqual(entrada.saidaEstoque, []);
+});
+
+test('porRegistroEventos: reconstrói o mesmo saldo mensal que porRegistro.pendentes, contando chegada/saidaEstoque até o fim de cada mês', () => {
+  const furos = [
+    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 10), terminoSondagem: d(2026, 3, 20) }),
+    furo({ status: 'PENDENTE', criacaoOS: d(2026, 2, 5), terminoSondagem: null, conclusao: null }),
+  ];
+  const saida = computeDemandas(furos, PERIODOS_2026);
+  const eventos = saida.porRegistroEventos['SUP-0001-24||SP'];
+  const fimDoMes1Based = (ano, mesUm) => diaEpoch(new Date(Date.UTC(ano, mesUm, 0, 23, 59, 59)));
+  const saldoEm = (corte) =>
+    eventos.chegada.filter(dia => dia <= corte).length - eventos.saidaEstoque.filter(dia => dia <= corte).length;
+  const esperado = saida.porRegistro['SUP-0001-24||SP'].pendentes;
+  for (let mes = 0; mes < 12; mes++) {
+    assert.strictEqual(saldoEm(fimDoMes1Based(2026, mes + 1)), esperado[mes], `mês ${mes}: saldo por eventos precisa bater com porRegistro.pendentes`);
+  }
+});
+
+test('porRegistroEventos: par (sup, tipologia) sem nenhum furo fica ausente, não aparece com arrays vazios "à toa"', () => {
+  const saida = computeDemandas([furo()], PERIODOS_2026);
+  assert.strictEqual('SUP-9999-99||SP' in saida.porRegistroEventos, false);
+});
+
+test('a saída sobrevive a JSON.stringify com porRegistroEventos também', () => {
+  const saida = computeDemandas([furo()], PERIODOS_2026);
+  const voltou = JSON.parse(JSON.stringify(saida));
+  assert.deepStrictEqual(voltou.porRegistroEventos, saida.porRegistroEventos);
 });

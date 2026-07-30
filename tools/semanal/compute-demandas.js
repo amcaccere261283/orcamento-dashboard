@@ -1,6 +1,7 @@
 'use strict';
 const { ORDEM_TIPOLOGIAS, SO_QUANDO_ACIONADA } = require('../comum/tipologias-avancos.js');
 const { chaveMatriz } = require('../comum/linha-base.js');
+const { diaEpoch } = require('../comum/datas.js');
 
 // Agrega os furos de parse-avancos.js em (tipologia, mês) x 5 séries, em
 // QUANTIDADE DE FUROS. Roda no BUILD, em Node -- o navegador recebe só o
@@ -57,12 +58,24 @@ function serieRegistroVazia(quantidade) {
   return { sondagemRealizada: zeros12(quantidade), pendentes: zeros12(quantidade) };
 }
 
+// Eventos brutos por (sup, tipologia), em dias-desde-época (diaEpoch) --
+// substitui, de propósito, um valor pré-somado por mês: a Tabela semanal
+// (Tarefa 3 do plano do calendário ISO) precisa recortar Realizado/
+// Pendentes por semana real, inclusive "até hoje" na semana em curso, algo
+// que uma granularidade fixa (mês ou semana) não serve -- ver
+// docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md,
+// seção "Fonte de dados".
+function entradaEventosVazia() {
+  return { chegada: [], sondagemRealizada: [], saidaEstoque: [] };
+}
+
 function computeDemandas(furos, periodos) {
   const n = periodos.length;
   const fins = periodos.map(fimDoMes);
   const porTipologia = new Map();
   for (const rotulo of ORDEM_TIPOLOGIAS) porTipologia.set(rotulo, serieVazia(n));
   const porRegistro = new Map();
+  const porRegistroEventos = new Map();
 
   for (const f of furos || []) {
     // Tipologia fora de ORDEM_TIPOLOGIAS não deveria existir (rotularTipologia
@@ -75,6 +88,25 @@ function computeDemandas(furos, periodos) {
     const chaveRegistro = chaveMatriz(f.sup, f.tipologia);
     if (!porRegistro.has(chaveRegistro)) porRegistro.set(chaveRegistro, serieRegistroVazia(n));
     const serieRegistro = porRegistro.get(chaveRegistro);
+
+    if (!porRegistroEventos.has(chaveRegistro)) porRegistroEventos.set(chaveRegistro, entradaEventosVazia());
+    const eventosRegistro = porRegistroEventos.get(chaveRegistro);
+
+    if (f.criacaoOS) eventosRegistro.chegada.push(diaEpoch(f.criacaoOS));
+
+    if (STATUS_REALIZADO.indexOf(f.status) !== -1 && f.terminoSondagem) {
+      eventosRegistro.sondagemRealizada.push(diaEpoch(f.terminoSondagem));
+    }
+
+    // saidaEstoque: o MENOR entre término (qualquer status) e cancelamento
+    // -- nunca os dois independentes, pra não contar duas vezes os furos
+    // CANCELADO que também têm data de término preenchida (16 na planilha
+    // real, ver spec). Só entra se pelo menos um dos dois existir; sem
+    // nenhum, o furo nunca sai do estoque (mesma regra de porRegistro).
+    const candidatosSaida = [];
+    if (f.terminoSondagem) candidatosSaida.push(diaEpoch(f.terminoSondagem));
+    if (cancelado && f.cancelamento) candidatosSaida.push(diaEpoch(f.cancelamento));
+    if (candidatosSaida.length) eventosRegistro.saidaEstoque.push(Math.min.apply(null, candidatosSaida));
 
     const iChegada = indiceDoMes(f.criacaoOS, periodos);
     if (iChegada >= 0) series.chegadas[iChegada] += 1;
@@ -130,7 +162,11 @@ function computeDemandas(furos, periodos) {
     }
   }
 
-  return { tipologias, totais, porRegistro: Object.fromEntries(porRegistro) };
+  return {
+    tipologias, totais,
+    porRegistro: Object.fromEntries(porRegistro), // ainda aqui só até a Tarefa 3 (render-aba-semanal.js) trocar de vez pra porRegistroEventos
+    porRegistroEventos: Object.fromEntries(porRegistroEventos),
+  };
 }
 
 // O agregado é por TIPOLOGIA, não por SUP -- mas nada é descartado por SUP:

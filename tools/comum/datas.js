@@ -31,4 +31,13 @@ function calcularVigenteIdx(periodos, generatedAt) {
   return generatedAt.getUTCMonth();
 }
 
-module.exports = { excelSerialParaData, formatarMesAno, calcularVigenteIdx };
+// Dia inteiro desde a época Unix (1970-01-01) -- mesma função de
+// tools/semanal/compute-semanal.js (duplicada lá de propósito: aquele
+// arquivo entra no bundle do navegador e não tem require nenhum; esta é a
+// versão canônica, usada em Node). Ver
+// docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md.
+function diaEpoch(data) {
+  return Math.floor(data.getTime() / 86400000);
+}
+
+module.exports = { excelSerialParaData, formatarMesAno, calcularVigenteIdx, diaEpoch };
