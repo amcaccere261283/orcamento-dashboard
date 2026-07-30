@@ -14,6 +14,9 @@ const { renderSemanal } = require('./render-semanal.js');
 const { excelSerialParaData } = require('../comum/datas.js');
 const { reconciliarLinhaBase } = require('../comum/linha-base.js');
 const config = require('../orcamento/config.js');
+const { parseAvancos } = require('./parse-avancos.js');
+const { computeDemandas, reconciliarSups } = require('./compute-demandas.js');
+const configDemandas = require('./config-demandas.js');
 
 // parseBaseline devolve um Map (porChave) -- JSON.stringify não sabe
 // serializar Map (viraria "{}", perdendo os dados em silêncio dentro do
@@ -62,7 +65,27 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   const { porChave } = parseBaseline(gridLinhaBase);
   const baseline = baselineParaCliente(porChave, registros);
 
-  const html = renderSemanal({ registros, baseline, periodos, senha, geradoEm: today });
+  // Terceira fonte desta página, e a única de EXECUÇÃO (uma linha por furo).
+  // Falha com o caminho na mensagem em vez de deixar vazar um ENOENT cru: um
+  // caminho errado em cache já travou uma sessão inteira neste projeto (ver
+  // CLAUDE.md, item da aba Gerencial).
+  let gridAvancos;
+  try {
+    gridAvancos = readXlsxSheet(configDemandas.caminhoArquivo, configDemandas.nomeAba);
+  } catch (err) {
+    throw new Error(`Não consegui ler a aba "${configDemandas.nomeAba}" de ${configDemandas.caminhoArquivo} (o Google Drive está montado em G:?). Erro original: ${err.message}`);
+  }
+  const { furos, descartadas, semDataTermino } = parseAvancos(gridAvancos);
+  const demandas = computeDemandas(furos, periodos);
+  console.log(`Demandas: ${furos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque).`);
+
+  // Relatório dos DOIS lados do desencontro de SUP. Nada é descartado -- isto
+  // é só visibilidade, e existe porque silenciar o que não casa foi o Critical
+  // da Fase 1 (ver tools/comum/linha-base.js).
+  const sups = reconciliarSups(furos, registros);
+  console.log(`Demandas/SUP: ${sups.furosSemSupNaMatriz} furo(s) em ${sups.soNoAvancos.length} SUP(s) que a MATRIZ não tem (${sups.soNoAvancos.join(', ') || 'nenhum'}); ${sups.soNaMatriz.length} SUP(s) da MATRIZ sem nenhum furo (${sups.soNaMatriz.join(', ') || 'nenhum'}).`);
+
+  const html = renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm: today });
 
   const resolvedOutPath = outPath || path.join(__dirname, '..', '..', 'dist', 'planejamento-semanal.html');
   fs.mkdirSync(path.dirname(resolvedOutPath), { recursive: true });

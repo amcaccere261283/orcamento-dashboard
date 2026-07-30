@@ -33,6 +33,11 @@ const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2
 // curtos colidem com o ruído base64 do blob cifrado (ver nota do brief).
 const TIPOLOGIA_SINTETICA = 'Tipologia-Sintetica-Rotativa';
 
+// A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
+// ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
+// tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {} };
+
 function registroSintetico(sup, tomador, tipologia, previstoMes, realizadoMes, equipesPrevisto, equipesRealizado) {
   const zeros = new Array(12).fill(0);
   const eqPrev = new Array(12).fill(0);
@@ -108,7 +113,7 @@ test('depois da senha certa, a aba Balanço de massa desenha SVG de verdade em #
     registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Rho', TIPOLOGIA_SINTETICA, 4000, 1000, 2, 5),
   ];
   const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
-  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
   // Antes de rodar qualquer script, a div está vazia -- nada pode montar em
   // build-time (identificador de cliente vazaria num Pages público).
@@ -164,7 +169,7 @@ test('SEM a injeção de fonteParaCliente() antes do bundle, a mesma senha certa
     registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Sigma', TIPOLOGIA_SINTETICA, 3000, 3000, 2, 2),
   ];
   const geradoEm = new Date('2026-07-01T00:00:00Z');
-  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
   const blocos = extrairBlocos(html);
   assert.equal(blocos.length, 6);
@@ -196,7 +201,7 @@ test('o HTML cru (antes de rodar qualquer script) nunca contém a tipologia, o S
   const registros = [
     registroSintetico('SUP-0003-24', 'Tomador-Sintetico-Tau', TIPOLOGIA_SINTETICA, 5000, 2000, 3, 1),
   ];
-  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
 
   assert.doesNotMatch(html, new RegExp(TIPOLOGIA_SINTETICA));
   assert.doesNotMatch(html, /SUP-0003-24/);

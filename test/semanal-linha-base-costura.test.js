@@ -32,6 +32,11 @@ const { renderAbaBalanco } = require('../tools/semanal/render-aba-balanco.js');
 const SENHA_FAKE = 'senha-fake-de-teste-linha-base-nao-e-a-real';
 const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2026, mes, 1)));
 const VIGENTE_IDX = 6; // julho
+
+// A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
+// ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
+// tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {} };
 const TIPOLOGIA_MATRIZ = 'LAB.C';        // rótulo da MATRIZ viva
 const TIPOLOGIA_LINHA_BASE = 'LAB.';     // rótulo do estudo original
 const SUP_MATRIZ = 'SUP-6830-23';        // código atual
@@ -181,7 +186,7 @@ test('na página gerada, a base "Previsto Inicial" só marca "sem base" no SUP q
   const baseline = baselineParaCliente(porChave, registros);
   const geradoEm = new Date('2026-07-01T00:00:00Z');
 
-  const html = renderSemanal({ registros, baseline, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const html = renderSemanal({ registros, baseline, demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
   const { sandbox, documentoFalso } = rodarPagina(html);
 
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;

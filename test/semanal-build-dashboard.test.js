@@ -14,6 +14,11 @@ function periodosDoAno(ano) {
 }
 const PERIODOS = periodosDoAno(1970);
 
+// A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
+// ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
+// tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {} };
+
 // grupo/tomador são identificadores sintéticos de propósito: >=12
 // caracteres e com hífen, pro alvo do teste "nenhum identificador aparece
 // em texto puro" abaixo não colidir por acaso com o próprio ruído
@@ -36,7 +41,7 @@ const REGISTROS = [{
 }];
 
 test('gera HTML com as duas abas e a casca compartilhada', () => {
-  const html = renderSemanal({ registros: REGISTROS, baseline: [], periodos: PERIODOS, senha: 'fake', geradoEm: new Date(0) });
+  const html = renderSemanal({ registros: REGISTROS, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS, senha: 'fake', geradoEm: new Date(0) });
   assert.match(html, /id="aba-semanal"/);
   assert.match(html, /id="aba-balanco"/);
   assert.match(html, /abas-visualizacao/);
@@ -53,14 +58,14 @@ test('gera HTML com as duas abas e a casca compartilhada', () => {
 // sintéticos abaixo, ou o próprio SUP-0001-24 -- é estruturalmente imune a
 // esse falso positivo, não só estatisticamente improvável.
 test('nenhum identificador aparece em texto puro', () => {
-  const html = renderSemanal({ registros: REGISTROS, baseline: [], periodos: PERIODOS, senha: 'fake', geradoEm: new Date(0) });
+  const html = renderSemanal({ registros: REGISTROS, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS, senha: 'fake', geradoEm: new Date(0) });
   assert.doesNotMatch(html, /SUP-0001-24/, 'SUP vazou fora do blob cifrado');
   assert.doesNotMatch(html, /Tomador-Sintetico-Alfa/, 'tomador vazou fora do blob cifrado');
   assert.doesNotMatch(html, /Grupo-Sintetico-Beta/, 'grupo vazou fora do blob cifrado');
 });
 
 test('a senha nunca aparece no HTML', () => {
-  const html = renderSemanal({ registros: REGISTROS, baseline: [], periodos: PERIODOS, senha: 'senha-secreta-123', geradoEm: new Date(0) });
+  const html = renderSemanal({ registros: REGISTROS, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS, senha: 'senha-secreta-123', geradoEm: new Date(0) });
   assert.doesNotMatch(html, /senha-secreta-123/);
 });
 
@@ -104,7 +109,7 @@ test('o baseline convertido chega inteiro dentro do blob cifrado do HTML', () =>
   const porChave = new Map([['SUP-0001-24||ST', { equipes: [1], volume: [100], financeiro: [1000] }]]);
   const baseline = baselineParaCliente(porChave, REGISTROS);
   const senha = 'fake';
-  const html = renderSemanal({ registros: REGISTROS, baseline, periodos: PERIODOS, senha, geradoEm: new Date(0) });
+  const html = renderSemanal({ registros: REGISTROS, baseline, demandas: DEMANDAS_VAZIAS, periodos: PERIODOS, senha, geradoEm: new Date(0) });
 
   const { decifrarComSenha } = require('../tools/comum/criptografia.js');
   const match = html.match(/window\.__DADOS_CIFRADOS__\s*=\s*(\{[\s\S]*?\});/);
@@ -123,7 +128,7 @@ test('o baseline convertido chega inteiro dentro do blob cifrado do HTML', () =>
 // trava o HTML dele byte a byte, então mexer nela reprovaria o golden.
 // Genérico de propósito: uma 4ª série futura sem CSS também é pega aqui.
 test('toda classe linha-* da tabela semanal tem regra de CSS na página gerada', () => {
-  const html = renderSemanal({ registros: REGISTROS, baseline: [], periodos: PERIODOS, senha: 'fake', geradoEm: new Date(0) });
+  const html = renderSemanal({ registros: REGISTROS, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS, senha: 'fake', geradoEm: new Date(0) });
   const estilo = html.match(/<style>([\s\S]*?)<\/style>/)[1];
 
   const tabela = renderAbaSemanal(REGISTROS, [0], 'financeiro', 0);
@@ -147,7 +152,7 @@ test('toda classe linha-* da tabela semanal tem regra de CSS na página gerada',
 test('vigenteIdx vem de calcularVigenteIdx, não do mês de geradoEm -- a virada de ano não vira "janeiro" da planilha antiga', () => {
   const periodos2026 = periodosDoAno(2026);
   const gerar = (iso) => renderSemanal({
-    registros: REGISTROS, baseline: [], periodos: periodos2026, senha: 'fake', geradoEm: new Date(iso),
+    registros: REGISTROS, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: periodos2026, senha: 'fake', geradoEm: new Date(iso),
   });
 
   assert.match(gerar('2026-07-15T00:00:00Z'), /window\.__VIGENTE_IDX__ = 6;/, 'dentro do ano da planilha, é o mês mesmo');
@@ -157,7 +162,7 @@ test('vigenteIdx vem de calcularVigenteIdx, não do mês de geradoEm -- a virada
 
 test('renderSemanal recusa build sem "periodos" -- sem eles não dá para decidir o mês vigente sem chutar o ano', () => {
   assert.throws(
-    () => renderSemanal({ registros: REGISTROS, baseline: [], senha: 'fake', geradoEm: new Date(0) }),
+    () => renderSemanal({ registros: REGISTROS, baseline: [], demandas: DEMANDAS_VAZIAS, senha: 'fake', geradoEm: new Date(0) }),
     /periodos/
   );
 });

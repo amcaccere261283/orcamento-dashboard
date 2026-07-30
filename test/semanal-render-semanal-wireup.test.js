@@ -27,6 +27,11 @@ const SENHA_FAKE = 'senha-fake-de-teste-e2e-nao-e-a-real';
 // (tools/comum/datas.js). 2026 é o ano de todos os geradoEm deste arquivo.
 const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2026, mes, 1)));
 
+// A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
+// ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
+// tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {} };
+
 function registroSintetico(sup, tomador, financeiroMes) {
   const zeros = new Array(12).fill(0);
   const fin = new Array(12).fill(0);
@@ -98,7 +103,7 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
   ];
   const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
 
-  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
   // Antes de rodar qualquer script, a div está mesmo vazia no HTML cru --
   // nada pode estar montado antes da senha (dado de cliente vazaria num
@@ -144,7 +149,7 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
 test('com a senha errada, a aba Semanal continua vazia -- nunca monta antes de decifrar de verdade', async () => {
   const registros = [registroSintetico('SUP-0003-24', 'Tomador-Sintetico-Delta', 4000)];
   const geradoEm = new Date('2026-07-01T00:00:00Z');
-  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
   const { sandbox, documentoFalso } = montarSandbox(html);
   documentoFalso.getElementById('campo-senha').value = 'senha-errada-de-teste-tambem-fake';
@@ -156,7 +161,7 @@ test('com a senha errada, a aba Semanal continua vazia -- nunca monta antes de d
 
 test('a chamada a RenderAbaSemanal.renderAbaSemanal, com injeção em #secao-semanal, está no código-fonte de montarDashboard (prova estática, complementar à prova dinâmica acima)', () => {
   const registros = [registroSintetico('SUP-0005-24', 'Tomador-Sintetico-Zeta', 1000)];
-  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   const scriptCliente = scripts[5][1]; // 6º <script>: SCRIPT_CLIENTE_SEMANAL
   assert.match(
@@ -167,7 +172,27 @@ test('a chamada a RenderAbaSemanal.renderAbaSemanal, com injeção em #secao-sem
 
 test('o HTML cru (antes de rodar qualquer script) nunca contém os identificadores dos registros em texto puro -- só o blob cifrado os carrega', () => {
   const registros = [registroSintetico('SUP-0004-24', 'Tomador-Sintetico-Epsilon', 9999)];
-  const html = renderSemanal({ registros, baseline: [], periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   assert.doesNotMatch(html, /Tomador-Sintetico-Epsilon/);
   assert.doesNotMatch(html, /Grupo-Sintetico-Beta/);
+});
+
+test('com três abas, abrir Demandas esconde as outras duas seções -- alternarAba continua exclusiva', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  documentoFalso.getElementById('aba-demandas').listeners.click();
+  assert.equal(documentoFalso.getElementById('secao-demandas').style.display, '');
+  assert.equal(documentoFalso.getElementById('secao-semanal').style.display, 'none');
+  assert.equal(documentoFalso.getElementById('secao-balanco').style.display, 'none');
+
+  documentoFalso.getElementById('aba-semanal').listeners.click();
+  assert.equal(documentoFalso.getElementById('secao-demandas').style.display, 'none');
+  assert.equal(documentoFalso.getElementById('secao-semanal').style.display, '');
 });
