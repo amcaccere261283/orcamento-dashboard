@@ -126,7 +126,7 @@ test('toda classe linha-* da tabela semanal tem regra de CSS na página gerada',
   const html = renderSemanal({ registros: REGISTROS, baseline: [], periodos: PERIODOS, senha: 'fake', geradoEm: new Date(0) });
   const estilo = html.match(/<style>([\s\S]*?)<\/style>/)[1];
 
-  const tabela = renderAbaSemanal(REGISTROS, [0], 'financeiro', 0);
+  const tabela = renderAbaSemanal(REGISTROS, [0], ['financeiro'], 0);
   const classes = [...new Set([...tabela.matchAll(/class="linha-serie-semanal (linha-[a-z-]+)"/g)].map(m => m[1]))];
   assert.deepStrictEqual(classes, ['linha-previsto', 'linha-realizado', 'linha-tendencia'], 'pré-condição: são estas as 3 séries da tabela hoje');
 
