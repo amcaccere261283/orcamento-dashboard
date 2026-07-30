@@ -114,8 +114,28 @@ test('os NÚMEROS das demandas viajam DENTRO do blob cifrado -- nunca soltos no 
   // tipo que test/semanal-render-semanal-wireup.test.js já faz para os
   // registros: procurar o dado, não o rótulo.
   const semBlob = html.replace(/window\.__DADOS_CIFRADOS__ = [\s\S]*?;/, '');
-  assert.strictEqual(/>\s*7154\s*</.test(semBlob), false, 'saldo real vazando no markup');
   assert.strictEqual(semBlob.includes('"chegadas":[10,20,30'), false, 'série real vazando no markup');
+});
+
+// Achado do review de Task 5: render-aba-demandas.js entra INTEIRO no bundle
+// (código E comentários -- buildBrowserBundle não separa os dois), e um
+// comentário chegou a citar cifras REAIS da planilha (7.154/5.546, medidas em
+// janeiro/2026) para explicar por que o estoque de Pendentes não é um pico no
+// primeiro mês. `>\s*7154\s*</` (a asserção antiga) nunca pegaria isso: o
+// número real está em pt-BR, com ponto de milhar, dentro de um COMENTÁRIO de
+// JS, não entre tags HTML -- a regex procurava a forma errada, no lugar
+// errado. Este teste procura as duas formas (pt-BR e dígitos crus) na página
+// inteira fora do blob, exatamente onde um comentário do bundle apareceria.
+test('nenhuma cifra real da planilha (nem em comentário do bundle, nem em qualquer outro lugar) aparece fora do blob cifrado', () => {
+  const html = paginaComDemandas();
+  const semBlob = html.replace(/window\.__DADOS_CIFRADOS__ = [\s\S]*?;/, '');
+  const cifrasReais = ['7.154', '5.546', '7154', '5546'];
+  for (const cifra of cifrasReais) {
+    assert.strictEqual(
+      semBlob.includes(cifra), false,
+      `cifra real da planilha "${cifra}" vazando fora do blob cifrado -- provavelmente veio de um comentário em algum módulo do bundle (render-aba-demandas.js já teve exatamente este vazamento)`
+    );
+  }
 });
 
 test('renderSemanal sem demandas LANÇA em vez de publicar uma aba vazia em silêncio', () => {
@@ -125,7 +145,7 @@ test('renderSemanal sem demandas LANÇA em vez de publicar uma aba vazia em sil�
   }), /demandas/);
 });
 
-test('trocar o seletor para acumulado redesenha a seção, e o listener sobrevive à segunda troca', async () => {
+test('trocar o seletor para acumulado redesenha a seção, e a segunda troca também redesenha', async () => {
   const { sandbox, documentoFalso } = montarSandbox(paginaComDemandas());
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
@@ -133,12 +153,40 @@ test('trocar o seletor para acumulado redesenha a seção, e o listener sobreviv
   documentoFalso.getElementById('demandas-modo').listeners.change({ target: { value: 'acumulado' } });
   assert.equal(documentoFalso.getElementById('secao-demandas').innerHTML, renderAbaDemandas(DEMANDAS, 'acumulado'));
 
-  // O <select> é recriado a cada innerHTML, então o listener tem que ser
+  // O <select> é recriado a cada innerHTML, então o listener PRECISARIA ser
   // religado depois de cada montagem -- mesmo motivo já documentado em
-  // montarAbaBalanco. Sem isso, a segunda troca não faz nada e o bug passa
-  // desapercebido num teste que só troca uma vez.
+  // montarAbaBalanco. Este teste exercita a segunda troca, mas NÃO prova
+  // sozinho que a religação é necessária: o DOM falso (criarDocumentoFalso)
+  // guarda o elemento por id e nunca o destrói, então o listener antigo
+  // sobrevive mesmo se a religação sumir do código -- comprovado pelo review
+  // de Task 5, que hoistou o addEventListener para fora de montarAbaDemandas
+  // e viu este teste continuar verde. A prova real de que a religação existe
+  // é estática, no teste seguinte (que lê o código-fonte em vez de rodá-lo).
   documentoFalso.getElementById('demandas-modo').listeners.change({ target: { value: 'mensal' } });
   assert.equal(documentoFalso.getElementById('secao-demandas').innerHTML, renderAbaDemandas(DEMANDAS, 'mensal'));
+});
+
+// Prova estática (mesmo padrão de test/semanal-render-semanal-wireup.test.js,
+// o teste que prova a chamada a RenderAbaSemanal.renderAbaSemanal dentro de
+// montarDashboard): o teste dinâmico acima RODA o listener duas vezes, mas o
+// DOM falso não consegue provar que ele foi RELIGADO -- só que ainda existe
+// (ver o comentário lá em cima). Este teste lê o código-fonte do <script> de
+// cliente e confirma que addEventListener('change', ...) do <select
+// id="demandas-modo"> está DENTRO do corpo de montarAbaDemandas, não fora
+// dela (por exemplo, içado para montarDashboard e chamado só uma vez) -- se
+// alguém fizer esse refatoro, este teste quebra mesmo que o dinâmico acima
+// continue verde.
+test('o addEventListener("change") de #demandas-modo está DENTRO de montarAbaDemandas -- prova estática de que a religação sobrevive a um refatoro', () => {
+  const html = paginaComDemandas();
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptCliente = scripts[5][1]; // 6º <script>: SCRIPT_CLIENTE_SEMANAL
+  const corpoFuncao = scriptCliente.match(/function montarAbaDemandas\(\) \{([\s\S]*?)\n\}/);
+  assert.ok(corpoFuncao, 'função montarAbaDemandas não encontrada no script de cliente');
+  assert.match(
+    corpoFuncao[1],
+    /document\.getElementById\('demandas-modo'\)\.addEventListener\('change'/,
+    'addEventListener(\'change\', ...) precisa estar DENTRO de montarAbaDemandas -- é isso que garante que o listener é religado a cada innerHTML, já que o <select> é recriado toda vez'
+  );
 });
 
 test('a aba Demandas aparece no seletor de abas, sem quebrar as duas existentes', () => {

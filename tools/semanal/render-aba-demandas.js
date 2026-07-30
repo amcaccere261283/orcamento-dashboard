@@ -106,9 +106,17 @@ function renderBloco(bloco, demandas, modo) {
     : (demandas.totais[bloco.serie] || []);
   linhas += renderLinha('Total', totais, bloco.estoque, modo, 'linha-demandas linha-total-demandas');
 
-  // Pendentes carrega furo de anos anteriores: na planilha real, 5.546 dos
-  // 7.154 abertos em janeiro/2026 chegaram antes de 2026. Sem essa nota o
-  // primeiro mês parece um pico inexplicável.
+  // Pendentes carrega furo de anos anteriores: a maior parte do que está
+  // aberto no primeiro mês do ano já existia antes dele. Sem essa nota o
+  // primeiro mês parece um pico inexplicável. NENHUM número real da
+  // planilha entra neste comentário, de propósito -- este arquivo vai
+  // inteiro (código E comentários) para dentro do bundle do navegador via
+  // BUNDLE_ARQUIVOS (render-semanal.js), e o HTML publicado é público; um
+  // número real aqui vazaria em texto puro na página, fora do blob cifrado
+  // (achado de um review anterior, corrigido: uma versão passada deste
+  // comentário citava as duas cifras da planilha real e elas apareciam cruas
+  // no HTML gerado -- ver o teste correspondente em
+  // test/semanal-render-aba-demandas-wireup.test.js).
   var nota = bloco.estoque
     ? '<p class="nota-demandas">Saldo aberto no fim de cada mês, não um fluxo — inclui demanda de anos anteriores ainda não sondada (o estoque de abertura). Por isso não se acumula.</p>'
     : '';
