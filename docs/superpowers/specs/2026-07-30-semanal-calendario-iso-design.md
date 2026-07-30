@@ -76,11 +76,20 @@ Solução: por `(sup, tipologia)`, guardar as datas dos eventos em si (em dias d
 
 ```js
 porRegistroEventos[chaveMatriz(sup, tipologia)] = {
-  chegada: [18932, 18935, ...],       // dia (epoch-day) de cada furo cuja OS chegou
-  termino: [18940, 18941, ...],       // dia de cada furo cuja sondagem terminou (status CONCLUIDO/EXECUTADO)
-  cancelamento: [18950, ...],         // dia de cada furo cancelado com data legível
+  chegada: [18932, 18935, ...],            // dia de cada furo cuja OS chegou (qualquer status)
+  sondagemRealizada: [18940, 18941, ...],  // dia de término de sondagem, SÓ furos CONCLUIDO/EXECUTADO (fluxo Realizado)
+  termino: [18940, 18941, 18952, ...],     // dia de término de sondagem de QUALQUER furo com essa data (saída de estoque)
+  cancelamento: [18950, ...],              // dia de cancelamento, SÓ furos CANCELADO com data legível
 };
 ```
+
+`sondagemRealizada` e `termino` parecem redundantes mas não são: a planilha real tem 16
+furos CANCELADO com data de término de sondagem preenchida além da de cancelamento — o
+cálculo de estoque de hoje já usa a data de término **bruta** (sem olhar status) pra tirar
+do estoque, enquanto o Realizado só conta término em furos CONCLUIDO/EXECUTADO. Colapsar
+os dois num só mudaria o comportamento pra essas 16 linhas sem querer. `cancelamento` não
+precisa dessa duplicação: o critério (`status === CANCELADO` + data legível) já é
+idêntico nos dois usos originais (série de canceladas e saída de estoque).
 
 Cada array tem um elemento por furo que contribui aquele evento (não por mês, não por
 semana) — o tamanho passa a ser proporcional à quantidade real de furos daquela
@@ -106,10 +115,10 @@ mesmo valor (foto) em cada uma das N semanas — sem mudança de semântica, só
 
 Para cada semana do mês vigente (`inicio`/`fim` em epoch-day):
 
-- **Semana fechada** (fim < hoje): soma de `termino` no intervalo `[inicio, fim]`
-  (inclusive), somado através dos registros selecionados (`indices`) — evento real, não
-  fração nominal.
-- **Semana em curso** (hoje ∈ `[inicio, fim]`): soma de `termino` no intervalo
+- **Semana fechada** (fim < hoje): soma de `sondagemRealizada` no intervalo
+  `[inicio, fim]` (inclusive), somado através dos registros selecionados (`indices`) —
+  evento real, não fração nominal.
+- **Semana em curso** (hoje ∈ `[inicio, fim]`): soma de `sondagemRealizada` no intervalo
   `[inicio, hoje]` — só o que já aconteceu.
 - **Semana futura** (inicio > hoje): 0 — nada aconteceu ainda. Reaproveita a mesma
   convenção "ausência = zero" já estabelecida para furos (Avanço Sond é listagem
