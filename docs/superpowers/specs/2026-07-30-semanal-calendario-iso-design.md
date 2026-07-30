@@ -78,18 +78,23 @@ Solução: por `(sup, tipologia)`, guardar as datas dos eventos em si (em dias d
 porRegistroEventos[chaveMatriz(sup, tipologia)] = {
   chegada: [18932, 18935, ...],            // dia de cada furo cuja OS chegou (qualquer status)
   sondagemRealizada: [18940, 18941, ...],  // dia de término de sondagem, SÓ furos CONCLUIDO/EXECUTADO (fluxo Realizado)
-  termino: [18940, 18941, 18952, ...],     // dia de término de sondagem de QUALQUER furo com essa data (saída de estoque)
-  cancelamento: [18950, ...],              // dia de cancelamento, SÓ furos CANCELADO com data legível
+  saidaEstoque: [18940, 18952, ...],       // por furo, o MENOR entre término (qualquer status) e cancelamento -- só entra se pelo menos um dos dois existir
 };
 ```
 
-`sondagemRealizada` e `termino` parecem redundantes mas não são: a planilha real tem 16
-furos CANCELADO com data de término de sondagem preenchida além da de cancelamento — o
-cálculo de estoque de hoje já usa a data de término **bruta** (sem olhar status) pra tirar
-do estoque, enquanto o Realizado só conta término em furos CONCLUIDO/EXECUTADO. Colapsar
-os dois num só mudaria o comportamento pra essas 16 linhas sem querer. `cancelamento` não
-precisa dessa duplicação: o critério (`status === CANCELADO` + data legível) já é
-idêntico nos dois usos originais (série de canceladas e saída de estoque).
+`saidaEstoque` não é "término" nem "cancelamento" — é o menor dos dois, calculado **por
+furo**, ainda no Node (onde a ligação furo-a-furo entre os dois campos existe). A
+planilha real tem 16 furos CANCELADO com data de término de sondagem preenchida além da
+de cancelamento; o estoque de hoje já trata isso como "sai na primeira das duas datas que
+chegar" (`!terminou && !cancelou`, um OU, nunca as duas subtraídas). Guardar `término` e
+`cancelamento` como listas separadas e contar cada uma independente subtrairia essas 16
+linhas DUAS vezes do saldo — errado. Calculando o mínimo por furo antes de achatar em
+lista, a conta de saldo vira uma soma-e-subtração simples (`chegada` menos `saidaEstoque`
+até a data) sem perder essa regra.
+
+`sondagemRealizada` continua separado (não vira `min` com nada) porque tem um critério
+diferente do estoque: só CONCLUIDO/EXECUTADO contam pro fluxo Realizado, enquanto o
+estoque considera QUALQUER status pra decidir se o furo já saiu.
 
 Cada array tem um elemento por furo que contribui aquele evento (não por mês, não por
 semana) — o tamanho passa a ser proporcional à quantidade real de furos daquela
@@ -144,9 +149,9 @@ Mesma forma de hoje, alimentada pelos números reais em vez de nominais:
 
 Ganha quebra por semana, deixando de ser só a célula de fechamento:
 
-- **Semana fechada**: saldo de furos em aberto medido no **domingo** daquela semana
-  (23:59) — `chegada <= fim` e não (`termino <= fim`) e não (`cancelamento <= fim`).
-  Serve pra ver se a demanda está diminuindo ou aumentando semana a semana.
+- **Semana fechada**: saldo de furos em aberto medido no **domingo** daquela semana —
+  contagem de `chegada <= fim` menos contagem de `saidaEstoque <= fim`. Serve pra ver se
+  a demanda está diminuindo ou aumentando semana a semana.
 - **Semana em curso**: mesmo cálculo, mas medido **hoje** em vez do domingo da semana
   (a semana ainda não fechou).
 - **Semana futura**: sem-dado (célula vazia) — não faz sentido projetar estoque futuro,
