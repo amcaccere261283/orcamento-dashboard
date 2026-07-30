@@ -21,7 +21,9 @@
 - **Nada de `Map` no payload cifrado.** `renderSemanal` faz `JSON.stringify({ registros, baseline, demandas })`; um `Map` serializa como `{}` e os dados desaparecem sem erro. Só arrays e objetos simples.
 - **Tarefas 1 a 5 rodam em qualquer máquina.** Só as Tarefas 6 e 7 precisam do Google Drive montado em `G:` e da senha real.
 - **Janela de saneamento de data:** serial Excel fora de `44927` (2023-01-01) a `46388` (2027-01-01) é tratado como ausente. Valor único, definido uma vez em `parse-avancos.js`.
-- **Nomes de coluna são exatos, com e sem acento como estão na planilha:** `Contrato`, `Criação da OS`, `Tipo`, `Status`, `Termino Sondagem` (**sem** acento em "Termino"), `Conclusão`, `Atualizado`.
+- **Nomes de coluna são exatos, com e sem acento como estão na planilha:** `Contrato`, `Criação da OS`, `Tipo`, `Status`, `Termino Sondagem` (**sem** acento em "Termino"), `Conclusão`, `Cancelamento`, `Atualizado`.
+- **`Cancelamento` é a única data da aba gravada como TEXTO `dd/MM/yyyy`;** as outras quatro são serial Excel. `Number()` num `"27/02/2025"` devolve `NaN`. Errar isso não quebra nada — a série apenas encolhe em silêncio.
+- **Para medir a planilha, use `readXlsxSheet` do próprio repositório**, nunca um leitor improvisado. Um script de sondagem com regex de célula guloso (`[^>]*`, que engole a barra de `<c r="M9" s="5"/>` e devora a célula seguinte) produziu os números da primeira versão do spec e custou duas decisões de design erradas — ver o bloco "Correção de 2026-07-30" no spec e a Task 6.
 
 ## File Structure
 
@@ -1605,13 +1607,288 @@ git commit -m "Ligar a aba Demandas: payload cifrado, seletor de aba e montagem 
 
 ---
 
-### Task 6: Sanidade contra a planilha real
+### Task 6: Ancorar canceladas na data real de cancelamento
+
+**Files:**
+- Modify: `tools/semanal/parse-avancos.js`
+- Modify: `test/semanal-parse-avancos.test.js`
+- Modify: `tools/semanal/compute-demandas.js`
+- Modify: `test/semanal-compute-demandas.test.js`
+
+**Interfaces:**
+- Consumes: nada novo.
+- Produces: o furo de `parseAvancos` ganha o campo `cancelamento: Date|null`, e `parseAvancos` passa a devolver também `cancelamentoIlegivel: number`. `computeDemandas` mantém a assinatura; muda o comportamento de `canceladas` e de `pendentes`.
+
+**Por que esta tarefa existe.** As Tasks 2 e 3 foram implementadas contra números que estavam errados. O spec foi corrigido em 2026-07-30 (commit `1bb3888`) depois que o teste contra a planilha real acusou divergência: o script de sondagem que produziu os números originais usava um regex de célula **guloso** (`[^>]*`), que numa célula vazia autofechada (`<c r="M9" s="5"/>`) engolia a barra e seguia até o `</c>` seguinte, devorando a célula vizinha e deslocando as colunas. Duas consequências, ambas de comportamento:
+
+1. **`canceladas` está ancorada em `Q` (Atualizado), e deve ancorar em `P` (Cancelamento).** `P` não está vazia: ela é **texto no formato `dd/MM/yyyy`**, e `Number()` nela devolve `NaN` — foi assim que o script concluiu, errado, que a coluna não tinha dados. Todas as 4.331 canceladas têm data e todas parseiam. `Q` é a última alteração da linha e fica meses fora: a linha 22 foi cancelada em 27/02/2025 e tem `Q` = 19/12/2025.
+2. **`pendentes` dá baixa em cancelada por status, e deve dar baixa pela data.** Um furo cancelado em julho estava aberto em janeiro, e o saldo de janeiro tem que dizer isso.
+
+- [ ] **Step 1: Escrever os testes que falham, no parser**
+
+Em `test/semanal-parse-avancos.test.js`, acrescente ao `CABECALHO` a coluna de cancelamento — ela fica entre `Conclusão` (índice 14) e `Atualizado` (índice 16), como na planilha real:
+
+```js
+CABECALHO[15] = 'Cancelamento';
+```
+
+E no helper `furo()`, acrescente o parâmetro com um default de texto, atribuído à coluna 15:
+
+```js
+function furo({ sup = 'SUP-0001-24', tipo = 'SP', status = 'CONCLUIDO', criacao = MAR10, termino = MAR12, conclusao = ABR02, cancelamento = '', atualizado = ABR05 } = {}) {
+  const linha = [];
+  linha[0] = sup;
+  linha[8] = criacao;
+  linha[9] = tipo;
+  linha[11] = status;
+  linha[13] = termino;
+  linha[14] = conclusao;
+  linha[15] = cancelamento;
+  linha[16] = atualizado;
+  return linha;
+}
+```
+
+Depois acrescente estes testes:
+
+```js
+test('cancelamento é lido de texto dd/MM/yyyy, não de serial Excel', () => {
+  const { furos } = parseAvancos(grade([furo({ status: 'CANCELADO', cancelamento: '27/02/2025' })]));
+  assert.strictEqual(furos[0].cancelamento.toISOString().slice(0, 10), '2025-02-27',
+    'dd/MM/yyyy: 27 é o dia e 02 é o mês, nunca o contrário');
+});
+
+test('cancelamento vazio vira null', () => {
+  const { furos } = parseAvancos(grade([furo({ cancelamento: '' })]));
+  assert.strictEqual(furos[0].cancelamento, null);
+});
+
+test('cancelamento em serial Excel NÃO é aceito -- a coluna é texto na planilha real', () => {
+  const { furos, cancelamentoIlegivel } = parseAvancos(grade([furo({ status: 'CANCELADO', cancelamento: 46091 })]));
+  assert.strictEqual(furos[0].cancelamento, null);
+  assert.strictEqual(cancelamentoIlegivel, 1);
+});
+
+test('cancelamento ilegível NUNCA vira Invalid Date -- ele compararia false contra qualquer data, em silêncio', () => {
+  const { furos, cancelamentoIlegivel } = parseAvancos(grade([furo({ status: 'CANCELADO', cancelamento: '31/31/2025' })]));
+  assert.strictEqual(furos[0].cancelamento, null);
+  assert.strictEqual(cancelamentoIlegivel, 1);
+});
+
+test('cancelamentoIlegivel só conta linha CANCELADO -- texto perdido em linha não cancelada não é anomalia', () => {
+  const { cancelamentoIlegivel } = parseAvancos(grade([
+    furo({ status: 'CONCLUIDO', cancelamento: 'lixo' }),
+    furo({ status: 'CANCELADO', cancelamento: 'lixo' }),
+  ]));
+  assert.strictEqual(cancelamentoIlegivel, 1);
+});
+
+test('data de cancelamento com espaço em volta ainda parseia', () => {
+  const { furos } = parseAvancos(grade([furo({ status: 'CANCELADO', cancelamento: ' 05/11/2024 ' })]));
+  assert.strictEqual(furos[0].cancelamento.toISOString().slice(0, 10), '2024-11-05');
+});
+
+test('a coluna Cancelamento é achada pelo NOME, como as outras', () => {
+  const semCancelamento = [];
+  semCancelamento[1] = CABECALHO.map(rotulo => (rotulo === 'Cancelamento' ? 'Outra coisa' : rotulo));
+  semCancelamento[2] = furo();
+  assert.throws(() => parseAvancos(semCancelamento), /Cancelamento/);
+});
+```
+
+- [ ] **Step 2: Rodar e confirmar que falham**
+
+Run: `node --test test/semanal-parse-avancos.test.js`
+Expected: FAIL — `cancelamento` é `undefined`, `cancelamentoIlegivel` é `undefined`, e o cabeçalho sem `Cancelamento` não lança.
+
+- [ ] **Step 3: Implementar no parser**
+
+Em `tools/semanal/parse-avancos.js`, acrescente `cancelamento: 'Cancelamento'` a `COLUNAS_OBRIGATORIAS`, o parser de data em texto, e o campo na saída.
+
+O parser de texto, ao lado de `dataSaneada`:
+
+```js
+// A coluna Cancelamento é a ÚNICA data desta aba gravada como texto
+// (dd/MM/yyyy), não como serial Excel. Medido em 2026-07-30: as 4.331 linhas
+// CANCELADO têm valor e todas as 4.331 parseiam. Number() num "27/02/2025"
+// devolve NaN -- foi assim que uma sondagem anterior concluiu, errado, que a
+// coluna estava vazia, e o spec chegou a declarar Q (Atualizado) como âncora
+// proxy das canceladas. Ver o bloco "Correção de 2026-07-30" no spec.
+//
+// Valida os componentes DEPOIS de montar a data: `new Date(Date.UTC(2025, 30, 31))`
+// não é Invalid Date, é uma data deslocada para outro mês. Um Invalid Date
+// solto seria pior que null -- ele compara `false` contra qualquer data, então
+// o furo sairia da série de canceladas E do estoque, sem erro nenhum.
+function dataDeTexto(valor) {
+  const bruto = texto(valor);
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(bruto);
+  if (!m) return null;
+  const dia = Number(m[1]);
+  const mes = Number(m[2]);
+  const ano = Number(m[3]);
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  if (data.getUTCFullYear() !== ano || data.getUTCMonth() !== mes - 1 || data.getUTCDate() !== dia) return null;
+  return data;
+}
+```
+
+Dentro do laço de `parseAvancos`, depois de `const status = ...`:
+
+```js
+    const cancelamento = dataDeTexto(linha[cols.cancelamento]);
+    // Só é anomalia quando a linha ESTÁ cancelada: nas outras a coluna é
+    // legitimamente vazia. Uma cancelada sem data legível fica fora da série de
+    // canceladas e, de propósito, DENTRO do estoque -- "não sei quando saiu" é
+    // mais honesto que "saiu no começo".
+    if (status === 'CANCELADO' && cancelamento === null) cancelamentoIlegivel++;
+```
+
+Declare `let cancelamentoIlegivel = 0;` junto dos outros contadores, acrescente `cancelamento` ao objeto empurrado em `furos`, e inclua `cancelamentoIlegivel` no objeto devolvido. Exporte `dataDeTexto` junto das outras funções.
+
+- [ ] **Step 4: Rodar e confirmar que passam**
+
+Run: `node --test test/semanal-parse-avancos.test.js`
+Expected: PASS — 17 testes.
+
+- [ ] **Step 5: Escrever os testes que falham, na agregação**
+
+Em `test/semanal-compute-demandas.test.js`, o helper `furo()` ganha `cancelamento: null` no default do `Object.assign`. Depois:
+
+```js
+test('canceladas ancoram em cancelamento (coluna P), não em atualizado (coluna Q)', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null,
+           cancelamento: d(2026, 2, 20), atualizado: d(2026, 11, 30) }),
+  ], PERIODOS_2026);
+  assert.strictEqual(serieDe(saida, 'SP', 'canceladas')[1], 1, 'fevereiro, o mês do cancelamento');
+  assert.strictEqual(serieDe(saida, 'SP', 'canceladas')[11], 0, 'dezembro é só a última alteração da linha');
+});
+
+test('cancelada sem data legível fica fora da série de canceladas', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null, cancelamento: null }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'canceladas'), new Array(12).fill(0));
+});
+
+test('cancelada sai do estoque NO MÊS do cancelamento -- estava aberta antes disso', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 10), terminoSondagem: null,
+           conclusao: null, cancelamento: d(2026, 4, 15) }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes').slice(0, 6), [1, 1, 1, 0, 0, 0],
+    'aberta jan-mar, fora a partir de abril');
+});
+
+test('cancelada SEM data legível continua no estoque -- "não sei quando saiu" não é "saiu no começo"', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 10), terminoSondagem: null,
+           conclusao: null, cancelamento: null }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(1));
+});
+
+test('cancelada cujo cancelamento é anterior ao ano nunca entra no estoque de 2026', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2025, 6, 1), terminoSondagem: null,
+           conclusao: null, cancelamento: d(2025, 8, 1) }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(0));
+});
+
+test('término vence cancelamento posterior: quem terminou a sondagem saiu do estoque ali', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 5), terminoSondagem: d(2026, 2, 10),
+           conclusao: null, cancelamento: d(2026, 6, 1) }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes').slice(0, 4), [1, 0, 0, 0]);
+});
+```
+
+E ajuste o teste existente `'cancelada NÃO entra no estoque de pendentes, em nenhum mês'`: ele passava porque cancelada saía por status. Agora o furo dele precisa de `cancelamento` antes ou dentro do primeiro mês para continuar valendo — dê a ele `cancelamento: d(2026, 1, 5)` e mantenha a asserção de 12 zeros, já que ele chega em janeiro e é cancelado em janeiro. Mantenha também o teste `'canceladas exige status CANCELADO'` (o guard negativo da Task 3), trocando `atualizado` por `cancelamento` nos furos não cancelados, para que ele continue provando o guard.
+
+- [ ] **Step 6: Rodar e confirmar que falham**
+
+Run: `node --test test/semanal-compute-demandas.test.js`
+Expected: FAIL — canceladas ainda conta por `atualizado`, e o estoque ainda tira cancelada por status.
+
+- [ ] **Step 7: Implementar na agregação**
+
+Em `tools/semanal/compute-demandas.js`, troque a âncora das canceladas e a regra do estoque.
+
+A âncora:
+
+```js
+    if (cancelado) {
+      const iCancel = indiceDoMes(f.cancelamento, periodos);
+      if (iCancel >= 0) series.canceladas[iCancel] += 1;
+    }
+```
+
+O estoque — o `!cancelado` sai da condição de entrada, e a data de cancelamento entra como segunda forma de saída:
+
+```js
+    // Estoque: aberto no fim do mês = chegou até ali, e nem a sondagem terminou
+    // nem o cancelamento ocorreu até ali. Cancelada sai pela DATA (coluna P), não
+    // por status: um furo cancelado em julho estava de fato aberto em janeiro, e o
+    // saldo de janeiro tem que dizer isso. Cancelada sem data legível permanece no
+    // estoque de propósito -- "não sei quando saiu" é mais honesto que "saiu no
+    // começo", e o build reporta a contagem.
+    if (f.criacaoOS) {
+      for (let i = 0; i < n; i++) {
+        if (f.criacaoOS > fins[i]) continue;
+        const terminou = f.terminoSondagem && f.terminoSondagem <= fins[i];
+        const cancelou = f.cancelamento && f.cancelamento <= fins[i];
+        if (!terminou && !cancelou) series.pendentes[i] += 1;
+      }
+    }
+```
+
+Atualize também o comentário do topo do módulo que descreve as cinco séries, para dizer `P (Cancelamento)` onde hoje diz `Q`.
+
+- [ ] **Step 8: Corrigir o comentário factualmente errado sobre EXECUTADO**
+
+Ainda em `tools/semanal/compute-demandas.js`, o comentário da série de relatório afirma que 798 das 811 linhas EXECUTADO têm data de Conclusão. Medido em 2026-07-30: são **0 de 811**. Reescreva mantendo a regra e corrigindo o motivo — filtrar por status é certo porque o status é que carrega o significado da etapa, e porque a planilha pode passar a preencher `O` em linha EXECUTADO sem avisar. Se o mesmo número aparecer em comentário de outro arquivo desta base (procure por `798`), corrija lá também.
+
+- [ ] **Step 9: Rodar e confirmar que passam**
+
+Run: `node --test test/semanal-compute-demandas.test.js`
+Expected: PASS.
+
+- [ ] **Step 10: Rodar a suíte inteira**
+
+Run: `node --test test/*.test.js`
+Expected: PASS em tudo. `test/orcamento-html-inalterado.test.js` e `test/publicacao-docs-sincronizado.test.js` incluídos — nada aqui toca o orçamento nem `dist/`/`docs/`.
+
+- [ ] **Step 11: Passar a contagem de anomalia para o log do build**
+
+Em `tools/semanal/build-dashboard.js`, o destructuring de `parseAvancos` ganha `cancelamentoIlegivel`, e a linha de log existente das demandas ganha o número no fim:
+
+```js
+  const { furos, descartadas, semDataTermino, cancelamentoIlegivel } = parseAvancos(gridAvancos);
+```
+
+```js
+  console.log(`Demandas: ${furos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
+```
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add tools/semanal/parse-avancos.js tools/semanal/compute-demandas.js tools/semanal/build-dashboard.js \
+  test/semanal-parse-avancos.test.js test/semanal-compute-demandas.test.js
+git commit -m "Ancorar canceladas na data real de cancelamento, lida de texto dd/MM/yyyy"
+```
+
+---
+
+### Task 7: Sanidade contra a planilha real
 
 **Files:**
 - Test: `test/semanal-demandas-planilha-real.test.js`
 
 **Interfaces:**
-- Consumes: `config-demandas.js` (Task 2), `parseAvancos` (Task 2), `computeDemandas` (Task 3), `readXlsxSheet` (`tools/comum/xlsx-reader.js`).
+- Consumes: `config-demandas.js` (Task 2), `parseAvancos` (Tasks 2 e 6), `computeDemandas` (Tasks 3 e 6), `readXlsxSheet` (`tools/comum/xlsx-reader.js`).
 - Produces: nada — é só rede de segurança.
 
 - [ ] **Step 1: Escrever o teste**
@@ -1629,37 +1906,51 @@ const { computeDemandas } = require('../tools/semanal/compute-demandas.js');
 const config = require('../tools/semanal/config-demandas.js');
 
 // Toda a suíte acima roda sobre fixture sintética, o que prova a LÓGICA mas
-// não o MAPEAMENTO: um nome de coluna errado, um status escrito de outro
-// jeito ou uma tipologia nova passariam inteiros. Este arquivo é a única
-// prova contra a planilha de verdade -- e por isso depende do Google Drive
-// montado em G:. Sem G:, PULA em vez de falhar: as outras 5 tarefas deste
-// plano rodam em qualquer máquina, e um colaborador sem acesso ao Drive não
-// pode ficar com a suíte vermelha (ver docs/onboarding-colaborador.md).
+// não o MAPEAMENTO: um nome de coluna errado, um status escrito de outro jeito,
+// um formato de data diferente do esperado -- tudo isso passaria inteiro. Este
+// arquivo é a única prova contra a planilha de verdade, e foi ele que pegou o
+// erro de medição que gerou a correção de 2026-07-30 (a coluna Cancelamento é
+// texto dd/MM/yyyy, não serial). Por isso ele depende do Drive montado em G:.
 //
-// Os números vêm da medição de 2026-07-29. Eles MUDAM quando a planilha é
-// atualizada: se este teste falhar depois de uma atualização, confira a
-// diferença antes de mexer no número -- é justamente aqui que uma tipologia
-// nova ou um status novo aparece pela primeira vez.
+// Sem G:, PULA em vez de falhar: as outras tarefas deste plano rodam em
+// qualquer máquina, e um colaborador sem acesso ao Drive não pode ficar com a
+// suíte vermelha (ver docs/onboarding-colaborador.md).
+//
+// Os números vêm da medição de 2026-07-30, feita com readXlsxSheet -- o leitor
+// do próprio repositório, nunca um leitor improvisado. Eles MUDAM quando a
+// planilha é atualizada: se este teste falhar depois de uma atualização,
+// confira a diferença antes de mexer no número. Ajustar o número para o que
+// saiu transforma este arquivo num carimbo.
 const TEM_DRIVE = fs.existsSync(config.caminhoArquivo);
 const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2026, mes, 1)));
 
-test('a planilha real é lida e agregada com os números medidos em 2026-07-29', { skip: TEM_DRIVE ? false : 'G: não montado -- este teste só roda com o Drive disponível' }, () => {
+test('a planilha real é lida e agregada com os números medidos em 2026-07-30', { skip: TEM_DRIVE ? false : 'G: não montado -- este teste só roda com o Drive disponível' }, () => {
   const grid = readXlsxSheet(config.caminhoArquivo, config.nomeAba);
-  const { furos, descartadas } = parseAvancos(grid);
+  const { furos, descartadas, cancelamentoIlegivel } = parseAvancos(grid);
 
-  assert.strictEqual(descartadas, 21, '21 linhas vazias na planilha de 2026-07-29');
-  assert.ok(furos.length > 61000, `esperava mais de 61 mil furos, li ${furos.length}`);
+  assert.strictEqual(descartadas, 21, '21 linhas vazias na planilha de 2026-07-30');
+  assert.strictEqual(furos.length, 61906, 'linhas úteis');
+  assert.strictEqual(cancelamentoIlegivel, 0, 'todas as 4.331 canceladas têm data legível');
 
   const demandas = computeDemandas(furos, PERIODOS_2026);
   const soma = serie => demandas.totais[serie].reduce((a, b) => a + b, 0);
 
   assert.strictEqual(soma('chegadas'), 16570, 'demandas chegadas em 2026');
   assert.strictEqual(soma('sondagemRealizada'), 15387, 'sondagem realizada em 2026');
-  assert.strictEqual(soma('relatorioConcluido'), 14753, 'relatório concluído em 2026');
-  assert.strictEqual(soma('canceladas'), 1902, 'canceladas em 2026, ancoradas em Atualizado');
+  assert.strictEqual(soma('relatorioConcluido'), 14804, 'relatório concluído em 2026');
+  assert.strictEqual(soma('canceladas'), 1240, 'cancelamentos OCORRIDOS em 2026, ancorados na coluna P');
 
-  assert.strictEqual(demandas.totais.pendentes[0], 7154, 'saldo de janeiro');
+  assert.strictEqual(demandas.totais.pendentes[0], 7861, 'saldo de janeiro');
   assert.strictEqual(demandas.totais.pendentes[11], 6176, 'saldo de dezembro');
+});
+
+test('a coluna Cancelamento é texto dd/MM/yyyy na planilha real -- o dia em que virar serial, este teste avisa', { skip: TEM_DRIVE ? false : 'G: não montado' }, () => {
+  const grid = readXlsxSheet(config.caminhoArquivo, config.nomeAba);
+  const { furos } = parseAvancos(grid);
+  const canceladas = furos.filter(f => f.status === 'CANCELADO');
+  assert.strictEqual(canceladas.length, 4331);
+  assert.strictEqual(canceladas.filter(f => f.cancelamento).length, 4331,
+    'se este número cair, a coluna mudou de formato e a série de canceladas encolheu em silêncio');
 });
 
 test('nenhuma tipologia crua da planilha real fica fora do mapa', { skip: TEM_DRIVE ? false : 'G: não montado' }, () => {
@@ -1674,25 +1965,28 @@ test('nenhuma tipologia crua da planilha real fica fora do mapa', { skip: TEM_DR
 - [ ] **Step 2: Rodar**
 
 Run: `node --test test/semanal-demandas-planilha-real.test.js`
-Expected: com `G:` montado, PASS nos 2 testes. Sem `G:`, os 2 aparecem como `skipped` — nunca como falha.
+Expected: com `G:` montado, PASS nos 3 testes. Sem `G:`, os 3 aparecem como `skipped` — nunca como falha.
 
-Se algum número divergir, **não ajuste o número para o que saiu**: confira primeiro se a planilha foi atualizada desde 2026-07-29 (`ls -la` no caminho) e, se foi, atualize os números **e** o comentário com a nova data de medição.
+Se algum número divergir, **não ajuste o número para o que saiu**. Confira primeiro se a planilha foi atualizada (`ls -la` no caminho de `config-demandas.js`) e, se foi, atualize os números **e** a data de medição no comentário. Se a planilha não mudou, é bug: pare e relate.
 
-- [ ] **Step 3: Rodar a suíte inteira**
+- [ ] **Step 3: Verificar que o teste realmente roda, e que o skip funciona**
+
+Confirme na saída que os 3 testes executaram (não `skipped`) — um teste que pula em silêncio não prova nada. Depois, temporariamente aponte `caminhoArquivo` para um caminho inexistente, rode de novo e confirme que aparecem como `skipped` e não como falha. Restaure o arquivo (`git checkout -- tools/semanal/config-demandas.js`) e confirme `git status --short` vazio antes de seguir.
+
+- [ ] **Step 4: Rodar a suíte inteira**
 
 Run: `node --test test/*.test.js`
 Expected: PASS em tudo.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add test/semanal-demandas-planilha-real.test.js
 git commit -m "Travar os números da planilha real, pulando quando o G: não existe"
 ```
-
 ---
 
-### Task 7: Construir, verificar e publicar
+### Task 8: Construir, revisar o design, verificar e publicar
 
 **Files:**
 - Modify: `CLAUDE.md`
@@ -1711,7 +2005,7 @@ ORCAMENTO_SENHA='<a senha real>' node tools/semanal/build-dashboard.js
 ORCAMENTO_SENHA='<a senha real>' node tools/orcamento/build-dashboard.js
 ```
 
-Expected: a saída do build da semanal traz a linha nova `Demandas: ... furos lidos, 21 linha(s) vazia(s) descartada(s), ...`. O build do orçamento roda para confirmar que continua igual — ele **não** deveria ter mudado.
+Expected: a saída do build da semanal traz as duas linhas novas — `Demandas: 61906 furos lidos, 21 linha(s) vazia(s) descartada(s), 74 furo(s) concluído(s) sem data de término (nunca saem do estoque), 0 cancelada(s) sem data legível (ficam no estoque).` e a linha `Demandas/SUP:` com 1150 furos em 13 SUPs fora da MATRIZ e 11 SUPs da MATRIZ sem furo. O build do orçamento roda para confirmar que continua igual — ele **não** deveria ter mudado.
 
 - [ ] **Step 2: Conferir a página à mão**
 
@@ -1720,11 +2014,24 @@ Abra `dist/planejamento-semanal.html`, destrave com a senha e confirme:
 1. A terceira aba **Demandas** existe e abre.
 2. Os 5 blocos aparecem, na ordem: Demandas chegadas, Sondagem realizada, Relatório concluído, Canceladas, Pendentes.
 3. Trocar a Visão para **Acumulado** faz os fluxos crescerem mês a mês e **não** muda a linha de Pendentes.
-4. No Acumulado, a última coluna do bloco Pendentes diz **Saldo**, não Total.
+4. O bloco Pendentes fecha em **Saldo** nos dois modos, nunca em "Total".
 5. `SEG.A`/`SEG.V` aparecem só se houver acionamento; `LAB.C`/`LAB.E` aparecem zerados.
-6. As abas Semanal e Balanço de massa continuam funcionando como antes.
+6. Os totais de 2026 batem com o teste da planilha real: chegadas 16.570, sondagem realizada 15.387, relatório concluído 14.804, canceladas 1.240, saldo de janeiro 7.861.
+7. As abas Semanal e Balanço de massa continuam funcionando como antes.
 
-- [ ] **Step 3: Copiar para `docs/` — o Pages serve `/docs`, não `/dist`**
+- [ ] **Step 3: Revisão de design do Open Design**
+
+O `CLAUDE.md` do repositório principal exige, para todo trabalho de HTML neste projeto: rodar `mcp__open-design__start_run` com `agent: "claude"`, `skill: "design-review"`, projeto `3b8ae52a-0da9-418c-9ff5-3eb94d0c517f`, apontando para `dist/planejamento-semanal.html`; esperar terminar e incorporar as sugestões que valerem a pena.
+
+Nenhuma tarefa anterior deste plano fez isso, porque até aqui não havia HTML construído. Três pontos já conhecidos que a revisão provavelmente vai tocar, e que valem correção independente do que ela disser:
+
+- `.linha-demandas` é emitida em toda linha e não tem regra de CSS nenhuma — as tabelas irmãs dão cor por série.
+- `cssBase()` define `th, td { text-align: left }`, e `.tabela-demandas .num { text-align: right }` só alcança `<td>`: os `<th>` dos 12 meses ficam alinhados à esquerda sobre números alinhados à direita.
+- Cinco blocos de 15 linhas cada é muita rolagem vertical; vale ver se a revisão sugere algo melhor que empilhar.
+
+Qualquer ajuste vai para `CSS_DEMANDAS` em `tools/semanal/render-semanal.js` (**nunca** para `cssBase()`, que é compartilhada com o orçamento e travada byte a byte), e a página é reconstruída depois. Se o Open Design não estiver disponível nesta máquina, siga sem ele e registre no relatório que a revisão não rodou.
+
+- [ ] **Step 4: Copiar para `docs/` — o Pages serve `/docs`, não `/dist`**
 
 ```bash
 cp dist/planejamento-semanal.html docs/planejamento-semanal.html
@@ -1733,45 +2040,57 @@ cp dist/orcamento-dashboard.html docs/index.html
 
 Sem isso o site segue servindo o build anterior **reportando deploy bem-sucedido** — foi o incidente de 2026-07-22. `test/publicacao-docs-sincronizado.test.js` trava essa cópia para as duas páginas.
 
-- [ ] **Step 4: Rodar a suíte inteira uma última vez**
+- [ ] **Step 5: Rodar a suíte inteira uma última vez**
 
 Run: `node --test test/*.test.js`
-Expected: PASS em tudo, incluindo `publicacao-docs-sincronizado` (agora comparando os arquivos recém-copiados).
+Expected: PASS em tudo, incluindo `publicacao-docs-sincronizado` (agora comparando os arquivos recém-copiados) e o teste da planilha real (que executa, não pula, porque o `G:` está montado nesta máquina).
 
-- [ ] **Step 5: Documentar no `CLAUDE.md`**
+- [ ] **Step 6: Documentar no `CLAUDE.md`**
 
-Na seção "Planejamento Semanal", acrescentar a fonte nova e as três armadilhas de dados que custaram medição para descobrir:
+Na seção "Planejamento Semanal", acrescentar a fonte nova e as armadilhas de dados que custaram medição para descobrir:
 
 ```markdown
 ### Aba Demandas (base do Avanço Sond)
 
 Terceira aba da página semanal, alimentada por
-`Dados e extratos\Extratos Sond\Avanço Sond.xlsx`, aba `Avanços` (61.927 linhas, uma por
-furo) — ver `tools/semanal/config-demandas.js`. É a única fonte de EXECUÇÃO do repositório;
-as outras duas são mensais. Cinco séries em quantidade de furos, mensal e acumulado.
+`Dados e extratos\Extratos Sond\Avanço Sond.xlsx`, aba `Avanços` (61.906 linhas úteis, uma
+por furo) — ver `tools/semanal/config-demandas.js`. É a única fonte de EXECUÇÃO do
+repositório; as outras duas são mensais. Cinco séries em quantidade de furos, mensal e
+acumulado.
 
-Três coisas da planilha que parecem bug e não são:
+Quatro coisas desta planilha que parecem bug e não são:
 
-- **A coluna `P` ("Cancelamento") não é data de cancelamento.** Está vazia em todas as 4.331
-  linhas CANCELADO e preenchida em todas as 50.662 CONCLUIDO, cerca de um ano depois da
-  conclusão. Canceladas ancoram em `Q` (Atualizado), a única data que existe nelas — é um
-  proxy declarado, não um fato.
-- **798 das 811 linhas EXECUTADO têm data de Conclusão preenchida**, embora EXECUTADO
-  signifique "relatório ainda por fazer". A série de relatório filtra por
-  `status = CONCLUIDO`, nunca pela presença da data.
-- **Pendentes é estoque, não fluxo:** no acumulado mostra o saldo do mês, nunca a soma.
-  Cancelada sai do saldo por status (não há data), então o saldo histórico subestima em até
-  4.331 furos no pior caso. Está no spec.
+- **A coluna `P` (Cancelamento) é a data real do cancelamento, gravada como TEXTO
+  `dd/MM/yyyy`** — a única data da aba que não é serial Excel. `Number()` nela devolve `NaN`.
+  É exatamente essa armadilha que fez uma sondagem inicial concluir que a coluna estava
+  vazia, e o spec chegou a declarar `Q` (Atualizado) como âncora proxy das canceladas. `Q`
+  não serve: a linha 22 foi cancelada em 27/02/2025 e tem `Q` = 19/12/2025.
+- **Nenhuma das 811 linhas EXECUTADO tem data de Conclusão**, e nenhuma das 50.662 CONCLUIDO
+  está sem ela. A série de relatório filtra por `status = CONCLUIDO` de propósito: o status é
+  que carrega o significado da etapa, e a planilha pode passar a preencher `O` em linha
+  EXECUTADO sem avisar.
+- **Pendentes é estoque, não fluxo:** no acumulado mostra o saldo do mês, nunca a soma, e
+  fecha em "Saldo" nos dois modos. Cancelada sai do saldo pela DATA do cancelamento, não por
+  status — um furo cancelado em julho estava aberto em janeiro.
+- **74 furos CONCLUIDO/EXECUTADO não têm data de término** e por isso nunca saem do estoque
+  pela regra de data. É a diferença entre o saldo de dezembro (6.176) e as 6.102 linhas
+  PENDENTE de hoje. O build reporta a contagem.
 
-`tools/comum/tipologias-avancos.js` mapeia os 21 rótulos crus nos 10 da MATRIZ mais
+`tools/comum/tipologias-avancos.js` mapeia os 20 rótulos crus nos 10 da MATRIZ mais
 `SP.F`/`SM.A` (independentes), `SEG.A`/`SEG.V` (só quando acionadas) e `Especiais`. Rótulo
 novo **falha o build de propósito** — não caia calado em Especiais.
+
+**Para medir esta planilha, use `readXlsxSheet` do próprio repositório, nunca um leitor
+improvisado.** Os números da primeira versão do spec vieram de um script de sondagem cujo
+regex de célula era guloso (`[^>]*` engole a barra de `<c r="M9" s="5"/>` e devora a célula
+seguinte), e duas decisões de design foram tomadas em cima deles. Está registrado no bloco
+"Correção de 2026-07-30" do spec.
 ```
 
-- [ ] **Step 6: Commit e publicar**
+- [ ] **Step 7: Commit e publicar**
 
 ```bash
-git add CLAUDE.md dist/planejamento-semanal.html docs/planejamento-semanal.html
+git add CLAUDE.md dist/planejamento-semanal.html docs/planejamento-semanal.html docs/index.html
 git commit -m "Publicar a aba Demandas e documentar a fonte Avanço Sond"
 git push origin demandas-base
 ```
@@ -1783,7 +2102,7 @@ branch + PR porque há três pessoas empurrando no mesmo repositório. Abra o PR
 gh pr create --base master --head demandas-base --title "Base de demandas e realizado (aba Demandas)" --body "Implementa docs/superpowers/specs/2026-07-29-base-demandas-realizado-design.md"
 ```
 
-- [ ] **Step 7: Verificar o deploy pelo conteúdo, não pelo status**
+- [ ] **Step 8: Verificar o deploy pelo conteúdo, não pelo status**
 
 Depois do merge do PR em `master`:
 
