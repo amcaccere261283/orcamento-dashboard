@@ -165,3 +165,15 @@ test('reconciliarSups não muda o agregado: SUP fora da MATRIZ continua contando
   assert.strictEqual(serieDe(saida, 'SP', 'chegadas')[0], 1,
     'nada é descartado por não casar com a MATRIZ -- foi o Critical da Fase 1');
 });
+
+test('canceladas exige status CANCELADO: não-cancelados com atualizado válido NÃO contam', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CONCLUIDO', atualizado: d(2026, 3, 12) }),
+    furo({ status: 'EXECUTADO', atualizado: d(2026, 4, 15) }),
+    furo({ status: 'PENDENTE', atualizado: d(2026, 2, 20) }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'canceladas'), new Array(12).fill(0),
+    'guard protege: o if(cancelado) é essencial');
+  assert.deepStrictEqual(saida.totais.canceladas, new Array(12).fill(0),
+    'totais.canceladas também fica zerado para não-cancelados');
+});
