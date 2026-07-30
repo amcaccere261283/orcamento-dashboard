@@ -179,7 +179,7 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, realizado) 
 
   return dimensoes.map(function (dimensao) {
     var mesVigente = previstoMesVigente(registros, indices, dimensao, vigenteIdx);
-    var semanasPrevisto = dividirEmSemanas(mesVigente, dimensao);
+    var semanasPrevisto = dividirEmSemanas(mesVigente, dimensao, SEMANAS); // ponte temporária -- Tarefa 3 troca por numSemanas real
     var fechamentoPrevisto = fecharMes(semanasPrevisto, dimensao);
     var semanasSemDado = new Array(SEMANAS).fill(null);
 
@@ -191,7 +191,7 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, realizado) 
 
     if (dimensao === 'volume' && temDadosDemandas) {
       var realizadoMes = demandasMesVigente(registros, indices, opts.demandas, 'sondagemRealizada', vigenteIdx);
-      semanasRealizado = dividirEmSemanas(realizadoMes, 'volume');
+      semanasRealizado = dividirEmSemanas(realizadoMes, 'volume', SEMANAS); // ponte temporária -- Tarefa 3 troca por numSemanas real
       fechamentoRealizado = fecharMes(semanasRealizado, 'volume');
 
       var semanaAtualNum = semanaAtual(opts.diaDoMes, opts.diasNoMes);
