@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const vm = require('node:vm');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
+const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 
 // Task 8 originalmente deixou o módulo pronto no bundle mas NUNCA chamado --
 // a aba Semanal abria vazia no navegador (achado do coordenador). Este
@@ -11,7 +12,7 @@ const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 // os <script> de cliente de dentro dela (gate + bundle + SCRIPT_CLIENTE_SEMANAL)
 // num vm.Context à parte, simula a senha certa sendo digitada e confirma que
 // #secao-semanal acaba com o HTML exato que renderAbaSemanal(registros
-// decifrados, todos os índices, 'financeiro', vigenteIdx) produz -- não só
+// decifrados, todos os índices, ['financeiro'], vigenteIdx) produz -- não só
 // que a <div> existe.
 //
 // Usa o Web Crypto NATIVO do Node (globalThis.crypto/atob/btoa/TextEncoder/
@@ -42,89 +43,6 @@ function registroSintetico(sup, tomador, financeiroMes) {
     previsto: bloco(new Array(12).fill(2), zeros, fin),
     realizado: bloco(new Array(12).fill(0), zeros, zeros),
     total: bloco(new Array(12).fill(0), zeros, zeros),
-  };
-}
-
-// DOM mínimo o bastante pro script de cliente rodar de ponta a ponta,
-// AGORA incluindo a barra de filtros compartilhada (montarFiltroMulti/
-// configurarAberturaFiltrosMulti, de scriptFiltros()) -- getElementById
-// devolve sempre o MESMO objeto por id (memoizado); querySelector/
-// querySelectorAll resolvem os poucos seletores que montarFiltroMulti de
-// fato usa e sintetizam checkboxes reais (com addEventListener/change
-// disparável) a partir do innerHTML que montarFiltroMulti escreveu, igual a
-// test/comum-filtros-wireup.test.js (tools/comum/render-shell.js) já faz.
-function criarDocumentoFalso() {
-  const elementos = {};
-  const checkboxesPorPainel = new Map();
-
-  function criarCheckboxFake(valor, checked) {
-    const listeners = {};
-    return { value: valor, checked, listeners, addEventListener(tipo, fn) { listeners[tipo] = fn; } };
-  }
-
-  // Sintetiza os <input type="checkbox"> do innerHTML do painel -- cache
-  // por texto de innerHTML (uma remontagem gera checkboxes NOVOS, igual ao
-  // DOM real substituindo os nós ao reatribuir innerHTML).
-  function checkboxesDoPainel(painel) {
-    const cacheKey = painel.innerHTML;
-    const cache = checkboxesPorPainel.get(painel);
-    if (cache && cache.key === cacheKey) return cache.lista;
-    const lista = [];
-    const re = /<input type="checkbox" value="([^"]*)"( checked)?>/g;
-    let m;
-    while ((m = re.exec(painel.innerHTML))) lista.push(criarCheckboxFake(m[1], !!m[2]));
-    checkboxesPorPainel.set(painel, { key: cacheKey, lista });
-    return lista;
-  }
-
-  function elemento(id) {
-    if (!elementos[id]) {
-      const el = {
-        id,
-        style: {},
-        classList: { toggle() {}, add() {}, remove() {}, contains: () => false },
-        listeners: {},
-        addEventListener(tipo, fn) { this.listeners[tipo] = fn; },
-        focus() {},
-        value: '',
-        textContent: '',
-        innerHTML: '',
-        disabled: false,
-        closest() { return el; },
-        appendChild() {}, // atualizarRotuloFiltro chama trigger.appendChild(seta) pra recolocar a seta depois de reescrever o textContent
-        // Só os 5 seletores que montarFiltroMulti/configurarAberturaFiltrosMulti
-        // chamam sobre um elemento já resolvido (o gatilho, o painel, e o
-        // que existe dentro do painel).
-        querySelector(sel) {
-          if (sel === '.filtro-multi-trigger') return elemento(id + '-trigger');
-          if (sel === '.filtro-multi-painel') return elemento(id + '-painel');
-          if (sel === '.filtro-multi-seta') return {};
-          if (sel === '.filtro-multi-busca') return null; // sem busca digitada nestes testes
-          if (sel === '.filtro-multi-vazio-busca') return { hidden: false };
-          return null;
-        },
-        querySelectorAll(sel) {
-          if (sel === 'input[type="checkbox"]') return checkboxesDoPainel(el);
-          return [];
-        },
-      };
-      elementos[id] = el;
-    }
-    return elementos[id];
-  }
-
-  return {
-    elementos,
-    getElementById: elemento,
-    // document.querySelector só é chamado como '#algum-id .filtro-multi-trigger'
-    // ou '#algum-id .filtro-multi-painel' (ver atualizarRotuloFiltro/montarFiltroMulti
-    // em scriptFiltros()) -- resolve pro mesmo elemento(id) e delega.
-    querySelector(sel) {
-      const m = /^#([\w-]+) (\.filtro-multi-(?:trigger|painel))$/.exec(sel);
-      return m ? elemento(m[1]).querySelector(m[2]) : null;
-    },
-    querySelectorAll() { return []; }, // .filtro-multi-trigger/.filtro-multi.aberto globais -- vazios de propósito, nenhum teste depende de achar outro filtro já aberto
-    addEventListener() {},
   };
 }
 
@@ -184,7 +102,7 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
   assert.notEqual(htmlMontado, '', '#secao-semanal continua vazia depois da senha certa -- reproduziria exatamente o bug relatado pelo coordenador');
   assert.equal(
     htmlMontado, esperado,
-    'o HTML injetado em #secao-semanal precisa ser exatamente o que renderAbaSemanal(registros decifrados, TODOS os índices, "financeiro", vigenteIdx) produz -- prova que os argumentos passados batem, não só que ALGUM HTML foi injetado'
+    'o HTML injetado em #secao-semanal precisa ser exatamente o que renderAbaSemanal(registros decifrados, TODOS os índices, ["financeiro"], vigenteIdx) produz -- prova que os argumentos passados batem, não só que ALGUM HTML foi injetado'
   );
 
   // Prova de conteúdo, não só de igualdade de string: soma dos 2 registros
@@ -194,8 +112,8 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
   const seiscentos = (6000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const milEQuinhentos = (1500).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   assert.match(htmlMontado, /S1/);
-  assert.match(htmlMontado, new RegExp(milEQuinhentos.replace('.', '\\.')));
-  assert.match(htmlMontado, new RegExp(seiscentos.replace('.', '\\.')));
+  assert.match(htmlMontado, new RegExp(milEQuinhentos.replace(/\./g, '\\.')));
+  assert.match(htmlMontado, new RegExp(seiscentos.replace(/\./g, '\\.')));
 });
 
 test('com a senha errada, a aba Semanal continua vazia -- nunca monta antes de decifrar de verdade', async () => {
@@ -260,7 +178,7 @@ test('filtrar por SUP na barra compartilhada recalcula a aba Semanal só com os 
   // Prova de conteúdo: 4000 ÷ 4 = 1000 por semana (só o SUP-0001-24), não
   // 1500 (que seria 6000 ÷ 4, a soma dos 2 registros sem filtro).
   const mil = (1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  assert.match(htmlMontado, new RegExp(mil.replace('.', '\\.')));
+  assert.match(htmlMontado, new RegExp(mil.replace(/\./g, '\\.')));
 });
 
 test('a soma S1+S2+S3+S4 do Previsto continua batendo com o mês vigente mesmo com um filtro de recorte ativo, não só sem filtro', async () => {

@@ -8,14 +8,14 @@ const {
 const { buildBrowserBundle } = require('../comum/browser-bundle.js');
 const { fonteParaCliente } = require('../comum/calculo-equipes.js');
 
-// Esta é a 1ª entrega publicável da página nova: casca (cabeçalho + gate de
-// senha) e as duas abas da spec (Semanal / Balanço de massa). A aba Semanal
-// já monta a tabela do mês vigente em 4 semanas (ver SCRIPT_CLIENTE_SEMANAL,
-// montarDashboard); a Task 10 fecha a aba Balanço de massa, que agora desenha
-// de verdade (RenderAbaBalanco.renderAbaBalanco, chamada por
-// montarAbaBalanco) com seus próprios controles (período/base/dimensão/
-// somente ativos) embutidos no HTML que ela mesma produz -- não via
-// markupFiltros() da casca compartilhada.
+// Página da spec com as duas abas (Semanal / Balanço de massa), agora com a
+// barra de filtros compartilhada (markupFiltros()/scriptFiltros() da casca,
+// ../comum/render-shell.js): origem/categoria/tipologia/grupo/sup + dimensão
+// governam as DUAS abas ao mesmo tempo, recalculando a que estiver ativa
+// (ver SCRIPT_CLIENTE_SEMANAL, montarDashboard). A aba Balanço de massa
+// também mantém 4 controles próprios (período/base/dimensão/somente ativos),
+// embutidos no HTML que ela mesma produz (RenderAbaBalanco.renderAbaBalanco,
+// via montarAbaBalanco) -- esses 4 NÃO fazem parte da barra compartilhada.
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -164,6 +164,13 @@ const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js', 'compute
 // em "Abrir", quando SUP/Grupo/Tomador/Tipologia ainda não existem em texto
 // plano no navegador.
 const SCRIPT_CLIENTE_SEMANAL = `
+// ComputeSemanal/ComputeBalanco nunca são lidos diretamente daqui em diante
+// -- quem faz o trabalho é RenderAbaSemanal/RenderAbaBalanco, que usam esses
+// dois módulos por dentro (chamada indireta, dentro do bundle). Estas duas
+// linhas continuam aqui só pra documentar que compute-semanal.js/
+// compute-balanco.js FORAM carregados do bundle de propósito -- sem elas, um
+// futuro leitor poderia achar que os dois módulos são código morto e
+// removê-los do bundle junto, quebrando RenderAbaSemanal/RenderAbaBalanco.
 var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaSemanal = MODULOS['render-aba-semanal.js'];
 var ComputeBalanco = MODULOS['compute-balanco.js'];
