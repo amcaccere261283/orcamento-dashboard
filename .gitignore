@@ -1,1 +1,4 @@
 .worktrees/
+# Scratchpad do subagent-driven-development (ledger, briefs, review packages).
+# É rascunho de sessão, não histórico -- o histórico é o git log.
+.superpowers/

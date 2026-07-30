@@ -88,6 +88,42 @@ diferentes no estudo, e 7 SUPs foram renomeados. Sem os mapas, 68 das 340 linhas
 "sem base", indistinguível de "contrato entrou depois do estudo" — foi o Critical que a
 revisão final pegou.
 
+### Aba Demandas (base do Avanço Sond)
+
+Terceira aba da página semanal, alimentada por
+`Dados e extratos\Extratos Sond\Avanço Sond.xlsx`, aba `Avanços` (61.906 linhas úteis, uma
+por furo) — ver `tools/semanal/config-demandas.js`. É a única fonte de EXECUÇÃO do
+repositório; as outras duas são mensais. Cinco séries em quantidade de furos, mensal e
+acumulado.
+
+Quatro coisas desta planilha que parecem bug e não são:
+
+- **A coluna `P` (Cancelamento) é a data real do cancelamento, gravada como TEXTO
+  `dd/MM/yyyy`** — a única data da aba que não é serial Excel. `Number()` nela devolve `NaN`.
+  É exatamente essa armadilha que fez uma sondagem inicial concluir que a coluna estava
+  vazia, e o spec chegou a declarar `Q` (Atualizado) como âncora proxy das canceladas. `Q`
+  não serve: a linha 22 foi cancelada em 27/02/2025 e tem `Q` = 19/12/2025.
+- **Nenhuma das 811 linhas EXECUTADO tem data de Conclusão**, e nenhuma das 50.662 CONCLUIDO
+  está sem ela. A série de relatório filtra por `status = CONCLUIDO` de propósito: o status é
+  que carrega o significado da etapa, e a planilha pode passar a preencher `O` em linha
+  EXECUTADO sem avisar.
+- **Pendentes é estoque, não fluxo:** no acumulado mostra o saldo do mês, nunca a soma, e
+  fecha em "Saldo" nos dois modos. Cancelada sai do saldo pela DATA do cancelamento, não por
+  status — um furo cancelado em julho estava aberto em janeiro.
+- **74 furos CONCLUIDO/EXECUTADO não têm data de término** e por isso nunca saem do estoque
+  pela regra de data. É a diferença entre o saldo de dezembro (6.176) e as 6.102 linhas
+  PENDENTE de hoje. O build reporta a contagem.
+
+`tools/comum/tipologias-avancos.js` mapeia os 20 rótulos crus nos 10 da MATRIZ mais
+`SP.F`/`SM.A` (independentes), `SEG.A`/`SEG.V` (só quando acionadas) e `Especiais`. Rótulo
+novo **falha o build de propósito** — não caia calado em Especiais.
+
+**Para medir esta planilha, use `readXlsxSheet` do próprio repositório, nunca um leitor
+improvisado.** Os números da primeira versão do spec vieram de um script de sondagem cujo
+regex de célula era guloso (`[^>]*` engole a barra de `<c r="M9" s="5"/>` e devora a célula
+seguinte), e duas decisões de design foram tomadas em cima deles. Está registrado no bloco
+"Correção de 2026-07-30" do spec.
+
 ### Pendências conhecidas
 
 **Fase 2 — os filtros: lógica compartilhada extraída, semanal ainda não

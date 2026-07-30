@@ -30,6 +30,8 @@ const ABAS_VISUALIZACAO = [
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>' },
   { id: 'aba-balanco', rotulo: 'Balanço de massa', ativa: false,
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>' },
+  { id: 'aba-demandas', rotulo: 'Demandas', ativa: false,
+    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>' },
 ];
 
 // Os 6 filtros multi-select da barra compartilhada entre as duas abas: só
@@ -110,6 +112,52 @@ const CSS_SEMANAL = `
   .tabela-semanal-titulo { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
 `;
 
+// CSS da aba Demandas (Task 5 desta fase). Mesma razão de CSS_SEMANAL/
+// CSS_BALANCO: NÃO entra em cssBase() (tools/comum/render-shell.js), que é
+// compartilhada com o orçamento e cujo HTML test/orcamento-html-inalterado.test.js
+// trava byte a byte.
+const CSS_DEMANDAS = `
+  .controles-demandas { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
+  .controle-demandas { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+  .controle-demandas select {
+    padding: 8px 30px 8px 10px; height: 36px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23c3c2b7' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+    color: var(--text-primary); font-size: 13px; cursor: pointer;
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  }
+  .bloco-demandas { margin-bottom: 28px; }
+  .bloco-demandas h3 { font-size: 14px; margin: 0 0 6px; color: var(--text-primary); }
+  .nota-demandas { font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; max-width: 70ch; }
+  .tabela-demandas { width: 100%; border-collapse: collapse; }
+  .tabela-demandas th, .tabela-demandas td { padding: 6px 8px; font-size: 12px; }
+  .tabela-demandas .num { text-align: right; }
+  /* cssBase() fixa "th, td { text-align: left }" pro dashboard inteiro, e a
+     regra acima só alcança <td class="num"> -- os <th> dos 12 meses e da
+     coluna de fechamento (renderCabecalho, render-aba-demandas.js) não têm
+     classe nenhuma, então ficavam à esquerda por cima de números alinhados à
+     direita. Só o primeiro <th> (cabeçalho vazio da coluna de rótulo) fica de
+     fora, porque não tem número embaixo dele. */
+  .tabela-demandas th:not(:first-child) { text-align: right; }
+  /* .linha-demandas é emitida em toda linha de tipologia (renderLinha,
+     render-aba-demandas.js) e não tinha regra de cor nenhuma -- diferente das
+     tabelas irmãs (.linha-previsto/.linha-realizado em cssBase(),
+     .linha-tendencia em CSS_SEMANAL acima), que sempre colorem .serie-label e
+     dão um acento no border-left. Verde por ser a mesma cor de .linha-realizado
+     (cssBase()): esta aba inteira É execução (furo por furo), nunca previsão --
+     ver a nota "É a única fonte de EXECUÇÃO do repositório" no CLAUDE.md. Uma
+     cor só para as 5 tabelas porque render-aba-demandas.js não emite um nome de
+     classe por bloco/série -- todas as linhas de tipologia usam o mesmo
+     'linha-demandas', então não há como colorir por série sem mexer no render
+     (fora do escopo deste ajuste, que é só CSS_DEMANDAS).
+     .linha-total-demandas fica como já estava (negrito + borda), sem herdar
+     esta cor -- ela já se destingue das linhas de tipologia por peso e borda,
+     igual .linha-total-sup em cssBase() não ganha cor de série própria. */
+  .linha-demandas .serie-label, .linha-demandas .celula-total-linha { color: #7fd858; }
+  .linha-demandas .serie-label { border-left-color: #7fd858; }
+  .linha-total-demandas td { font-weight: 600; border-top: 1px solid var(--border); }
+`;
+
 // render-aba-semanal.js consome compute-semanal.js (require('./compute-semanal.js'))
 // -- por isso vem depois na lista: a ordem aqui é a ordem de dependência, e
 // buildBrowserBundle não resolve isso sozinho (ver o comentário no topo dele).
@@ -124,7 +172,7 @@ const CSS_SEMANAL = `
 // lá embaixo em renderSemanal(). Sem isso a aba Balanço de massa quebra em
 // produção com ReferenceError, mesmo com os testes em Node passando (Node
 // resolve o require normalmente).
-const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js', 'compute-balanco.js', 'render-aba-balanco.js'];
+const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js', 'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js'];
 
 // O gate de senha (scriptDesbloqueio, casca compartilhada) sempre chama
 // fecharTendenciaVigente(registros, vigenteIdx) e montarDashboard(registros)
@@ -175,6 +223,9 @@ var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaSemanal = MODULOS['render-aba-semanal.js'];
 var ComputeBalanco = MODULOS['compute-balanco.js'];
 var RenderAbaBalanco = MODULOS['render-aba-balanco.js'];
+var RenderAbaDemandas = MODULOS['render-aba-demandas.js'];
+
+var MODO_DEMANDAS = 'mensal';
 
 // As 3 dimensões que a aba Semanal expõe -- subconjunto das 5 do orçamento
 // (sem produtividade/ticketMedio, que não fazem sentido pra uma tabela
@@ -224,14 +275,17 @@ filtrosSelecionadosSemanal.dimensao.add('financeiro');
 // resto do gate (e montarDashboard) espera em window.__REGISTROS__.
 function fecharTendenciaVigente(dados) {
   window.__BASELINE__ = dados && dados.baseline;
+  window.__DEMANDAS__ = dados && dados.demandas;
   return dados && dados.registros ? dados.registros : dados;
 }
 
 function alternarAba(aba) {
   document.getElementById('secao-semanal').style.display = aba === 'semanal' ? '' : 'none';
   document.getElementById('secao-balanco').style.display = aba === 'balanco' ? '' : 'none';
+  document.getElementById('secao-demandas').style.display = aba === 'demandas' ? '' : 'none';
   document.getElementById('aba-semanal').classList.toggle('aba-ativa', aba === 'semanal');
   document.getElementById('aba-balanco').classList.toggle('aba-ativa', aba === 'balanco');
+  document.getElementById('aba-demandas').classList.toggle('aba-ativa', aba === 'demandas');
 }
 
 // Estado dos controles PRÓPRIOS da aba Balanço de massa (Período/Base/
@@ -280,12 +334,30 @@ function montarAbaBalanco(registros, indices) {
   });
 }
 
+// Redesenha #secao-demandas inteira (controles + tabelas) com o modo atual
+// (MODO_DEMANDAS) e religa o <select>, recriado a cada innerHTML -- mesmo
+// motivo já documentado em montarAbaBalanco. A aba Demandas NÃO participa da
+// barra de filtros compartilhada (ver spec
+// 2026-07-29-base-demandas-realizado-design.md, "Fora de escopo") -- é
+// redesenhada só por esta função, sempre com window.__DEMANDAS__ inteiro,
+// independente de filtrosSelecionadosSemanal/recalcularSemanal.
+function montarAbaDemandas() {
+  document.getElementById('secao-demandas').innerHTML =
+    RenderAbaDemandas.renderAbaDemandas(window.__DEMANDAS__, MODO_DEMANDAS);
+  document.getElementById('demandas-modo').addEventListener('change', function (e) {
+    MODO_DEMANDAS = e.target.value;
+    montarAbaDemandas();
+  });
+}
+
 // Recalcula o recorte a partir da barra de filtros compartilhada e redesenha
-// as DUAS abas com o mesmo 'indices' -- é a única função que decide "o que
-// recalcular" quando um filtro muda (equivalente a recalcularTabela +
-// recalcularAlertas no orçamento, só que aqui é uma função só pras duas
-// abas, já que nenhuma delas tem o custo de montagem incremental que a
-// Tabela do orçamento tem -- as duas são full re-render via innerHTML).
+// as abas Semanal e Balanço de massa com o mesmo 'indices' -- é a única
+// função que decide "o que recalcular" quando um filtro muda (equivalente a
+// recalcularTabela + recalcularAlertas no orçamento, só que aqui é uma
+// função só pras duas abas, já que nenhuma delas tem o custo de montagem
+// incremental que a Tabela do orçamento tem -- as duas são full re-render
+// via innerHTML). A aba Demandas fica de fora deste recorte de propósito --
+// ver montarAbaDemandas.
 function recalcularSemanal() {
   var indices = indicesFiltrados(
     window.__REGISTROS__,
@@ -324,9 +396,11 @@ function montarTodosFiltrosMultiSemanal(registros) {
 function montarDashboard(registros) {
   document.getElementById('aba-semanal').addEventListener('click', function () { alternarAba('semanal'); });
   document.getElementById('aba-balanco').addEventListener('click', function () { alternarAba('balanco'); });
+  document.getElementById('aba-demandas').addEventListener('click', function () { alternarAba('demandas'); });
   montarTodosFiltrosMultiSemanal(registros);
   configurarAberturaFiltrosMulti();
   recalcularSemanal();
+  montarAbaDemandas();
 }
 `;
 
@@ -341,15 +415,18 @@ function montarDashboard(registros) {
 // nunca soltos no markup ou no JS de cliente -- porque SUP/Grupo/Tomador/
 // Tipologia são protegidos pela senha e este HTML vai pra um GitHub Pages
 // público.
-function renderSemanal({ registros, baseline, periodos, senha, geradoEm }) {
+function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm }) {
   if (!senha) {
     throw new Error('renderSemanal requer "senha" -- os registros (SUP/Grupo/Tomador/Tipologia/valores) são cifrados com ela antes de ir pro HTML.');
   }
   if (!Array.isArray(periodos) || periodos.length === 0) {
     throw new Error('renderSemanal requer "periodos" (os 12 meses da MATRIZ, como datas) -- é o que permite calcularVigenteIdx decidir o mês vigente sem assumir que os registros são do ano corrente.');
   }
+  if (!demandas || !Array.isArray(demandas.tipologias)) {
+    throw new Error('renderSemanal requer "demandas" ({tipologias, totais}, de tools/semanal/compute-demandas.js) -- sem isso a aba Demandas montaria vazia no navegador sem nenhum erro no build.');
+  }
 
-  const dadosJson = JSON.stringify({ registros, baseline });
+  const dadosJson = JSON.stringify({ registros, baseline, demandas });
   const dadosCifrados = cifrarComSenha(dadosJson, senha);
   const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');
 
@@ -389,6 +466,7 @@ function renderSemanal({ registros, baseline, periodos, senha, geradoEm }) {
 ${cssBase()}
 ${CSS_SEMANAL}
 ${CSS_BALANCO}
+${CSS_DEMANDAS}
 </style>
 </head>
 <body>
@@ -413,6 +491,7 @@ ${markupFiltros(FILTROS_SEMANAL, { recuo: '    ' })}
 ${markupAbas(ABAS_VISUALIZACAO, '    ')}
     <div id="secao-semanal"></div>
     <div id="secao-balanco" style="display:none"></div>
+    <div id="secao-demandas" style="display:none"></div>
   </div>
   </main>
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx};</script>
