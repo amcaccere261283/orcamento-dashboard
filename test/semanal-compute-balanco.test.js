@@ -154,12 +154,17 @@ function mkBaseline(chave, volMes6, eqMes6) {
 }
 
 // helper que monta o cenário mínimo de 1 SUP × 1 tipologia no mês 6
-function cenario({ previstoVol, realizadoVol, base = 'previsto', baseline = null }) {
+function cenario({ previstoVol, realizadoVol, base = 'previsto', baseline = null, tomador = 'Tomador-Padrao' }) {
   const mk = (vol, eq) => { const v = new Array(12).fill(0), e = new Array(12).fill(0);
     v[6] = vol; e[6] = eq; return { volume: v, equipes: e, financeiro: new Array(12).fill(0) }; };
   return {
-    registros: [{ sup: 'SUP-0001-24', tipologia: 'ST', previsto: mk(previstoVol, 2), realizado: mk(realizadoVol, 3), total: mk(0, 0) }],
+    registros: [{ sup: 'SUP-0001-24', tipologia: 'ST', tomador, previsto: mk(previstoVol, 2), realizado: mk(realizadoVol, 3), total: mk(0, 0) }],
     indices: [0], tipologia: 'ST', base, dimensao: 'volume', periodo: 'mesVigente',
     vigenteIdx: 6, baseline: baseline === null ? [{ chave: 'SUP-0001-24||ST', volume: new Array(12).fill(0) }] : baseline,
   };
 }
+
+test('tomador chega em cada linha, direto do registro', () => {
+  const linhas = calcularLinhas(cenario({ previstoVol: 100, realizadoVol: 100, tomador: 'Concessionária Exemplo S.A' }));
+  assert.strictEqual(linhas[0].tomador, 'Concessionária Exemplo S.A');
+});

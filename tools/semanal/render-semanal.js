@@ -110,6 +110,11 @@ const CSS_SEMANAL = `
   .linha-tendencia .serie-label { border-left-color: #f6b53f; }
   .bloco-dimensao-semanal + .bloco-dimensao-semanal { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--border); }
   .tabela-semanal-titulo { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  /* Mesmo verde de .linha-demandas em CSS_DEMANDAS abaixo -- fio visual
+     entre as duas: esta linha também vem do Avanço Sond, também é
+     execução (estoque de furos), nunca previsão. */
+  .linha-pendentes-demandas .serie-label, .linha-pendentes-demandas .celula-total-linha { color: #7fd858; }
+  .linha-pendentes-demandas .serie-label { border-left-color: #7fd858; }
 `;
 
 // CSS da aba Demandas (Task 5 desta fase). Mesma razão de CSS_SEMANAL/
@@ -368,7 +373,16 @@ function recalcularSemanal() {
     filtrosSelecionadosSemanal.origem
   );
   var dimensoes = dimensoesEmOrdemSemanal(filtrosSelecionadosSemanal.dimensao);
-  document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(window.__REGISTROS__, indices, dimensoes, window.__VIGENTE_IDX__);
+  // hoje/diasNoMes vêm do relógio de quem está vendo a página (não do
+  // build) -- calculados de novo a cada recálculo, é barato e evita estado
+  // obsoleto se a aba ficar aberta atravessando a meia-noite. Dia 0 do mês
+  // seguinte = último dia do mês atual, truque padrão do Date do JS.
+  var hoje = new Date();
+  var diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(
+    window.__REGISTROS__, indices, dimensoes, window.__VIGENTE_IDX__,
+    { demandas: window.__DEMANDAS__, diaDoMes: hoje.getDate(), diasNoMes: diasNoMes }
+  );
   montarAbaBalanco(window.__REGISTROS__, indices);
 }
 
@@ -424,6 +438,9 @@ function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoE
   }
   if (!demandas || !Array.isArray(demandas.tipologias)) {
     throw new Error('renderSemanal requer "demandas" ({tipologias, totais}, de tools/semanal/compute-demandas.js) -- sem isso a aba Demandas montaria vazia no navegador sem nenhum erro no build.');
+  }
+  if (!demandas.porRegistro || typeof demandas.porRegistro !== 'object') {
+    throw new Error('renderSemanal requer "demandas.porRegistro" (de tools/semanal/compute-demandas.js) -- sem isso Realizado/Tendência/Demandas Pendentes desapareceriam da Tabela Semanal sem nenhum erro no build.');
   }
 
   const dadosJson = JSON.stringify({ registros, baseline, demandas });

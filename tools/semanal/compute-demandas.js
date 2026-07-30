@@ -1,5 +1,6 @@
 'use strict';
 const { ORDEM_TIPOLOGIAS, SO_QUANDO_ACIONADA } = require('../comum/tipologias-avancos.js');
+const { chaveMatriz } = require('../comum/linha-base.js');
 
 // Agrega os furos de parse-avancos.js em (tipologia, mês) x 5 séries, em
 // QUANTIDADE DE FUROS. Roda no BUILD, em Node -- o navegador recebe só o
@@ -47,11 +48,21 @@ function serieVazia(quantidade) {
   return series;
 }
 
+// Só as 2 séries que a Tabela semanal precisa (Realizado/Tendência/Pendentes
+// da dimensão Volume) -- não os 5, YAGNI. Chaveado por (sup, tipologia) --
+// MESMA expressão de chaveMatriz (tools/comum/linha-base.js), reaproveitada
+// aqui de propósito: este módulo é Node-only (não entra no bundle do
+// navegador), o require é seguro.
+function serieRegistroVazia(quantidade) {
+  return { sondagemRealizada: zeros12(quantidade), pendentes: zeros12(quantidade) };
+}
+
 function computeDemandas(furos, periodos) {
   const n = periodos.length;
   const fins = periodos.map(fimDoMes);
   const porTipologia = new Map();
   for (const rotulo of ORDEM_TIPOLOGIAS) porTipologia.set(rotulo, serieVazia(n));
+  const porRegistro = new Map();
 
   for (const f of furos || []) {
     // Tipologia fora de ORDEM_TIPOLOGIAS não deveria existir (rotularTipologia
@@ -61,12 +72,16 @@ function computeDemandas(furos, periodos) {
     const series = porTipologia.get(f.tipologia);
     const cancelado = f.status === 'CANCELADO';
 
+    const chaveRegistro = chaveMatriz(f.sup, f.tipologia);
+    if (!porRegistro.has(chaveRegistro)) porRegistro.set(chaveRegistro, serieRegistroVazia(n));
+    const serieRegistro = porRegistro.get(chaveRegistro);
+
     const iChegada = indiceDoMes(f.criacaoOS, periodos);
     if (iChegada >= 0) series.chegadas[iChegada] += 1;
 
     if (STATUS_REALIZADO.indexOf(f.status) !== -1) {
       const iSondagem = indiceDoMes(f.terminoSondagem, periodos);
-      if (iSondagem >= 0) series.sondagemRealizada[iSondagem] += 1;
+      if (iSondagem >= 0) { series.sondagemRealizada[iSondagem] += 1; serieRegistro.sondagemRealizada[iSondagem] += 1; }
     }
 
     if (f.status === 'CONCLUIDO') {
@@ -90,7 +105,7 @@ function computeDemandas(furos, periodos) {
         if (f.criacaoOS > fins[i]) continue;
         const terminou = f.terminoSondagem && f.terminoSondagem <= fins[i];
         const cancelou = f.cancelamento && f.cancelamento <= fins[i];
-        if (!terminou && !cancelou) series.pendentes[i] += 1;
+        if (!terminou && !cancelou) { series.pendentes[i] += 1; serieRegistro.pendentes[i] += 1; }
       }
     }
   }
@@ -115,7 +130,7 @@ function computeDemandas(furos, periodos) {
     }
   }
 
-  return { tipologias, totais };
+  return { tipologias, totais, porRegistro: Object.fromEntries(porRegistro) };
 }
 
 // O agregado é por TIPOLOGIA, não por SUP -- mas nada é descartado por SUP:

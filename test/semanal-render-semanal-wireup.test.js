@@ -31,7 +31,7 @@ const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2
 // A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
 // ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
 // tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
-const DEMANDAS_VAZIAS = { tipologias: [], totais: {} };
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistro: {} };
 
 function registroSintetico(sup, tomador, financeiroMes) {
   const zeros = new Array(12).fill(0);
@@ -101,6 +101,10 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
 
   const vigenteIdx = geradoEm.getUTCMonth();
   const indicesTodos = registros.map((_, i) => i);
+  // Este teste só é válido enquanto o seletor de dimensão abrir em
+  // "financeiro" por padrão -- Volume ativaria Realizado/Tendência/Pendentes
+  // no lado real (5 args) sem equivalente aqui (4 args), e este assert
+  // quebraria com um diff de HTML sem pista da causa.
   const esperado = renderAbaSemanal(registros, indicesTodos, ['financeiro'], vigenteIdx);
 
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
@@ -196,6 +200,10 @@ test('filtrar por SUP na barra compartilhada recalcula a aba Semanal só com os 
   checkboxAlfa.listeners.change();
 
   const vigenteIdx = geradoEm.getUTCMonth();
+  // Este teste só é válido enquanto o seletor de dimensão abrir em
+  // "financeiro" por padrão -- Volume ativaria Realizado/Tendência/Pendentes
+  // no lado real (5 args) sem equivalente aqui (4 args), e este assert
+  // quebraria com um diff de HTML sem pista da causa.
   const esperado = renderAbaSemanal(registros, [0], ['financeiro'], vigenteIdx); // só o índice 0 (SUP-0001-24)
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
   assert.equal(htmlMontado, esperado, 'depois de filtrar por SUP-0001-24, a Tabela semanal deve recalcular só com esse registro, não os 2');
@@ -234,4 +242,38 @@ test('a soma S1+S2+S3+S4 do Previsto continua batendo com o mês vigente mesmo c
   const s1a_s4 = numeros.slice(0, 4);
   assert.deepStrictEqual(s1a_s4, [1000, 1000, 1000, 1000]);
   assert.strictEqual(s1a_s4.reduce((a, b) => a + b, 0), 4000);
+});
+
+test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume está marcada e demandas.porRegistro tem dado real', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
+  const demandas = {
+    // tipologias/totais: renderSemanal exige o formato {tipologias, totais}
+    // de compute-demandas.js (ver DEMANDAS_VAZIAS acima) -- vazios aqui
+    // porque este teste não olha a aba Demandas, só o wire-up de
+    // Realizado/Tendência via porRegistro em window.__DEMANDAS__. totais
+    // precisa refletir o mesmo comprimento/serie de porRegistro (revisão
+    // final da branch): demandasMesVigente usa demandas.totais[serie] só
+    // pra saber o tamanho do ano e validar vigenteIdx -- {} vazio faria
+    // vigenteIdx=6 parecer "fora do intervalo" por engano.
+    tipologias: [], totais: { sondagemRealizada: [0, 0, 0, 0, 0, 0, 800, 0, 0, 0, 0, 0], pendentes: [0, 0, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0] },
+    porRegistro: { 'SUP-0001-24||ST': { sondagemRealizada: [0, 0, 0, 0, 0, 0, 800, 0, 0, 0, 0, 0], pendentes: [0, 0, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0] } },
+  };
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // Marca a dimensão Volume no seletor (Financeiro continua marcado também --
+  // seletor-dimensao é multi-select, minimoUm:true, não substitui).
+  const painelDimensao = documentoFalso.getElementById('seletor-dimensao-painel');
+  const checkboxVolume = painelDimensao.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'volume')[0];
+  assert.ok(checkboxVolume, 'esperava um checkbox "volume" no seletor de dimensão');
+  checkboxVolume.checked = true;
+  checkboxVolume.listeners.change();
+
+  const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
+  assert.match(htmlMontado, /Demandas Pendentes/, 'a linha nova precisa aparecer no bloco Volume depois de marcar a dimensão');
+  assert.doesNotMatch(htmlMontado.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0], /sem-dado/, 'Realizado (Volume) precisa vir preenchido, não sem-dado, com demandas.porRegistro real');
 });
