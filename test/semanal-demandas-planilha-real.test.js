@@ -30,7 +30,7 @@ test('a planilha real é lida e agregada com os números medidos em 2026-07-30',
   const grid = readXlsxSheet(config.caminhoArquivo, config.nomeAba);
   const { furos, descartadas, cancelamentoIlegivel } = parseAvancos(grid);
 
-  assert.strictEqual(descartadas, 21, '21 linhas vazias na planilha de 2026-07-30');
+  assert.strictEqual(descartadas, 1, '1 linha vazia na planilha -- caiu de 21 pra 1 depois de uma edição na planilha em 2026-07-30 15:56 (linhas em branco removidas; todo o resto da agregação abaixo não mudou)');
   assert.strictEqual(furos.length, 61906, 'linhas úteis');
   assert.strictEqual(cancelamentoIlegivel, 0, 'todas as 4.331 canceladas têm data legível');
 
