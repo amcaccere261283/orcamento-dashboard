@@ -45,7 +45,8 @@ Colunas que interessam:
 | L | Status | `CONCLUIDO` 50.662 · `PENDENTE` 6.102 · `CANCELADO` 4.331 · `EXECUTADO` 811 · vazio 21 |
 | N | Término Sondagem | fim da sondagem em campo, e início da etapa de relatório |
 | O | Conclusão | fim da etapa de relatório |
-| Q | Atualizado | última alteração da linha — única âncora de data das canceladas |
+| P | Cancelamento | data do cancelamento — **texto `dd/MM/yyyy`**, não serial Excel |
+| Q | Atualizado | última alteração da linha — **não usada por nenhuma série** |
 
 Semântica dos status, confirmada pelo dono: **CONCLUIDO** é o processo inteiro fechado
 (sondagem + relatório); **EXECUTADO** é a sondagem feita em campo com o relatório ainda por
@@ -78,7 +79,7 @@ descartadas, com o motivo:
 | Arquivo | Responsabilidade |
 |---|---|
 | `tools/semanal/config-demandas.js` | **Criar.** Caminho do arquivo e nome da aba. Separado do `config.js` do orçamento: é outra fonte, com outro ciclo de atualização, e nada do orçamento depende dela. |
-| `tools/semanal/parse-avancos.js` | **Criar.** Lê a aba e devolve uma linha por furo: `{ sup, tipologiaCrua, status, criacaoOS, terminoSondagem, conclusao, atualizado }`, datas já convertidas de serial Excel. Descarta linha vazia. Nenhuma agregação. |
+| `tools/semanal/parse-avancos.js` | **Criar.** Lê a aba e devolve uma linha por furo: `{ sup, tipologia, status, criacaoOS, terminoSondagem, conclusao, cancelamento, atualizado }`. As datas vêm de serial Excel, **exceto `cancelamento`**, que na planilha é texto `dd/MM/yyyy`. Descarta linha vazia. Nenhuma agregação. |
 | `tools/comum/tipologias-avancos.js` | **Criar.** O mapa de tipologia crua → rótulo do dashboard, e só isso. Em `comum/` porque a ingestão de laboratório vai precisar do mesmo mapa. |
 | `tools/semanal/compute-demandas.js` | **Criar.** Função pura, sem I/O: recebe os furos e os 12 períodos, devolve `(tipologia, mês) → 5 séries`. |
 | `tools/semanal/render-aba-demandas.js` | **Criar.** A tabela: um bloco por série, uma linha por tipologia, 12 colunas de mês + total, com alternância Mensal/Acumulado. |
@@ -105,21 +106,31 @@ Todas em quantidade de furos, por (tipologia, mês).
 |---|---|---|
 | Demandas chegadas | mês de `I`, todos os status | 16.570 |
 | Sondagem realizada | mês de `N`, status ∈ {CONCLUIDO, EXECUTADO} | 15.387 |
-| Relatório concluído | mês de `O`, status = CONCLUIDO | 14.753 |
-| Canceladas | mês de `Q`, status = CANCELADO | 1.902 |
-| Pendentes *(estoque)* | chegou até o fim do mês e sondagem não terminou até ali; exclui CANCELADO | 7.154 (jan) → 6.176 (dez) |
+| Relatório concluído | mês de `O`, status = CONCLUIDO | 14.804 |
+| Canceladas | mês de `P`, status = CANCELADO | 1.240 |
+| Pendentes *(estoque)* | chegou até o fim do mês e nem a sondagem terminou nem o cancelamento ocorreu até ali | 7.861 (jan) → 6.176 (dez) |
 
-Distribuição mensal medida em 2026-07-29 (jan..jul). De agosto em diante os quatro fluxos
+Distribuição mensal remedida em 2026-07-30 (jan..jul). De agosto em diante os quatro fluxos
 são zero, porque não há evento futuro; o estoque **não** zera, fica parado em 6.176 até
 dezembro — que é justamente o comportamento esperado de um saldo e a razão de ele não somar:
 
 ```
 chegadas (I)            2972  2204  5625  1206  1145  1796  1622
 sondagem realizada (N)  1208  2603  2798  2488  2506  2008  1776
-relatório concluído (O)  879  2096  2733  2438  2498  2575  1534
-canceladas (Q)           164    59    61    42   312   385   879
-estoque pendente        7154  6614  9297  7980  6578  6337  6176
+relatório concluído (O)  879  2096  2733  2438  2498  2622  1538
+canceladas (P)           136   283    86    59    71   296   309
+estoque pendente        7861  7179  9920  8577  7154  6639  6176
 ```
+
+> **Correção de 2026-07-30.** A primeira versão deste spec trazia números de um script de
+> medição descartável cujo regex de célula era **guloso** (`[^>]*`): numa célula vazia
+> autofechada (`<c r="M9" s="5"/>`) ele engolia a barra e seguia até o `</c>` seguinte,
+> devorando a célula vizinha. O parser do repositório (`parseSheetGrid`, em
+> `tools/comum/xlsx-cells.js`) usa a forma preguiçosa e sempre leu certo. Toda medição deste
+> spec foi refeita com o leitor do próprio repositório. O que mudou: `relatorioConcluido`
+> (14.753 → 14.804), a âncora das canceladas (ver abaixo), o saldo dos meses iniciais, e as
+> contagens de data suja. O que não mudou: chegadas (16.570), sondagem realizada (15.387),
+> 21 linhas descartadas, 13 SUPs fora da MATRIZ, e o saldo de dezembro (6.176).
 
 ### Fluxo x estoque
 
@@ -131,14 +142,14 @@ saldos daria um número sem significado, crescente e convincente.
 (acumular equipes é média ponderada, não soma) e `dividirEmSemanas` (equipes é foto, não
 fluxo, e não se divide por 4). Vira teste dedicado.
 
-**Limitação declarada do estoque:** cancelada sai do saldo **por status**, não por data,
-porque data de cancelamento não existe na planilha (ver a âncora `Q` abaixo). Consequência: um
-furo cancelado em julho já aparece fora do saldo de janeiro, embora naquele momento estivesse
-de fato em aberto. O saldo histórico subestima em até 4.331 furos no pior caso, decrescendo
-até zero no mês corrente. Não há como corrigir com os dados disponíveis — a planilha guarda
-só o status final, não as transições. A alternativa (manter cancelada no saldo até a data de
-`Q`) trocaria um erro conhecido e limitado por um pior: usar um proxy de data para decidir
-presença em estoque, onde o erro não teria teto.
+**Cancelada sai do saldo pela data, não pelo status.** Um furo cancelado em julho estava de
+fato aberto em janeiro, e o saldo de janeiro tem que dizer isso. A data existe (coluna `P` —
+ver a âncora abaixo), então não há aproximação a fazer aqui.
+
+A primeira versão deste spec afirmava o contrário e declarava uma limitação incontornável
+("o saldo histórico subestima em até 4.331 furos"). Isso era consequência do bug de medição:
+com `P` lida como vazia, a única saída parecia ser dar baixa por status. Com a data real, a
+limitação desaparece — e o efeito é visível, o saldo de janeiro sobe de 7.154 para 7.861.
 
 ### Por que cada âncora
 
@@ -147,18 +158,23 @@ presença em estoque, onde o erro não teria teto.
   as sobreviventes reescreveria o passado a cada cancelamento novo.
 - **Sondagem realizada exige o status, não só a data.** `N` está preenchida em linha
   PENDENTE também; sem o filtro de status a série contaria furo não executado.
-- **Relatório concluído exige `status = CONCLUIDO`, não a presença de `O`.** 798 das 811
-  linhas EXECUTADO têm `O` preenchida, o que contradiz a definição de EXECUTADO ("relatório
-  a ser executado"). Nessas linhas `O` não significa relatório fechado. Quem trocar essa
-  regra por "tem `O`" infla a série em ~800 furos.
-- **Canceladas ancoram em `Q`, e isso é um proxy declarado.** A coluna `P` se chama
-  "Cancelamento" mas está **vazia em todas as 4.331 canceladas** e **preenchida em todas as
-  50.662 CONCLUIDO**, tipicamente cerca de um ano depois da conclusão: comporta-se como prazo
-  contratual, não como data de evento. `Q` (Atualizado) é a única data que existe em 100% das
-  canceladas. O risco é conhecido: se alguém tocar a linha depois do cancelamento, a data
-  anda. A alternativa exata seria ancorar em `I` (553 furos em 2026), mas isso mede outra
-  coisa — a safra de chegada que morreu, não quando o cancelamento aconteceu — e não
-  combinaria com as outras quatro séries, que são todas de evento.
+- **Relatório concluído exige `status = CONCLUIDO`, e não a presença de `O`.** As duas regras
+  dão o mesmo resultado hoje: **nenhuma** das 811 linhas EXECUTADO tem `O` preenchida, e
+  nenhuma das 50.662 CONCLUIDO está sem ela. Filtrar por status é ainda assim o certo, porque
+  é o status que carrega o significado — "relatório fechado" é uma etapa, não a existência de
+  uma célula — e porque a planilha pode passar a preencher `O` em linha EXECUTADO sem avisar.
+  (A primeira versão deste spec afirmava que 798 das 811 EXECUTADO tinham `O`; era o bug de
+  medição. A regra sobrevive à correção, a justificativa não.)
+- **Canceladas ancoram em `P` (Cancelamento), a data real do evento.** Todas as 4.331
+  canceladas têm data, e todas as 4.331 são parseáveis. Duas particularidades importam:
+  **`P` é gravada como TEXTO no formato `dd/MM/yyyy`**, não como serial Excel — `Number()`
+  nela devolve `NaN`, que é exatamente como a primeira versão deste spec concluiu, errado, que
+  a coluna estava vazia. E as datas vão de 2023-03-15 a 2026-07-22: só **1.240** dos 4.331
+  cancelamentos ocorreram em 2026.
+  **`Q` (Atualizado) não serve como âncora.** É a última alteração da linha, e a distância é
+  material: a linha 22 foi cancelada em 27/02/2025 e tem `Q` = 19/12/2025 — dez meses depois,
+  em outro ano. Ancorar em `Q` contaria 1.902 linhas *tocadas* em 2026 no lugar dos 1.240
+  cancelamentos *ocorridos* em 2026.
 
 ## Mapa de tipologias
 
@@ -191,22 +207,25 @@ legitimamente ausente. O build reporta a contagem dos dois lados no log.
 
 ## Bordas e qualidade de dados
 
-Tudo abaixo foi medido na planilha real em 2026-07-29, não suposto:
+Tudo abaixo foi remedido na planilha real em 2026-07-30 com o leitor do próprio repositório,
+não suposto e não herdado da primeira versão deste spec:
 
 - **21 linhas vazias** (sem SUP, tipo nem profundidade): descartadas por `parse-avancos.js`,
-  com a contagem no log do build.
-- **3.929 datas absurdas em `M`** (Início Sondagem), de 1901 a 2078. Não afeta nada: `M` não
-  ancora série nenhuma. Fica registrado para ninguém tentar usar `M` sem saneamento.
-- **`N` está 100% limpa**: as 61.927 linhas têm valor dentro de 2023-02 a 2026-07-28. As duas
-  colunas que o dono definiu como bordas do ciclo (`I` e `N`) são justamente as sem lixo.
-- **15 datas absurdas em `O`** e **61 linhas CONCLUIDO sem `O`**: ficam fora da série de
-  relatório, com contagem no log.
-- **74 furos concluídos sem `N` válida** nunca saem do estoque pela regra de data. É a
-  diferença entre o saldo de dezembro (6.176) e as 6.102 linhas PENDENTE de hoje. Reportado
-  no log — a alternativa, calar, faria o saldo divergir do status sem explicação.
-- **5.546 furos de legado** chegaram antes de 2026 e não terminaram: o saldo de janeiro
-  (7.154) é majoritariamente isso. A tabela rotula o estoque de abertura, senão janeiro
-  parece um pico inexplicável.
+  com a contagem no log do build. Sobram 61.906 linhas úteis.
+- **As colunas de data estão essencialmente limpas.** `M` (Início Sondagem, não usada por
+  série nenhuma) tem **2** valores fora de 2023-2027; `N` e `O` têm **zero**. Nenhuma linha
+  CONCLUIDO está sem `O`, e nenhuma das 61.906 está sem `I`. A primeira versão deste spec
+  falava de 3.929 datas absurdas em `M`, 15 em `O` e 61 CONCLUIDO sem `O` — todos artefatos do
+  regex guloso, que deslocava as colunas.
+- **`P` (Cancelamento) é texto, e é o único campo de data que não é serial.** As 4.331
+  canceladas têm valor, e todas as 4.331 parseiam como `dd/MM/yyyy`. Um leitor que faça
+  `Number()` nela recebe `NaN` e conclui, errado, que a coluna está vazia.
+- **74 furos CONCLUIDO/EXECUTADO sem `N` válida** nunca saem do estoque pela regra de data.
+  É a diferença entre o saldo de dezembro (6.176) e as 6.102 linhas PENDENTE de hoje.
+  Reportado no log — a alternativa, calar, faria o saldo divergir do status sem explicação.
+- **6.233 furos de legado** chegaram antes de 2026 e, em 2026-01-01, não tinham término nem
+  cancelamento: o saldo de janeiro (7.861) é majoritariamente isso. A tabela rotula o estoque
+  de abertura, senão janeiro parece um pico inexplicável.
 - **Limite de saneamento de data:** serial fora de 2023-01-01..2027-01-01 é tratado como
   ausente. A planilha só tem operação a partir de 2023-02.
 
@@ -234,18 +253,25 @@ esta aba pelo mesmo caminho das outras — mas não antes, e não neste spec.
   mês, nunca duas vezes.
 - **`N` sem status não conta:** furo PENDENTE com `N` preenchida fica fora de *sondagem
   realizada*.
-- **`O` em linha EXECUTADO não conta** em *relatório concluído*.
+- **`O` em linha EXECUTADO não conta** em *relatório concluído* — hoje nenhuma linha real
+  está nesse estado, e o teste existe para o dia em que estiver.
 - **Pendentes não acumula:** saldos 5/7/6 em três meses dão 5/7/6 no modo acumulado, não
   5/12/18.
-- **Cancelada fora do estoque**, e cancelada ancorada em `Q`.
+- **Cancelada ancorada em `P`, com `P` em texto `dd/MM/yyyy`**, e **cancelada sai do estoque
+  no mês do cancelamento** — não antes (o furo estava aberto) e não nunca.
+- **`P` ilegível não derruba a linha:** um valor que não parseia deixa o furo fora da série de
+  canceladas e **dentro** do estoque, com contagem no log — nunca um `Invalid Date`
+  silencioso, que compararia `false` contra tudo.
 - **Mapa de tipologias, um caso por linha da tabela**, incluindo `SM.A` **não** caindo em
   `SM / SM.F / SR` e `SP.F` **não** caindo em `SP`.
 - **Rótulo desconhecido faz o build falhar** citando o rótulo.
 - **`SEG.A`/`SEG.V` sem furo no período não renderizam** o bloco.
 - **O agregado sobrevive ao `JSON.stringify`** do blob: nenhum `Map` no payload.
 - **Sanidade contra a planilha real**, condicionado à existência do `G:` (`fs.existsSync` no
-  caminho, `t.skip` se não houver): chegadas de 2026 somam 16.570 e o saldo de dezembro é
-  6.176. Sem isso, um erro de mapeamento passa por toda a suíte sintética.
+  caminho, `skip` se não houver): chegadas de 2026 somam 16.570, relatório concluído 14.804,
+  canceladas 1.240, e o saldo vai de 7.861 (jan) a 6.176 (dez). Sem isso, um erro de
+  mapeamento passa por toda a suíte sintética — foi exatamente este teste que pegou o erro de
+  medição que gerou a correção de 2026-07-30.
 
 Os testes existentes de `render-semanal` mudam de expectativa (passa a haver uma terceira
 aba) e precisam ser ajustados junto, não depois.
@@ -257,8 +283,8 @@ spec do Kairo em `2026-07-29-planejamento-semanal-filtros-design.md` e outro do 
 `2026-07-29-semanal-filtros-layout-orcamento-design.md`, com uma branch local implementando
 o segundo. Esta frente foi desenhada para não colidir:
 
-- Toca **um único arquivo compartilhado**, `render-semanal.js`, em duas linhas (registrar a
-  aba e chamar o render). Todo o resto é arquivo novo.
+- Toca **um único arquivo compartilhado**, `render-semanal.js`, e só de forma aditiva
+  (ver a linha dele na tabela de módulos). Todo o resto é arquivo novo.
 - Não toca `render-aba-semanal.js`, `render-aba-balanco.js`, `compute-semanal.js` nem
   `render-shell.js` — que é onde as duas versões da Fase 2 trabalham.
 - Não muda o HTML do orçamento, então `test/orcamento-html-inalterado.test.js` continua
@@ -266,9 +292,17 @@ o segundo. Esta frente foi desenhada para não colidir:
 
 ## Riscos
 
-**O proxy `Q` para canceladas** é a única regra deste spec que não é exata. Se a série de
-canceladas parecer errada em uso, é o primeiro lugar para olhar — e a troca para `I` é
-localizada em `compute-demandas.js`.
+**Formato de data misturado na mesma aba.** Quatro colunas de data são serial Excel e uma
+(`P`) é texto `dd/MM/yyyy`. Se a planilha passar a gravar `P` como serial — ou outra coluna
+como texto — o parser silenciosamente deixa de ver a data, e nada quebra: a série encolhe.
+A defesa é o teste contra a planilha real, que trava as somas; ele é o único que enxergaria.
+Se alguém acrescentar coluna de data nova, meça o formato antes de assumir.
+
+**Medição por script descartável foi a causa do maior retrabalho deste spec.** Os números da
+primeira versão vieram de um script de sondagem com regex guloso, e duas decisões de design
+foram tomadas em cima deles. A lição, registrada aqui de propósito: para medir a planilha,
+use `readXlsxSheet` do próprio repositório, não um leitor improvisado — mesmo para uma
+sondagem rápida.
 
 **O build passa a depender de uma terceira planilha no `G:`.** Se o arquivo não existir, o
 build deve falhar com mensagem clara dizendo qual caminho faltou, não com `ENOENT` cru: um
