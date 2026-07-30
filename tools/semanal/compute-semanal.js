@@ -23,6 +23,17 @@ function fecharMes(semanas, dimensao) {
   var soma = validos.reduce(function (a, b) { return a + b; }, 0);
   return dimensao === 'equipes' ? soma / validos.length : soma;
 }
+
+// diaDoMes: 1-31. diasNoMes: total de dias do mês vigente (28-31). Devolve
+// 1-4 -- qual fatia nominal do mês "hoje" cai dentro, com a MESMA divisão em
+// 4 partes iguais que dividirEmSemanas já aplica ao VALOR mensal, agora
+// aplicada ao CALENDÁRIO -- não semanas ISO, mesmo espírito do resto deste
+// arquivo. Math.min/max travam o resultado em [1,4] mesmo quando as fatias
+// não fecham em número inteiro de dias (ex.: mês de 31 dias, 31/4 = 7.75).
+function semanaAtual(diaDoMes, diasNoMes) {
+  var semana = Math.ceil(diaDoMes / (diasNoMes / SEMANAS));
+  return Math.min(SEMANAS, Math.max(1, semana));
+}
 // FIM CLIENTE >>>
 
-module.exports = { SEMANAS, dividirEmSemanas, fecharMes };
+module.exports = { SEMANAS, dividirEmSemanas, fecharMes, semanaAtual };
