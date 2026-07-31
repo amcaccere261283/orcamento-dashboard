@@ -121,6 +121,14 @@ const CSS_SEMANAL = `
      de Demandas no dashboard inteiro. */
   .linha-pendentes-demandas .serie-label, .linha-pendentes-demandas .celula-total-linha { color: #9700DA; }
   .linha-pendentes-demandas .serie-label { border-left-color: #9700DA; }
+  /* Mesmo tratamento visual de .nota-demandas (CSS_DEMANDAS abaixo) --
+     mensagem de estado vazio (aba Gráficos, render-aba-grafico-semanal.js,
+     "Sem mês vigente válido"), texto secundário discreto em vez do branco
+     padrão do corpo. Classe própria (não reaproveita .nota-demandas
+     diretamente) porque o nome é sobre o que a mensagem É (aviso de
+     ausência de dado), não sobre em qual aba ela mora -- outras abas podem
+     usar o mesmo aviso no futuro sem o nome soar deslocado. */
+  .aviso-sem-dado { font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; max-width: 70ch; }
 `;
 
 // CSS da aba Demandas (Task 5 desta fase). Mesma razão de CSS_SEMANAL/

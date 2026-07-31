@@ -88,24 +88,41 @@ test('construirPainelGraficoSemanalHtml: Volume com demandas mostra as 3 séries
   assert.match(html, />Tendência</);
 });
 
-test('construirPainelGraficoSemanalHtml: os valores desenhados no gráfico batem EXATAMENTE com os da Tabela Semanal pro mesmo fixture -- [2,3,1,0,0]', () => {
-  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_REALIZADO_CONHECIDO } };
+test('construirPainelGraficoSemanalHtml: os valores desenhados no gráfico batem EXATAMENTE com os da Tabela Semanal pro mesmo fixture -- [2,3,1,0,0], passando pelo PIPELINE REAL (não hardcoded)', () => {
   const { semanasDoMes, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
+  const { calcularSeriesSemanaisDimensao } = require('../tools/semanal/render-aba-semanal.js');
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_REALIZADO_CONHECIDO } };
   const semanas = semanasDoMes(ANO, VIGENTE_JULHO);
   const indiceAtual = indiceSemanaAtual(semanas, HOJE_15_JUL);
-  const svg = construirGraficoSemanalSvg(
-    [{ serie: 'realizado', valores: [2, 3, 1, 0, 0] }], 0, semanas.length, semanas
+
+  // Pré-condição: a MESMA função que a Tabela Semanal usa (ver
+  // "Realizado semanal..." em test/semanal-render-aba-semanal.test.js)
+  // produz [2,3,1,0,0] pra este fixture -- se esta linha falhar, o
+  // problema é na extração, não no gráfico.
+  const series = calcularSeriesSemanaisDimensao(
+    [registro(1000)], [0], 'volume', VIGENTE_JULHO, semanas, semanas.length, true, indiceAtual, demandas, HOJE_15_JUL
   );
-  // Só 3 valores são positivos (2, 3, 1) -- construirColunasSvg só desenha
-  // rótulo/barra quando valor !== null/undefined; 0 tem barra de altura 0
-  // (h<=0 -> desenharBarraArredondada devolve ''), então só 3 <path> reais.
-  const barras = (svg.svg.match(/class="grafico-barra"/g) || []).length;
-  assert.strictEqual(barras, 3, 'semanas com 0 furo não desenham path (altura zero), só as 3 com furo real');
-  // casasDecimais=0 (mesma regra do orçamento: todo gráfico mostra número
-  // inteiro) -- "2", não "2,00".
-  assert.match(svg.svg, />2</);
-  assert.match(svg.svg, />3</);
-  assert.match(svg.svg, />1</);
+  assert.deepStrictEqual(series.semanasRealizado, [2, 3, 1, 0, 0]);
+
+  // A aba Gráficos passa pelo MESMO pipeline (construirPainelGraficoSemanalHtml
+  // chama calcularSeriesSemanaisDimensao por dentro, não recebe valores
+  // prontos) -- os números desenhados no SVG (via data-tooltip, que carrega
+  // o valor exato) têm que bater ponto a ponto com a série acima.
+  const html = construirPainelGraficoSemanalHtml(
+    [registro(1000)], [0], 'volume', VIGENTE_JULHO, semanas, semanas.length, true, indiceAtual, demandas, HOJE_15_JUL
+  );
+  assert.match(html, /S1 \(01\/07 a 05\/07\) · Realizado: 2"/);
+  assert.match(html, /S2 \(06\/07 a 12\/07\) · Realizado: 3"/);
+  assert.match(html, /S3 \(13\/07 a 19\/07\) · Realizado: 1"/);
+  assert.match(html, /S4 \(20\/07 a 26\/07\) · Realizado: 0"/);
+  assert.match(html, /S5 \(27\/07 a 31\/07\) · Realizado: 0"/);
+
+  // Só 3 semanas de Realizado são positivas (2, 3, 1) -- construirColunasSvg
+  // só desenha <path> quando a barra tem altura > 0 (0 furo = altura zero,
+  // desenharBarraArredondada devolve ''); Previsto/Tendência têm valor em
+  // toda semana, então o total de barras é maior que 3 -- não checa a
+  // contagem aqui de propósito, isso já é coberto no teste de
+  // construirGraficoSemanalSvg isolado (mais acima neste arquivo).
 });
 
 test('construirPainelGraficoSemanalHtml: Equipes mostra só Previsto, sem legenda (1 série só) e sem painel Acumulado', () => {
@@ -164,7 +181,7 @@ test('construirGraficoSemanalSvg: eixo X usa rótulo curto "Sn", sem intervalo d
   assert.match(svg.svg, /data-tooltip="S1 \(01\/07 a 05\/07\)/, 'tooltip tem o intervalo completo');
 });
 
-test('renderAbaGraficoSemanal: com várias dimensões, cada uma soma o Previsto SÓ dos registros daquela tipologia -- indices filtrados de fora chegam prontos', () => {
+test('renderAbaGraficoSemanal: soma o Previsto só dos registros em "indices" -- respeita o recorte já filtrado, não os registros inteiros', () => {
   const registros = [registro(100), Object.assign(registro(200), { sup: 'SUP-0002-24', tipologia: 'SP' })];
   const html = renderAbaGraficoSemanal(registros, [1], ['volume'], { vigenteIdx: VIGENTE_JULHO, ano: ANO });
   // Só o índice 1 (SUP-0002-24, previsto 200) entra -- previsto semanal =
