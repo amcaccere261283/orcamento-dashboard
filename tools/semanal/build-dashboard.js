@@ -18,6 +18,20 @@ const { parseAvancos } = require('./parse-avancos.js');
 const { computeDemandas, reconciliarSups } = require('./compute-demandas.js');
 const configDemandas = require('./config-demandas.js');
 
+// Mesmo logo/avatar do orçamento (tools/orcamento/build-dashboard.js) --
+// mesmos arquivos em assets/, mesma função de carregar, duplicada aqui de
+// propósito (Node-only, 2 chamadores só, não vale um módulo comum novo pra
+// isso). Ausência do arquivo não quebra o build -- loadDataUri devolve
+// undefined, e renderSemanal trata isso como "sem logo/sem marca d'água".
+const LOGO_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-suporte-infra-negativo.png');
+const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-alvo.png');
+
+function loadDataUri(filePath) {
+  if (!fs.existsSync(filePath)) return undefined;
+  const buf = fs.readFileSync(filePath);
+  return `data:image/png;base64,${buf.toString('base64')}`;
+}
+
 // parseBaseline devolve um Map (porChave) -- JSON.stringify não sabe
 // serializar Map (viraria "{}", perdendo os dados em silêncio dentro do
 // blob cifrado). renderSemanal só faz JSON.stringify({registros, baseline}),
@@ -85,7 +99,10 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   const sups = reconciliarSups(furos, registros);
   console.log(`Demandas/SUP: ${sups.furosSemSupNaMatriz} furo(s) em ${sups.soNoAvancos.length} SUP(s) que a MATRIZ não tem (${sups.soNoAvancos.join(', ') || 'nenhum'}); ${sups.soNaMatriz.length} SUP(s) da MATRIZ sem nenhum furo (${sups.soNaMatriz.join(', ') || 'nenhum'}).`);
 
-  const html = renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm: today });
+  const html = renderSemanal({
+    registros, baseline, demandas, periodos, senha, geradoEm: today,
+    logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
+  });
 
   const resolvedOutPath = outPath || path.join(__dirname, '..', '..', 'dist', 'planejamento-semanal.html');
   fs.mkdirSync(path.dirname(resolvedOutPath), { recursive: true });

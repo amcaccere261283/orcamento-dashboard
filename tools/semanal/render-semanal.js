@@ -438,7 +438,7 @@ function montarDashboard(registros) {
 // nunca soltos no markup ou no JS de cliente -- porque SUP/Grupo/Tomador/
 // Tipologia são protegidos pela senha e este HTML vai pra um GitHub Pages
 // público.
-function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm }) {
+function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm, logoDataUri, iconDataUri }) {
   if (!senha) {
     throw new Error('renderSemanal requer "senha" -- os registros (SUP/Grupo/Tomador/Tipologia/valores) são cifrados com ela antes de ir pro HTML.');
   }
@@ -455,6 +455,15 @@ function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoE
   const dadosJson = JSON.stringify({ registros, baseline, demandas });
   const dadosCifrados = cifrarComSenha(dadosJson, senha);
   const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');
+
+  // Mesmo logo (canto superior esquerdo) e marca d'água de fundo (avatar)
+  // do orçamento (tools/orcamento/render-dashboard.js) -- mesmo sistema
+  // visual nos dois dashboards deste repositório. logoDataUri/iconDataUri
+  // vêm de build-dashboard.js (assets/*.png convertidos pra data URI);
+  // ausentes (arquivo não encontrado), a imagem simplesmente não aparece --
+  // mesmo comportamento do orçamento.
+  const logoImg = logoDataUri ? `<img src="${logoDataUri}" alt="Suporte Infra">` : '';
+  const watermarkImg = iconDataUri ? `<img class="watermark" src="${iconDataUri}" alt="">` : '';
 
   // MESMA função do orçamento (calcularVigenteIdx, tools/comum/datas.js).
   // Antes daqui saía `geradoEm.getUTCMonth()`, o que assumia que os
@@ -496,10 +505,12 @@ ${CSS_DEMANDAS}
 </style>
 </head>
 <body>
+  ${watermarkImg}
   <main>
 ${markupCabecalho({
     titulo: 'Planejamento Semanal',
     subtitulo: escapeHtml(formatarMesAno(geradoEm)),
+    logo: logoImg,
     recuo: '  ',
   })}
 
