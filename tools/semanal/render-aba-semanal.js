@@ -9,9 +9,10 @@ var DIMENSOES_ROTULO_SEMANAL = { equipes: 'Equipes', volume: 'Volume', financeir
 
 // Este módulo roda tanto no Node (testes) quanto embrulhado no navegador via
 // buildBrowserBundle -- por isso 'var'/'function', não 'const'/arrow. A
-// linha de import acima segue a forma EXATA que buildBrowserBundle espera:
-// `const { X, Y } = <module>;` sem espaço antes do parêntese e com chaves.
-// Ver o comentário no topo de transformaModulo (tools/comum/browser-bundle.js).
+// linha de import acima segue a forma EXATA que a reescrita de transformaModulo
+// reconhece: const + chaves sem espaço antes delas + nomes destrutrados + módulo
+// relativo (ex.: `const { X, Y } = <modulo>` no padrão esperado). Ver o
+// comentário no topo de transformaModulo lá.
 
 function escapeHtml(value) {
   return String(value === null || value === undefined ? '' : value)

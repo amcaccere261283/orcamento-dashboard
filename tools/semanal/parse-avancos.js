@@ -5,8 +5,8 @@ const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 // Lê a aba "Avanços" do Avanço Sond.xlsx: 61.927 linhas, uma por furo. Só
 // leitura e saneamento -- nenhuma agregação (isso é compute-demandas.js).
 //
-// Node-only: NUNCA entra no bundle do navegador. As dependências externas acima
-// seriam REMOVIDAS por transformaModulo (tools/comum/browser-bundle.js),
+// Node-only: NUNCA entra no bundle do navegador. Os requires '../comum/'
+// acima seriam REMOVIDOS por transformaModulo (tools/comum/browser-bundle.js),
 // e as funções virariam undefined em produção com os testes passando.
 //
 // Colunas usadas, com o nome EXATO da planilha (medido em 2026-07-29):
