@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
+const { diaEpoch } = require('../tools/comum/datas.js');
 
 // Task 8 originalmente deixou o módulo pronto no bundle mas NUNCA chamado --
 // a aba Semanal abria vazia no navegador (achado do coordenador). Este
@@ -31,7 +32,7 @@ const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2
 // A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
 // ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
 // tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
-const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistro: {} };
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistroEventos: {} };
 
 function registroSintetico(sup, tomador, financeiroMes) {
   const zeros = new Array(12).fill(0);
@@ -105,7 +106,7 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
   // "financeiro" por padrão -- Volume ativaria Realizado/Tendência/Pendentes
   // no lado real (5 args) sem equivalente aqui (4 args), e este assert
   // quebraria com um diff de HTML sem pista da causa.
-  const esperado = renderAbaSemanal(registros, indicesTodos, ['financeiro'], vigenteIdx);
+  const esperado = renderAbaSemanal(registros, indicesTodos, ['financeiro'], vigenteIdx, 2026);
 
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
   assert.notEqual(htmlMontado, '', '#secao-semanal continua vazia depois da senha certa -- reproduziria exatamente o bug relatado pelo coordenador');
@@ -115,13 +116,13 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
   );
 
   // Prova de conteúdo, não só de igualdade de string: soma dos 2 registros
-  // no mês vigente (4000+2000=6000), dividida em 4 semanas (1500 cada),
-  // formatada em pt-BR -- os mesmos números que um humano abrindo a página
-  // veria na tela.
+  // no mês vigente (4000+2000=6000), dividida em 5 semanas (1200 cada) --
+  // julho de 2026 tem 5 semanas ISO reais, não 4 -- formatada em pt-BR --
+  // os mesmos números que um humano abrindo a página veria na tela.
   const seiscentos = (6000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const milEQuinhentos = (1500).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const milEDuzentos = (1200).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   assert.match(htmlMontado, /S1/);
-  assert.match(htmlMontado, new RegExp(milEQuinhentos.replace(/\./g, '\\.')));
+  assert.match(htmlMontado, new RegExp(milEDuzentos.replace(/\./g, '\\.')));
   assert.match(htmlMontado, new RegExp(seiscentos.replace(/\./g, '\\.')));
 });
 
@@ -204,17 +205,18 @@ test('filtrar por SUP na barra compartilhada recalcula a aba Semanal só com os 
   // "financeiro" por padrão -- Volume ativaria Realizado/Tendência/Pendentes
   // no lado real (5 args) sem equivalente aqui (4 args), e este assert
   // quebraria com um diff de HTML sem pista da causa.
-  const esperado = renderAbaSemanal(registros, [0], ['financeiro'], vigenteIdx); // só o índice 0 (SUP-0001-24)
+  const esperado = renderAbaSemanal(registros, [0], ['financeiro'], vigenteIdx, 2026); // só o índice 0 (SUP-0001-24)
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
   assert.equal(htmlMontado, esperado, 'depois de filtrar por SUP-0001-24, a Tabela semanal deve recalcular só com esse registro, não os 2');
 
-  // Prova de conteúdo: 4000 ÷ 4 = 1000 por semana (só o SUP-0001-24), não
-  // 1500 (que seria 6000 ÷ 4, a soma dos 2 registros sem filtro).
-  const mil = (1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  assert.match(htmlMontado, new RegExp(mil.replace(/\./g, '\\.')));
+  // Prova de conteúdo: 4000 ÷ 5 = 800 por semana (só o SUP-0001-24, 5
+  // semanas reais de julho), não 1200 (que seria 6000 ÷ 5, a soma dos 2
+  // registros sem filtro).
+  const oitocentos = (800).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  assert.match(htmlMontado, new RegExp(oitocentos.replace(/\./g, '\\.')));
 });
 
-test('a soma S1+S2+S3+S4 do Previsto continua batendo com o mês vigente mesmo com um filtro de recorte ativo, não só sem filtro', async () => {
+test('a soma de todas as semanas do Previsto continua batendo com o mês vigente mesmo com um filtro de recorte ativo, não só sem filtro', async () => {
   const registros = [
     registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
     registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 2000),
@@ -235,29 +237,34 @@ test('a soma S1+S2+S3+S4 do Previsto continua batendo com o mês vigente mesmo c
   const numeros = (htmlMontado.match(/<td class="num">([\d.,]+)<\/td>/g) || [])
     .map((td) => td.match(/>([\d.,]+)</)[1])
     .map((n) => Number(n.replace(/\./g, '').replace(',', '.')));
-  // As 4 primeiras células numéricas da linha Previsto: S1..S4. Cada uma
-  // deve ser 1000 (4000 ÷ 4, só o SUP-0001-24 depois do filtro), e a soma
-  // das 4 deve bater com o 4000 do mês vigente filtrado -- não com os 6000
-  // de antes do filtro.
-  const s1a_s4 = numeros.slice(0, 4);
-  assert.deepStrictEqual(s1a_s4, [1000, 1000, 1000, 1000]);
-  assert.strictEqual(s1a_s4.reduce((a, b) => a + b, 0), 4000);
+  // As 5 primeiras células numéricas da linha Previsto: S1..S5 (julho de
+  // 2026 tem 5 semanas ISO reais). Cada uma deve ser 800 (4000 ÷ 5, só o
+  // SUP-0001-24 depois do filtro), e a soma das 5 deve bater com o 4000 do
+  // mês vigente filtrado -- não com os 6000 de antes do filtro.
+  const semanasPrevisto = numeros.slice(0, 5);
+  assert.deepStrictEqual(semanasPrevisto, [800, 800, 800, 800, 800]);
+  assert.strictEqual(semanasPrevisto.reduce((a, b) => a + b, 0), 4000);
 });
 
-test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume está marcada e demandas.porRegistro tem dado real', async () => {
+test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume está marcada e demandas.porRegistroEventos tem dado real', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
+  // tipologias/totais: renderSemanal exige o formato {tipologias, totais}
+  // de compute-demandas.js (ver DEMANDAS_VAZIAS acima) -- vazios aqui
+  // porque este teste não olha a aba Demandas, só o wire-up de
+  // Realizado/Tendência via porRegistroEventos em window.__DEMANDAS__.
+  // Datas em julho de 2026 (mês vigente deste teste) -- qualquer dia real
+  // desse mês serve, já que o cliente calcula hojeEpoch com o relógio real
+  // de quem roda o teste (recalcularSemanal), não com geradoEm.
   const demandas = {
-    // tipologias/totais: renderSemanal exige o formato {tipologias, totais}
-    // de compute-demandas.js (ver DEMANDAS_VAZIAS acima) -- vazios aqui
-    // porque este teste não olha a aba Demandas, só o wire-up de
-    // Realizado/Tendência via porRegistro em window.__DEMANDAS__. totais
-    // precisa refletir o mesmo comprimento/serie de porRegistro (revisão
-    // final da branch): demandasMesVigente usa demandas.totais[serie] só
-    // pra saber o tamanho do ano e validar vigenteIdx -- {} vazio faria
-    // vigenteIdx=6 parecer "fora do intervalo" por engano.
-    tipologias: [], totais: { sondagemRealizada: [0, 0, 0, 0, 0, 0, 800, 0, 0, 0, 0, 0], pendentes: [0, 0, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0] },
-    porRegistro: { 'SUP-0001-24||ST': { sondagemRealizada: [0, 0, 0, 0, 0, 0, 800, 0, 0, 0, 0, 0], pendentes: [0, 0, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0] } },
+    tipologias: [], totais: {},
+    porRegistroEventos: {
+      'SUP-0001-24||ST': {
+        chegada: [],
+        sondagemRealizada: [diaEpoch(new Date(Date.UTC(2026, 6, 5))), diaEpoch(new Date(Date.UTC(2026, 6, 5)))],
+        saidaEstoque: [],
+      },
+    },
   };
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
   const { sandbox, documentoFalso } = montarSandbox(html);
@@ -275,5 +282,5 @@ test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume e
 
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
   assert.match(htmlMontado, /Demandas Pendentes/, 'a linha nova precisa aparecer no bloco Volume depois de marcar a dimensão');
-  assert.doesNotMatch(htmlMontado.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0], /sem-dado/, 'Realizado (Volume) precisa vir preenchido, não sem-dado, com demandas.porRegistro real');
+  assert.doesNotMatch(htmlMontado.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0], /sem-dado/, 'Realizado (Volume) precisa vir preenchido, não sem-dado, com demandas.porRegistroEventos real');
 });

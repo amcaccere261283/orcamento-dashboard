@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const {
   computeDemandas, SERIES, SERIE_ESTOQUE, reconciliarSups,
 } = require('../tools/semanal/compute-demandas.js');
+const { diaEpoch } = require('../tools/comum/datas.js');
 
 const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2026, mes, 1)));
 const d = (ano, mes, dia) => new Date(Date.UTC(ano, mes - 1, dia));
@@ -220,37 +221,68 @@ test('canceladas exige status CANCELADO: não-cancelados com cancelamento válid
     'totais.canceladas também fica zerado para não-cancelados');
 });
 
-test('porRegistro agrega sondagemRealizada e pendentes por (sup, tipologia), na mesma passada que o agregado por tipologia', () => {
-  const furos = [
-    // 2 furos do mesmo SUP+tipologia, sondagem terminada em meses diferentes.
-    { sup: 'SUP-0001-24', tipologia: 'ST', status: 'CONCLUIDO', criacaoOS: new Date(Date.UTC(2026, 0, 5)), terminoSondagem: new Date(Date.UTC(2026, 1, 10)), conclusao: new Date(Date.UTC(2026, 1, 15)), cancelamento: null },
-    { sup: 'SUP-0001-24', tipologia: 'ST', status: 'EXECUTADO', criacaoOS: new Date(Date.UTC(2026, 0, 6)), terminoSondagem: new Date(Date.UTC(2026, 2, 1)), conclusao: null, cancelamento: null },
-    // Outro SUP, mesma tipologia -- não pode se misturar com o de cima.
-    { sup: 'SUP-0002-24', tipologia: 'ST', status: 'CONCLUIDO', criacaoOS: new Date(Date.UTC(2026, 0, 1)), terminoSondagem: new Date(Date.UTC(2026, 1, 20)), conclusao: new Date(Date.UTC(2026, 1, 25)), cancelamento: null },
-  ];
-  const periodos = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 1)));
-  const { porRegistro } = computeDemandas(furos, periodos);
-
-  assert.deepStrictEqual(porRegistro['SUP-0001-24||ST'].sondagemRealizada[1], 1, 'só o furo CONCLUIDO terminou sondagem em fevereiro (índice 1)');
-  assert.deepStrictEqual(porRegistro['SUP-0001-24||ST'].sondagemRealizada[2], 1, 'o furo EXECUTADO terminou sondagem em março (índice 2)');
-  assert.deepStrictEqual(porRegistro['SUP-0002-24||ST'].sondagemRealizada[1], 1, 'SUP diferente não pode somar no bucket do SUP-0001-24');
-  assert.strictEqual(porRegistro['SUP-0001-24||ST'].sondagemRealizada.reduce((a, b) => a + b, 0), 2, 'total de sondagens realizadas do SUP-0001-24/ST no ano');
+test('porRegistroEventos: chegada tem um dia por furo (qualquer status), sondagemRealizada só CONCLUIDO/EXECUTADO', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 5), terminoSondagem: d(2026, 2, 10) }),
+    furo({ status: 'PENDENTE', criacaoOS: d(2026, 1, 6), terminoSondagem: null, conclusao: null }),
+  ], PERIODOS_2026);
+  const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
+  assert.strictEqual(entrada.chegada.length, 2, 'os 2 furos têm criacaoOS, PENDENTE inclusive');
+  assert.strictEqual(entrada.sondagemRealizada.length, 1, 'só o CONCLUIDO conta pro fluxo Realizado');
 });
 
-test('par (sup, tipologia) sem nenhum furo fica AUSENTE de porRegistro, não aparece com zeros', () => {
-  const furos = [
-    { sup: 'SUP-0001-24', tipologia: 'ST', status: 'CONCLUIDO', criacaoOS: new Date(Date.UTC(2026, 0, 1)), terminoSondagem: new Date(Date.UTC(2026, 0, 15)), conclusao: new Date(Date.UTC(2026, 0, 20)), cancelamento: null },
-  ];
-  const periodos = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 1)));
-  const { porRegistro } = computeDemandas(furos, periodos);
-  assert.strictEqual('SUP-9999-99||ST' in porRegistro, false, 'quem lê porRegistro trata ausência como zero -- este teste garante que a ausência é real, não uma entrada zerada');
+test('porRegistroEventos: saidaEstoque é o MENOR entre término e cancelamento, nunca os dois separados -- furos CANCELADO com término preenchido existem na planilha real (16, ver spec)', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), terminoSondagem: d(2026, 2, 1), cancelamento: d(2026, 3, 1), conclusao: null }),
+  ], PERIODOS_2026);
+  const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
+  assert.strictEqual(entrada.saidaEstoque.length, 1, 'um furo só sai do estoque uma vez, mesmo com 2 datas candidatas');
+  assert.strictEqual(entrada.saidaEstoque[0], diaEpoch(d(2026, 2, 1)), 'usa a data mais cedo (término), não o cancelamento');
 });
 
-test('pendentes em porRegistro fecha com o mesmo saldo por (sup, tipologia) que o agregado geral fecharia se só houvesse esse par', () => {
+test('porRegistroEventos: cancelamento antes do término também usa o menor (o cancelamento)', () => {
+  const saida = computeDemandas([
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), terminoSondagem: d(2026, 5, 1), cancelamento: d(2026, 2, 1), conclusao: null }),
+  ], PERIODOS_2026);
+  const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
+  assert.strictEqual(entrada.saidaEstoque.length, 1);
+  assert.strictEqual(entrada.saidaEstoque[0], diaEpoch(d(2026, 2, 1)));
+});
+
+test('porRegistroEventos: furo sem término nem cancelamento nunca aparece em saidaEstoque (nunca sai do estoque)', () => {
+  const saida = computeDemandas([
+    furo({ status: 'PENDENTE', criacaoOS: d(2026, 1, 1), terminoSondagem: null, cancelamento: null, conclusao: null }),
+  ], PERIODOS_2026);
+  const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
+  assert.deepStrictEqual(entrada.saidaEstoque, []);
+});
+
+test('porRegistroEventos: reconstrói o saldo mensal correto, contando chegada/saidaEstoque até o fim de cada mês', () => {
   const furos = [
-    { sup: 'SUP-0001-24', tipologia: 'ST', status: 'PENDENTE', criacaoOS: new Date(Date.UTC(2026, 0, 10)), terminoSondagem: null, conclusao: null, cancelamento: null },
+    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 10), terminoSondagem: d(2026, 3, 20) }),
+    furo({ status: 'PENDENTE', criacaoOS: d(2026, 2, 5), terminoSondagem: null, conclusao: null }),
   ];
-  const periodos = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 1)));
-  const { porRegistro, totais } = computeDemandas(furos, periodos);
-  assert.deepStrictEqual(porRegistro['SUP-0001-24||ST'].pendentes, totais.pendentes, 'com um único (sup, tipologia) na planilha, o saldo por registro tem que bater com o saldo total');
+  const saida = computeDemandas(furos, PERIODOS_2026);
+  const eventos = saida.porRegistroEventos['SUP-0001-24||SP'];
+  const fimDoMes1Based = (ano, mesUm) => diaEpoch(new Date(Date.UTC(ano, mesUm, 0, 23, 59, 59)));
+  const saldoEm = (corte) =>
+    eventos.chegada.filter(dia => dia <= corte).length - eventos.saidaEstoque.filter(dia => dia <= corte).length;
+  // Furo 1: chega jan/10, sai (termina) mar/20 -> aberto no fim de jan e fev, fechado a
+  // partir do fim de mar. Furo 2: chega fev/5, nunca sai -> aberto do fim de fev em diante.
+  // fim-jan: só furo1 (1). fim-fev: os dois (2). fim-mar em diante: só furo2 (1).
+  const esperado = [1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+  for (let mes = 0; mes < 12; mes++) {
+    assert.strictEqual(saldoEm(fimDoMes1Based(2026, mes + 1)), esperado[mes], `mês ${mes}`);
+  }
+});
+
+test('porRegistroEventos: par (sup, tipologia) sem nenhum furo fica ausente, não aparece com arrays vazios "à toa"', () => {
+  const saida = computeDemandas([furo()], PERIODOS_2026);
+  assert.strictEqual('SUP-9999-99||SP' in saida.porRegistroEventos, false);
+});
+
+test('a saída sobrevive a JSON.stringify com porRegistroEventos também', () => {
+  const saida = computeDemandas([furo()], PERIODOS_2026);
+  const voltou = JSON.parse(JSON.stringify(saida));
+  assert.deepStrictEqual(voltou.porRegistroEventos, saida.porRegistroEventos);
 });
