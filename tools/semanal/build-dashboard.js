@@ -111,7 +111,7 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   } catch (err) {
     throw new Error(`Não consegui ler a aba "${configDemandas.nomeAba}" de ${configDemandas.caminhoArquivo} (o Google Drive está montado em G:?). Erro original: ${err.message}`);
   }
-  const { furos, descartadas, semDataTermino, cancelamentoIlegivel } = parseAvancos(gridAvancos);
+  const { furos, descartadas, semDataTermino, cancelamentoIlegivel, deslocamentos } = parseAvancos(gridAvancos);
 
   // Quarta fonte desta página: ensaios de laboratório JÁ CONCLUÍDOS (aba
   // "Lab Concluido", mesmo workbook de Avanços -- ver config-lab.js).
@@ -130,7 +130,7 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   console.log(`Lab: ${ensaiosLidos.length} ensaio(s) lido(s), ${ensaiosDescartados} linha(s) descartada(s) (lixo "TESTE" ou vazia), ${ensaiosRedirecionados} ensaio(s) redirecionado(s) pra "Diversos" (SUP sem registro LAB.C/LAB.E na MATRIZ).`);
 
   const demandas = computeDemandas(furos, periodos, ensaios);
-  console.log(`Demandas: ${furos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
+  console.log(`Demandas: ${furos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${deslocamentos} linha(s) de "deslocamento" descartada(s) (furo impenetrável reposicionado, não é demanda nova), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
 
   // Relatório dos DOIS lados do desencontro de SUP. Nada é descartado -- isto
   // é só visibilidade, e existe porque silenciar o que não casa foi o Critical

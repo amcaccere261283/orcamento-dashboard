@@ -5,12 +5,20 @@
 // pelo dono do projeto em 2026-07-29 (ver o spec
 // docs/superpowers/specs/2026-07-29-base-demandas-realizado-design.md).
 //
-// Duas decisões que parecem erro de digitação e NÃO são:
-// - SM.A não entra em 'SM / SM.F / SR', e SP.F não entra em 'SP'. São
-//   serviços tratados de forma independente, com rótulo próprio.
+// Decisões que parecem erro de digitação e NÃO são:
+// - SP.F não entra em 'SP' -- é serviço tratado de forma independente, com
+//   rótulo próprio (SM.A tinha a mesma exceção até 2026-08-01; o dono do
+//   projeto decidiu juntá-la em 'SM / SM.F / SR', ver abaixo).
 // - SEG.A e SEG.V ficam separadas e só aparecem na tela quando houver
 //   acionamento no período (ver SO_QUANDO_ACIONADA) -- são serviços sob
 //   demanda, e uma linha de zeros permanente só faria ruído.
+//
+// Três reclassificações feitas em 2026-08-01, a pedido do dono do projeto:
+// - SM.A passa a contar em 'SM / SM.F / SR' (antes era rótulo próprio).
+// - BQ passa a contar em 'PI' (antes caía em 'Especiais').
+// - DN passa a contar em 'SH' (antes caía em 'Especiais'; investigado e
+//   sem qualquer vínculo nos dados com CPTU -- OS e identificação próprios,
+//   "DN-"/"DEN-", nunca compartilhados com uma linha CPTU).
 const MAPA_TIPOLOGIAS = {
   SP: 'SP',
   ST: 'ST',
@@ -22,13 +30,13 @@ const MAPA_TIPOLOGIAS = {
   SM: 'SM / SM.F / SR',
   'SM.F': 'SM / SM.F / SR',
   SR: 'SM / SM.F / SR',
+  'SM.A': 'SM / SM.F / SR',
   'SP.F': 'SP.F',
-  'SM.A': 'SM.A',
   'SEG.A': 'SEG.A',
   'SEG.V': 'SEG.V',
-  BQ: 'Especiais',
+  BQ: 'PI',
+  DN: 'SH',
   SN: 'Especiais',
-  DN: 'Especiais',
   'PZ.SP': 'Especiais',
   'PZ.SM': 'Especiais',
   INA: 'Especiais',
@@ -41,7 +49,7 @@ const MAPA_TIPOLOGIAS = {
 // parecer completa quando não está.
 const ORDEM_TIPOLOGIAS = [
   'SP', 'SM / SM.F / SR', 'ST', 'PI', 'BL', 'CPTu', 'SH', 'VT', 'LAB.C', 'LAB.E',
-  'SP.F', 'SM.A', 'SEG.A', 'SEG.V', 'Especiais',
+  'SP.F', 'SEG.A', 'SEG.V', 'Especiais',
 ];
 
 const SO_QUANDO_ACIONADA = ['SEG.A', 'SEG.V'];

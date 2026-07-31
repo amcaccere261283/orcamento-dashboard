@@ -11,7 +11,8 @@ const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 //
 // Colunas usadas, com o nome EXATO da planilha (medido em 2026-07-29):
 // Contrato(A) · Criação da OS(I) · Tipo(J) · Status(L) · Termino Sondagem(N,
-// sem acento em "Termino") · Conclusão(O) · Cancelamento(P) · Atualizado(Q).
+// sem acento em "Termino") · Conclusão(O) · Cancelamento(P) · Atualizado(Q) ·
+// Observações de Campo(AB).
 //
 // Uma coluna de propósito NÃO usada:
 // - Inicio Sondagem(M): 3.929 das 61.927 linhas têm data fora de 2023-2027
@@ -32,11 +33,20 @@ const COLUNAS_OBRIGATORIAS = {
   conclusao: 'Conclusão',
   cancelamento: 'Cancelamento',
   atualizado: 'Atualizado',
+  observacoesCampo: 'Observações de Campo',
 };
 
 function texto(valor) {
   return String(valor === null || valor === undefined ? '' : valor).trim();
 }
+
+// Ponto de "deslocamento" (novo furo aberto ao lado de um impenetrável) não é
+// demanda nova -- é o mesmo furo original, reposicionado. Fica marcado só na
+// Observações de Campo, em texto livre ("Deslocamento A", "Foram executados
+// deslocamentos A e B" etc.) -- decisão do dono do projeto, 2026-08-01: 10.407
+// linhas na planilha real levam a palavra, e nenhuma delas deve contar em
+// nenhuma série. Regex insensível a maiúsculas: a grafia varia entre linhas.
+const RE_DESLOCAMENTO = /deslocamento/i;
 
 function locateColunasAvancos(headerRow) {
   const linha = headerRow || [];
@@ -91,6 +101,7 @@ function parseAvancos(grid) {
   let descartadas = 0;
   let semDataTermino = 0;
   let cancelamentoIlegivel = 0;
+  let deslocamentos = 0;
 
   for (let r = 2; r < grid.length; r++) {
     const linha = grid[r];
@@ -101,6 +112,10 @@ function parseAvancos(grid) {
     // resto de edição. Descartadas e contadas, nunca rotuladas (rotular
     // lançaria por tipologia vazia).
     if (!sup && !tipoCru) { descartadas++; continue; }
+
+    // Deslocamento: descartada ANTES de rotular (não precisa de tipologia
+    // válida pra ser excluída) -- ver RE_DESLOCAMENTO acima.
+    if (RE_DESLOCAMENTO.test(texto(linha[cols.observacoesCampo]))) { deslocamentos++; continue; }
 
     let tipologia;
     try {
@@ -134,7 +149,7 @@ function parseAvancos(grid) {
     });
   }
 
-  return { furos, descartadas, semDataTermino, cancelamentoIlegivel };
+  return { furos, descartadas, semDataTermino, cancelamentoIlegivel, deslocamentos };
 }
 
 module.exports = {

@@ -16,6 +16,7 @@ CABECALHO[13] = 'Termino Sondagem';
 CABECALHO[14] = 'Conclusão';
 CABECALHO[15] = 'Cancelamento';
 CABECALHO[16] = 'Atualizado';
+CABECALHO[27] = 'Observações de Campo';
 
 // 2026-03-10, 2026-03-12, 2026-04-02, 2026-04-05 em serial Excel.
 const MAR10 = 46091, MAR12 = 46093, ABR02 = 46114, ABR05 = 46117;
@@ -27,7 +28,7 @@ function grade(linhas) {
   return grid;
 }
 
-function furo({ sup = 'SUP-0001-24', tipo = 'SP', status = 'CONCLUIDO', criacao = MAR10, termino = MAR12, conclusao = ABR02, cancelamento = '', atualizado = ABR05 } = {}) {
+function furo({ sup = 'SUP-0001-24', tipo = 'SP', status = 'CONCLUIDO', criacao = MAR10, termino = MAR12, conclusao = ABR02, cancelamento = '', atualizado = ABR05, observacoesCampo = '' } = {}) {
   const linha = [];
   linha[0] = sup;
   linha[8] = criacao;
@@ -37,6 +38,7 @@ function furo({ sup = 'SUP-0001-24', tipo = 'SP', status = 'CONCLUIDO', criacao 
   linha[14] = conclusao;
   linha[15] = cancelamento;
   linha[16] = atualizado;
+  linha[27] = observacoesCampo;
   return linha;
 }
 
@@ -83,6 +85,50 @@ test('linha sem SUP e sem tipo é descartada e contada, não rotulada', () => {
   assert.strictEqual(descartadas, 1);
 });
 
+// --- deslocamento (achado de 2026-08-01) ---
+
+test('linha com "deslocamento" em Observações de Campo é descartada, não vira furo', () => {
+  const { furos, deslocamentos } = parseAvancos(grade([
+    furo({ observacoesCampo: 'FURO IMPENETRÁVEL - Foram realizados os deslocamentos A e B.' }),
+    furo(),
+  ]));
+  assert.strictEqual(furos.length, 1, 'só a linha sem "deslocamento" vira furo');
+  assert.strictEqual(furos[0].sup, 'SUP-0001-24');
+  assert.strictEqual(deslocamentos, 1);
+});
+
+test('detecção de "deslocamento" é insensível a maiúsculas/minúsculas', () => {
+  const { deslocamentos } = parseAvancos(grade([
+    furo({ observacoesCampo: 'DESLOCAMENTO (A)' }),
+    furo({ observacoesCampo: 'Deslocamento A' }),
+    furo({ observacoesCampo: 'deslocamento a' }),
+  ]));
+  assert.strictEqual(deslocamentos, 3);
+});
+
+test('deslocamento é descartado mesmo com tipologia que lançaria erro se rotulada -- checagem vem antes de rotularTipologia', () => {
+  const { furos, deslocamentos } = parseAvancos(grade([
+    furo({ tipo: 'XYZ', observacoesCampo: 'Deslocamento A' }),
+  ]));
+  assert.strictEqual(furos.length, 0);
+  assert.strictEqual(deslocamentos, 1);
+});
+
+test('Observações de Campo sem a palavra "deslocamento" não descarta a linha', () => {
+  const { furos, deslocamentos } = parseAvancos(grade([
+    furo({ observacoesCampo: 'Furo executado sem intercorrências.' }),
+  ]));
+  assert.strictEqual(furos.length, 1);
+  assert.strictEqual(deslocamentos, 0);
+});
+
+test('a coluna Observações de Campo é achada pelo NOME, como as outras', () => {
+  const semObs = [];
+  semObs[1] = CABECALHO.map(rotulo => (rotulo === 'Observações de Campo' ? 'Outra coisa' : rotulo));
+  semObs[2] = furo();
+  assert.throws(() => parseAvancos(semObs), /Observações de Campo/);
+});
+
 test('tipologia desconhecida LANÇA citando o rótulo e a linha da planilha', () => {
   assert.throws(() => parseAvancos(grade([furo({ tipo: 'XYZ' })])), /XYZ/);
   assert.throws(() => parseAvancos(grade([furo({ tipo: 'XYZ' })])), /linha 2/);
@@ -119,6 +165,7 @@ test('as colunas são achadas pelo NOME, não por posição fixa', () => {
   deslocado[1][8] = 'Conclusão';
   deslocado[1][9] = 'Cancelamento';
   deslocado[1][10] = 'Atualizado';
+  deslocado[1][11] = 'Observações de Campo';
   deslocado[2] = [];
   deslocado[2][3] = 'SUP-9999-26';
   deslocado[2][4] = MAR10;
