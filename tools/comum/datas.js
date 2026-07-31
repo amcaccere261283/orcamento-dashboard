@@ -1,5 +1,7 @@
 'use strict';
+const fs = require('node:fs');
 
+// <<< INICIO CLIENTE
 // Época do Excel ajustada pro bug histórico de achar que 1900 foi bissexto
 // -- serial 25569 = 1970-01-01 UTC, o offset padrão usado por qualquer
 // leitor de xlsx real.
@@ -7,6 +9,7 @@ function excelSerialParaData(serial) {
   const milissegundos = Math.round((serial - 25569) * 86400 * 1000);
   return new Date(milissegundos);
 }
+// FIM CLIENTE >>>
 
 const MESES_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -40,4 +43,17 @@ function diaEpoch(data) {
   return Math.floor(data.getTime() / 86400000);
 }
 
-module.exports = { excelSerialParaData, formatarMesAno, calcularVigenteIdx, diaEpoch };
+function trechosParaCliente() {
+  const src = fs.readFileSync(__filename, 'utf8').replace(/\r\n/g, '\n');
+  const padrao = /\/\/ <<< INICIO CLIENTE([\s\S]*?)\/\/ FIM CLIENTE >>>/g;
+  const trechos = [];
+  let achado;
+  while ((achado = padrao.exec(src)) !== null) trechos.push(achado[1]);
+  return trechos;
+}
+
+function fonteParaCliente() {
+  return trechosParaCliente().join('');
+}
+
+module.exports = { excelSerialParaData, formatarMesAno, calcularVigenteIdx, diaEpoch, trechosParaCliente, fonteParaCliente };

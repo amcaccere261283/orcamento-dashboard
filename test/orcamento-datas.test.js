@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { excelSerialParaData, formatarMesAno, calcularVigenteIdx } = require('../tools/comum/datas.js');
+const { excelSerialParaData, formatarMesAno, calcularVigenteIdx, fonteParaCliente, trechosParaCliente } = require('../tools/comum/datas.js');
 
 test('excelSerialParaData converts a known Excel serial (46023, seen in the real MATRIZ header) to 01/01/2026 UTC', () => {
   const data = excelSerialParaData(46023);
@@ -40,4 +40,23 @@ test('calcularVigenteIdx returns 12 when generatedAt is a year after periodos (w
   const periodos = [];
   for (let i = 0; i < 12; i++) periodos.push(new Date(Date.UTC(2026, i, 1)));
   assert.equal(calcularVigenteIdx(periodos, new Date(Date.UTC(2027, 0, 5))), 12);
+});
+
+test('o recorte não devolve CR nenhum', () => {
+  assert.doesNotMatch(fonteParaCliente(), /\r/);
+  trechosParaCliente().forEach((trecho, i) => assert.doesNotMatch(trecho, /\r/, `trecho ${i} tem CR`));
+});
+
+test('fonteParaCliente() avalia pro mesmo excelSerialParaData que o export do Node, e NÃO expõe formatarMesAno/calcularVigenteIdx/diaEpoch', () => {
+  const fonte = fonteParaCliente();
+  assert.doesNotMatch(fonte, /function formatarMesAno/);
+  assert.doesNotMatch(fonte, /function calcularVigenteIdx/);
+  assert.doesNotMatch(fonte, /function diaEpoch/);
+
+  const cliente = new Function(`${fonte}
+return { excelSerialParaData: excelSerialParaData };`)();
+
+  [25569, 46023, 44927].forEach((serial) => {
+    assert.deepStrictEqual(cliente.excelSerialParaData(serial), excelSerialParaData(serial));
+  });
 });
