@@ -102,11 +102,16 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
 
   const vigenteIdx = geradoEm.getUTCMonth();
   const indicesTodos = registros.map((_, i) => i);
-  // Este teste só é válido enquanto o seletor de dimensão abrir em
-  // "financeiro" por padrão -- Volume ativaria Realizado/Tendência/Pendentes
-  // no lado real (5 args) sem equivalente aqui (4 args), e este assert
-  // quebraria com um diff de HTML sem pista da causa.
-  const esperado = renderAbaSemanal(registros, indicesTodos, ['financeiro'], vigenteIdx, 2026);
+  // Financeiro agora TAMBÉM ativa Realizado/Tendência quando demandas está
+  // presente (mesmo com DEMANDAS_VAZIAS -- porRegistroEventos:{} é um
+  // agregado real, ativa a linha com zeros). O lado real (recalcularSemanal)
+  // sempre passa demandas + hojeEpoch calculado na hora -- reproduz aqui o
+  // MESMO hojeEpoch (mesma fórmula de render-semanal.js) pra bater byte a
+  // byte; como porRegistroEventos está vazio, o valor exato de hojeEpoch não
+  // muda nenhum número (tudo fecha em zero), só precisa ser um número.
+  const agoraDoTeste = new Date();
+  const hojeEpochDoTeste = diaEpoch(new Date(Date.UTC(agoraDoTeste.getFullYear(), agoraDoTeste.getMonth(), agoraDoTeste.getDate())));
+  const esperado = renderAbaSemanal(registros, indicesTodos, ['financeiro'], vigenteIdx, 2026, { demandas: DEMANDAS_VAZIAS, hojeEpoch: hojeEpochDoTeste });
 
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
   assert.notEqual(htmlMontado, '', '#secao-semanal continua vazia depois da senha certa -- reproduziria exatamente o bug relatado pelo coordenador');
@@ -201,11 +206,12 @@ test('filtrar por SUP na barra compartilhada recalcula a aba Semanal só com os 
   checkboxAlfa.listeners.change();
 
   const vigenteIdx = geradoEm.getUTCMonth();
-  // Este teste só é válido enquanto o seletor de dimensão abrir em
-  // "financeiro" por padrão -- Volume ativaria Realizado/Tendência/Pendentes
-  // no lado real (5 args) sem equivalente aqui (4 args), e este assert
-  // quebraria com um diff de HTML sem pista da causa.
-  const esperado = renderAbaSemanal(registros, [0], ['financeiro'], vigenteIdx, 2026); // só o índice 0 (SUP-0001-24)
+  // Ver comentário equivalente no teste acima -- Financeiro agora ativa
+  // Realizado/Tendência com demandas presente, mesmo vazia (porRegistroEventos:{}
+  // fecha em zero, mas precisa do MESMO hojeEpoch que o lado real calcula).
+  const agoraDoTeste2 = new Date();
+  const hojeEpochDoTeste2 = diaEpoch(new Date(Date.UTC(agoraDoTeste2.getFullYear(), agoraDoTeste2.getMonth(), agoraDoTeste2.getDate())));
+  const esperado = renderAbaSemanal(registros, [0], ['financeiro'], vigenteIdx, 2026, { demandas: DEMANDAS_VAZIAS, hojeEpoch: hojeEpochDoTeste2 }); // só o índice 0 (SUP-0001-24)
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
   assert.equal(htmlMontado, esperado, 'depois de filtrar por SUP-0001-24, a Tabela semanal deve recalcular só com esse registro, não os 2');
 

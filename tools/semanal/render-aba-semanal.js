@@ -69,18 +69,41 @@ function chaveDemandas(sup, tipologia) {
 // (inclusive nos dois extremos). Ausência de (sup, tipologia) em
 // porRegistroEventos, ou nenhum evento no intervalo, conta 0 -- mesma
 // convenção "ausência = zero" de sempre (Avanço Sond é listagem completa).
-function contarEventosNoIntervalo(registros, indices, demandas, serie, inicioEpoch, fimEpoch) {
+// pesoPorRegistro (opcional): função registro -> peso, aplicada à contagem
+// de CADA registro antes de somar (nunca à soma final) -- Financeiro usa
+// isso pra multiplicar o volume realizado de cada registro pelo TICKET
+// médio DAQUELE registro antes de somar em R$, já que registros diferentes
+// no mesmo recorte podem ter tickets diferentes (somar volumes primeiro e
+// multiplicar por uma média depois daria um número errado, exceto quando
+// todos têm o mesmo ticket). Volume não passa peso nenhum (padrão 1,
+// contagem pura de furos).
+function contarEventosNoIntervalo(registros, indices, demandas, serie, inicioEpoch, fimEpoch, pesoPorRegistro) {
   var total = 0;
   (indices || []).forEach(function (i) {
     var registro = registros[i];
     if (!registro) return;
     var entrada = demandas.porRegistroEventos[chaveDemandas(registro.sup, registro.tipologia)];
     if (!entrada || !Array.isArray(entrada[serie])) return;
+    var peso = pesoPorRegistro ? pesoPorRegistro(registro) : 1;
+    if (!peso) return;
+    var conta = 0;
     entrada[serie].forEach(function (dia) {
-      if (dia >= inicioEpoch && dia <= fimEpoch) total += 1;
+      if (dia >= inicioEpoch && dia <= fimEpoch) conta += 1;
     });
+    total += conta * peso;
   });
   return total;
+}
+
+// TICKET médio (R$ por furo) do registro -- premissa do Previsto, lida
+// direto da MATRIZ (coluna TICKET, ver tools/orcamento/parse-matriz.js), a
+// MESMA premissa que o orçamento já usa pra calcular ticketMedio do
+// Previsto (tools/orcamento/compute-orcamento.js, calcularDimensaoPrevisto).
+// Um valor fixo pro ano inteiro, por (sup, tipologia) -- não muda semana a
+// semana. Registro sem TICKET cadastrado na planilha conta 0 (mesma regra
+// do orçamento): sem premissa de preço, sem R$ atribuído aos furos dele.
+function ticketMedio(registro) {
+  return (registro && registro.previsto && registro.previsto.volumeResumo && registro.previsto.volumeResumo.ticket) || 0;
 }
 
 // Saldo de furos em aberto na data 'dataEpoch' (inclusive), através dos
@@ -160,8 +183,11 @@ function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento) {
 // vigente tem, mesmo quando 'realizado' não é passado (Previsto/Equipes/
 // Financeiro precisam da contagem certa de colunas independente de haver
 // dado de demandas). 'realizado' é um 6º parâmetro OPCIONAL --
-// { demandas, hojeEpoch } -- que ativa Realizado/Tendência/Demandas
-// Pendentes no bloco Volume quando demandas.porRegistroEventos existe
+// { demandas, hojeEpoch } -- que ativa Realizado/Tendência nos blocos
+// Volume e Financeiro (Financeiro pesa cada furo pelo TICKET médio do
+// registro dono dele -- ver ticketMedio/pesoPorRegistro acima) e Demandas
+// Pendentes só no bloco Volume (estoque de furos, sem análogo em R$),
+// quando demandas.porRegistroEventos existe
 // (Tarefa 2) e hojeEpoch é um número (dia-desde-época de "hoje", calculado
 // pelo relógio de quem está vendo a página -- render-semanal.js calcula
 // com diaEpoch(new Date(...)) a cada recálculo; esta função nunca chama
@@ -194,14 +220,23 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
     var fechamentoTendencia = null;
     var linhaPendentes = '';
 
-    if (dimensao === 'volume' && temDemandas) {
+    // Realizado/Tendência: Volume conta furos reais; Financeiro pega o
+    // MESMO furo real e multiplica pelo ticket médio do registro dono
+    // daquele furo antes de somar (pesoPorRegistro) -- é o "acompanhamento
+    // do produzido" em R$, na mesma lógica semanal do Volume, sem precisar
+    // de outra fonte de dado (o ticket já vem na MATRIZ, junto do resto do
+    // registro). Demandas Pendentes é estoque de FUROS -- não tem análogo
+    // em R$ que a spec tenha pedido, fica exclusivo do Volume.
+    if ((dimensao === 'volume' || dimensao === 'financeiro') && temDemandas) {
+      var pesoPorRegistro = dimensao === 'financeiro' ? ticketMedio : null;
+
       if (temSemanasReais) {
         semanasRealizado = semanas.map(function (semana, i) {
-          if (i === indiceAtual) return contarEventosNoIntervalo(registros, indices, opts.demandas, 'sondagemRealizada', semana.inicio, opts.hojeEpoch);
-          if (semana.fim < opts.hojeEpoch) return contarEventosNoIntervalo(registros, indices, opts.demandas, 'sondagemRealizada', semana.inicio, semana.fim);
+          if (i === indiceAtual) return contarEventosNoIntervalo(registros, indices, opts.demandas, 'sondagemRealizada', semana.inicio, opts.hojeEpoch, pesoPorRegistro);
+          if (semana.fim < opts.hojeEpoch) return contarEventosNoIntervalo(registros, indices, opts.demandas, 'sondagemRealizada', semana.inicio, semana.fim, pesoPorRegistro);
           return 0; // semana futura -- nada aconteceu ainda
         });
-        fechamentoRealizado = fecharMes(semanasRealizado, 'volume');
+        fechamentoRealizado = fecharMes(semanasRealizado, dimensao);
 
         // NÃO usar indiceAtual aqui: ele vale -1 tanto quando nenhuma
         // semana do mês começou (início do mês, semanas restantes = todas)
@@ -218,22 +253,24 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
           if (semanas[se].inicio <= opts.hojeEpoch) semanasElapsadas++;
         }
         semanasTendencia = calcularTendenciaSemanal(mesVigente, semanasRealizado, semanasElapsadas - 1);
-        fechamentoTendencia = fecharMes(semanasTendencia, 'volume');
+        fechamentoTendencia = fecharMes(semanasTendencia, dimensao);
       }
 
-      var semanasPendentes = temSemanasReais
-        ? semanas.map(function (semana, i) {
-            if (i === indiceAtual) return pendentesNaData(registros, indices, opts.demandas, opts.hojeEpoch);
-            if (semana.fim < opts.hojeEpoch) return pendentesNaData(registros, indices, opts.demandas, semana.fim);
-            return null; // semana futura -- sem-dado, não projeta estoque futuro
-          })
-        : semanasSemDado;
-      // Fechamento SEMPRE o saldo de hoje, calculado direto e independente
-      // da quebra semanal -- "quantas demandas estão pendentes agora" não
-      // depende de qual das N semanas está em curso, nem de haver semana
-      // válida nenhuma.
-      var fechamentoPendentes = pendentesNaData(registros, indices, opts.demandas, opts.hojeEpoch);
-      linhaPendentes = renderLinhaSerie('Demandas Pendentes', 'pendentes-demandas', semanasPendentes, fechamentoPendentes);
+      if (dimensao === 'volume') {
+        var semanasPendentes = temSemanasReais
+          ? semanas.map(function (semana, i) {
+              if (i === indiceAtual) return pendentesNaData(registros, indices, opts.demandas, opts.hojeEpoch);
+              if (semana.fim < opts.hojeEpoch) return pendentesNaData(registros, indices, opts.demandas, semana.fim);
+              return null; // semana futura -- sem-dado, não projeta estoque futuro
+            })
+          : semanasSemDado;
+        // Fechamento SEMPRE o saldo de hoje, calculado direto e independente
+        // da quebra semanal -- "quantas demandas estão pendentes agora" não
+        // depende de qual das N semanas está em curso, nem de haver semana
+        // válida nenhuma.
+        var fechamentoPendentes = pendentesNaData(registros, indices, opts.demandas, opts.hojeEpoch);
+        linhaPendentes = renderLinhaSerie('Demandas Pendentes', 'pendentes-demandas', semanasPendentes, fechamentoPendentes);
+      }
     }
 
     return '<div class="bloco-dimensao-semanal">'

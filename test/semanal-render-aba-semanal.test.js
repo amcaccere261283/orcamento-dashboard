@@ -123,6 +123,55 @@ test('Realizado semanal: semana fechada soma o intervalo inteiro, semana em curs
   assert.deepStrictEqual(numeros, ['2,00', '3,00', '1,00', '0,00', '0,00', '6,00']);
 });
 
+test('Realizado/Tendência de Financeiro pesa cada furo pelo ticket médio do registro -- mesmos furos do teste de Volume acima, multiplicados pelo ticket', () => {
+  const eventos = {
+    sondagemRealizada: [
+      diaJul(1), diaJul(1),
+      diaJul(8), diaJul(8), diaJul(8),
+      diaJul(14),
+      diaJul(18),
+      diaJul(22), diaJul(22), diaJul(22), diaJul(22), diaJul(22),
+      diaJul(28), diaJul(28), diaJul(28), diaJul(28),
+    ],
+    saidaEstoque: [], chegada: [],
+  };
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': eventos } };
+  const registroTicket250 = registro(0);
+  registroTicket250.previsto.volumeResumo.ticket = 250;
+  const html = renderAbaSemanal([registroTicket250], [0], ['financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
+  const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
+  const numeros = linhaRealizado.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
+  // Furos [2,3,1,0,0] (fechamento 6) x ticket 250 = [500,750,250,0,0], fechamento 1.500.
+  assert.deepStrictEqual(numeros, ['500,00', '750,00', '250,00', '0,00', '0,00', '1.500,00']);
+});
+
+test('Realizado de Financeiro soma por registro (furos daquele registro x SEU ticket), não soma os furos todos e multiplica por uma média geral', () => {
+  const eventosAlfa = { sondagemRealizada: [diaJul(1), diaJul(1)], saidaEstoque: [], chegada: [] }; // 2 furos
+  const eventosBeta = { sondagemRealizada: [diaJul(1)], saidaEstoque: [], chegada: [] }; // 1 furo
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': eventosAlfa, 'SUP-0002-24||SP': eventosBeta } };
+  const registroAlfa = registro(0);
+  registroAlfa.previsto.volumeResumo.ticket = 100; // 2 furos x 100 = 200
+  const registroBeta = registro(0);
+  registroBeta.sup = 'SUP-0002-24'; registroBeta.tipologia = 'SP';
+  registroBeta.previsto.volumeResumo.ticket = 1000; // 1 furo x 1000 = 1.000
+  const html = renderAbaSemanal([registroAlfa, registroBeta], [0, 1], ['financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
+  const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
+  // Soma correta por registro: 200 (Alfa) + 1.000 (Beta) = 1.200 na 1ª semana.
+  // Se fosse "somar furos (3) x ticket médio ((100+1000)/2=550)" daria 1.650 -- errado.
+  assert.match(linhaRealizado, /<td class="num">1\.200,00<\/td>/);
+});
+
+test('registro sem TICKET cadastrado (0 ou ausente) não contribui R$ nenhum em Financeiro, mesmo com furos reais -- mesma regra do orçamento', () => {
+  const eventos = { sondagemRealizada: [diaJul(1), diaJul(1)], saidaEstoque: [], chegada: [] };
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': eventos } };
+  const registroSemTicket = registro(0);
+  registroSemTicket.previsto.volumeResumo.ticket = 0;
+  const html = renderAbaSemanal([registroSemTicket], [0], ['financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
+  const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
+  assert.doesNotMatch(linhaRealizado, /sem-dado/, 'ainda é dado real (zero R$), não ausência de dado');
+  assert.match(linhaRealizado, /<td class="num">0,00<\/td>/);
+});
+
 test('Tendência: semanas fechada/em-curso usam o Realizado real, futuras dividem igualmente o saldo restante do Previsto', () => {
   const eventos = {
     sondagemRealizada: [diaJul(1), diaJul(1), diaJul(8), diaJul(8), diaJul(8), diaJul(14)],
@@ -195,12 +244,15 @@ test('registro cuja combinação (sup, tipologia) não existe em demandas.porReg
   assert.match(linhaRealizado, /<td class="num">0,00<\/td>/);
 });
 
-test('Realizado/Tendência só aparecem no bloco Volume -- Equipes e Financeiro continuam sem-dado mesmo com demandas presente', () => {
+test('Realizado/Tendência aparecem em Volume E Financeiro (Financeiro pesado pelo ticket médio); Equipes nunca ativa; Demandas Pendentes continua exclusivo do Volume', () => {
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': { sondagemRealizada: [diaJul(1)], saidaEstoque: [], chegada: [] } } };
   const html = renderAbaSemanal([registro(1000)], [0], ['equipes', 'financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
-  assert.doesNotMatch(html, /Demandas Pendentes/);
-  const linhasSemDado = (html.match(/class="num sem-dado"/g) || []).length;
-  assert.strictEqual(linhasSemDado, 20, '2 dimensões x 5 semanas (julho) x 2 linhas (Realizado + Tendência)');
+  assert.doesNotMatch(html, /Demandas Pendentes/, 'Pendentes é estoque de furos, sem análogo em R$ -- exclusivo do Volume');
+  const blocoEquipes = html.split('<div class="bloco-dimensao-semanal">')[1];
+  const blocoFinanceiro = html.split('<div class="bloco-dimensao-semanal">')[2];
+  const semDadoEquipes = (blocoEquipes.match(/class="num sem-dado"/g) || []).length;
+  assert.strictEqual(semDadoEquipes, 10, 'Equipes: 5 semanas x 2 linhas (Realizado + Tendência), nunca ativa -- não é furo, não tem ticket');
+  assert.doesNotMatch(blocoFinanceiro, /sem-dado/, 'Financeiro: Realizado/Tendência ativos (ticket médio 1 na fixture registro(), mesmos números de furos que Volume mostraria)');
 });
 
 test('Tendência não fabrica projeção nos dias de "fim de mês" -- quando as semanas do mês já fecharam e hoje já caiu numa semana de fronteira do mês seguinte, Tendência continua igual a Realizado', () => {
