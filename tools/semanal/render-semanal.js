@@ -208,6 +208,18 @@ const BUNDLE_ARQUIVOS = [
   'compute-semanal.js', 'render-aba-semanal.js',
   'compute-grafico-semanal.js', 'render-aba-grafico-semanal.js',
   'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js',
+  // Os 4 abaixo alimentam o botão "Atualizar dados" (live-refresh) -- ver
+  // docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md.
+  // parse-matriz-cliente.js não tem require nenhum (auto-suficiente).
+  // parse-avancos.js/parse-lab.js/compute-demandas.js têm require('../comum/...')
+  // que o bundle REMOVE (ver transformaModulo) -- as funções que sobram
+  // undefined (excelSerialParaData, rotularTipologia, classificarEnsaioLab,
+  // chaveMatriz) são supridas como globais pelo <script> de fonteParaCliente()
+  // logo ANTES deste bundle (ver a Task 9 deste plano). compute-demandas.js
+  // também precisa vir DEPOIS de compute-semanal.js na lista -- ele lê
+  // diaEpoch de lá agora (require('./compute-semanal.js'), same-dir,
+  // resolvido normalmente pelo bundler).
+  'parse-matriz-cliente.js', 'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js',
 ];
 
 // O gate de senha (scriptDesbloqueio, casca compartilhada) sempre chama

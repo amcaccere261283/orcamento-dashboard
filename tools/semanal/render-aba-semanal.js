@@ -8,10 +8,10 @@ const { semanasDoMes, indiceSemanaAtual, dividirEmSemanas, fecharMes } = require
 var DIMENSOES_ROTULO_SEMANAL = { equipes: 'Equipes', volume: 'Volume', financeiro: 'Financeiro' };
 
 // Este módulo roda tanto no Node (testes) quanto embrulhado no navegador via
-// buildBrowserBundle -- por isso 'var'/'function', não 'const'/arrow, e o
-// require acima na forma EXATA que a reescrita de tools/comum/browser-bundle.js
-// reconhece (`const { X, Y } = require('./arquivo.js');`, sem espaço antes do
-// parêntese, com chaves). Ver o comentário no topo de transformaModulo lá.
+// buildBrowserBundle -- por isso 'var'/'function', não 'const'/arrow. A
+// linha de import acima segue a forma EXATA que buildBrowserBundle espera:
+// `const { X, Y } = <module>;` sem espaço antes do parêntese e com chaves.
+// Ver o comentário no topo de transformaModulo (tools/comum/browser-bundle.js).
 
 function escapeHtml(value) {
   return String(value === null || value === undefined ? '' : value)
@@ -58,7 +58,7 @@ function previstoMesVigente(registros, indices, dimensao, vigenteIdx) {
 
 // Mesma expressão de chaveMatriz (tools/comum/linha-base.js) -- duplicada de
 // propósito porque este módulo entra no bundle do navegador
-// (buildBrowserBundle remove require('../comum/...'), não reescreve -- mesmo
+// (as dependências externas são removidas, não reescritas -- mesmo
 // motivo já documentado em chaveBaseline, tools/semanal/compute-balanco.js).
 function chaveDemandas(sup, tipologia) {
   return sup + '||' + tipologia;
