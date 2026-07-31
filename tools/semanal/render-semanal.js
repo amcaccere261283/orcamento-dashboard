@@ -25,9 +25,14 @@ function escapeHtml(value) {
 // Mesmos dois ícones (tabela/gráfico de barras) que o orçamento já usa nas
 // abas Tabela/Gráfico -- mesmo sistema visual, mesma linguagem de ícone
 // pros dois dashboards deste repositório.
+// Ícone da aba Gráficos: linha de tendência (não o mesmo ícone de 3 barras
+// que "Balanço de massa" já usa nesta mesma barra -- os dois apareceriam
+// idênticos lado a lado, então este é distinto de propósito).
 const ABAS_VISUALIZACAO = [
   { id: 'aba-semanal', rotulo: 'Semanal', ativa: true,
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>' },
+  { id: 'aba-grafico-semanal', rotulo: 'Gráficos', ativa: false,
+    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>' },
   { id: 'aba-balanco', rotulo: 'Balanço de massa', ativa: false,
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>' },
   { id: 'aba-demandas', rotulo: 'Demandas', ativa: false,
@@ -175,6 +180,14 @@ const CSS_DEMANDAS = `
 // 'compute-semanal.js' precisa continuar vindo ANTES de 'compute-balanco.js'
 // na lista abaixo, não só antes de 'render-aba-semanal.js'.
 //
+// render-aba-grafico-semanal.js (aba Gráficos, achado de 2026-08-01) consome
+// os TRÊS: compute-semanal.js (semanasDoMes/indiceSemanaAtual),
+// render-aba-semanal.js (calcularSeriesSemanaisDimensao/formatarIntervaloSemana
+// -- a aba Gráficos é uma segunda leitura visual dos MESMOS números que a
+// Tabela Semanal já calcula, nunca uma fonte própria) e
+// compute-grafico-semanal.js (calcularAcumulado/calcularEscalaEixo, só
+// matemática pura) -- os três precisam vir antes dele na lista.
+//
 // compute-balanco.js TAMBÉM consome tools/comum/calculo-equipes.js
 // (mediaEquipesPonderada), um require '../' que o bundle REMOVE em vez de
 // reescrever (ver o comentário no topo de compute-balanco.js e em
@@ -183,7 +196,11 @@ const CSS_DEMANDAS = `
 // lá embaixo em renderSemanal(). Sem isso a aba Balanço de massa quebra em
 // produção com ReferenceError, mesmo com os testes em Node passando (Node
 // resolve o require normalmente).
-const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js', 'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js'];
+const BUNDLE_ARQUIVOS = [
+  'compute-semanal.js', 'render-aba-semanal.js',
+  'compute-grafico-semanal.js', 'render-aba-grafico-semanal.js',
+  'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js',
+];
 
 // O gate de senha (scriptDesbloqueio, casca compartilhada) sempre chama
 // fecharTendenciaVigente(registros, vigenteIdx) e montarDashboard(registros)
@@ -233,6 +250,7 @@ const SCRIPT_CLIENTE_SEMANAL = `
 // aqui e continuar achando o mesmo de ComputeSemanal por engano.
 var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaSemanal = MODULOS['render-aba-semanal.js'];
+var RenderAbaGraficoSemanal = MODULOS['render-aba-grafico-semanal.js'];
 var ComputeBalanco = MODULOS['compute-balanco.js'];
 var RenderAbaBalanco = MODULOS['render-aba-balanco.js'];
 var RenderAbaDemandas = MODULOS['render-aba-demandas.js'];
@@ -293,11 +311,52 @@ function fecharTendenciaVigente(dados) {
 
 function alternarAba(aba) {
   document.getElementById('secao-semanal').style.display = aba === 'semanal' ? '' : 'none';
+  document.getElementById('secao-grafico-semanal').style.display = aba === 'grafico-semanal' ? '' : 'none';
   document.getElementById('secao-balanco').style.display = aba === 'balanco' ? '' : 'none';
   document.getElementById('secao-demandas').style.display = aba === 'demandas' ? '' : 'none';
   document.getElementById('aba-semanal').classList.toggle('aba-ativa', aba === 'semanal');
+  document.getElementById('aba-grafico-semanal').classList.toggle('aba-ativa', aba === 'grafico-semanal');
   document.getElementById('aba-balanco').classList.toggle('aba-ativa', aba === 'balanco');
   document.getElementById('aba-demandas').classList.toggle('aba-ativa', aba === 'demandas');
+}
+
+// Redesenha só o CONTEÚDO de #secao-grafico-semanal (não a div inteira --
+// #grafico-semanal-tooltip é irmã dele no HTML e precisa sobreviver aos
+// redesenhos, senão o listener delegado em inicializarTooltipGraficoSemanal
+// perderia o elemento de destino). Mesmos 'registros'/'indices' que
+// recalcularSemanal já filtrou pela barra compartilhada, mesma 'dimensoes'
+// e 'hojeEpoch' que RenderAbaSemanal.renderAbaSemanal recebe -- a aba
+// Gráficos é uma segunda leitura visual dos MESMOS números da Tabela
+// Semanal, nunca um recorte à parte (por isso não tem controles próprios,
+// ao contrário da aba Balanço de massa).
+function montarAbaGraficoSemanal(registros, indices, dimensoes, hojeEpoch) {
+  document.getElementById('grafico-semanal-conteudo').innerHTML = RenderAbaGraficoSemanal.renderAbaGraficoSemanal(registros, indices, dimensoes, {
+    vigenteIdx: window.__VIGENTE_IDX__,
+    ano: window.__ANO__,
+    demandas: window.__DEMANDAS__,
+    hojeEpoch: hojeEpoch,
+  });
+}
+
+// Tooltip único, delegado -- mesmo mecanismo do Gráfico no orçamento
+// (inicializarTooltipGrafico, tools/orcamento/render-dashboard.js): os SVGs
+// são recriados via innerHTML a cada montarAbaGraficoSemanal, então um
+// listener por elemento seria descartado toda hora. Chamada uma vez só, em
+// montarDashboard (o elemento #secao-grafico-semanal em si nunca é
+// recriado -- só o filho #grafico-semanal-conteudo, ver a função acima).
+function inicializarTooltipGraficoSemanal() {
+  var secao = document.getElementById('secao-grafico-semanal');
+  var tooltip = document.getElementById('grafico-semanal-tooltip');
+  secao.addEventListener('mousemove', function (e) {
+    var alvo = e.target.closest ? e.target.closest('[data-tooltip]') : null;
+    if (!alvo) { tooltip.style.display = 'none'; return; }
+    var rectSecao = secao.getBoundingClientRect();
+    tooltip.textContent = alvo.getAttribute('data-tooltip');
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX - rectSecao.left + 14) + 'px';
+    tooltip.style.top = (e.clientY - rectSecao.top - 12) + 'px';
+  });
+  secao.addEventListener('mouseleave', function () { tooltip.style.display = 'none'; });
 }
 
 // Estado dos controles PRÓPRIOS da aba Balanço de massa (Período/Base/
@@ -399,6 +458,7 @@ function recalcularSemanal() {
     window.__REGISTROS__, indices, dimensoes, window.__VIGENTE_IDX__, window.__ANO__,
     { demandas: window.__DEMANDAS__, hojeEpoch: hojeEpoch }
   );
+  montarAbaGraficoSemanal(window.__REGISTROS__, indices, dimensoes, hojeEpoch);
   montarAbaBalanco(window.__REGISTROS__, indices);
 }
 
@@ -425,10 +485,12 @@ function montarTodosFiltrosMultiSemanal(registros) {
 // constante.
 function montarDashboard(registros) {
   document.getElementById('aba-semanal').addEventListener('click', function () { alternarAba('semanal'); });
+  document.getElementById('aba-grafico-semanal').addEventListener('click', function () { alternarAba('grafico-semanal'); });
   document.getElementById('aba-balanco').addEventListener('click', function () { alternarAba('balanco'); });
   document.getElementById('aba-demandas').addEventListener('click', function () { alternarAba('demandas'); });
   montarTodosFiltrosMultiSemanal(registros);
   configurarAberturaFiltrosMulti();
+  inicializarTooltipGraficoSemanal();
   recalcularSemanal();
   montarAbaDemandas();
 }
@@ -534,6 +596,10 @@ ${markupCabecalho({
 ${markupFiltros(FILTROS_SEMANAL, { recuo: '    ' })}
 ${markupAbas(ABAS_VISUALIZACAO, '    ')}
     <div id="secao-semanal"></div>
+    <div id="secao-grafico-semanal" style="display:none">
+      <div id="grafico-semanal-conteudo"></div>
+      <div id="grafico-semanal-tooltip" class="grafico-tooltip" style="display:none"></div>
+    </div>
     <div id="secao-balanco" style="display:none"></div>
     <div id="secao-demandas" style="display:none"></div>
   </div>
