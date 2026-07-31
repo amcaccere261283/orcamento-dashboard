@@ -43,10 +43,17 @@ test('DN entra em SH -- reclassificado a pedido do dono em 2026-08-01 (sem vínc
   assert.strictEqual(rotularTipologia('DN'), 'SH');
 });
 
-test('os 4 rótulos restantes sem equivalente na MATRIZ viram Especiais', () => {
-  for (const t of ['SN', 'PZ.SP', 'PZ.SM', 'INA']) {
-    assert.strictEqual(rotularTipologia(t), 'Especiais');
-  }
+test('PZ.SP entra em SP -- reclassificado a pedido do dono em 2026-08-01', () => {
+  assert.strictEqual(rotularTipologia('PZ.SP'), 'SP');
+});
+
+test('PZ.SM e INA entram em SM / SM.F / SR -- reclassificados a pedido do dono em 2026-08-01', () => {
+  assert.strictEqual(rotularTipologia('PZ.SM'), 'SM / SM.F / SR');
+  assert.strictEqual(rotularTipologia('INA'), 'SM / SM.F / SR');
+});
+
+test('SN é o único rótulo que sobra sem equivalente na MATRIZ -- vira Especiais', () => {
+  assert.strictEqual(rotularTipologia('SN'), 'Especiais');
 });
 
 test('rótulo desconhecido LANÇA citando o rótulo -- nunca cai calado em Especiais', () => {

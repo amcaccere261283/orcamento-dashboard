@@ -10,10 +10,10 @@
 //   acionamento no período (ver SO_QUANDO_ACIONADA) -- são serviços sob
 //   demanda, e uma linha de zeros permanente só faria ruído.
 //
-// Quatro reclassificações feitas em 2026-08-01, a pedido do dono do
-// projeto -- SP.F, SM.A, BQ e DN tinham rótulo próprio (ou caíam em
-// 'Especiais') e passam a contar dentro de uma das 10 tipologias da
-// MATRIZ:
+// Sete reclassificações feitas em 2026-08-01, a pedido do dono do
+// projeto -- SP.F, SM.A, BQ, DN, PZ.SP, PZ.SM e INA tinham rótulo próprio
+// (ou caíam em 'Especiais') e passam a contar dentro de uma das 10
+// tipologias da MATRIZ:
 // - SP.F passa a contar em 'SP' (antes era rótulo próprio -- decidido
 //   depois de SM.A, ao notar que a mesma exceção não fazia mais sentido
 //   mantida só pra SP.F).
@@ -22,6 +22,14 @@
 // - DN passa a contar em 'SH' (antes caía em 'Especiais'; investigado e
 //   sem qualquer vínculo nos dados com CPTU -- OS e identificação próprios,
 //   "DN-"/"DEN-", nunca compartilhados com uma linha CPTU).
+// - PZ.SP passa a contar em 'SP' (antes caía em 'Especiais').
+// - PZ.SM e INA passam a contar em 'SM / SM.F / SR' (antes caíam em
+//   'Especiais').
+//
+// SEG.A, SEG.V e SN ficam de fora dessa rodada -- decisão explícita do
+// dono do projeto de NÃO contá-los por enquanto ("a princípio"). SEG.A e
+// SEG.V continuam com rótulo próprio (ver SO_QUANDO_ACIONADA acima); SN é
+// o único rótulo que sobra em 'Especiais'.
 const MAPA_TIPOLOGIAS = {
   SP: 'SP',
   ST: 'ST',
@@ -34,15 +42,15 @@ const MAPA_TIPOLOGIAS = {
   'SM.F': 'SM / SM.F / SR',
   SR: 'SM / SM.F / SR',
   'SM.A': 'SM / SM.F / SR',
+  'PZ.SM': 'SM / SM.F / SR',
+  INA: 'SM / SM.F / SR',
   'SP.F': 'SP',
+  'PZ.SP': 'SP',
   'SEG.A': 'SEG.A',
   'SEG.V': 'SEG.V',
   BQ: 'PI',
   DN: 'SH',
   SN: 'Especiais',
-  'PZ.SP': 'Especiais',
-  'PZ.SM': 'Especiais',
-  INA: 'Especiais',
 };
 
 // Ordem de exibição: primeiro as 10 da MATRIZ (mesma ordem que o orçamento
