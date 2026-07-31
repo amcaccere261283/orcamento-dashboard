@@ -1,5 +1,7 @@
 'use strict';
+const fs = require('node:fs');
 
+// <<< INICIO CLIENTE
 // A aba "Lab Concluido" do Avanço Sond.xlsx usa 60 rótulos de "Tipo de
 // Ensaio"; a MATRIZ só conhece 2 tipologias de laboratório -- LAB.C
 // (Convencional) e LAB.E (Especial). Este mapa é a tradução.
@@ -95,5 +97,32 @@ function classificarEnsaioLab(tipoEnsaioCru) {
   }
   return destino;
 }
+// FIM CLIENTE >>>
 
-module.exports = { MAPA_TIPO_ENSAIO_LAB, classificarEnsaioLab };
+// Recorta os blocos marcados para inlinar no navegador exatamente o mesmo
+// código que o Node testou. A regex escapa as barras, então o próprio
+// padrão não casa consigo mesmo e não vira um bloco fantasma.
+//
+// O \r\n vira \n na leitura porque é isso que o resto do HTML já faz: o JS
+// de cliente do orçamento mora em template literal, e a linguagem normaliza
+// a quebra de linha do literal pra \n mesmo quando o .js está em CRLF no
+// disco. fs.readFileSync não normaliza nada, então sem esse replace o
+// trecho injetado sairia em CRLF num checkout Windows (core.autocrlf=true) e
+// em LF num checkout Linux -- o HTML publicado passaria a depender de como o
+// repositório foi clonado.
+function trechosParaCliente() {
+  const src = fs.readFileSync(__filename, 'utf8').replace(/\r\n/g, '\n');
+  const padrao = /\/\/ <<< INICIO CLIENTE([\s\S]*?)\/\/ FIM CLIENTE >>>/g;
+  const trechos = [];
+  let achado;
+  while ((achado = padrao.exec(src)) !== null) trechos.push(achado[1]);
+  return trechos;
+}
+
+// Os trechos já começam e terminam em quebra de linha, então concatenar
+// direto reproduz o espaçamento natural entre eles.
+function fonteParaCliente() {
+  return trechosParaCliente().join('');
+}
+
+module.exports = { MAPA_TIPO_ENSAIO_LAB, classificarEnsaioLab, trechosParaCliente, fonteParaCliente };

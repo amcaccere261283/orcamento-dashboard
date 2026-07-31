@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { classificarEnsaioLab, MAPA_TIPO_ENSAIO_LAB } = require('../tools/comum/tipologias-lab.js');
+const { classificarEnsaioLab, MAPA_TIPO_ENSAIO_LAB, fonteParaCliente, trechosParaCliente } = require('../tools/comum/tipologias-lab.js');
 
 test('todo destino do mapa é LAB.C ou LAB.E, nunca outra coisa', () => {
   for (const destino of Object.values(MAPA_TIPO_ENSAIO_LAB)) {
@@ -43,4 +43,20 @@ test('tipo de ensaio desconhecido LANÇA citando o rótulo -- nunca cai calado e
 test('tipo de ensaio vazio LANÇA -- linha sem "Tipo de Ensaio" é descartada antes, não classificada', () => {
   assert.throws(() => classificarEnsaioLab(''), /vazi/i);
   assert.throws(() => classificarEnsaioLab(null), /vazi/i);
+});
+
+test('o recorte não devolve CR nenhum', () => {
+  assert.doesNotMatch(fonteParaCliente(), /\r/);
+  trechosParaCliente().forEach((trecho, i) => assert.doesNotMatch(trecho, /\r/, `trecho ${i} tem CR`));
+});
+
+test('fonteParaCliente() avalia pros mesmos MAPA_TIPO_ENSAIO_LAB/classificarEnsaioLab que os exports do Node', () => {
+  const fonte = fonteParaCliente();
+  const cliente = new Function(`${fonte}
+return { MAPA_TIPO_ENSAIO_LAB: MAPA_TIPO_ENSAIO_LAB, classificarEnsaioLab: classificarEnsaioLab };`)();
+
+  assert.deepStrictEqual(cliente.MAPA_TIPO_ENSAIO_LAB, MAPA_TIPO_ENSAIO_LAB);
+  assert.strictEqual(cliente.classificarEnsaioLab('LL'), classificarEnsaioLab('LL'));
+  assert.strictEqual(cliente.classificarEnsaioLab('TRI2.UU'), classificarEnsaioLab('TRI2.UU'));
+  assert.throws(() => cliente.classificarEnsaioLab('ENSAIO-INEXISTENTE'), /Tipo de Ensaio desconhecido/);
 });
