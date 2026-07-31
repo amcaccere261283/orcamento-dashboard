@@ -43,6 +43,17 @@ const ABAS_VISUALIZACAO = [
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>' },
 ];
 
+// Só o botão de atualização ao vivo + status -- ao contrário do orçamento,
+// a semanal não tem "#limpar-filtros" nem as abas dentro deste slot (as
+// abas já são renderizadas à parte, via markupAbas() logo abaixo da barra
+// de filtros -- ver a chamada de renderSemanal). Reaproveita os MESMOS ids
+// (#atualizar-dashboard/#status-atualizacao) que o CSS compartilhado em
+// cssBase() (tools/comum/render-shell.js) já estiliza.
+const MARKUP_ACOES_SEMANAL = `      <div class="filtros-acoes">
+        <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
+        <span id="status-atualizacao" class="status-atualizacao"></span>
+      </div>`;
+
 // Os 6 filtros multi-select da barra compartilhada entre as duas abas: só
 // id e rótulo inicial (mesmo padrão de FILTROS_PRINCIPAIS no orçamento) --
 // as opções de cada um são montadas no cliente a partir dos registros
@@ -617,7 +628,7 @@ ${markupCabecalho({
   </div>
 
   <div id="conteudo-protegido" style="display:none">
-${markupFiltros(FILTROS_SEMANAL, { recuo: '    ' })}
+${markupFiltros(FILTROS_SEMANAL, { recuo: '    ', acoes: MARKUP_ACOES_SEMANAL })}
 ${markupAbas(ABAS_VISUALIZACAO, '    ')}
     <div id="secao-semanal"></div>
     <div id="secao-grafico-semanal" style="display:none">

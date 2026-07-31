@@ -293,3 +293,9 @@ test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume e
   assert.match(htmlMontado, /Demandas Pendentes/, 'a linha nova precisa aparecer no bloco Volume depois de marcar a dimensão');
   assert.doesNotMatch(htmlMontado.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0], /sem-dado/, 'Realizado (Volume) precisa vir preenchido, não sem-dado, com demandas.porRegistroEventos real');
 });
+
+test('o HTML da semanal tem o botão "Atualizar dados" e o span de status, com os MESMOS ids que o CSS compartilhado (cssBase) estiliza', () => {
+  const html = renderSemanal({ registros: [], baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
+  assert.match(html, /<button id="atualizar-dashboard" type="button">/);
+  assert.match(html, /<span id="status-atualizacao" class="status-atualizacao"><\/span>/);
+});
