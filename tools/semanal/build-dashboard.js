@@ -12,7 +12,7 @@ const { parseMatriz, locateColumns } = require('../orcamento/parse-matriz.js');
 const { parseBaseline } = require('../orcamento/parse-baseline.js');
 const { renderSemanal } = require('./render-semanal.js');
 const { excelSerialParaData } = require('../comum/datas.js');
-const { reconciliarLinhaBase } = require('../comum/linha-base.js');
+const { reconciliarLinhaBase, chaveMatriz } = require('../comum/linha-base.js');
 const config = require('../orcamento/config.js');
 const { parseAvancos } = require('./parse-avancos.js');
 const { parseLab } = require('./parse-lab.js');
@@ -55,6 +55,26 @@ function loadDataUri(filePath) {
 function baselineParaCliente(porChave, registros) {
   const { porChaveMatriz } = reconciliarLinhaBase(registros, porChave);
   return Array.from(porChaveMatriz, ([chave, dados]) => ({ chave, ...dados }));
+}
+
+// Ensaio cuja combinação (sup, tipologia) não existe como registro na
+// MATRIZ não tem "onde" contar -- ficaria fora do Realizado da Tabela
+// Semanal em silêncio, mesmo sendo trabalho real (achado de
+// 2026-08-01: 409 ensaios de laboratório caindo fora do acompanhamento).
+// A MATRIZ já tem um registro "Diversos" com Previsto próprio pra cada
+// tipologia (inclusive LAB.C/LAB.E) -- decisão do dono do projeto:
+// redirecionar esses ensaios pra lá em vez de descartá-los. Extraída como
+// função pura (mesmo padrão de baselineParaCliente acima) pra testar sem
+// planilha sintética.
+function redirecionarSupsDesconhecidos(ensaios, registros) {
+  const chavesConhecidas = new Set(registros.map(r => chaveMatriz(r.sup, r.tipologia)));
+  let redirecionados = 0;
+  const saida = ensaios.map(e => {
+    if (chavesConhecidas.has(chaveMatriz(e.sup, e.tipologia))) return e;
+    redirecionados++;
+    return Object.assign({}, e, { sup: 'Diversos' });
+  });
+  return { ensaios: saida, redirecionados };
 }
 
 // A senha nunca vem de um arquivo do repositório -- só de variável de
@@ -105,8 +125,9 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   } catch (err) {
     throw new Error(`Não consegui ler a aba "${configLab.nomeAba}" de ${configLab.caminhoArquivo} (o Google Drive está montado em G:?). Erro original: ${err.message}`);
   }
-  const { ensaios, descartadas: ensaiosDescartados } = parseLab(gridLab);
-  console.log(`Lab: ${ensaios.length} ensaio(s) lido(s), ${ensaiosDescartados} linha(s) descartada(s) (lixo "TESTE" ou vazia).`);
+  const { ensaios: ensaiosLidos, descartadas: ensaiosDescartados } = parseLab(gridLab);
+  const { ensaios, redirecionados: ensaiosRedirecionados } = redirecionarSupsDesconhecidos(ensaiosLidos, registros);
+  console.log(`Lab: ${ensaiosLidos.length} ensaio(s) lido(s), ${ensaiosDescartados} linha(s) descartada(s) (lixo "TESTE" ou vazia), ${ensaiosRedirecionados} ensaio(s) redirecionado(s) pra "Diversos" (SUP sem registro LAB.C/LAB.E na MATRIZ).`);
 
   const demandas = computeDemandas(furos, periodos, ensaios);
   console.log(`Demandas: ${furos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
@@ -138,4 +159,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, baselineParaCliente };
+module.exports = { build, baselineParaCliente, redirecionarSupsDesconhecidos };

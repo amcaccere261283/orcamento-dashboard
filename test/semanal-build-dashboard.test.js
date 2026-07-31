@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
-const { baselineParaCliente } = require('../tools/semanal/build-dashboard.js');
+const { baselineParaCliente, redirecionarSupsDesconhecidos } = require('../tools/semanal/build-dashboard.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
 
 // Os 12 meses da MATRIZ como datas -- em produção saem do cabeçalho da
@@ -167,4 +167,60 @@ test('renderSemanal recusa build sem "periodos" -- sem eles não dá para decidi
     () => renderSemanal({ registros: REGISTROS, baseline: [], demandas: DEMANDAS_VAZIAS, senha: 'fake', geradoEm: new Date(0) }),
     /periodos/
   );
+});
+
+// --- redirecionarSupsDesconhecidos (achado de 2026-08-01) -------------------
+
+function registroMinimo(sup, tipologia) {
+  return { sup, tipologia };
+}
+
+test('ensaio cujo (sup, tipologia) bate com um registro da MATRIZ passa direto, sem redirecionar', () => {
+  const registros = [registroMinimo('SUP-0001-24', 'LAB.C')];
+  const ensaios = [{ sup: 'SUP-0001-24', tipologia: 'LAB.C', concluido: new Date() }];
+  const { ensaios: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
+  assert.strictEqual(saida[0].sup, 'SUP-0001-24');
+  assert.strictEqual(redirecionados, 0);
+});
+
+test('ensaio cujo SUP não existe na MATRIZ pra aquela tipologia é redirecionado pra "Diversos"', () => {
+  const registros = [registroMinimo('Diversos', 'LAB.C')];
+  const ensaios = [{ sup: 'SUP-9999-99', tipologia: 'LAB.C', concluido: new Date() }];
+  const { ensaios: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
+  assert.strictEqual(saida[0].sup, 'Diversos');
+  assert.strictEqual(saida[0].tipologia, 'LAB.C', 'só o sup muda, a tipologia (já classificada) continua a mesma');
+  assert.strictEqual(redirecionados, 1);
+});
+
+test('SUP existe na MATRIZ, mas não para ESSA tipologia -- redireciona mesmo assim (a chave é (sup,tipologia), não só sup)', () => {
+  const registros = [registroMinimo('SUP-0001-24', 'ST')]; // só Sondagem, sem LAB.C
+  const ensaios = [{ sup: 'SUP-0001-24', tipologia: 'LAB.C', concluido: new Date() }];
+  const { ensaios: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
+  assert.strictEqual(saida[0].sup, 'Diversos');
+  assert.strictEqual(redirecionados, 1);
+});
+
+test('não muda o ensaio original -- devolve um objeto novo, sem mutar a entrada', () => {
+  const registros = [registroMinimo('Diversos', 'LAB.C')];
+  const original = { sup: 'SUP-9999-99', tipologia: 'LAB.C', concluido: new Date() };
+  redirecionarSupsDesconhecidos([original], registros);
+  assert.strictEqual(original.sup, 'SUP-9999-99', 'o objeto original não pode ser mutado');
+});
+
+test('lista vazia de ensaios não quebra e não redireciona nada', () => {
+  const { ensaios: saida, redirecionados } = redirecionarSupsDesconhecidos([], [registroMinimo('Diversos', 'LAB.C')]);
+  assert.deepStrictEqual(saida, []);
+  assert.strictEqual(redirecionados, 0);
+});
+
+test('mistura de ensaios conhecidos e desconhecidos -- só os desconhecidos são redirecionados, na mesma ordem', () => {
+  const registros = [registroMinimo('SUP-0001-24', 'LAB.C'), registroMinimo('Diversos', 'LAB.E')];
+  const ensaios = [
+    { sup: 'SUP-0001-24', tipologia: 'LAB.C', concluido: new Date() },
+    { sup: 'SUP-9999-99', tipologia: 'LAB.E', concluido: new Date() },
+    { sup: 'SUP-0001-24', tipologia: 'LAB.C', concluido: new Date() },
+  ];
+  const { ensaios: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
+  assert.deepStrictEqual(saida.map(e => e.sup), ['SUP-0001-24', 'Diversos', 'SUP-0001-24']);
+  assert.strictEqual(redirecionados, 1);
 });
