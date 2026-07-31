@@ -45,11 +45,15 @@ test('ida e volta fecha para as três dimensões, com 4 ou 5 semanas', () => {
 
 // --- Calendário ISO de semanas reais ---------------------------------------
 
-function dia(ano, mes, d) { return diaEpoch(new Date(ano, mes, d)); }
+// Date.UTC, não o construtor local: semanasDoMes trabalha inteiramente em
+// UTC (mesma convenção de excelSerialParaData/eventos de furos -- ver o
+// comentário de diaEpoch em compute-semanal.js) -- um dia local aqui só
+// bateria por coincidência de fuso, não por estar correto.
+function dia(ano, mes, d) { return diaEpoch(new Date(Date.UTC(ano, mes, d))); }
 
 test('diaEpoch: dias consecutivos produzem inteiros consecutivos', () => {
-  const d1 = diaEpoch(new Date(2026, 6, 15));
-  const d2 = diaEpoch(new Date(2026, 6, 16));
+  const d1 = diaEpoch(new Date(Date.UTC(2026, 6, 15)));
+  const d2 = diaEpoch(new Date(Date.UTC(2026, 6, 16)));
   assert.strictEqual(d2, d1 + 1);
 });
 

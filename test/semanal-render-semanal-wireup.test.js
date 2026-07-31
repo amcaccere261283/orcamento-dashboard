@@ -261,7 +261,7 @@ test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume e
     porRegistroEventos: {
       'SUP-0001-24||ST': {
         chegada: [],
-        sondagemRealizada: [diaEpoch(new Date(2026, 6, 5)), diaEpoch(new Date(2026, 6, 5))],
+        sondagemRealizada: [diaEpoch(new Date(Date.UTC(2026, 6, 5))), diaEpoch(new Date(Date.UTC(2026, 6, 5)))],
         saidaEstoque: [],
       },
     },

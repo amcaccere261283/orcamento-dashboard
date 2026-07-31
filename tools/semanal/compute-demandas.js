@@ -90,7 +90,7 @@ function computeDemandas(furos, periodos) {
     // -- nunca os dois independentes, pra não contar duas vezes os furos
     // CANCELADO que também têm data de término preenchida (16 na planilha
     // real, ver spec). Só entra se pelo menos um dos dois existir; sem
-    // nenhum, o furo nunca sai do estoque (mesma regra de porRegistro).
+    // nenhum, o furo nunca sai do estoque (mesma regra da série 'pendentes' abaixo).
     const candidatosSaida = [];
     if (f.terminoSondagem) candidatosSaida.push(diaEpoch(f.terminoSondagem));
     if (cancelado && f.cancelamento) candidatosSaida.push(diaEpoch(f.cancelamento));

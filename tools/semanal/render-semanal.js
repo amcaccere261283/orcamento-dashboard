@@ -376,11 +376,17 @@ function recalcularSemanal() {
   var dimensoes = dimensoesEmOrdemSemanal(filtrosSelecionadosSemanal.dimensao);
   // hojeEpoch vem do relógio de quem está vendo a página (não do build) --
   // calculado de novo a cada recálculo, é barato e evita estado obsoleto se
-  // a aba ficar aberta atravessando a meia-noite. Mesma convenção de fuso
-  // que os eventos de furos usam (diaEpoch em compute-demandas.js): dia
-  // civil LOCAL, não UTC -- new Date() já constrói no fuso de quem está
-  // vendo a página.
-  var hojeEpoch = ComputeSemanal.diaEpoch(new Date());
+  // a aba ficar aberta atravessando a meia-noite. O DIA em si é o civil
+  // LOCAL de quem está vendo a página (getFullYear/getMonth/getDate, não os
+  // getUTC*) -- é o dia que a pessoa vê no relógio dela, de propósito. Mas
+  // o NÚMERO que diaEpoch devolve precisa ficar na mesma convenção que o
+  // resto do sistema usa (semanasDoMes, eventos de furos): ancorado em UTC,
+  // não no instante bruto de 'agora' -- do contrário, diaEpoch(new Date())
+  // rola pro dia seguinte a partir de 21h em fusos atrás de UTC (o caso do
+  // Brasil), e discorda de vez em fusos à frente de UTC (achado da revisão
+  // final da branch).
+  var agora = new Date();
+  var hojeEpoch = ComputeSemanal.diaEpoch(new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate())));
   document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(
     window.__REGISTROS__, indices, dimensoes, window.__VIGENTE_IDX__, window.__ANO__,
     { demandas: window.__DEMANDAS__, hojeEpoch: hojeEpoch }

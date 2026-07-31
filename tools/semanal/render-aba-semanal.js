@@ -1,5 +1,5 @@
 'use strict';
-const { diaEpoch, semanasDoMes, indiceSemanaAtual, dividirEmSemanas, fecharMes } = require('./compute-semanal.js');
+const { semanasDoMes, indiceSemanaAtual, dividirEmSemanas, fecharMes } = require('./compute-semanal.js');
 
 // Rótulo de exibição de cada dimensão -- só as 3 que a barra de filtros da
 // semanal expõe (ver FILTROS_CONFIG_SEMANAL/DIMENSOES_CONFIG_SEMANAL em
@@ -203,7 +203,21 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
         });
         fechamentoRealizado = fecharMes(semanasRealizado, 'volume');
 
-        semanasTendencia = calcularTendenciaSemanal(mesVigente, semanasRealizado, indiceAtual);
+        // NÃO usar indiceAtual aqui: ele vale -1 tanto quando nenhuma
+        // semana do mês começou (início do mês, semanas restantes = todas)
+        // quanto quando TODAS as semanas do mês já fecharam e hoje já caiu
+        // numa semana de fronteira do mês seguinte (fim do mês, semanas
+        // restantes = nenhuma) -- calcularTendenciaSemanal tratava os dois
+        // casos como "nenhuma semana elapsada", fabricando uma projeção
+        // sobre um mês que já terminou (achado da revisão final: 9 dias/ano,
+        // incluindo os últimos dias de mar/jun/set). semanasElapsadas conta
+        // direto pelas datas -- quantas semanas do mês já começaram até
+        // hoje -- e não confunde os dois casos.
+        var semanasElapsadas = 0;
+        for (var se = 0; se < semanas.length; se++) {
+          if (semanas[se].inicio <= opts.hojeEpoch) semanasElapsadas++;
+        }
+        semanasTendencia = calcularTendenciaSemanal(mesVigente, semanasRealizado, semanasElapsadas - 1);
         fechamentoTendencia = fecharMes(semanasTendencia, 'volume');
       }
 

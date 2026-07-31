@@ -133,9 +133,9 @@ test('toda classe linha-* da tabela semanal tem regra de CSS na página gerada',
   const estilo = html.match(/<style>([\s\S]*?)<\/style>/)[1];
 
   const demandas = { porRegistroEventos: {} };
-  const tabela = renderAbaSemanal(REGISTROS, [0], ['volume'], 0, 1970, { demandas, hojeEpoch: diaEpoch(new Date(1970, 0, 15)) });
+  const tabela = renderAbaSemanal(REGISTROS, [0], ['volume'], 0, 1970, { demandas, hojeEpoch: diaEpoch(new Date(Date.UTC(1970, 0, 15))) });
   const classes = [...new Set([...tabela.matchAll(/class="linha-serie-semanal (linha-[a-z-]+)"/g)].map(m => m[1]))];
-  assert.deepStrictEqual(classes, ['linha-previsto', 'linha-realizado', 'linha-tendencia', 'linha-pendentes-demandas'], 'pré-condição: são estas as 4 séries da tabela hoje (com porRegistro presente ativando a linha de Pendentes)');
+  assert.deepStrictEqual(classes, ['linha-previsto', 'linha-realizado', 'linha-tendencia', 'linha-pendentes-demandas'], 'pré-condição: são estas as 4 séries da tabela hoje (com porRegistroEventos presente ativando a linha de Pendentes)');
 
   classes.forEach(classe => {
     assert.ok(estilo.includes(`.${classe} `), `a classe ${classe} é emitida pela tabela mas não tem nenhuma regra no <style> da página -- a linha renderiza sem cor`);
