@@ -169,7 +169,10 @@ test('renderSemanal recusa build sem "periodos" -- sem eles não dá para decidi
   );
 });
 
-// --- redirecionarSupsDesconhecidos (achado de 2026-08-01) -------------------
+// --- redirecionarSupsDesconhecidos (achado de 2026-08-01, generalizado no
+// mesmo dia de "só laboratório" pra "qualquer item com sup/tipologia",
+// depois de achar o mesmo problema em furos de Sondagem -- SP mostrava
+// 1.506 no acompanhamento contra 1.519 numa contagem direta na planilha) --
 
 function registroMinimo(sup, tipologia) {
   return { sup, tipologia };
@@ -178,7 +181,7 @@ function registroMinimo(sup, tipologia) {
 test('ensaio cujo (sup, tipologia) bate com um registro da MATRIZ passa direto, sem redirecionar', () => {
   const registros = [registroMinimo('SUP-0001-24', 'LAB.C')];
   const ensaios = [{ sup: 'SUP-0001-24', tipologia: 'LAB.C', concluido: new Date() }];
-  const { ensaios: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
+  const { itens: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
   assert.strictEqual(saida[0].sup, 'SUP-0001-24');
   assert.strictEqual(redirecionados, 0);
 });
@@ -186,7 +189,7 @@ test('ensaio cujo (sup, tipologia) bate com um registro da MATRIZ passa direto, 
 test('ensaio cujo SUP não existe na MATRIZ pra aquela tipologia é redirecionado pra "Diversos"', () => {
   const registros = [registroMinimo('Diversos', 'LAB.C')];
   const ensaios = [{ sup: 'SUP-9999-99', tipologia: 'LAB.C', concluido: new Date() }];
-  const { ensaios: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
+  const { itens: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
   assert.strictEqual(saida[0].sup, 'Diversos');
   assert.strictEqual(saida[0].tipologia, 'LAB.C', 'só o sup muda, a tipologia (já classificada) continua a mesma');
   assert.strictEqual(redirecionados, 1);
@@ -195,7 +198,7 @@ test('ensaio cujo SUP não existe na MATRIZ pra aquela tipologia é redirecionad
 test('SUP existe na MATRIZ, mas não para ESSA tipologia -- redireciona mesmo assim (a chave é (sup,tipologia), não só sup)', () => {
   const registros = [registroMinimo('SUP-0001-24', 'ST')]; // só Sondagem, sem LAB.C
   const ensaios = [{ sup: 'SUP-0001-24', tipologia: 'LAB.C', concluido: new Date() }];
-  const { ensaios: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
+  const { itens: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
   assert.strictEqual(saida[0].sup, 'Diversos');
   assert.strictEqual(redirecionados, 1);
 });
@@ -208,7 +211,7 @@ test('não muda o ensaio original -- devolve um objeto novo, sem mutar a entrada
 });
 
 test('lista vazia de ensaios não quebra e não redireciona nada', () => {
-  const { ensaios: saida, redirecionados } = redirecionarSupsDesconhecidos([], [registroMinimo('Diversos', 'LAB.C')]);
+  const { itens: saida, redirecionados } = redirecionarSupsDesconhecidos([], [registroMinimo('Diversos', 'LAB.C')]);
   assert.deepStrictEqual(saida, []);
   assert.strictEqual(redirecionados, 0);
 });
@@ -220,7 +223,16 @@ test('mistura de ensaios conhecidos e desconhecidos -- só os desconhecidos são
     { sup: 'SUP-9999-99', tipologia: 'LAB.E', concluido: new Date() },
     { sup: 'SUP-0001-24', tipologia: 'LAB.C', concluido: new Date() },
   ];
-  const { ensaios: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
+  const { itens: saida, redirecionados } = redirecionarSupsDesconhecidos(ensaios, registros);
   assert.deepStrictEqual(saida.map(e => e.sup), ['SUP-0001-24', 'Diversos', 'SUP-0001-24']);
+  assert.strictEqual(redirecionados, 1);
+});
+
+test('função é agnóstica ao tipo de item -- funciona igual pra furos de Sondagem (campos extras: status, criacaoOS...), não só ensaios de laboratório', () => {
+  const registros = [registroMinimo('Diversos', 'SP')];
+  const furos = [{ sup: 'SUP-9999-99', tipologia: 'SP', status: 'PENDENTE', criacaoOS: new Date(), terminoSondagem: null }];
+  const { itens: saida, redirecionados } = redirecionarSupsDesconhecidos(furos, registros);
+  assert.strictEqual(saida[0].sup, 'Diversos');
+  assert.strictEqual(saida[0].status, 'PENDENTE', 'campos que não são sup/tipologia sobrevivem intactos');
   assert.strictEqual(redirecionados, 1);
 });

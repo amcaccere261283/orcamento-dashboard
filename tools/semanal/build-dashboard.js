@@ -57,24 +57,37 @@ function baselineParaCliente(porChave, registros) {
   return Array.from(porChaveMatriz, ([chave, dados]) => ({ chave, ...dados }));
 }
 
-// Ensaio cuja combinação (sup, tipologia) não existe como registro na
-// MATRIZ não tem "onde" contar -- ficaria fora do Realizado da Tabela
-// Semanal em silêncio, mesmo sendo trabalho real (achado de
-// 2026-08-01: 409 ensaios de laboratório caindo fora do acompanhamento).
-// A MATRIZ já tem um registro "Diversos" com Previsto próprio pra cada
-// tipologia (inclusive LAB.C/LAB.E) -- decisão do dono do projeto:
-// redirecionar esses ensaios pra lá em vez de descartá-los. Extraída como
-// função pura (mesmo padrão de baselineParaCliente acima) pra testar sem
-// planilha sintética.
-function redirecionarSupsDesconhecidos(ensaios, registros) {
+// Furo/ensaio cuja combinação (sup, tipologia) não existe como registro na
+// MATRIZ não tem "onde" contar -- ficaria fora do Realizado/Demandas
+// Pendentes da Tabela Semanal em silêncio, mesmo sendo trabalho real
+// (achado de 2026-08-01: primeiro em 409 ensaios de laboratório/mês, depois
+// generalizado ao notar o mesmo problema em furos de Sondagem -- SP
+// mostrava 1.506 no acompanhamento contra 1.519 numa contagem direta na
+// planilha, 13 furos com SUP fora da MATRIZ). A MATRIZ já tem um registro
+// "Diversos" com Previsto próprio pra cada uma das suas 10 tipologias
+// (inclusive LAB.C/LAB.E) -- decisão do dono do projeto: SUP não cadastrado
+// na MATRIZ SEMPRE redireciona pra Diversos, sem exceção, em vez de ser
+// descartado. Função pura e agnóstica ao tipo de item (funciona pra
+// ensaios de laboratório E furos de Sondagem/Avanços -- os dois só
+// precisam de 'sup'/'tipologia'), mesmo padrão de baselineParaCliente
+// acima, pra testar sem planilha sintética.
+//
+// Tipologias sem registro Diversos na MATRIZ (SP.F, SEG.A, SEG.V,
+// Especiais -- só existem no Avanços, sem equivalente na MATRIZ) continuam
+// de fora mesmo depois do redirecionamento: a chave vira
+// 'Diversos||<tipologia>', que também não existe entre os registros, então
+// o item continua sem "onde" contar. Isso é uma limitação estrutural (não
+// há Previsto pra atribuir a algo que a MATRIZ não modela), não um bug
+// desta função.
+function redirecionarSupsDesconhecidos(itens, registros) {
   const chavesConhecidas = new Set(registros.map(r => chaveMatriz(r.sup, r.tipologia)));
   let redirecionados = 0;
-  const saida = ensaios.map(e => {
-    if (chavesConhecidas.has(chaveMatriz(e.sup, e.tipologia))) return e;
+  const saida = itens.map(item => {
+    if (chavesConhecidas.has(chaveMatriz(item.sup, item.tipologia))) return item;
     redirecionados++;
-    return Object.assign({}, e, { sup: 'Diversos' });
+    return Object.assign({}, item, { sup: 'Diversos' });
   });
-  return { ensaios: saida, redirecionados };
+  return { itens: saida, redirecionados };
 }
 
 // A senha nunca vem de um arquivo do repositório -- só de variável de
@@ -111,7 +124,7 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   } catch (err) {
     throw new Error(`Não consegui ler a aba "${configDemandas.nomeAba}" de ${configDemandas.caminhoArquivo} (o Google Drive está montado em G:?). Erro original: ${err.message}`);
   }
-  const { furos, descartadas, semDataTermino, cancelamentoIlegivel, deslocamentos } = parseAvancos(gridAvancos);
+  const { furos: furosLidos, descartadas, semDataTermino, cancelamentoIlegivel, deslocamentos } = parseAvancos(gridAvancos);
 
   // Quarta fonte desta página: ensaios de laboratório JÁ CONCLUÍDOS (aba
   // "Lab Concluido", mesmo workbook de Avanços -- ver config-lab.js).
@@ -126,16 +139,24 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
     throw new Error(`Não consegui ler a aba "${configLab.nomeAba}" de ${configLab.caminhoArquivo} (o Google Drive está montado em G:?). Erro original: ${err.message}`);
   }
   const { ensaios: ensaiosLidos, descartadas: ensaiosDescartados } = parseLab(gridLab);
-  const { ensaios, redirecionados: ensaiosRedirecionados } = redirecionarSupsDesconhecidos(ensaiosLidos, registros);
+  const { itens: ensaios, redirecionados: ensaiosRedirecionados } = redirecionarSupsDesconhecidos(ensaiosLidos, registros);
   console.log(`Lab: ${ensaiosLidos.length} ensaio(s) lido(s), ${ensaiosDescartados} linha(s) descartada(s) (lixo "TESTE" ou vazia), ${ensaiosRedirecionados} ensaio(s) redirecionado(s) pra "Diversos" (SUP sem registro LAB.C/LAB.E na MATRIZ).`);
 
+  // Mesmo redirecionamento aplicado aos furos de Sondagem/Avanços -- ver o
+  // comentário de redirecionarSupsDesconhecidos acima. Usa furosLidos (não
+  // redirecionado) pra reconciliarSups logo abaixo: o relatório de
+  // desencontro de SUP existe pra dar visibilidade de quais SUPs reais a
+  // MATRIZ não conhece, e "Diversos" mascararia isso (ele SEMPRE existe na
+  // MATRIZ, então apareceria como "SUP conhecido" no relatório).
+  const { itens: furos, redirecionados: furosRedirecionados } = redirecionarSupsDesconhecidos(furosLidos, registros);
   const demandas = computeDemandas(furos, periodos, ensaios);
-  console.log(`Demandas: ${furos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${deslocamentos} linha(s) de "deslocamento" descartada(s) (furo impenetrável reposicionado, não é demanda nova), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
+  console.log(`Demandas: ${furosLidos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${deslocamentos} linha(s) de "deslocamento" descartada(s) (furo impenetrável reposicionado, não é demanda nova), ${furosRedirecionados} furo(s) redirecionado(s) pra "Diversos" (SUP sem registro na MATRIZ pra aquela tipologia), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
 
-  // Relatório dos DOIS lados do desencontro de SUP. Nada é descartado -- isto
-  // é só visibilidade, e existe porque silenciar o que não casa foi o Critical
-  // da Fase 1 (ver tools/comum/linha-base.js).
-  const sups = reconciliarSups(furos, registros);
+  // Relatório dos DOIS lados do desencontro de SUP, com os furos ORIGINAIS
+  // (furosLidos, não redirecionados -- ver o comentário acima). Nada é
+  // descartado -- isto é só visibilidade, e existe porque silenciar o que
+  // não casa foi o Critical da Fase 1 (ver tools/comum/linha-base.js).
+  const sups = reconciliarSups(furosLidos, registros);
   console.log(`Demandas/SUP: ${sups.furosSemSupNaMatriz} furo(s) em ${sups.soNoAvancos.length} SUP(s) que a MATRIZ não tem (${sups.soNoAvancos.join(', ') || 'nenhum'}); ${sups.soNaMatriz.length} SUP(s) da MATRIZ sem nenhum furo (${sups.soNaMatriz.join(', ') || 'nenhum'}).`);
 
   const html = renderSemanal({
