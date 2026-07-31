@@ -6,7 +6,11 @@ const {
   cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio, scriptFiltros,
 } = require('../comum/render-shell.js');
 const { buildBrowserBundle } = require('../comum/browser-bundle.js');
-const { fonteParaCliente } = require('../comum/calculo-equipes.js');
+const { fonteParaCliente: fonteParaClienteEquipes } = require('../comum/calculo-equipes.js');
+const { fonteParaCliente: fonteParaClienteTipologiasAvancos } = require('../comum/tipologias-avancos.js');
+const { fonteParaCliente: fonteParaClienteTipologiasLab } = require('../comum/tipologias-lab.js');
+const { fonteParaCliente: fonteParaClienteDatas } = require('../comum/datas.js');
+const { fonteParaCliente: fonteParaClienteLinhaBase } = require('../comum/linha-base.js');
 
 // Página da spec com as duas abas (Semanal / Balanço de massa), agora com a
 // barra de filtros compartilhada (markupFiltros()/scriptFiltros() da casca,
@@ -627,7 +631,7 @@ ${markupAbas(ABAS_VISUALIZACAO, '    ')}
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx}; window.__ANO__ = ${periodos[0].getUTCFullYear()};</script>
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
   <script>${scriptDesbloqueio()}</script>
-  <script>${fonteParaCliente()}</script>
+  <script>${fonteParaClienteEquipes()}${fonteParaClienteTipologiasAvancos()}${fonteParaClienteTipologiasLab()}${fonteParaClienteDatas()}${fonteParaClienteLinhaBase()}</script>
   <script>${bundle}</script>
   <script>${scriptFiltros()}${SCRIPT_CLIENTE_SEMANAL}</script>
 </body>

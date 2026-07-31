@@ -58,7 +58,10 @@ function registroSintetico(sup, tomador, financeiroMes) {
 // nenhum reescrito, nenhum resumido. A Task 10 acrescentou o <script> de
 // fonteParaCliente() (mediaEquipesPonderada como global, consumida por
 // compute-balanco.js dentro do bundle) ANTES do bundle -- por isso 6
-// blocos agora, não mais 5.
+// blocos agora, não mais 5. A Task 9 desta fase manteve os 6 blocos (a
+// contagem não muda), só engordou o CONTEÚDO deste 4º bloco: agora
+// concatena 5 fontes (calculo-equipes, tipologias-avancos, tipologias-lab,
+// datas, linha-base) em vez de só calculo-equipes.
 function montarSandbox(html) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
   assert.equal(blocos.length, 6, 'esperava exatamente 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
