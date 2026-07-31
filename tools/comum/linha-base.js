@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('node:fs');
+
 // Reconciliação das chaves entre a MATRIZ viva e o estudo de linha de base.
 //
 // Esta lógica nasceu dentro de anexarPrevistoInicial (tools/orcamento/
@@ -46,6 +48,7 @@ const SUP_MAP_LINHA_BASE = {
   'SUP-8413-26': 'ECOVIAS - Nova Raposo - Pacote 02',
 };
 
+// <<< INICIO CLIENTE
 // Chave no espaço da MATRIZ: sup e tipologia CRUS, exatamente como
 // parse-matriz.js os entrega. É a MESMA expressão de chaveBaseline em
 // tools/semanal/compute-balanco.js -- de propósito: é o formato que o
@@ -53,6 +56,7 @@ const SUP_MAP_LINHA_BASE = {
 function chaveMatriz(sup, tipologia) {
   return `${sup}||${tipologia}`;
 }
+// FIM CLIENTE >>>
 
 // Chave correspondente na LINHA DE BASE para um par (sup, tipologia) da
 // MATRIZ, ou null quando nenhuma das duas tentativas existe em porChave.
@@ -99,7 +103,21 @@ function reconciliarLinhaBase(registros, porChave) {
   return { porChaveMatriz, chavesUsadas };
 }
 
+function trechosParaCliente() {
+  const src = fs.readFileSync(__filename, 'utf8').replace(/\r\n/g, '\n');
+  const padrao = /\/\/ <<< INICIO CLIENTE([\s\S]*?)\/\/ FIM CLIENTE >>>/g;
+  const trechos = [];
+  let achado;
+  while ((achado = padrao.exec(src)) !== null) trechos.push(achado[1]);
+  return trechos;
+}
+
+function fonteParaCliente() {
+  return trechosParaCliente().join('');
+}
+
 module.exports = {
   TIP_MAP_LINHA_BASE, SUP_MAP_LINHA_BASE,
   chaveMatriz, resolverChaveLinhaBase, reconciliarLinhaBase,
+  trechosParaCliente, fonteParaCliente,
 };

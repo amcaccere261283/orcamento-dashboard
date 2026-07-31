@@ -215,3 +215,23 @@ test('na página gerada, a base "Previsto Inicial" só marca "sem base" no SUP q
   assert.strictEqual(contarOcorrencias(svg, 'sem base'), 1, 'só SUP-0009-26 (o que de fato não estava no estudo) pode aparecer como "sem base"');
   assert.match(svg, /class="barra-acima"/, 'os dois SUPs com base têm desvio positivo (+700 e +300) -- precisa haver barra desenhada, não só rótulo');
 });
+
+// --- Testes de fonteParaCliente() ------------------------------------------------
+
+const { fonteParaCliente, trechosParaCliente, chaveMatriz } = require('../tools/comum/linha-base.js');
+
+test('o recorte não devolve CR nenhum', () => {
+  assert.doesNotMatch(fonteParaCliente(), /\r/);
+  trechosParaCliente().forEach((trecho, i) => assert.doesNotMatch(trecho, /\r/, `trecho ${i} tem CR`));
+});
+
+test('fonteParaCliente() avalia pro mesmo chaveMatriz que o export do Node, e NÃO expõe reconciliarLinhaBase', () => {
+  const fonte = fonteParaCliente();
+  assert.doesNotMatch(fonte, /function reconciliarLinhaBase/);
+  assert.doesNotMatch(fonte, /function resolverChaveLinhaBase/);
+
+  const cliente = new Function(`${fonte}
+return { chaveMatriz: chaveMatriz };`)();
+
+  assert.strictEqual(cliente.chaveMatriz('SUP-0001-24', 'SP'), chaveMatriz('SUP-0001-24', 'SP'));
+});
