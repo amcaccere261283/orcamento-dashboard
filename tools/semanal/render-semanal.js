@@ -289,6 +289,10 @@ var RenderAbaGraficoSemanal = MODULOS['render-aba-grafico-semanal.js'];
 var ComputeBalanco = MODULOS['compute-balanco.js'];
 var RenderAbaBalanco = MODULOS['render-aba-balanco.js'];
 var RenderAbaDemandas = MODULOS['render-aba-demandas.js'];
+var ParseMatrizCliente = MODULOS['parse-matriz-cliente.js'];
+var ParseAvancos = MODULOS['parse-avancos.js'];
+var ParseLab = MODULOS['parse-lab.js'];
+var ComputeDemandas = MODULOS['compute-demandas.js'];
 
 var MODO_DEMANDAS = 'mensal';
 
@@ -529,6 +533,77 @@ function montarDashboard(registros) {
   recalcularSemanal();
   montarAbaDemandas();
 }
+
+// ---- Atualização ao vivo (busca as Sheets espelho publicadas, sem tocar
+// nos arquivos originais) -- ver docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md.
+// URL_ESPELHO_MATRIZ_SEMANAL é a MESMA Sheet publicada que o orçamento já
+// usa (tools/orcamento/render-dashboard.js) -- literal duplicado de
+// propósito, não hà como as duas páginas compartilharem uma constante JS
+// (são dois builds independentes). As outras duas ainda são placeholder:
+// dependem de um Apps Script novo, que o dono do projeto precisa publicar
+// manualmente (ver tools/semanal/apps-script-espelho-avancos.gs) -- troque
+// pelos valores reais assim que ele publicar.
+var URL_ESPELHO_MATRIZ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRaOjGxPYWKj-as9RwErptIND7PE_zxsND19PReV1MdOup1ZY3iAu_DGrQ0gatPyYFEy3hg-LWE2esw/pub?gid=609773455&single=true&output=csv';
+var URL_ESPELHO_AVANCOS_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS';
+var URL_ESPELHO_LAB_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-LAB';
+
+function definirStatusAtualizacaoSemanal(texto, ehErro) {
+  var el = document.getElementById('status-atualizacao');
+  if (!el) return;
+  el.textContent = texto;
+  el.classList.toggle('status-erro', !!ehErro);
+}
+
+function periodosDoAnoSemanal() {
+  var periodos = [];
+  for (var i = 0; i < 12; i++) periodos.push(new Date(Date.UTC(window.__ANO__, i, 1)));
+  return periodos;
+}
+
+function buscarCsvSemanal(url) {
+  var comCacheBust = url + (url.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
+  return fetch(comCacheBust).then(function (resposta) {
+    if (!resposta.ok) throw new Error('HTTP ' + resposta.status + ' ao buscar ' + url);
+    return resposta.text();
+  });
+}
+
+// Tudo-ou-nada: nenhum window.__REGISTROS__/window.__DEMANDAS__ é
+// sobrescrito antes dos 3 fetches E de todo o parsing terminarem com
+// sucesso -- uma falha parcial (ex.: MATRIZ ok, Avanços fora do ar) não
+// pode deixar os dois globais referindo momentos diferentes. baseline
+// (window.__BASELINE__) nunca é tocado aqui -- ver "Estado atual" no spec.
+function atualizarDadosAoVivoSemanal() {
+  definirStatusAtualizacaoSemanal('Atualizando…', false);
+  Promise.all([
+    buscarCsvSemanal(URL_ESPELHO_MATRIZ_SEMANAL),
+    buscarCsvSemanal(URL_ESPELHO_AVANCOS_SEMANAL),
+    buscarCsvSemanal(URL_ESPELHO_LAB_SEMANAL),
+  ]).then(function (textos) {
+    var registrosNovos = ParseMatrizCliente.parseMatrizCliente(ParseMatrizCliente.parseCsvGrid(textos[0]));
+    if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho da MATRIZ -- confira se o Apps Script já rodou pelo menos uma vez');
+
+    var furosLidos = ParseAvancos.parseAvancos(ParseMatrizCliente.parseCsvGrid(textos[1])).furos;
+    var ensaiosLidos = ParseLab.parseLab(ParseMatrizCliente.parseCsvGrid(textos[2])).ensaios;
+
+    var furos = ComputeDemandas.redirecionarSupsDesconhecidos(furosLidos, registrosNovos).itens;
+    var ensaios = ComputeDemandas.redirecionarSupsDesconhecidos(ensaiosLidos, registrosNovos).itens;
+    var demandasNovas = ComputeDemandas.computeDemandas(furos, periodosDoAnoSemanal(), ensaios);
+
+    window.__REGISTROS__ = registrosNovos;
+    window.__DEMANDAS__ = demandasNovas;
+    montarTodosFiltrosMultiSemanal(window.__REGISTROS__);
+    recalcularSemanal();
+    montarAbaDemandas();
+
+    var agora = new Date();
+    definirStatusAtualizacaoSemanal('Atualizado às ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), false);
+  }).catch(function (erro) {
+    definirStatusAtualizacaoSemanal('Falha ao atualizar: ' + erro.message, true);
+  });
+}
+
+document.getElementById('atualizar-dashboard').addEventListener('click', atualizarDadosAoVivoSemanal);
 `;
 
 // registros: array de registros da MATRIZ (mesmo formato do orçamento --
