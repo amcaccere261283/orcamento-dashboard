@@ -16,7 +16,7 @@ const { reconciliarLinhaBase, chaveMatriz } = require('../comum/linha-base.js');
 const config = require('../orcamento/config.js');
 const { parseAvancos } = require('./parse-avancos.js');
 const { parseLab } = require('./parse-lab.js');
-const { computeDemandas, reconciliarSups } = require('./compute-demandas.js');
+const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos } = require('./compute-demandas.js');
 const configDemandas = require('./config-demandas.js');
 const configLab = require('./config-lab.js');
 
@@ -57,40 +57,6 @@ function baselineParaCliente(porChave, registros) {
   return Array.from(porChaveMatriz, ([chave, dados]) => ({ chave, ...dados }));
 }
 
-// Furo/ensaio cuja combinação (sup, tipologia) não existe como registro na
-// MATRIZ não tem "onde" contar -- ficaria fora do Realizado/Demandas
-// Pendentes da Tabela Semanal em silêncio, mesmo sendo trabalho real
-// (achado de 2026-08-01: primeiro em 409 ensaios de laboratório/mês, depois
-// generalizado ao notar o mesmo problema em furos de Sondagem -- SP
-// mostrava 1.506 no acompanhamento contra 1.519 numa contagem direta na
-// planilha, 13 furos com SUP fora da MATRIZ). A MATRIZ já tem um registro
-// "Diversos" com Previsto próprio pra cada uma das suas 10 tipologias
-// (inclusive LAB.C/LAB.E) -- decisão do dono do projeto: SUP não cadastrado
-// na MATRIZ SEMPRE redireciona pra Diversos, sem exceção, em vez de ser
-// descartado. Função pura e agnóstica ao tipo de item (funciona pra
-// ensaios de laboratório E furos de Sondagem/Avanços -- os dois só
-// precisam de 'sup'/'tipologia'), mesmo padrão de baselineParaCliente
-// acima, pra testar sem planilha sintética.
-//
-// Tipologias sem registro Diversos na MATRIZ (SEG.A, SEG.V, Especiais --
-// só existem no Avanços, sem equivalente na MATRIZ; SP.F e as outras 3
-// reclassificações de 2026-08-01 -- ver tools/comum/tipologias-avancos.js
-// -- já saem de rotularTipologia coladas numa das 10 tipologias da MATRIZ,
-// então não chegam aqui como rótulo próprio) continuam de fora mesmo
-// depois do redirecionamento: a chave vira 'Diversos||<tipologia>', que
-// também não existe entre os registros, então o item continua sem "onde"
-// contar. Isso é uma limitação estrutural (não há Previsto pra atribuir a
-// algo que a MATRIZ não modela), não um bug desta função.
-function redirecionarSupsDesconhecidos(itens, registros) {
-  const chavesConhecidas = new Set(registros.map(r => chaveMatriz(r.sup, r.tipologia)));
-  let redirecionados = 0;
-  const saida = itens.map(item => {
-    if (chavesConhecidas.has(chaveMatriz(item.sup, item.tipologia))) return item;
-    redirecionados++;
-    return Object.assign({}, item, { sup: 'Diversos' });
-  });
-  return { itens: saida, redirecionados };
-}
 
 // A senha nunca vem de um arquivo do repositório -- só de variável de
 // ambiente, lida na hora do build e descartada depois (mesmo raciocínio de
