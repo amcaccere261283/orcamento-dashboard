@@ -147,6 +147,20 @@ arquivo exige por causa do incidente de 2026-07-22. Vale acrescentar.
 exercita isso hoje (Realizado e Tendência são nulos até a planilha semanal existir), mas
 decida a semântica da semana corrente incompleta **antes** de escrever `parse-semanal.js`.
 
+**Balanço de Massa: barra de equipes em Mês Vigente continua sem dado (2026-08-01).**
+Depois de mover o Realizado de Volume/Financeiro pra Mês Vigente pro Avanço Sond (ver
+`compute-balanco.js`, `realizadoDoAvancos`), `equipesRealizado` continua vindo só da
+coluna Realizado da MATRIZ -- que, igual às outras, só é preenchida depois que o mês
+fecha. Resultado: a barra de equipes desenha "sem dado" (não mais barra zero enganosa,
+mas ainda sem dado real) em Mês Vigente. Não existe rastreamento de equipes por furo no
+Avanço Sond -- a candidata mais próxima é a coluna "Sondador" (quem executou o furo), hoje
+não lida em lugar nenhum do projeto. O dono do projeto pediu explicitamente pra NÃO
+decidir agora ("guardar pra retomar depois") -- ele ainda não escolheu como contar
+"equipes" a partir do Avanço Sond. Uma opção levantada (ainda não confirmada por ele):
+contar Sondadores distintos ativos no mês, por (SUP, tipologia), como proxy de "quantas
+equipes trabalharam". Ao retomar, pergunte a ele antes de implementar -- não assuma essa
+opção como decidida.
+
 ## Estilo de trabalho
 
 Vale o mesmo do repositório principal: decidir e implementar sem parar para perguntar
