@@ -1,12 +1,14 @@
 'use strict';
 const { ORDEM_TIPOLOGIAS, SO_QUANDO_ACIONADA } = require('../comum/tipologias-avancos.js');
 const { chaveMatriz } = require('../comum/linha-base.js');
-const { diaEpoch } = require('../comum/datas.js');
+const { diaEpoch } = require('./compute-semanal.js');
 
 // Agrega os furos de parse-avancos.js em (tipologia, mês) x 5 séries, em
 // QUANTIDADE DE FUROS. Roda no BUILD, em Node -- o navegador recebe só o
-// agregado, já dentro do blob cifrado (ver render-semanal.js). Por isso o
-// require '../comum/' acima é seguro aqui: este módulo não entra no bundle.
+// agregado, já dentro do blob cifrado (ver render-semanal.js). O require
+// '../comum/linha-base.js' acima passa a viajar dentro do bundle a partir
+// da Task 8 -- ver docs/superpowers/plans/2026-07-31-semanal-atualizar-dados.md
+// e docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md.
 //
 // As 4 primeiras séries são FLUXOS (eventos datados, acumulam por soma
 // corrida). 'pendentes' é ESTOQUE: o saldo aberto no fim de cada mês. Somar
@@ -187,4 +189,26 @@ function reconciliarSups(furos, registros) {
   return { soNoAvancos, soNaMatriz, furosSemSupNaMatriz };
 }
 
-module.exports = { computeDemandas, reconciliarSups, SERIES, SERIE_ESTOQUE };
+// Furo/ensaio cuja combinação (sup, tipologia) não existe como registro na
+// MATRIZ não tem "onde" contar -- ficaria fora do Realizado/Demandas
+// Pendentes da Tabela Semanal em silêncio, mesmo sendo trabalho real. A
+// MATRIZ sempre tem um registro "Diversos" com Previsto próprio pra cada
+// uma das suas 10 tipologias -- SUP não cadastrado SEMPRE redireciona pra
+// Diversos, sem exceção, em vez de ser descartado. Função pura e agnóstica
+// ao tipo de item (funciona pra ensaios de laboratório E furos de
+// Sondagem/Avanços -- os dois só precisam de 'sup'/'tipologia'). Movida de
+// build-dashboard.js pra cá: usa chaveMatriz, que só é seguro chamar aqui
+// dentro (módulo dual Node/navegador) -- ver
+// docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md.
+function redirecionarSupsDesconhecidos(itens, registros) {
+  const chavesConhecidas = new Set(registros.map(r => chaveMatriz(r.sup, r.tipologia)));
+  let redirecionados = 0;
+  const saida = itens.map(item => {
+    if (chavesConhecidas.has(chaveMatriz(item.sup, item.tipologia))) return item;
+    redirecionados++;
+    return Object.assign({}, item, { sup: 'Diversos' });
+  });
+  return { itens: saida, redirecionados };
+}
+
+module.exports = { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, SERIES, SERIE_ESTOQUE };
