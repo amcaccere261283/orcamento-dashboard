@@ -15,8 +15,10 @@ const { excelSerialParaData } = require('../comum/datas.js');
 const { reconciliarLinhaBase } = require('../comum/linha-base.js');
 const config = require('../orcamento/config.js');
 const { parseAvancos } = require('./parse-avancos.js');
+const { parseLab } = require('./parse-lab.js');
 const { computeDemandas, reconciliarSups } = require('./compute-demandas.js');
 const configDemandas = require('./config-demandas.js');
+const configLab = require('./config-lab.js');
 
 // Mesmo logo/avatar do orçamento (tools/orcamento/build-dashboard.js) --
 // mesmos arquivos em assets/, mesma função de carregar, duplicada aqui de
@@ -90,7 +92,23 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
     throw new Error(`Não consegui ler a aba "${configDemandas.nomeAba}" de ${configDemandas.caminhoArquivo} (o Google Drive está montado em G:?). Erro original: ${err.message}`);
   }
   const { furos, descartadas, semDataTermino, cancelamentoIlegivel } = parseAvancos(gridAvancos);
-  const demandas = computeDemandas(furos, periodos);
+
+  // Quarta fonte desta página: ensaios de laboratório JÁ CONCLUÍDOS (aba
+  // "Lab Concluido", mesmo workbook de Avanços -- ver config-lab.js).
+  // Alimenta só Realizado/Tendência de LAB.C/LAB.E na Tabela Semanal, nunca
+  // a aba Demandas nem Demandas Pendentes (ver o comentário em
+  // computeDemandas, compute-demandas.js). Mesmo tratamento de erro de
+  // caminho que Avanços -- ver o comentário logo acima.
+  let gridLab;
+  try {
+    gridLab = readXlsxSheet(configLab.caminhoArquivo, configLab.nomeAba);
+  } catch (err) {
+    throw new Error(`Não consegui ler a aba "${configLab.nomeAba}" de ${configLab.caminhoArquivo} (o Google Drive está montado em G:?). Erro original: ${err.message}`);
+  }
+  const { ensaios, descartadas: ensaiosDescartados } = parseLab(gridLab);
+  console.log(`Lab: ${ensaios.length} ensaio(s) lido(s), ${ensaiosDescartados} linha(s) descartada(s) (lixo "TESTE" ou vazia).`);
+
+  const demandas = computeDemandas(furos, periodos, ensaios);
   console.log(`Demandas: ${furos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
 
   // Relatório dos DOIS lados do desencontro de SUP. Nada é descartado -- isto
