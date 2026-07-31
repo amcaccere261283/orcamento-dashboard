@@ -381,6 +381,7 @@ function recalcularSemanal() {
   var diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
   document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(
     window.__REGISTROS__, indices, dimensoes, window.__VIGENTE_IDX__,
+    2026, // ano temporário -- Tarefa 4 troca por window.__ANO__ real (emitido no build a partir de periodos[0])
     { demandas: window.__DEMANDAS__, diaDoMes: hoje.getDate(), diasNoMes: diasNoMes }
   );
   montarAbaBalanco(window.__REGISTROS__, indices);

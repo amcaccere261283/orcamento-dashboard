@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  dividirEmSemanas, fecharMes, SEMANAS, semanaAtual,
+  dividirEmSemanas, fecharMes,
   diaEpoch, semanasDoMes, indiceSemanaAtual,
 } = require('../tools/semanal/compute-semanal.js');
 
@@ -41,13 +41,6 @@ test('ida e volta fecha para as três dimensões, com 4 ou 5 semanas', () => {
         `dimensão ${dim} não fechou com ${numSemanas} semanas`);
     }
   }
-});
-
-test('SEMANAS/semanaAtual continuam em 4 fatias nominais -- obsoletos, mantidos só até a Tarefa 3 trocar render-aba-semanal.js pelo calendário real', () => {
-  assert.strictEqual(SEMANAS, 4);
-  assert.strictEqual(semanaAtual(1, 28), 1);
-  assert.strictEqual(semanaAtual(15, 28), 3);
-  assert.strictEqual(semanaAtual(28, 28), 4);
 });
 
 // --- Calendário ISO de semanas reais ---------------------------------------

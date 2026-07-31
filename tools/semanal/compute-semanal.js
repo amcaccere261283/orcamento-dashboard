@@ -1,8 +1,6 @@
 'use strict';
 
 // <<< INICIO CLIENTE
-var SEMANAS = 4;
-
 // Volume e financeiro são FLUXOS: o mês se reparte em N fatias nominais e a
 // soma delas reconstrói o mês. Equipes é uma FOTO: 2 equipes mobilizadas no
 // mês são 2 equipes em cada semana, não valorMensal/N -- dividir produziria
@@ -25,15 +23,6 @@ function fecharMes(semanas, dimensao) {
   if (!validos.length) return null;
   var soma = validos.reduce(function (a, b) { return a + b; }, 0);
   return dimensao === 'equipes' ? soma / validos.length : soma;
-}
-
-// OBSOLETO a partir do calendário ISO abaixo (ver
-// docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md) --
-// mantido só até a Tarefa 3 deste plano trocar render-aba-semanal.js pelas
-// semanas reais (semanasDoMes/indiceSemanaAtual). Não usar em código novo.
-function semanaAtual(diaDoMes, diasNoMes) {
-  var semana = Math.ceil(diaDoMes / (diasNoMes / SEMANAS));
-  return Math.min(SEMANAS, Math.max(1, semana));
 }
 
 // ============================================================
@@ -109,7 +98,4 @@ function indiceSemanaAtual(semanas, hojeEpoch) {
 }
 // FIM CLIENTE >>>
 
-module.exports = {
-  SEMANAS, dividirEmSemanas, fecharMes, semanaAtual,
-  diaEpoch, semanasDoMes, indiceSemanaAtual,
-};
+module.exports = { dividirEmSemanas, fecharMes, diaEpoch, semanasDoMes, indiceSemanaAtual };

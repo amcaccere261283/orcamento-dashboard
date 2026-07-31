@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 const { baselineParaCliente } = require('../tools/semanal/build-dashboard.js');
+const { diaEpoch } = require('../tools/comum/datas.js');
 
 // Os 12 meses da MATRIZ como datas -- em produção saem do cabeçalho da
 // planilha (build-dashboard.js); aqui basta o ano bater com o de geradoEm
@@ -131,8 +132,8 @@ test('toda classe linha-* da tabela semanal tem regra de CSS na página gerada',
   const html = renderSemanal({ registros: REGISTROS, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS, senha: 'fake', geradoEm: new Date(0) });
   const estilo = html.match(/<style>([\s\S]*?)<\/style>/)[1];
 
-  const demandas = { totais: { sondagemRealizada: new Array(12).fill(0), pendentes: new Array(12).fill(0) }, porRegistro: {} };
-  const tabela = renderAbaSemanal(REGISTROS, [0], ['volume'], 0, { demandas, diaDoMes: 1, diasNoMes: 28 });
+  const demandas = { porRegistroEventos: {} };
+  const tabela = renderAbaSemanal(REGISTROS, [0], ['volume'], 0, 1970, { demandas, hojeEpoch: diaEpoch(new Date(1970, 0, 15)) });
   const classes = [...new Set([...tabela.matchAll(/class="linha-serie-semanal (linha-[a-z-]+)"/g)].map(m => m[1]))];
   assert.deepStrictEqual(classes, ['linha-previsto', 'linha-realizado', 'linha-tendencia', 'linha-pendentes-demandas'], 'pré-condição: são estas as 4 séries da tabela hoje (com porRegistro presente ativando a linha de Pendentes)');
 

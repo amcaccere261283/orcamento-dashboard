@@ -1,5 +1,5 @@
 'use strict';
-const { SEMANAS, dividirEmSemanas, fecharMes, semanaAtual } = require('./compute-semanal.js');
+const { diaEpoch, semanasDoMes, indiceSemanaAtual, dividirEmSemanas, fecharMes } = require('./compute-semanal.js');
 
 // Rótulo de exibição de cada dimensão -- só as 3 que a barra de filtros da
 // semanal expõe (ver FILTROS_CONFIG_SEMANAL/DIMENSOES_CONFIG_SEMANAL em
@@ -40,7 +40,8 @@ function rotuloColunaFechamento(dimensao) {
 // somar equipes de CONTRATOS DIFERENTES no mesmo mês é válido (times
 // simultâneos se somam); o que NÃO se soma é equipes ao longo do TEMPO
 // (semanas), que é o que dividirEmSemanas/fecharMes tratam à parte. null só
-// quando NENHUM registro contribuinte tem valor no mês vigente.
+// quando NENHUM registro contribuinte tem valor no mês vigente -- inclusive
+// quando vigenteIdx está fora de [0,11] (mensal[vigenteIdx] é undefined).
 function previstoMesVigente(registros, indices, dimensao, vigenteIdx) {
   var soma = null;
   (indices || []).forEach(function (i) {
@@ -63,90 +64,83 @@ function chaveDemandas(sup, tipologia) {
   return sup + '||' + tipologia;
 }
 
-// Soma, através dos registros em 'indices', uma série de demandas.porRegistro
-// (Task 1, compute-demandas.js) no mês vigente -- mesmo padrão de
-// soma-através-de-registros que previstoMesVigente já usa, só que a fonte é
-// 'demandas' (Avanço Sond), não registro.previsto. Ausência de (sup,
-// tipologia) em porRegistro significa ZERO furos para aquele par -- não "sem
-// dado reportado" (null): o Avanço Sond é uma listagem completa de furos, uma
-// combinação ausente é uma contagem real de zero. null só quando 'indices'
-// está vazio (nenhum registro selecionado) -- mesma regra de
-// previstoMesVigente.
-//
-// Assume (sup, tipologia) único por registro selecionado -- se a MATRIZ um
-// dia tiver 2 linhas com a mesma combinação ambas somariam o mesmo balde de
-// porRegistro, dobrando o Realizado/Pendentes. Não verificado neste código;
-// parse-matriz.js documenta 3 linhas físicas por combinação hoje.
-//
-// Também assume que registro.tipologia (MATRIZ) é a mesma etiqueta que
-// chega em furo.tipologia (Avanços, já mapeada por rotularTipologia) -- só
-// as tipologias que a MATRIZ conhece aparecem aqui. Tipologias que só
-// existem nos Avanços (ex.: SEG.A/SEG.V, acionadas sob demanda) nunca
-// contribuem pra Realizado/Pendentes na Tabela Semanal -- mesmo escopo que
-// o Previsto já tem hoje, não é uma lacuna nova desta task.
-function demandasMesVigente(registros, indices, demandas, serie, vigenteIdx) {
-  if (!indices || !indices.length) return null;
-  // vigenteIdx pode vir fora do intervalo do ano da planilha (12 = ano
-  // inteiro no passado, -1 = ano inteiro no futuro -- calcularVigenteIdx em
-  // tools/comum/datas.js). Nesse caso não existe "mês vigente" real: sem
-  // este guard, entrada[serie][vigenteIdx] vira undefined pra TODO registro
-  // e "|| 0" transformaria isso num 0,00 real -- indistinguível de "mês
-  // vigente existe e teve zero furos". demandas.totais[serie] tem o mesmo
-  // comprimento de periodos (sempre presente, mesmo com porRegistro vazio),
-  // então serve de fonte confiável do tamanho do ano sem precisar de um
-  // parâmetro novo.
-  var totalSerie = demandas.totais && demandas.totais[serie];
-  if (!Array.isArray(totalSerie) || vigenteIdx < 0 || vigenteIdx >= totalSerie.length) return null;
-  var soma = 0;
-  indices.forEach(function (i) {
+// Soma, através dos registros em 'indices', quantos eventos de uma série de
+// porRegistroEventos (compute-demandas.js) caem em [inicioEpoch, fimEpoch]
+// (inclusive nos dois extremos). Ausência de (sup, tipologia) em
+// porRegistroEventos, ou nenhum evento no intervalo, conta 0 -- mesma
+// convenção "ausência = zero" de sempre (Avanço Sond é listagem completa).
+function contarEventosNoIntervalo(registros, indices, demandas, serie, inicioEpoch, fimEpoch) {
+  var total = 0;
+  (indices || []).forEach(function (i) {
     var registro = registros[i];
     if (!registro) return;
-    var entrada = demandas.porRegistro[chaveDemandas(registro.sup, registro.tipologia)];
-    if (entrada && Array.isArray(entrada[serie])) soma += (entrada[serie][vigenteIdx] || 0);
+    var entrada = demandas.porRegistroEventos[chaveDemandas(registro.sup, registro.tipologia)];
+    if (!entrada || !Array.isArray(entrada[serie])) return;
+    entrada[serie].forEach(function (dia) {
+      if (dia >= inicioEpoch && dia <= fimEpoch) total += 1;
+    });
   });
-  return soma;
+  return total;
 }
 
-// Tendência semanal (Volume): semanas já passadas (<= semanaAtualNum) usam o
-// Realizado nominal daquela semana; semanas futuras distribuem igualmente o
-// que falta pra bater o Previsto do mês -- ver "Semana atual e Tendência" no
-// spec (docs/superpowers/specs/2026-07-30-semanal-realizado-tendencia-balanco-visual-design.md).
-// Por construção, a soma das 4 semanas bate com previstoMes quando há
-// semana(s) futura(s) -- "mantido o resto do plano, o mês fecha como
-// planejado". null (as 4 semanas) quando previstoMes ou realizadoMes for
-// null.
-function calcularTendenciaSemanal(previstoMes, realizadoMes, semanasRealizado, semanaAtualNum) {
-  if (previstoMes === null || realizadoMes === null) return new Array(SEMANAS).fill(null);
-  var realizadoAteAgora = (realizadoMes / SEMANAS) * semanaAtualNum;
-  var semanasRestantes = SEMANAS - semanaAtualNum;
+// Saldo de furos em aberto na data 'dataEpoch' (inclusive), através dos
+// registros em 'indices': chegou até ali, e ainda não saiu do estoque até
+// ali. saidaEstoque já é o menor entre término e cancelamento, calculado
+// por furo em compute-demandas.js -- ver o comentário lá sobre por que não
+// dá pra subtrair as duas listas independentes.
+function pendentesNaData(registros, indices, demandas, dataEpoch) {
+  var total = 0;
+  (indices || []).forEach(function (i) {
+    var registro = registros[i];
+    if (!registro) return;
+    var entrada = demandas.porRegistroEventos[chaveDemandas(registro.sup, registro.tipologia)];
+    if (!entrada) return;
+    (entrada.chegada || []).forEach(function (dia) { if (dia <= dataEpoch) total += 1; });
+    (entrada.saidaEstoque || []).forEach(function (dia) { if (dia <= dataEpoch) total -= 1; });
+  });
+  return total;
+}
+
+// Tendência semanal (Volume): semanas já fechadas ou em curso usam o
+// Realizado REAL daquela semana (já é fato, não precisa projetar); semanas
+// futuras distribuem igualmente o que falta pra bater o Previsto do mês.
+// Quando o Realizado até agora já bateu ou passou o Previsto (saldo <= 0),
+// as semanas futuras continuam no mesmo ritmo médio já realizado em vez de
+// projetar um valor negativo. indiceAtual === -1 (nenhuma semana do mês
+// começou ainda -- dias de fronteira entre meses) conta como "nenhuma
+// semana elapsada": todas as semanas do mês são futuras, e a Tendência
+// mostra previstoMes/numSemanas igualmente em todas.
+function calcularTendenciaSemanal(previstoMes, semanasRealizado, indiceAtual) {
+  var numSemanas = semanasRealizado.length;
+  if (previstoMes === null) return semanasRealizado.map(function () { return null; });
+
+  var semanasElapsadas = indiceAtual + 1; // 0 quando indiceAtual === -1
+  var realizadoAteAgora = 0;
+  for (var s = 0; s < semanasElapsadas; s++) realizadoAteAgora += semanasRealizado[s];
+
+  var semanasFuturas = numSemanas - semanasElapsadas;
   var saldoRestante = previstoMes - realizadoAteAgora;
-  // Realizado já bateu (ou passou) o Previsto do mês até a semana atual:
-  // saldoRestante fica <= 0, e dividir isso pelas semanas futuras projetaria
-  // furos NEGATIVOS -- sem sentido. Nesse caso a Tendência passa a seguir o
-  // mesmo ritmo já realizado (realizadoMes/SEMANAS) em vez do saldo, então o
-  // mês fecha em realizadoMes (o que já foi feito), não seria coerente
-  // fechar em algo menor que o já realizado.
-  var tendenciaFutura = semanasRestantes > 0
-    ? (saldoRestante > 0 ? saldoRestante / semanasRestantes : realizadoMes / SEMANAS)
+  var ritmoRealizado = semanasElapsadas > 0 ? realizadoAteAgora / semanasElapsadas : previstoMes / numSemanas;
+  var tendenciaFutura = semanasFuturas > 0
+    ? (saldoRestante > 0 ? saldoRestante / semanasFuturas : ritmoRealizado)
     : 0;
+
   var saida = [];
-  for (var s = 1; s <= SEMANAS; s++) {
-    saida.push(s <= semanaAtualNum ? semanasRealizado[s - 1] : tendenciaFutura);
+  for (var i = 0; i < numSemanas; i++) {
+    saida.push(i < semanasElapsadas ? semanasRealizado[i] : tendenciaFutura);
   }
   return saida;
 }
 
-function renderCabecalho(dimensao) {
+function renderCabecalho(dimensao, numSemanas) {
   var colunasSemana = '';
-  for (var i = 1; i <= SEMANAS; i++) colunasSemana += '<th>S' + i + '</th>';
+  for (var i = 1; i <= numSemanas; i++) colunasSemana += '<th>S' + i + '</th>';
   return '<thead><tr><th></th>' + colunasSemana + '<th>' + escapeHtml(rotuloColunaFechamento(dimensao)) + '</th></tr></thead>';
 }
 
-// 'semanas' são os 4 valores por semana (ou null); 'fechamento' é o valor já
+// 'semanas' são os N valores por semana (ou null); 'fechamento' é o valor já
 // fechado (fecharMes) pra a coluna final. null em qualquer um vira a classe
-// sem-dado -- Realizado e Tendência ainda não têm planilha semanal de
-// origem (ver comentário no topo de renderAbaSemanal), então SEMPRE chegam
-// nulos aqui; não é um caso de erro, é o estado normal de hoje.
+// sem-dado.
 function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento) {
   var celulasSemana = semanas.map(function (v) {
     if (v === null || v === undefined) return '<td class="num sem-dado"></td>';
@@ -160,28 +154,39 @@ function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento) {
     + celulasSemana + celulaFechamento + '</tr>';
 }
 
-// registros/indices/dimensoes/vigenteIdx: mesmos parâmetros de sempre (ver
-// comentário original abaixo). 'realizado' é um 5º parâmetro OPCIONAL --
-// { demandas, diaDoMes, diasNoMes } -- que ativa Realizado/Tendência/
-// Demandas Pendentes só no bloco Volume, quando demandas.porRegistro existe
-// (Task 1). Omitido, ou com porRegistro ausente/vazio, o HTML produzido é
-// IDÊNTICO ao de antes desta tarefa -- nenhuma chamada existente precisa
-// mudar.
+// registros/indices/dimensoes/vigenteIdx: mesmos parâmetros de sempre. 'ano'
+// (novo, obrigatório) é o ano civil da planilha (periodos[0].getUTCFullYear())
+// -- necessário pra semanasDoMes saber quantas semanas (4 ou 5) o mês
+// vigente tem, mesmo quando 'realizado' não é passado (Previsto/Equipes/
+// Financeiro precisam da contagem certa de colunas independente de haver
+// dado de demandas). 'realizado' é um 6º parâmetro OPCIONAL --
+// { demandas, hojeEpoch } -- que ativa Realizado/Tendência/Demandas
+// Pendentes no bloco Volume quando demandas.porRegistroEventos existe
+// (Tarefa 2) e hojeEpoch é um número (dia-desde-época de "hoje", calculado
+// pelo relógio de quem está vendo a página -- render-semanal.js calcula
+// com diaEpoch(new Date(...)) a cada recálculo; esta função nunca chama
+// new Date() internamente, fica pura e testável em Node com qualquer
+// combinação).
 //
-// Previsto vem de dividirEmSemanas aplicado à soma do Previsto do mês
-// vigente através dos registros selecionados. diaDoMes/diasNoMes vêm do
-// relógio de quem está vendo a página (render-semanal.js calcula com
-// `new Date()` a cada recálculo) -- esta função nunca chama new Date()
-// internamente, fica pura e testável em Node com qualquer combinação.
-function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, realizado) {
+// Duas coisas continuam válidas mesmo sem mês vigente válido (vigenteIdx
+// fora de [0,11] -- ano inteiro no passado/futuro): a linha Demandas
+// Pendentes ainda aparece (com as 4 semanas de fallback sem-dado, mas o
+// fechamento mostra o saldo de hoje calculado direto) -- "quantas demandas
+// estão pendentes agora" não depende de qual mês a tabela está exibindo.
+function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realizado) {
   var opts = realizado || {};
-  var temDadosDemandas = !!(opts.demandas && opts.demandas.porRegistro && opts.diaDoMes && opts.diasNoMes);
+  var mesValido = vigenteIdx >= 0 && vigenteIdx <= 11;
+  var semanas = mesValido ? semanasDoMes(ano, vigenteIdx) : [];
+  var numSemanas = mesValido ? semanas.length : 4;
+  var temDemandas = !!(opts.demandas && opts.demandas.porRegistroEventos && typeof opts.hojeEpoch === 'number');
+  var temSemanasReais = mesValido && temDemandas;
+  var indiceAtual = temSemanasReais ? indiceSemanaAtual(semanas, opts.hojeEpoch) : -1;
 
   return dimensoes.map(function (dimensao) {
     var mesVigente = previstoMesVigente(registros, indices, dimensao, vigenteIdx);
-    var semanasPrevisto = dividirEmSemanas(mesVigente, dimensao, SEMANAS); // ponte temporária -- Tarefa 3 troca por numSemanas real
+    var semanasPrevisto = dividirEmSemanas(mesVigente, dimensao, numSemanas);
     var fechamentoPrevisto = fecharMes(semanasPrevisto, dimensao);
-    var semanasSemDado = new Array(SEMANAS).fill(null);
+    var semanasSemDado = new Array(numSemanas).fill(null);
 
     var semanasRealizado = semanasSemDado;
     var fechamentoRealizado = null;
@@ -189,23 +194,38 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, realizado) 
     var fechamentoTendencia = null;
     var linhaPendentes = '';
 
-    if (dimensao === 'volume' && temDadosDemandas) {
-      var realizadoMes = demandasMesVigente(registros, indices, opts.demandas, 'sondagemRealizada', vigenteIdx);
-      semanasRealizado = dividirEmSemanas(realizadoMes, 'volume', SEMANAS); // ponte temporária -- Tarefa 3 troca por numSemanas real
-      fechamentoRealizado = fecharMes(semanasRealizado, 'volume');
+    if (dimensao === 'volume' && temDemandas) {
+      if (temSemanasReais) {
+        semanasRealizado = semanas.map(function (semana, i) {
+          if (i === indiceAtual) return contarEventosNoIntervalo(registros, indices, opts.demandas, 'sondagemRealizada', semana.inicio, opts.hojeEpoch);
+          if (semana.fim < opts.hojeEpoch) return contarEventosNoIntervalo(registros, indices, opts.demandas, 'sondagemRealizada', semana.inicio, semana.fim);
+          return 0; // semana futura -- nada aconteceu ainda
+        });
+        fechamentoRealizado = fecharMes(semanasRealizado, 'volume');
 
-      var semanaAtualNum = semanaAtual(opts.diaDoMes, opts.diasNoMes);
-      semanasTendencia = calcularTendenciaSemanal(mesVigente, realizadoMes, semanasRealizado, semanaAtualNum);
-      fechamentoTendencia = fecharMes(semanasTendencia, 'volume');
+        semanasTendencia = calcularTendenciaSemanal(mesVigente, semanasRealizado, indiceAtual);
+        fechamentoTendencia = fecharMes(semanasTendencia, 'volume');
+      }
 
-      var pendentesMes = demandasMesVigente(registros, indices, opts.demandas, 'pendentes', vigenteIdx);
-      linhaPendentes = renderLinhaSerie('Demandas Pendentes', 'pendentes-demandas', semanasSemDado, pendentesMes);
+      var semanasPendentes = temSemanasReais
+        ? semanas.map(function (semana, i) {
+            if (i === indiceAtual) return pendentesNaData(registros, indices, opts.demandas, opts.hojeEpoch);
+            if (semana.fim < opts.hojeEpoch) return pendentesNaData(registros, indices, opts.demandas, semana.fim);
+            return null; // semana futura -- sem-dado, não projeta estoque futuro
+          })
+        : semanasSemDado;
+      // Fechamento SEMPRE o saldo de hoje, calculado direto e independente
+      // da quebra semanal -- "quantas demandas estão pendentes agora" não
+      // depende de qual das N semanas está em curso, nem de haver semana
+      // válida nenhuma.
+      var fechamentoPendentes = pendentesNaData(registros, indices, opts.demandas, opts.hojeEpoch);
+      linhaPendentes = renderLinhaSerie('Demandas Pendentes', 'pendentes-demandas', semanasPendentes, fechamentoPendentes);
     }
 
     return '<div class="bloco-dimensao-semanal">'
       + '<div class="tabela-semanal-titulo">' + escapeHtml(DIMENSOES_ROTULO_SEMANAL[dimensao] || dimensao) + '</div>'
       + '<table class="tabela-semanal">'
-      + renderCabecalho(dimensao)
+      + renderCabecalho(dimensao, numSemanas)
       + '<tbody>'
       + renderLinhaSerie('Previsto', 'previsto', semanasPrevisto, fechamentoPrevisto)
       + renderLinhaSerie('Realizado', 'realizado', semanasRealizado, fechamentoRealizado)
