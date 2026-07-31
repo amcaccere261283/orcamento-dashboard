@@ -90,4 +90,4 @@ function parseLab(grid) {
   return { ensaios, descartadas };
 }
 
-module.exports = { parseLab, locateColunasLab };
+module.exports = { parseLab, locateColunasLab, SERIAL_MIN, SERIAL_MAX };

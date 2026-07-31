@@ -1,13 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseLab, locateColunasLab } = require('../tools/semanal/parse-lab.js');
-const { SERIAL_MIN, SERIAL_MAX } = (() => {
-  // parse-lab.js não exporta as constantes de sanidade (não são
-  // consumidas fora do módulo) -- os mesmos valores de parse-avancos.js,
-  // repetidos aqui só pra escrever os testes de fronteira.
-  return { SERIAL_MIN: 44927, SERIAL_MAX: 46388 };
-})();
+const { parseLab, locateColunasLab, SERIAL_MIN, SERIAL_MAX } = require('../tools/semanal/parse-lab.js');
 
 // A grade que readXlsxSheet devolve é indexada pelo número de linha do Excel
 // (grid[1] é o cabeçalho) e por índice de coluna 0-based.
