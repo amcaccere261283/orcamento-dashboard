@@ -191,13 +191,20 @@ test('na página gerada, a base "Previsto Inicial" só marca "sem base" no SUP q
   assert.strictEqual(sandbox.__BASELINE__[0].chave, `${SUP_MATRIZ}||${TIPOLOGIA_MATRIZ}`);
   assert.ok(Array.isArray(sandbox.__REGISTROS__), 'window.__REGISTROS__ tem que continuar sendo só o array de registros, não o embrulho {registros, baseline}');
 
-  // Troca o seletor de base para "Previsto Inicial" -- o mesmo listener que
-  // montarAbaBalanco religa a cada redesenho.
+  // Troca o período pra "Acumulado até o mês" e a base pra "Previsto
+  // Inicial" -- os mesmos listeners que montarAbaBalanco religa a cada
+  // redesenho (cada troca recria os controles; por isso o 2º getElementById
+  // busca a referência FRESCA, depois da 1ª redesenhada). Este teste é sobre
+  // a costura de linha de base, não sobre a fonte do Realizado (achado de
+  // 2026-08-01: Mês Vigente passou a usar o Avanço Sond, ver
+  // compute-balanco.js) -- Acumulado até o mês continua na coluna Realizado
+  // da MATRIZ, mesma lógica que a fixture sintética abaixo já pressupõe.
+  documentoFalso.getElementById('balanco-periodo').listeners.change({ target: { value: 'acumuladoAteMes' } });
   documentoFalso.getElementById('balanco-base').listeners.change({ target: { value: 'previstoInicial' } });
 
   const svg = documentoFalso.getElementById('secao-balanco').innerHTML;
   const esperado = renderAbaBalanco(registros, [0, 1, 2], {
-    periodo: 'mesVigente', base: 'previstoInicial', dimensao: 'financeiro', somenteAtivos: true,
+    periodo: 'acumuladoAteMes', base: 'previstoInicial', dimensao: 'financeiro', somenteAtivos: true,
     vigenteIdx: VIGENTE_IDX, baseline,
   });
   assert.equal(svg, esperado, 'a aba redesenhada com base "Previsto Inicial" precisa bater com renderAbaBalanco -- prova que window.__BASELINE__ chegou lá dentro com o conteúdo certo');

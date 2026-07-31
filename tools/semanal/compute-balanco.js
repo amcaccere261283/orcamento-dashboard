@@ -1,5 +1,6 @@
 'use strict';
 const { mediaEquipesPonderada } = require('../comum/calculo-equipes.js');
+const { diaEpoch } = require('./compute-semanal.js');
 
 // Este módulo roda tanto no Node (testes) quanto embrulhado no navegador via
 // buildBrowserBundle -- por isso 'var'/'function', não 'const'/arrow (ver o
@@ -96,13 +97,81 @@ function ehPositivo(v) {
   return typeof v === 'number' && v > 0;
 }
 
-// { registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline }
-// -> uma linha por SUP presente em 'indices' cuja tipologia bate com
-// 'tipologia'. A grade de origem é densa (todo SUP tem linha em toda
-// tipologia, a maioria zerada) -- por isso NÃO existe agrupamento por SUP
-// aqui: cada (SUP, tipologia) já é um registro só na MATRIZ.
-function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline }) {
+// Mesma chave de demandas.porRegistroEventos (chaveMatriz, tools/comum/
+// linha-base.js) -- MESMA expressão de chaveBaseline acima, duplicada de
+// propósito (mesmo motivo já documentado ali: este módulo roda no bundle
+// do navegador e '../comum/...' é removido, não resolvido).
+function chaveDemandas(sup, tipologia) {
+  return sup + '||' + tipologia;
+}
+
+// TICKET médio (R$ por furo) do registro -- mesma premissa/mesma leitura
+// que ticketMedio em render-aba-semanal.js (a MESMA usada pro Previsto de
+// Financeiro no orçamento). Registro sem TICKET cadastrado conta 0.
+function ticketMedio(registro) {
+  return (registro && registro.previsto && registro.previsto.volumeResumo && registro.previsto.volumeResumo.ticket) || 0;
+}
+
+// Converte um intervalo de ÍNDICES de mês (ver periodoParaIntervalo, [inicio,
+// fim) meio-aberto) num intervalo em dia-desde-época (mesma unidade dos
+// eventos de porRegistroEventos, ver compute-demandas.js) -- 1º dia do mês
+// 'inicio' até o último dia do mês 'fim - 1'. `Date.UTC(ano, fim, 0)` é o
+// último dia do mês anterior a 'fim' (dia 0 rola pro mês de trás), o mesmo
+// truque que fimDoMes usa em compute-demandas.js. null quando não há
+// intervalo (ver periodoParaIntervalo) -- nunca reconstrói Date sem UTC
+// (mesma convenção do resto do projeto, ver compute-semanal.js).
+function intervaloParaEpoch(ano, intervalo) {
+  if (!intervalo) return null;
+  return {
+    inicio: diaEpoch(new Date(Date.UTC(ano, intervalo.inicio, 1))),
+    fim: diaEpoch(new Date(Date.UTC(ano, intervalo.fim, 0))),
+  };
+}
+
+// Realizado calculado a partir dos furos reais do Avanço Sond (mesma fonte
+// e mesmo evento -- sondagemRealizada -- que a Tabela Semanal usa), pesado
+// por 'peso' (1 pra volume, ticketMedio(registro) pra financeiro -- mesmo
+// pesoPorRegistro de contarEventosNoIntervalo em render-aba-semanal.js).
+// SEMPRE devolve um número, nunca null: ausência de (sup,tipologia) em
+// porRegistroEventos, ou nenhum evento no intervalo, é uma contagem real de
+// zero (Avanço Sond é listagem completa -- mesma convenção "ausência =
+// zero" de sempre), não "sem dado". É essa garantia que resolve o achado de
+// 2026-08-01: a coluna Realizado da MATRIZ só é preenchida depois que o mês
+// fecha (confirmado nos dados reais: TODOS os registros com Previsto em
+// julho, o mês vigente à época, tinham Realizado da MATRIZ nulo -- nenhuma
+// barra aparecia pra ninguém), então Mês Vigente precisa de uma fonte que
+// já existe em tempo real -- os furos concluídos, que a Tabela Semanal já
+// lê da mesma forma.
+function realizadoDoAvancos(demandas, sup, tipologia, intervaloEpoch, peso) {
+  var porRegistroEventos = (demandas && demandas.porRegistroEventos) || {};
+  var entrada = porRegistroEventos[chaveDemandas(sup, tipologia)];
+  var eventos = (entrada && entrada.sondagemRealizada) || [];
+  var contagem = 0;
+  for (var i = 0; i < eventos.length; i++) {
+    if (eventos[i] >= intervaloEpoch.inicio && eventos[i] <= intervaloEpoch.fim) contagem++;
+  }
+  return contagem * peso;
+}
+
+// { registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline,
+//   demandas, ano } -> uma linha por SUP presente em 'indices' cuja
+// tipologia bate com 'tipologia'. A grade de origem é densa (todo SUP tem
+// linha em toda tipologia, a maioria zerada) -- por isso NÃO existe
+// agrupamento por SUP aqui: cada (SUP, tipologia) já é um registro só na
+// MATRIZ.
+//
+// 'demandas' (opcional, achado de 2026-08-01) e 'ano' (obrigatório junto
+// com 'demandas') ativam o Realizado calculado do Avanço Sond -- SÓ pra
+// periodo === 'mesVigente', a pedido explícito do dono do projeto
+// ("usar o dado da planilha avanço sond somente para Mês Vigente");
+// Acumulado até o mês continua lendo a coluna Realizado da própria MATRIZ,
+// sem mudança. Sem 'demandas' (chamador não passou, ou 'ano' ausente),
+// cai no comportamento de sempre (coluna da MATRIZ) -- retrocompatível com
+// quem ainda não tem 'demandas' à mão.
+function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline, demandas, ano }) {
   var intervalo = periodoParaIntervalo(periodo, vigenteIdx);
+  var intervaloEpoch = periodo === 'mesVigente' && typeof ano === 'number' ? intervaloParaEpoch(ano, intervalo) : null;
+  var usarAvancosNoRealizado = periodo === 'mesVigente' && !!demandas && !!intervaloEpoch;
   var linhas = [];
 
   (indices || []).forEach(function (i) {
@@ -113,11 +182,18 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
     var mensalRealizado = registro.realizado && registro.realizado[dimensao];
 
     var previstoPeriodo = somarIntervalo(mensalPrevisto, intervalo);
-    var realizadoPeriodo = somarIntervalo(mensalRealizado, intervalo);
+    var realizadoPeriodo;
+    if (usarAvancosNoRealizado) {
+      var peso = dimensao === 'financeiro' ? ticketMedio(registro) : 1;
+      realizadoPeriodo = realizadoDoAvancos(demandas, registro.sup, tipologia, intervaloEpoch, peso);
+    } else {
+      realizadoPeriodo = somarIntervalo(mensalRealizado, intervalo);
+    }
 
-    // Atividade é por (SUP, tipologia), sempre sobre Previsto/Realizado da
-    // MATRIZ (nunca sobre a base escolhida) -- é o que faz o gráfico mostrar
-    // só as linhas com movimento de verdade, em vez de 34 SUPs com barra de
+    // Atividade é por (SUP, tipologia) -- sobre Previsto da MATRIZ sempre, e
+    // sobre Realizado da MATRIZ OU do Avanços (o que estiver em uso acima),
+    // nunca sobre a base escolhida. É o que faz o gráfico mostrar só as
+    // linhas com movimento de verdade, em vez de 34 SUPs com barra de
     // comprimento zero. As colunas inicio/termino do registro (janela
     // contratual) NÃO servem pra isso, não dizem se houve movimento nesta
     // tipologia especificamente.

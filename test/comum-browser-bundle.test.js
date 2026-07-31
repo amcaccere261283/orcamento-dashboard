@@ -119,7 +119,11 @@ test('compute-balanco.js bundlado + fonteParaCliente() resolve mediaEquipesPonde
   const { buildBrowserBundle: buildReal } = require('../tools/comum/browser-bundle.js');
   const dirSemanal = path.join(__dirname, '..', 'tools', 'semanal');
 
-  const bundle = buildReal(dirSemanal, ['compute-balanco.js']);
+  // compute-semanal.js precisa entrar no bundle ANTES: compute-balanco.js
+  // agora também consome diaEpoch de lá (achado de 2026-08-01, Realizado do
+  // Avanço Sond em Mês Vigente) -- mesma ordem de dependência que
+  // BUNDLE_ARQUIVOS usa em render-semanal.js.
+  const bundle = buildReal(dirSemanal, ['compute-semanal.js', 'compute-balanco.js']);
   assert.doesNotMatch(bundle, /require\(/, 'compute-balanco.js bundlado não pode deixar nenhum require sobrando');
 
   const scriptDeNavegador = `

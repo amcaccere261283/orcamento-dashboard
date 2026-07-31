@@ -169,6 +169,11 @@ const CSS_DEMANDAS = `
 // buildBrowserBundle não resolve isso sozinho (ver o comentário no topo dele).
 // Mesma regra para o par da Task 10: render-aba-balanco.js consome
 // compute-balanco.js (require('./compute-balanco.js')), então vem depois.
+// compute-balanco.js, por sua vez, TAMBÉM consome compute-semanal.js
+// (diaEpoch, achado de 2026-08-01 -- Realizado do Avanço Sond em Mês
+// Vigente precisa converter índice de mês pra dia-desde-época) -- por isso
+// 'compute-semanal.js' precisa continuar vindo ANTES de 'compute-balanco.js'
+// na lista abaixo, não só antes de 'render-aba-semanal.js'.
 //
 // compute-balanco.js TAMBÉM consome tools/comum/calculo-equipes.js
 // (mediaEquipesPonderada), um require '../' que o bundle REMOVE em vez de
@@ -321,6 +326,8 @@ function montarAbaBalanco(registros, indices) {
     somenteAtivos: ESTADO_BALANCO.somenteAtivos,
     vigenteIdx: window.__VIGENTE_IDX__,
     baseline: window.__BASELINE__,
+    demandas: window.__DEMANDAS__,
+    ano: window.__ANO__,
   });
 
   document.getElementById('balanco-periodo').addEventListener('change', function (e) {

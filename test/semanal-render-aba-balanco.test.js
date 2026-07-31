@@ -55,6 +55,39 @@ test('base Previsto em branco: o gráfico rotula "sem base", não desenha barra 
   assert.doesNotMatch(svg, /class="barra-abaixo"/);
 });
 
+// Mesmo cuidado de "sem base", pro outro lado do desvio: havia Previsto,
+// mas o Realizado ainda não existe (achado de 2026-08-01 -- a coluna
+// Realizado da MATRIZ só é preenchida depois que o mês fecha, então
+// Acumulado até o mês pode legitimamente ficar "sem dado" nalgum SUP; Mês
+// Vigente não cai mais aqui, ver realizadoDoAvancos em compute-balanco.js).
+// "Realizado não lançado" e "bateu a base certinho" (desvio 0) apareceriam
+// idênticos se ambos virassem barra de comprimento zero.
+test('valorRealizado sem dado (desvio null, mas COM base): rotula "Realizado não lançado", não desenha barra de comprimento zero', () => {
+  const linha = { sup: 'SUP-D', valorBase: 100, valorRealizado: null, desvio: null, equipesBase: null, equipesRealizado: null, desvioEquipes: null, ativo: true, semBase: false };
+  const svg = renderGraficoTipologia('ST', [linha], {});
+  assert.match(svg, /Realizado não lançado/i);
+  assert.doesNotMatch(svg, /class="barra-acima"/);
+  assert.doesNotMatch(svg, /class="barra-abaixo"/);
+  // A base (100) ainda é informação real -- diferente de "sem base", ela
+  // continua aparecendo mesmo sem Realizado.
+  assert.match(svg, />100</);
+});
+
+test('desvioEquipes sem dado (null) não desenha a barra de equipes, mas não impede a barra principal (desvio) de aparecer', () => {
+  const linha = { sup: 'SUP-E', valorBase: 100, valorRealizado: 150, desvio: 50, equipesBase: null, equipesRealizado: null, desvioEquipes: null, ativo: true, semBase: false };
+  const svg = renderGraficoTipologia('ST', [linha], {});
+  assert.match(svg, /class="barra-acima"/, 'o desvio principal tem valor -- a barra precisa aparecer mesmo sem dado de equipes');
+  assert.doesNotMatch(svg, /class="barra-equipes"/, 'sem equipesBase/equipesRealizado não há o que desenhar -- nunca uma barra de comprimento zero');
+  assert.doesNotMatch(svg, /eq\.</, 'nenhum rótulo "0,0 eq." -- isso pareceria um desvio real de equipes igual a zero');
+});
+
+test('com valorRealizado E desvioEquipes ambos presentes, as duas barras aparecem juntas (comportamento de sempre)', () => {
+  const linha = { sup: 'SUP-F', valorBase: 100, valorRealizado: 150, desvio: 50, equipesBase: 2, equipesRealizado: 3, desvioEquipes: 1, ativo: true, semBase: false };
+  const svg = renderGraficoTipologia('ST', [linha], {});
+  assert.match(svg, /class="barra-acima"/);
+  assert.match(svg, /class="barra-equipes"/);
+});
+
 test('com o filtro de ativos ligado, inativos não são desenhados', () => {
   const linhas = LINHAS.concat([{ sup: 'SUP-Z', desvio: 0, ativo: false, semBase: false, valorBase: 0, valorRealizado: 0, desvioEquipes: 0 }]);
   assert.doesNotMatch(renderGraficoTipologia('ST', linhas, { somenteAtivos: true }), /SUP-Z/);

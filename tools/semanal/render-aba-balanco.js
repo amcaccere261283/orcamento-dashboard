@@ -152,35 +152,54 @@ function renderGraficoTipologia(tipologia, linhas, opcoes) {
       return;
     }
 
-    var desvio = linha.desvio || 0;
-    var comprimento = escalaValor(desvio);
-    var paraDireita = desvio >= 0;
-    var classeCor = paraDireita ? 'barra-acima' : 'barra-abaixo';
-    var cor = paraDireita ? COR_ACIMA : COR_ABAIXO;
-    var xBarra = paraDireita ? CENTRO_X : CENTRO_X - comprimento;
-
-    svg += '<rect class="' + classeCor + '" x="' + xBarra + '" y="' + (y - 9) + '" width="' + comprimento + '" height="18" fill="' + cor + '"></rect>';
-
-    var desvioEq = linha.desvioEquipes || 0;
-    var comprimentoEq = escalaEquipes(desvioEq);
-    var paraDireitaEq = desvioEq >= 0;
-    var xEq = paraDireitaEq ? CENTRO_X : CENTRO_X - comprimentoEq;
-
-    svg += '<rect class="barra-equipes" x="' + xEq + '" y="' + (y - 5) + '" width="' + comprimentoEq + '" height="10" fill="url(#' + patternId + ')" stroke="' + COR_EQUIPES + '" stroke-width="0.5"></rect>';
-
-    // Rótulo da base, junto à linha central.
+    // Rótulo da base, junto à linha central -- sempre aparece a partir daqui
+    // (linha.semBase já teria retornado acima; valorBase existe).
     svg += '<text x="' + CENTRO_X + '" y="' + (y - 12) + '" text-anchor="middle" fill="' + COR_TEXTO_SECUNDARIO + '" font-size="10">' + formatarNumero(linha.valorBase, 0) + '</text>';
 
-    // Rótulo do realizado, na ponta da barra.
-    var xPonta = paraDireita ? (CENTRO_X + comprimento + 6) : (CENTRO_X - comprimento - 6);
-    var ancoraPonta = paraDireita ? 'start' : 'end';
-    svg += '<text x="' + xPonta + '" y="' + (y + 4) + '" text-anchor="' + ancoraPonta + '" fill="' + COR_TEXTO + '" font-size="11" font-weight="600">' + formatarNumero(linha.valorRealizado, 0) + '</text>';
+    if (linha.desvio === null) {
+      // Mesmo cuidado que "sem base" (linha.semBase acima), mas pro outro
+      // lado do desvio: havia base, mas o Realizado ainda não existe --
+      // "não lançado" e "bateu exatamente a base" são coisas opostas que
+      // apareceriam idênticas se ambas virassem uma barra de comprimento
+      // zero. Acontece pra Acumulado até o mês quando a coluna Realizado da
+      // MATRIZ está em branco pro período (achado de 2026-08-01; Mês
+      // Vigente não cai mais aqui, ver realizadoDoAvancos em
+      // compute-balanco.js -- furos reais nunca são "sem dado", só zero).
+      svg += '<text x="' + CENTRO_X + '" y="' + (y + 4) + '" text-anchor="middle" fill="' + COR_TEXTO_SECUNDARIO + '" font-size="11" font-style="italic">Realizado não lançado</text>';
+    } else {
+      var desvio = linha.desvio;
+      var comprimento = escalaValor(desvio);
+      var paraDireita = desvio >= 0;
+      var classeCor = paraDireita ? 'barra-acima' : 'barra-abaixo';
+      var cor = paraDireita ? COR_ACIMA : COR_ABAIXO;
+      var xBarra = paraDireita ? CENTRO_X : CENTRO_X - comprimento;
 
-    // Rótulo das equipes, em laranja, na ponta da barra de equipes.
-    var xPontaEq = paraDireitaEq ? (CENTRO_X + comprimentoEq + 6) : (CENTRO_X - comprimentoEq - 6);
-    var ancoraEq = paraDireitaEq ? 'start' : 'end';
-    var sinalEq = desvioEq > 0 ? '+' : '';
-    svg += '<text x="' + xPontaEq + '" y="' + (y + 15) + '" text-anchor="' + ancoraEq + '" fill="' + COR_EQUIPES + '" font-size="10">' + sinalEq + formatarNumero(desvioEq, 1) + ' eq.</text>';
+      svg += '<rect class="' + classeCor + '" x="' + xBarra + '" y="' + (y - 9) + '" width="' + comprimento + '" height="18" fill="' + cor + '"></rect>';
+
+      // Rótulo do realizado, na ponta da barra.
+      var xPonta = paraDireita ? (CENTRO_X + comprimento + 6) : (CENTRO_X - comprimento - 6);
+      var ancoraPonta = paraDireita ? 'start' : 'end';
+      svg += '<text x="' + xPonta + '" y="' + (y + 4) + '" text-anchor="' + ancoraPonta + '" fill="' + COR_TEXTO + '" font-size="11" font-weight="600">' + formatarNumero(linha.valorRealizado, 0) + '</text>';
+    }
+
+    // Barra de equipes: SEMPRE lida da MATRIZ (Avanço Sond não rastreia
+    // equipes por furo -- ver compute-balanco.js), então pode ficar "sem
+    // dado" mesmo quando o desvio principal (acima) já tem valor. Mesmo
+    // cuidado: null não vira barra de comprimento zero, só não desenha.
+    if (linha.desvioEquipes !== null) {
+      var desvioEq = linha.desvioEquipes;
+      var comprimentoEq = escalaEquipes(desvioEq);
+      var paraDireitaEq = desvioEq >= 0;
+      var xEq = paraDireitaEq ? CENTRO_X : CENTRO_X - comprimentoEq;
+
+      svg += '<rect class="barra-equipes" x="' + xEq + '" y="' + (y - 5) + '" width="' + comprimentoEq + '" height="10" fill="url(#' + patternId + ')" stroke="' + COR_EQUIPES + '" stroke-width="0.5"></rect>';
+
+      // Rótulo das equipes, em laranja, na ponta da barra de equipes.
+      var xPontaEq = paraDireitaEq ? (CENTRO_X + comprimentoEq + 6) : (CENTRO_X - comprimentoEq - 6);
+      var ancoraEq = paraDireitaEq ? 'start' : 'end';
+      var sinalEq = desvioEq > 0 ? '+' : '';
+      svg += '<text x="' + xPontaEq + '" y="' + (y + 15) + '" text-anchor="' + ancoraEq + '" fill="' + COR_EQUIPES + '" font-size="10">' + sinalEq + formatarNumero(desvioEq, 1) + ' eq.</text>';
+    }
   });
 
   svg += '</svg>';
@@ -245,9 +264,12 @@ function renderControles(estado) {
 // tipologia presente em 'indices'. registros/indices: mesmo par que o resto
 // do projeto usa (registros: array completo da MATRIZ; indices: quais
 // entram). opcoes: { periodo, base, dimensao, somenteAtivos, vigenteIdx,
-// baseline } -- os 4 primeiros têm default (mesmos da aba: mês vigente,
-// Previsto, financeiro, somente ativos ligado); vigenteIdx e baseline não
-// têm default sensato e vêm de quem chama (render-semanal.js).
+// baseline, demandas, ano } -- os 4 primeiros têm default (mesmos da aba:
+// mês vigente, Previsto, financeiro, somente ativos ligado); vigenteIdx e
+// baseline não têm default sensato e vêm de quem chama (render-semanal.js).
+// demandas/ano (opcionais, achado de 2026-08-01): ativam o Realizado do
+// Avanço Sond só pra Mês Vigente -- ver o comentário de calcularLinhas em
+// compute-balanco.js.
 function renderAbaBalanco(registros, indices, opcoes) {
   var opts = opcoes || {};
   var periodo = opts.periodo || 'mesVigente';
@@ -256,6 +278,8 @@ function renderAbaBalanco(registros, indices, opcoes) {
   var somenteAtivos = opts.somenteAtivos === undefined ? true : opts.somenteAtivos;
   var vigenteIdx = opts.vigenteIdx;
   var baseline = opts.baseline || [];
+  var demandas = opts.demandas;
+  var ano = opts.ano;
 
   var tipologias = listarTipologias(registros, indices);
 
@@ -263,7 +287,7 @@ function renderAbaBalanco(registros, indices, opcoes) {
     var linhas = calcularLinhas({
       registros: registros, indices: indices, tipologia: tipologia,
       base: base, dimensao: dimensao, periodo: periodo,
-      vigenteIdx: vigenteIdx, baseline: baseline,
+      vigenteIdx: vigenteIdx, baseline: baseline, demandas: demandas, ano: ano,
     });
     return '<div class="grafico-painel">' + renderGraficoTipologia(tipologia, linhas, { somenteAtivos: somenteAtivos }) + '</div>';
   }).join('');

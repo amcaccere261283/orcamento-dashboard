@@ -108,11 +108,19 @@ test('depois da senha certa, a aba Balanço de massa desenha SVG de verdade em #
   assert.notEqual(documentoFalso.getElementById('gate-senha-erro').style.display, 'block', 'senha certa não pode acusar erro -- se acusar, é sintoma do ReferenceError de mediaEquipesPonderada ausente');
   assert.equal(documentoFalso.getElementById('gate-senha').style.display, 'none');
 
+  // demandas/ano: MESMO que montarAbaBalanco passa de verdade (window.__DEMANDAS__/
+  // window.__ANO__) -- precisa bater aqui pro comparativo de igualdade de
+  // string abaixo fazer sentido. DEMANDAS_VAZIAS tem porRegistroEventos: {}
+  // (nenhum furo), então o Realizado calculado do Avanço Sond pra Mês
+  // Vigente (achado de 2026-08-01, ver compute-balanco.js) é 0 aqui -- NÃO
+  // o 1000 hardcoded em registro.realizado.financeiro (esse valor só
+  // importaria com periodo: 'acumuladoAteMes', que continua lendo a coluna
+  // da MATRIZ).
   const vigenteIdx = geradoEm.getUTCMonth();
   const indicesTodos = registros.map((_, i) => i);
   const esperado = renderAbaBalanco(registros, indicesTodos, {
     periodo: 'mesVigente', base: 'previsto', dimensao: 'financeiro', somenteAtivos: true,
-    vigenteIdx, baseline: [],
+    vigenteIdx, baseline: [], demandas: DEMANDAS_VAZIAS, ano: geradoEm.getUTCFullYear(),
   });
 
   const htmlMontado = documentoFalso.getElementById('secao-balanco').innerHTML;
@@ -126,7 +134,7 @@ test('depois da senha certa, a aba Balanço de massa desenha SVG de verdade em #
   // o SUP e uma barra colorida real aparecem no SVG desenhado.
   assert.match(htmlMontado, new RegExp(TIPOLOGIA_SINTETICA));
   assert.match(htmlMontado, /SUP-0001-24/);
-  assert.match(htmlMontado, /class="barra-abaixo"/, 'previsto 4000 > realizado 1000 -- desvio negativo, barra à esquerda');
+  assert.match(htmlMontado, /class="barra-abaixo"/, 'previsto 4000 > realizado 0 (Avanço Sond vazio nesta fixture) -- desvio negativo, barra à esquerda');
 
   // Os 4 controles (período/base/dimensão/somente ativos) também precisam
   // ter sido montados -- é o que SCRIPT_CLIENTE_SEMANAL religa a cada

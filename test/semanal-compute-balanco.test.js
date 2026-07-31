@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { ordenarPorDesvio, calcularLinhas } = require('../tools/semanal/compute-balanco.js');
 const { DIAS_PREMISSA_MES, mediaEquipesPonderada } = require('../tools/comum/calculo-equipes.js');
+const { diaEpoch } = require('../tools/semanal/compute-semanal.js');
 
 test('ordena por desvio com sinal, positivos antes dos negativos', () => {
   const linhas = [
@@ -167,4 +168,94 @@ function cenario({ previstoVol, realizadoVol, base = 'previsto', baseline = null
 test('tomador chega em cada linha, direto do registro', () => {
   const linhas = calcularLinhas(cenario({ previstoVol: 100, realizadoVol: 100, tomador: 'Concessionária Exemplo S.A' }));
   assert.strictEqual(linhas[0].tomador, 'Concessionária Exemplo S.A');
+});
+
+// --- Mês Vigente usa o Realizado do Avanço Sond (achado de 2026-08-01) -----
+//
+// A coluna Realizado da MATRIZ só é preenchida depois que o mês fecha --
+// pra Mês Vigente (o mês em andamento) ela vem SEMPRE em branco, mesmo
+// havendo furos reais concluídos (confirmado nos dados reais: SUP-7133-24,
+// SP, julho -- 100 Previsto, Realizado da MATRIZ nulo, mas 115 furos já
+// concluídos no Avanço Sond). Decisão do dono do projeto: usar o dado do
+// Avanço Sond SOMENTE pra Mês Vigente -- Acumulado até o mês continua na
+// coluna da MATRIZ, sem mudança (ver os testes acima, nenhum passa
+// 'demandas').
+
+var ANO_TESTE = 2026;
+var VIGENTE_JULHO = 6;
+
+function diaJul(dia) { return diaEpoch(new Date(Date.UTC(ANO_TESTE, 6, dia))); }
+
+function demandasComEventos(chave, dias) {
+  var porRegistroEventos = {};
+  porRegistroEventos[chave] = { chegada: [], saidaEstoque: [], sondagemRealizada: dias };
+  return { porRegistroEventos: porRegistroEventos };
+}
+
+test('Mês Vigente com demandas: Realizado de Volume conta os furos concluídos no Avanço Sond, ignora a coluna Realizado da MATRIZ', () => {
+  var linhas = calcularLinhas(Object.assign(
+    cenario({ previstoVol: 100, realizadoVol: 999 }), // 999 na MATRIZ -- tem que ser IGNORADO
+    { demandas: demandasComEventos('SUP-0001-24||ST', [diaJul(1), diaJul(8), diaJul(15)]), ano: ANO_TESTE }
+  ));
+  assert.strictEqual(linhas[0].valorRealizado, 3, '3 furos concluídos em julho, não os 999 da MATRIZ');
+  assert.strictEqual(linhas[0].desvio, -97); // 3 - 100
+});
+
+test('Mês Vigente com demandas: Realizado de Financeiro pesa cada furo pelo ticket médio do registro, mesma lógica de render-aba-semanal.js', () => {
+  var base = cenario({ previstoVol: 100, realizadoVol: 999 });
+  base.dimensao = 'financeiro';
+  base.registros[0].previsto.volumeResumo = { total: 0, totalInicial: 0, ticket: 250 };
+  var linhas = calcularLinhas(Object.assign(base, {
+    demandas: demandasComEventos('SUP-0001-24||ST', [diaJul(1), diaJul(8)]), ano: ANO_TESTE,
+  }));
+  assert.strictEqual(linhas[0].valorRealizado, 500); // 2 furos x 250
+});
+
+test('Mês Vigente com demandas: (sup,tipologia) sem entrada em porRegistroEventos conta 0, nunca null -- ausência é zero, não "sem dado"', () => {
+  var linhas = calcularLinhas(Object.assign(
+    cenario({ previstoVol: 100, realizadoVol: 999 }),
+    { demandas: demandasComEventos('SUP-OUTRO||ST', [diaJul(1)]), ano: ANO_TESTE } // chave de OUTRO sup
+  ));
+  assert.strictEqual(linhas[0].valorRealizado, 0);
+  assert.notStrictEqual(linhas[0].valorRealizado, null);
+  assert.strictEqual(linhas[0].desvio, -100); // 0 - 100, número real, não null
+});
+
+test('Mês Vigente com demandas: furo fora do intervalo do mês (junho) não conta em julho', () => {
+  var diaJun30 = diaEpoch(new Date(Date.UTC(ANO_TESTE, 5, 30)));
+  var linhas = calcularLinhas(Object.assign(
+    cenario({ previstoVol: 100, realizadoVol: 0 }),
+    { demandas: demandasComEventos('SUP-0001-24||ST', [diaJun30, diaJul(1)]), ano: ANO_TESTE }
+  ));
+  assert.strictEqual(linhas[0].valorRealizado, 1, 'só o furo de 01/07 conta -- 30/06 é de junho');
+});
+
+test('Mês Vigente com demandas: equipesRealizado continua vindo da MATRIZ -- Avanço Sond não rastreia equipes por furo', () => {
+  var linhas = calcularLinhas(Object.assign(
+    cenario({ previstoVol: 100, realizadoVol: 999 }),
+    { demandas: demandasComEventos('SUP-0001-24||ST', [diaJul(1), diaJul(2)]), ano: ANO_TESTE }
+  ));
+  assert.strictEqual(linhas[0].equipesRealizado, 3, 'mesmo valor de sempre -- cenario() fixa equipesRealizado=3 na MATRIZ');
+});
+
+test('Acumulado até o mês IGNORA demandas -- continua lendo a coluna Realizado da MATRIZ, mesmo com demandas presente', () => {
+  var base = cenario({ previstoVol: 100, realizadoVol: 50 });
+  base.periodo = 'acumuladoAteMes';
+  var linhas = calcularLinhas(Object.assign(base, {
+    demandas: demandasComEventos('SUP-0001-24||ST', [diaJul(1), diaJul(8), diaJul(15)]), ano: ANO_TESTE,
+  }));
+  assert.strictEqual(linhas[0].valorRealizado, 50, 'os 3 furos do Avanço Sond não podem influenciar Acumulado até o mês');
+});
+
+test('Mês Vigente SEM demandas (undefined) cai no comportamento de sempre -- coluna Realizado da MATRIZ', () => {
+  var linhas = calcularLinhas(cenario({ previstoVol: 100, realizadoVol: 42 })); // sem 'demandas' no objeto
+  assert.strictEqual(linhas[0].valorRealizado, 42);
+});
+
+test('Mês Vigente com demandas mas SEM ano cai no comportamento de sempre -- ano é obrigatório pra converter mês em dia-desde-época', () => {
+  var linhas = calcularLinhas(Object.assign(
+    cenario({ previstoVol: 100, realizadoVol: 42 }),
+    { demandas: demandasComEventos('SUP-0001-24||ST', [diaJul(1)]) } // sem 'ano'
+  ));
+  assert.strictEqual(linhas[0].valorRealizado, 42, 'sem ano não dá pra converter o intervalo de mês em dia-desde-época -- cai no fallback');
 });
