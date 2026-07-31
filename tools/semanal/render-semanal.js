@@ -112,10 +112,10 @@ const CSS_SEMANAL = `
   .tabela-semanal-titulo { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
   /* Mesmo roxo de .linha-demandas em CSS_DEMANDAS abaixo -- fio visual
      entre as duas: esta linha também vem do Avanço Sond, também é
-     execução (estoque de furos), nunca previsão. #9700DA é a cor padrão
+     execução (estoque de furos), nunca previsão. #C234B4 é a cor padrão
      de Demandas no dashboard inteiro. */
-  .linha-pendentes-demandas .serie-label, .linha-pendentes-demandas .celula-total-linha { color: #9700DA; }
-  .linha-pendentes-demandas .serie-label { border-left-color: #9700DA; }
+  .linha-pendentes-demandas .serie-label, .linha-pendentes-demandas .celula-total-linha { color: #C234B4; }
+  .linha-pendentes-demandas .serie-label { border-left-color: #C234B4; }
 `;
 
 // CSS da aba Demandas (Task 5 desta fase). Mesma razão de CSS_SEMANAL/
@@ -149,7 +149,7 @@ const CSS_DEMANDAS = `
      render-aba-demandas.js) e não tinha regra de cor nenhuma -- diferente das
      tabelas irmãs (.linha-previsto/.linha-realizado em cssBase(),
      .linha-tendencia em CSS_SEMANAL acima), que sempre colorem .serie-label e
-     dão um acento no border-left. #9700DA (roxo) é a cor padrão de Demandas
+     dão um acento no border-left. #C234B4 (roxo) é a cor padrão de Demandas
      no dashboard inteiro -- ver o mesmo valor em .linha-pendentes-demandas
      (CSS_SEMANAL acima). Uma cor só para as 5 tabelas porque
      render-aba-demandas.js não emite um nome de classe por bloco/série --
@@ -159,8 +159,8 @@ const CSS_DEMANDAS = `
      .linha-total-demandas fica como já estava (negrito + borda), sem herdar
      esta cor -- ela já se destingue das linhas de tipologia por peso e borda,
      igual .linha-total-sup em cssBase() não ganha cor de série própria. */
-  .linha-demandas .serie-label, .linha-demandas .celula-total-linha { color: #9700DA; }
-  .linha-demandas .serie-label { border-left-color: #9700DA; }
+  .linha-demandas .serie-label, .linha-demandas .celula-total-linha { color: #C234B4; }
+  .linha-demandas .serie-label { border-left-color: #C234B4; }
   .linha-total-demandas td { font-weight: 600; border-top: 1px solid var(--border); }
 `;
 
