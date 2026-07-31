@@ -286,3 +286,59 @@ test('a saída sobrevive a JSON.stringify com porRegistroEventos também', () =>
   const voltou = JSON.parse(JSON.stringify(saida));
   assert.deepStrictEqual(voltou.porRegistroEventos, saida.porRegistroEventos);
 });
+
+// --- Ensaios de laboratório (parse-lab.js, aba "Lab Concluido") ------------
+
+function ensaioLab(over = {}) {
+  return Object.assign({
+    sup: 'SUP-0001-24', tipologia: 'LAB.C', concluido: d(2026, 2, 10),
+  }, over);
+}
+
+test('ensaiosLab alimenta sondagemRealizada em porRegistroEventos, chaveado por (sup, LAB.C/LAB.E)', () => {
+  const saida = computeDemandas([], PERIODOS_2026, [
+    ensaioLab({ tipologia: 'LAB.C' }),
+    ensaioLab({ tipologia: 'LAB.E' }),
+    ensaioLab({ tipologia: 'LAB.C' }),
+  ]);
+  assert.strictEqual(saida.porRegistroEventos['SUP-0001-24||LAB.C'].sondagemRealizada.length, 2);
+  assert.strictEqual(saida.porRegistroEventos['SUP-0001-24||LAB.E'].sondagemRealizada.length, 1);
+  assert.strictEqual(
+    saida.porRegistroEventos['SUP-0001-24||LAB.C'].sondagemRealizada[0],
+    diaEpoch(d(2026, 2, 10)),
+  );
+});
+
+test('ensaiosLab NÃO entra em tipologias/totais -- a aba Demandas (mensal) continua exclusiva de Sondagem', () => {
+  const saida = computeDemandas([], PERIODOS_2026, [ensaioLab({ tipologia: 'LAB.C' })]);
+  const blocoLabC = saida.tipologias.find(t => t.tipologia === 'LAB.C');
+  assert.ok(blocoLabC, 'LAB.C continua aparecendo na aba Demandas (zerado)');
+  assert.deepStrictEqual(blocoLabC.series.sondagemRealizada, new Array(12).fill(0),
+    'zerado mesmo com ensaio real em porRegistroEventos -- fontes diferentes, aba Demandas não lê ensaiosLab');
+  assert.deepStrictEqual(saida.totais.sondagemRealizada, new Array(12).fill(0));
+});
+
+test('furos e ensaiosLab convivem em porRegistroEventos sem se misturar -- chaves diferentes (tipologia diferente), mesmo SUP', () => {
+  const saida = computeDemandas([furo({ sup: 'SUP-0001-24', tipologia: 'SP' })], PERIODOS_2026, [
+    ensaioLab({ sup: 'SUP-0001-24', tipologia: 'LAB.C' }),
+  ]);
+  assert.strictEqual(saida.porRegistroEventos['SUP-0001-24||SP'].sondagemRealizada.length, 1, 'o furo');
+  assert.strictEqual(saida.porRegistroEventos['SUP-0001-24||LAB.C'].sondagemRealizada.length, 1, 'o ensaio');
+});
+
+test('ensaiosLab omitido não quebra nada -- computeDemandas(furos, periodos) continua funcionando como antes', () => {
+  assert.doesNotThrow(() => computeDemandas([furo()], PERIODOS_2026));
+  const saida = computeDemandas([furo()], PERIODOS_2026);
+  assert.ok(saida.porRegistroEventos);
+});
+
+test('ensaio sem data de conclusão (concluido: null) não entra em sondagemRealizada', () => {
+  const saida = computeDemandas([], PERIODOS_2026, [ensaioLab({ concluido: null })]);
+  assert.strictEqual(saida.porRegistroEventos['SUP-0001-24||LAB.C'].sondagemRealizada.length, 0);
+});
+
+test('ensaiosLab não gera chegada/saidaEstoque -- Demandas Pendentes de LAB.C/LAB.E fica sem-dado de propósito (sem fonte de backlog ainda)', () => {
+  const saida = computeDemandas([], PERIODOS_2026, [ensaioLab()]);
+  assert.deepStrictEqual(saida.porRegistroEventos['SUP-0001-24||LAB.C'].chegada, []);
+  assert.deepStrictEqual(saida.porRegistroEventos['SUP-0001-24||LAB.C'].saidaEstoque, []);
+});

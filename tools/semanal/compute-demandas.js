@@ -60,7 +60,7 @@ function entradaEventosVazia() {
   return { chegada: [], sondagemRealizada: [], saidaEstoque: [] };
 }
 
-function computeDemandas(furos, periodos) {
+function computeDemandas(furos, periodos, ensaiosLab) {
   const n = periodos.length;
   const fins = periodos.map(fimDoMes);
   const porTipologia = new Map();
@@ -128,6 +128,25 @@ function computeDemandas(furos, periodos) {
         if (!terminou && !cancelou) { series.pendentes[i] += 1; }
       }
     }
+  }
+
+  // Ensaios de laboratório (parse-lab.js, aba "Lab Concluido") -- SÓ
+  // alimentam porRegistroEventos.sondagemRealizada, pro acompanhamento
+  // semanal de LAB.C/LAB.E na Tabela Semanal (mesma série que os furos
+  // acima usam, reaproveitada -- render-aba-semanal.js não precisa saber
+  // se o "volume" é furo ou ensaio). NÃO entram em tipologias/totais: a
+  // aba Demandas (mensal) continua exclusiva de Sondagem/Avanços, fora de
+  // escopo deste ajuste -- "LAB.C/LAB.E zerados" ali continua sendo o
+  // sinal de "sem fonte", não um bug. Sem chegada/saidaEstoque (a aba Lab
+  // Concluido só mostra o que já terminou, sem visibilidade de backlog),
+  // então Demandas Pendentes continua sem-dado pra LAB.C/LAB.E, mesmo
+  // com Realizado/Tendência já ativos -- decisão do dono do projeto,
+  // 2026-07-31: ele pretende trazer a demanda de laboratório pra
+  // planilha depois.
+  for (const e of ensaiosLab || []) {
+    const chaveRegistro = chaveMatriz(e.sup, e.tipologia);
+    if (!porRegistroEventos.has(chaveRegistro)) porRegistroEventos.set(chaveRegistro, entradaEventosVazia());
+    if (e.concluido) porRegistroEventos.get(chaveRegistro).sondagemRealizada.push(diaEpoch(e.concluido));
   }
 
   const tipologias = [];
