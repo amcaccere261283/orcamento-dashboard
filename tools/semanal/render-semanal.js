@@ -217,13 +217,14 @@ const BUNDLE_ARQUIVOS = ['compute-semanal.js', 'render-aba-semanal.js', 'compute
 // em "Abrir", quando SUP/Grupo/Tomador/Tipologia ainda não existem em texto
 // plano no navegador.
 const SCRIPT_CLIENTE_SEMANAL = `
-// ComputeSemanal/ComputeBalanco nunca são lidos diretamente daqui em diante
-// -- quem faz o trabalho é RenderAbaSemanal/RenderAbaBalanco, que usam esses
-// dois módulos por dentro (chamada indireta, dentro do bundle). Estas duas
-// linhas continuam aqui só pra documentar que compute-semanal.js/
-// compute-balanco.js FORAM carregados do bundle de propósito -- sem elas, um
-// futuro leitor poderia achar que os dois módulos são código morto e
-// removê-los do bundle junto, quebrando RenderAbaSemanal/RenderAbaBalanco.
+// ComputeBalanco nunca é lido diretamente daqui em diante -- quem faz o
+// trabalho é RenderAbaBalanco, que o usa por dentro (chamada indireta,
+// dentro do bundle). ComputeSemanal MUDOU: recalcularSemanal usa
+// ComputeSemanal.diaEpoch diretamente agora, pra calcular "hoje" em dias-
+// desde-época com a MESMA convenção que os eventos de furos (ver
+// compute-semanal.js/compute-demandas.js) -- sem isso, um futuro leitor
+// poderia achar RenderAbaBalanco é o único motivo de ComputeBalanco estar
+// aqui e continuar achando o mesmo de ComputeSemanal por engano.
 var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaSemanal = MODULOS['render-aba-semanal.js'];
 var ComputeBalanco = MODULOS['compute-balanco.js'];
@@ -373,16 +374,16 @@ function recalcularSemanal() {
     filtrosSelecionadosSemanal.origem
   );
   var dimensoes = dimensoesEmOrdemSemanal(filtrosSelecionadosSemanal.dimensao);
-  // hoje/diasNoMes vêm do relógio de quem está vendo a página (não do
-  // build) -- calculados de novo a cada recálculo, é barato e evita estado
-  // obsoleto se a aba ficar aberta atravessando a meia-noite. Dia 0 do mês
-  // seguinte = último dia do mês atual, truque padrão do Date do JS.
-  var hoje = new Date();
-  var diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  // hojeEpoch vem do relógio de quem está vendo a página (não do build) --
+  // calculado de novo a cada recálculo, é barato e evita estado obsoleto se
+  // a aba ficar aberta atravessando a meia-noite. Mesma convenção de fuso
+  // que os eventos de furos usam (diaEpoch em compute-demandas.js): dia
+  // civil LOCAL, não UTC -- new Date() já constrói no fuso de quem está
+  // vendo a página.
+  var hojeEpoch = ComputeSemanal.diaEpoch(new Date());
   document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(
-    window.__REGISTROS__, indices, dimensoes, window.__VIGENTE_IDX__,
-    2026, // ano temporário -- Tarefa 4 troca por window.__ANO__ real (emitido no build a partir de periodos[0])
-    { demandas: window.__DEMANDAS__, diaDoMes: hoje.getDate(), diasNoMes: diasNoMes }
+    window.__REGISTROS__, indices, dimensoes, window.__VIGENTE_IDX__, window.__ANO__,
+    { demandas: window.__DEMANDAS__, hojeEpoch: hojeEpoch }
   );
   montarAbaBalanco(window.__REGISTROS__, indices);
 }
@@ -440,8 +441,8 @@ function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoE
   if (!demandas || !Array.isArray(demandas.tipologias)) {
     throw new Error('renderSemanal requer "demandas" ({tipologias, totais}, de tools/semanal/compute-demandas.js) -- sem isso a aba Demandas montaria vazia no navegador sem nenhum erro no build.');
   }
-  if (!demandas.porRegistro || typeof demandas.porRegistro !== 'object') {
-    throw new Error('renderSemanal requer "demandas.porRegistro" (de tools/semanal/compute-demandas.js) -- sem isso Realizado/Tendência/Demandas Pendentes desapareceriam da Tabela Semanal sem nenhum erro no build.');
+  if (!demandas.porRegistroEventos || typeof demandas.porRegistroEventos !== 'object') {
+    throw new Error('renderSemanal requer "demandas.porRegistroEventos" (de tools/semanal/compute-demandas.js) -- sem isso Realizado/Tendência/Demandas Pendentes desapareceriam da Tabela Semanal sem nenhum erro no build.');
   }
 
   const dadosJson = JSON.stringify({ registros, baseline, demandas });
@@ -512,7 +513,7 @@ ${markupAbas(ABAS_VISUALIZACAO, '    ')}
     <div id="secao-demandas" style="display:none"></div>
   </div>
   </main>
-  <script>window.__VIGENTE_IDX__ = ${vigenteIdx};</script>
+  <script>window.__VIGENTE_IDX__ = ${vigenteIdx}; window.__ANO__ = ${periodos[0].getUTCFullYear()};</script>
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
   <script>${scriptDesbloqueio()}</script>
   <script>${fonteParaCliente()}</script>

@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
+const { diaEpoch } = require('../tools/comum/datas.js');
 
 // Task 8 originalmente deixou o módulo pronto no bundle mas NUNCA chamado --
 // a aba Semanal abria vazia no navegador (achado do coordenador). Este
@@ -31,7 +32,7 @@ const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2
 // A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
 // ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
 // tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
-const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistro: {} };
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistroEventos: {} };
 
 function registroSintetico(sup, tomador, financeiroMes) {
   const zeros = new Array(12).fill(0);
@@ -245,20 +246,25 @@ test('a soma de todas as semanas do Previsto continua batendo com o mês vigente
   assert.strictEqual(semanasPrevisto.reduce((a, b) => a + b, 0), 4000);
 });
 
-test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume está marcada e demandas.porRegistro tem dado real', async () => {
+test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume está marcada e demandas.porRegistroEventos tem dado real', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
+  // tipologias/totais: renderSemanal exige o formato {tipologias, totais}
+  // de compute-demandas.js (ver DEMANDAS_VAZIAS acima) -- vazios aqui
+  // porque este teste não olha a aba Demandas, só o wire-up de
+  // Realizado/Tendência via porRegistroEventos em window.__DEMANDAS__.
+  // Datas em julho de 2026 (mês vigente deste teste) -- qualquer dia real
+  // desse mês serve, já que o cliente calcula hojeEpoch com o relógio real
+  // de quem roda o teste (recalcularSemanal), não com geradoEm.
   const demandas = {
-    // tipologias/totais: renderSemanal exige o formato {tipologias, totais}
-    // de compute-demandas.js (ver DEMANDAS_VAZIAS acima) -- vazios aqui
-    // porque este teste não olha a aba Demandas, só o wire-up de
-    // Realizado/Tendência via porRegistro em window.__DEMANDAS__. totais
-    // precisa refletir o mesmo comprimento/serie de porRegistro (revisão
-    // final da branch): demandasMesVigente usa demandas.totais[serie] só
-    // pra saber o tamanho do ano e validar vigenteIdx -- {} vazio faria
-    // vigenteIdx=6 parecer "fora do intervalo" por engano.
-    tipologias: [], totais: { sondagemRealizada: [0, 0, 0, 0, 0, 0, 800, 0, 0, 0, 0, 0], pendentes: [0, 0, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0] },
-    porRegistro: { 'SUP-0001-24||ST': { sondagemRealizada: [0, 0, 0, 0, 0, 0, 800, 0, 0, 0, 0, 0], pendentes: [0, 0, 0, 0, 0, 0, 50, 0, 0, 0, 0, 0] } },
+    tipologias: [], totais: {},
+    porRegistroEventos: {
+      'SUP-0001-24||ST': {
+        chegada: [],
+        sondagemRealizada: [diaEpoch(new Date(2026, 6, 5)), diaEpoch(new Date(2026, 6, 5))],
+        saidaEstoque: [],
+      },
+    },
   };
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
   const { sandbox, documentoFalso } = montarSandbox(html);
@@ -276,5 +282,5 @@ test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume e
 
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
   assert.match(htmlMontado, /Demandas Pendentes/, 'a linha nova precisa aparecer no bloco Volume depois de marcar a dimensão');
-  assert.doesNotMatch(htmlMontado.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0], /sem-dado/, 'Realizado (Volume) precisa vir preenchido, não sem-dado, com demandas.porRegistro real');
+  assert.doesNotMatch(htmlMontado.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0], /sem-dado/, 'Realizado (Volume) precisa vir preenchido, não sem-dado, com demandas.porRegistroEventos real');
 });

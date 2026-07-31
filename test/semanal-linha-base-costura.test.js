@@ -37,7 +37,7 @@ const VIGENTE_IDX = 6; // julho
 // A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
 // ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
 // tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
-const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistro: {} };
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistroEventos: {} };
 const TIPOLOGIA_MATRIZ = 'LAB.C';        // rótulo da MATRIZ viva
 const TIPOLOGIA_LINHA_BASE = 'LAB.';     // rótulo do estudo original
 const SUP_MATRIZ = 'SUP-6830-23';        // código atual

@@ -18,7 +18,7 @@ const PERIODOS = periodosDoAno(1970);
 // A aba Demandas passou a ser obrigatória no payload (renderSemanal lança sem
 // ela, de propósito -- ver o comentário lá). Agregado mínimo válido: sem
 // tipologia nenhuma, renderAbaDemandas rende o aviso de "sem dado".
-const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistro: {} };
+const DEMANDAS_VAZIAS = { tipologias: [], totais: {}, porRegistroEventos: {} };
 
 // grupo/tomador são identificadores sintéticos de propósito: >=12
 // caracteres e com hífen, pro alvo do teste "nenhum identificador aparece
