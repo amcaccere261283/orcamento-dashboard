@@ -34,10 +34,25 @@ function criarDocumentoFalso() {
 
   function elemento(id) {
     if (!elementos[id]) {
+      // classList de verdade (Set), não um stub -- Task 12 precisa provar
+      // que definirStatusAtualizacaoSemanal() (render-semanal.js) realmente
+      // acrescenta 'status-erro' via classList.toggle(classe, força), então
+      // contains()/toggle() precisam refletir estado, não sempre `false`.
+      const classes = new Set();
+      const classList = {
+        add: (c) => classes.add(c),
+        remove: (c) => classes.delete(c),
+        contains: (c) => classes.has(c),
+        toggle: (c, forcar) => {
+          const presente = forcar === undefined ? !classes.has(c) : !!forcar;
+          if (presente) classes.add(c); else classes.delete(c);
+          return presente;
+        },
+      };
       const el = {
         id,
         style: {},
-        classList: { toggle() {}, add() {}, remove() {}, contains: () => false },
+        classList,
         listeners: {},
         addEventListener(tipo, fn) { this.listeners[tipo] = fn; },
         focus() {},

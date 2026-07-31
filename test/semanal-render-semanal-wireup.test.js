@@ -62,13 +62,21 @@ function registroSintetico(sup, tomador, financeiroMes) {
 // contagem não muda), só engordou o CONTEÚDO deste 4º bloco: agora
 // concatena 5 fontes (calculo-equipes, tipologias-avancos, tipologias-lab,
 // datas, linha-base) em vez de só calculo-equipes.
-function montarSandbox(html) {
+// fetchMock (Task 12): injetado como window.fetch pro botão "Atualizar
+// dados" (atualizarDadosAoVivoSemanal(), que chama fetch() de dentro do
+// bundle de cliente) ter algo pra chamar dentro do vm.Context -- sem
+// fetchMock, qualquer teste que dispare o refresh rejeita imediatamente com
+// um erro claro, em vez de vazar pra uma tentativa de rede de verdade.
+function montarSandbox(html, fetchMock) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
   assert.equal(blocos.length, 6, 'esperava exatamente 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
   const codigo = blocos.join('\n;\n');
 
   const documentoFalso = criarDocumentoFalso();
-  const sandbox = { document: documentoFalso, atob, btoa, crypto, TextEncoder, TextDecoder, console };
+  const sandbox = {
+    document: documentoFalso, atob, btoa, crypto, TextEncoder, TextDecoder, console,
+    fetch: fetchMock || (() => Promise.reject(new Error('fetch não mockado neste teste'))),
+  };
   sandbox.window = sandbox; // window É o global object, como no navegador
   vm.createContext(sandbox);
   vm.runInContext(codigo, sandbox, { filename: 'planejamento-semanal-cliente.js' });
@@ -298,4 +306,102 @@ test('o HTML da semanal tem o botão "Atualizar dados" e o span de status, com o
   const html = renderSemanal({ registros: [], baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   assert.match(html, /<button id="atualizar-dashboard" type="button">/);
   assert.match(html, /<span id="status-atualizacao" class="status-atualizacao"><\/span>/);
+});
+
+// Task 12 -- wire-up ponta-a-ponta de atualizarDadosAoVivoSemanal()
+// (render-semanal.js, ~linha 576): roda o botão "Atualizar dados" de
+// verdade dentro do MESMO vm.Context que os testes acima, com fetch()
+// mockado (montarSandbox agora aceita um 2º argumento, ver acima).
+//
+// atualizarDadosAoVivoSemanal() NÃO devolve a Promise.all() interna (o
+// listener de clique não precisa dela) -- não dá pra `await
+// sandbox.atualizarDadosAoVivoSemanal()` diretamente, esse await resolveria
+// no próximo microtask e a cadeia fetch->text()->parse ainda não teria
+// terminado (comprovado à parte: um `await` sobre uma função que dispara
+// uma Promise sem devolvê-la adianta o continuation da função-mãe antes do
+// .then() interno rodar). Como o fetchMock abaixo resolve tudo de forma
+// síncrona (sem I/O real, sem setTimeout), um único boundary de macrotask
+// (setImmediate) garante que toda a cadeia de microtasks já esvaziou antes
+// de checarmos o resultado.
+function chamarEsperarAtualizacao(sandbox) {
+  sandbox.atualizarDadosAoVivoSemanal();
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+test('atualizarDadosAoVivoSemanal: busca os 3 CSVs, substitui window.__REGISTROS__/window.__DEMANDAS__ (sem tocar window.__BASELINE__), remonta filtros e re-renderiza a aba ativa', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-01T00:00:00Z');
+  const html = renderSemanal({ registros, baseline: [{ chave: 'SUP-0001-24||ST', previstoInicial: {} }], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+
+  const csvMatriz = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERMINO,SONDAGEM,BASE,'
+    + Array(12).fill('mes').join(',') + ',PICO,MÉDIA,PROD.,DIAS,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,TICKET,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,OBS\n'
+    + 'Origem-B,Grupo-B,Tomador-Novo,SUP-0002-25,Escopo,Apoio,01/2026,12/2026,ST,P,'
+    + Array(12).fill('0').join(',') + ',2,2,8,25,'
+    + Array(12).fill('0').join(',') + ',100,100,9999,'
+    + Array(12).fill('0').join(',') + ',100,100,\n'
+    // parseMatrizCliente (tools/semanal/parse-matriz-cliente.js) só empurra
+    // um registro pra fora no BASE 'T' -- uma linha 'P' sozinha fica presa
+    // em `atual` e nunca chega a `registros` (comprovado à parte). A MATRIZ
+    // real sempre tem as 3 linhas físicas (P/R/T); aqui bastam P+T (R é
+    // opcional no parser).
+    + ',,,,,,,,,T,'
+    + Array(12).fill('0').join(',') + ',0,0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,\n';
+  // parseAvancos/parseLab (tools/semanal/parse-avancos.js, parse-lab.js)
+  // leem o cabeçalho em grid[1], não grid[0] -- mesmo formato de 2 linhas
+  // antes do dado que a planilha real (Avanço Sond.xlsx) tem. Por isso a
+  // linha em branco antes do cabeçalho abaixo -- sem ela, locateColunas...
+  // lança "Coluna não encontrada" (comprovado à parte) e este teste de
+  // SUCESSO cairia no branch de erro.
+  const csvVazio = '\n' + 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo\n';
+  const csvLabVazio = '\n' + 'ID Contrato,Concluído Dia,Tipo de Ensaio\n';
+
+  const fetchMock = (url) => {
+    const texto = url.indexOf('pub?gid=609773455') !== -1 ? csvMatriz
+      : url.indexOf('PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS') !== -1 ? csvVazio
+      : csvLabVazio;
+    return Promise.resolve({ ok: true, text: () => Promise.resolve(texto) });
+  };
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  // Mesmo padrão do teste de wireup original (linha ~78 acima): digita a
+  // senha certa em #campo-senha e chama tentarDesbloquear() diretamente --
+  // não existe #senha-input nem #form-desbloqueio/evento 'submit' neste
+  // HTML (scriptDesbloqueio() em tools/comum/render-shell.js usa um botão
+  // com addEventListener('click', tentarDesbloquear), não um <form>).
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const baselineAntes = sandbox.window.__BASELINE__;
+  await chamarEsperarAtualizacao(sandbox);
+
+  assert.strictEqual(sandbox.window.__REGISTROS__.length, 1, 'registros novos vieram só do CSV da MATRIZ mockado');
+  assert.strictEqual(sandbox.window.__REGISTROS__[0].sup, 'SUP-0002-25');
+  assert.strictEqual(sandbox.window.__REGISTROS__[0].previsto.volumeResumo.ticket, 9999, 'TICKET novo precisa aparecer -- é a motivação original desta feature');
+  assert.strictEqual(sandbox.window.__BASELINE__, baselineAntes, 'baseline não pode ser tocado pelo refresh');
+  assert.match(documentoFalso.getElementById('status-atualizacao').textContent, /^Atualizado às \d{2}:\d{2}$/);
+});
+
+test('atualizarDadosAoVivoSemanal: se qualquer um dos 3 fetches falhar, window.__REGISTROS__ NÃO muda e o status mostra o erro', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-01T00:00:00Z');
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+
+  const fetchMock = (url) => url.indexOf('pub?gid=609773455') !== -1
+    ? Promise.resolve({ ok: false, status: 500 })
+    : Promise.resolve({ ok: true, text: () => Promise.resolve('') });
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const registrosAntes = sandbox.window.__REGISTROS__;
+  await chamarEsperarAtualizacao(sandbox);
+
+  assert.strictEqual(sandbox.window.__REGISTROS__, registrosAntes, 'uma falha em QUALQUER fetch não pode trocar os registros -- tudo ou nada');
+  assert.match(documentoFalso.getElementById('status-atualizacao').textContent, /^Falha ao atualizar: /);
+  assert.ok(documentoFalso.getElementById('status-atualizacao').classList.contains('status-erro'));
 });
