@@ -71,8 +71,11 @@ retomar, parta destas descobertas em vez de investigar de novo:
 
 ## Planejamento Semanal (segunda página, publicada em 2026-07-29)
 
-`docs/planejamento-semanal.html` — aba 1 com o mês vigente dividido em 4 semanas, aba 2
-com o gráfico Balanço de massa (barras divergentes por tipologia). Build:
+`docs/planejamento-semanal.html` — aba 1 com o mês vigente dividido em semanas reais
+(segunda a domingo, cortadas SEMPRE dentro do mês -- nenhum dia de um mês conta no
+acompanhamento do mês vizinho; ver `tools/semanal/compute-semanal.js` e
+`docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md`), aba 2 com o
+gráfico Balanço de massa (barras divergentes por tipologia). Build:
 `ORCAMENTO_SENHA='...' node tools/semanal/build-dashboard.js`, e **sempre**
 `cp dist/planejamento-semanal.html docs/planejamento-semanal.html` antes de commitar.
 `test/publicacao-docs-sincronizado.test.js` trava essa cópia para as duas páginas.

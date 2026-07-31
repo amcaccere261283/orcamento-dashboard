@@ -6,8 +6,8 @@
 // mês são 2 equipes em cada semana, não valorMensal/N -- dividir produziria
 // número errado em silêncio e discordaria do orçamento, que mostra a média.
 // Mesma premissa de mediaEquipesPonderada em tools/comum/calculo-equipes.js.
-// numSemanas é OBRIGATÓRIO: o calendário ISO abaixo mostra que um mês tem 4
-// ou 5 semanas reais, nunca sempre 4 -- ver
+// numSemanas é OBRIGATÓRIO: o calendário abaixo mostra que um mês tem de 5 a
+// 6 semanas reais (nenhum mês de 2026 tem exatamente 4) -- ver
 // docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md.
 function dividirEmSemanas(valorMensal, dimensao, numSemanas) {
   var saida = [];
@@ -26,11 +26,16 @@ function fecharMes(semanas, dimensao) {
 }
 
 // ============================================================
-// Calendário ISO 8601 de semanas reais (segunda a domingo) -- ver
-// docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md. Cada
-// semana pertence ao mês que contém a MAIORIA dos seus 7 dias -- como 7 é
-// ímpar, nunca há empate, e uma semana de 7 dias nunca toca 3 meses (nem
-// fevereiro, o mês mais curto, tem menos de 7 dias).
+// Calendário de semanas reais (segunda a domingo), cortadas SEMPRE dentro do
+// mês -- ver docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md
+// (substituído em 2026-08-01: a versão anterior usava a "regra da maioria" do
+// ISO 8601, que deixava dias de um mês contarem no acompanhamento do mês
+// vizinho -- ex.: 29-30/06 entravam no Realizado de julho. Isso é inaceitável
+// pra quem acompanha o produzido mensal: cada dia tem que contar SÓ no mês
+// dele). A 1ª e a última semana de cada mês ficam curtas (1 a 7 dias) sempre
+// que o mês não começa numa segunda ou não termina num domingo; as do meio
+// são semana cheia (segunda a domingo). Nenhum mês de 2026 tem exatamente 4
+// -- a contagem real varia de 5 a 6.
 // ============================================================
 
 // Dia inteiro desde a época Unix (1970-01-01), a partir de QUALQUER
@@ -53,62 +58,45 @@ function diaEpoch(data) {
   return Math.floor(data.getTime() / 86400000);
 }
 
-// Dado o início (segunda) de uma semana ISO, decide qual (ano, mês) tem a
-// maioria dos seus 7 dias. Trabalha inteiramente em UTC (getUTC*/Date.UTC)
-// -- mesma convenção que excelSerialParaData/indiceDoMes/calcularVigenteIdx
-// já usam no resto do projeto -- de propósito: os eventos de furos (Tarefa
-// 2, compute-demandas.js) vêm de excelSerialParaData, que produz meia-noite
-// UTC. Se este cálculo usasse Date local, diaEpoch(segunda) dependeria do
-// fuso da máquina rodando o build/navegador -- em fusos à frente de UTC
-// (ex.: Europe/Berlin), a semana inteira deslizaria um dia pra trás e um
-// furo terminado no domingo cairia na semana errada, em silêncio (achado da
-// revisão final da branch).
-function mesDaSemana(segunda) {
-  var contagem = {};
-  var melhorChave = null;
-  var melhorContagem = 0;
-  for (var i = 0; i < 7; i++) {
-    var d = new Date(Date.UTC(segunda.getUTCFullYear(), segunda.getUTCMonth(), segunda.getUTCDate() + i));
-    var chave = d.getUTCFullYear() + '-' + d.getUTCMonth();
-    contagem[chave] = (contagem[chave] || 0) + 1;
-    if (contagem[chave] > melhorContagem) {
-      melhorContagem = contagem[chave];
-      melhorChave = chave;
-    }
-  }
-  var partes = melhorChave.split('-');
-  return { ano: Number(partes[0]), mes: Number(partes[1]) };
+// Dia da semana de um dia-desde-época, na convenção 0=segunda..6=domingo
+// (não a convenção nativa de Date, que é 0=domingo..6=sábado) -- mesma
+// convenção usada no resto do arquivo. Reconstrói o Date multiplicando de
+// volta por 86400000: como diaEpoch nunca ajusta fuso (só floor), o produto
+// cai exatamente na meia-noite UTC daquele dia -- mesma garantia de UTC em
+// toda a aritmética que o resto do arquivo já documenta (achado da revisão
+// final da branch anterior: Date local aqui deslizaria a semana em fusos
+// diferentes de UTC+0).
+function diaDaSemana(diaEp) {
+  var d = new Date(diaEp * 86400000);
+  return (d.getUTCDay() + 6) % 7;
 }
 
-// Semanas ISO (segunda a domingo) cuja maioria dos dias cai em (ano,
-// mesIndex) -- 4 ou 5 semanas, na ordem do calendário. inicio/fim de cada
-// semana já vêm em diaEpoch, prontos pra comparar com datas de furos sem
-// reconstruir Date. Varre a partir de uma semana antes do 1º dia do mês
-// (cobre o caso da 1ª semana do mês pertencer, pela regra da maioria, ao
-// mês anterior) e avança semana a semana -- no máximo 5 semanas próprias +
-// as 2 de fronteira cabem com folga em 8 iterações. UTC em toda a
-// aritmética (ver o comentário de mesDaSemana acima).
+// Semanas (segunda a domingo) do mês (ano, mesIndex), cortadas SEMPRE dentro
+// do mês -- nunca uma semana atravessa a virada de mês. Anda dia a dia desde
+// o 1º dia do mês: cada semana vai até o primeiro domingo que encontrar, ou
+// até o fim do mês, o que vier primeiro -- por isso a 1ª e a última semana
+// costumam ficar curtas (1 a 7 dias), e as do meio são sempre cheias (7
+// dias). inicio/fim de cada semana já vêm em diaEpoch, prontos pra comparar
+// com datas de furos sem reconstruir Date.
 function semanasDoMes(ano, mesIndex) {
-  var primeiroDia = new Date(Date.UTC(ano, mesIndex, 1));
-  var deslocamento = (primeiroDia.getUTCDay() + 6) % 7; // 0=segunda..6=domingo
-  var cursor = new Date(Date.UTC(ano, mesIndex, 1 - deslocamento - 7));
+  var cursor = diaEpoch(new Date(Date.UTC(ano, mesIndex, 1)));
+  var fimMes = diaEpoch(new Date(Date.UTC(ano, mesIndex + 1, 0)));
   var semanas = [];
-  for (var i = 0; i < 8; i++) {
-    var segunda = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate()));
-    var domingo = new Date(Date.UTC(segunda.getUTCFullYear(), segunda.getUTCMonth(), segunda.getUTCDate() + 6));
-    var dono = mesDaSemana(segunda);
-    if (dono.ano === ano && dono.mes === mesIndex) {
-      semanas.push({ inicio: diaEpoch(segunda), fim: diaEpoch(domingo) });
-    }
-    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 7));
+  while (cursor <= fimMes) {
+    var diasAteDomingo = 6 - diaDaSemana(cursor);
+    var fimSemana = Math.min(cursor + diasAteDomingo, fimMes);
+    semanas.push({ inicio: cursor, fim: fimSemana });
+    cursor = fimSemana + 1;
   }
   return semanas;
 }
 
 // Índice (0-based) da semana, dentro de semanasDoMes, que contém hojeEpoch
-// -- ou -1 se nenhuma contém (dias de fronteira entre meses: a semana ISO
-// que cobre esses dias pode pertencer ao mês anterior pela regra da
-// maioria -- ver spec).
+// -- ou -1 se nenhuma contém. Com o corte sempre dentro do mês, as semanas
+// de um mês cobrem TODOS os seus dias sem lacuna nenhuma -- -1 só acontece
+// se hojeEpoch estiver fora do mês vigente sendo exibido (chamador passou
+// hoje/vigenteIdx inconsistentes entre si; nunca acontece no fluxo real,
+// onde os dois vêm do mesmo "hoje" -- ver render-semanal.js).
 function indiceSemanaAtual(semanas, hojeEpoch) {
   for (var i = 0; i < semanas.length; i++) {
     if (hojeEpoch >= semanas[i].inicio && hojeEpoch <= semanas[i].fim) return i;

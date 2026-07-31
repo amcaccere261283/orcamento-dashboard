@@ -155,9 +155,35 @@ function calcularTendenciaSemanal(previstoMes, semanasRealizado, indiceAtual) {
   return saida;
 }
 
-function renderCabecalho(dimensao, numSemanas) {
+// '05' em vez de '5' -- sem toLocaleString/padStart (o resto deste módulo já
+// evita depender deles fora do formatador de número principal), só divisão
+// inteira manual.
+function doisDigitos(n) { return (n < 10 ? '0' : '') + n; }
+
+// 'dd/MM a dd/MM' a partir de um par inicio/fim em diaEpoch (mesma unidade
+// de compute-semanal.js). Reconstrói o Date multiplicando de volta por
+// 86400000 -- como diaEpoch nunca ajusta fuso, cai exatamente na meia-noite
+// UTC daquele dia, então lê com getUTC* (mesma convenção do resto do
+// arquivo, nunca Date local).
+function formatarIntervaloSemana(inicioEpoch, fimEpoch) {
+  var i = new Date(inicioEpoch * 86400000);
+  var f = new Date(fimEpoch * 86400000);
+  return doisDigitos(i.getUTCDate()) + '/' + doisDigitos(i.getUTCMonth() + 1)
+    + ' a ' + doisDigitos(f.getUTCDate()) + '/' + doisDigitos(f.getUTCMonth() + 1);
+}
+
+// 'semanas' (opcional) são as semanas reais do mês vigente (ver
+// compute-semanal.js), na mesma ordem das colunas -- cada rótulo "Sn" ganha
+// o intervalo de datas ao lado ("S1 (01/07 a 05/07)"). Sem mês vigente
+// válido (semanas ausente ou vazio, ver renderAbaSemanal abaixo) os rótulos
+// caem no fallback "Sn" puro -- não há semana real pra descrever.
+function renderCabecalho(dimensao, numSemanas, semanas) {
   var colunasSemana = '';
-  for (var i = 1; i <= numSemanas; i++) colunasSemana += '<th>S' + i + '</th>';
+  for (var i = 1; i <= numSemanas; i++) {
+    var semana = semanas && semanas[i - 1];
+    var rotulo = semana ? ('S' + i + ' (' + formatarIntervaloSemana(semana.inicio, semana.fim) + ')') : ('S' + i);
+    colunasSemana += '<th>' + escapeHtml(rotulo) + '</th>';
+  }
   return '<thead><tr><th></th>' + colunasSemana + '<th>' + escapeHtml(rotuloColunaFechamento(dimensao)) + '</th></tr></thead>';
 }
 
@@ -179,8 +205,9 @@ function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento) {
 
 // registros/indices/dimensoes/vigenteIdx: mesmos parâmetros de sempre. 'ano'
 // (novo, obrigatório) é o ano civil da planilha (periodos[0].getUTCFullYear())
-// -- necessário pra semanasDoMes saber quantas semanas (4 ou 5) o mês
-// vigente tem, mesmo quando 'realizado' não é passado (Previsto/Equipes/
+// -- necessário pra semanasDoMes saber quantas semanas (5 ou 6, nunca 4 --
+// ver compute-semanal.js) o mês vigente tem, mesmo quando 'realizado' não é
+// passado (Previsto/Equipes/
 // Financeiro precisam da contagem certa de colunas independente de haver
 // dado de demandas). 'realizado' é um 6º parâmetro OPCIONAL --
 // { demandas, hojeEpoch } -- que ativa Realizado/Tendência nos blocos
@@ -238,16 +265,18 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
         });
         fechamentoRealizado = fecharMes(semanasRealizado, dimensao);
 
-        // NÃO usar indiceAtual aqui: ele vale -1 tanto quando nenhuma
-        // semana do mês começou (início do mês, semanas restantes = todas)
-        // quanto quando TODAS as semanas do mês já fecharam e hoje já caiu
-        // numa semana de fronteira do mês seguinte (fim do mês, semanas
-        // restantes = nenhuma) -- calcularTendenciaSemanal tratava os dois
-        // casos como "nenhuma semana elapsada", fabricando uma projeção
-        // sobre um mês que já terminou (achado da revisão final: 9 dias/ano,
-        // incluindo os últimos dias de mar/jun/set). semanasElapsadas conta
-        // direto pelas datas -- quantas semanas do mês já começaram até
-        // hoje -- e não confunde os dois casos.
+        // NÃO usar indiceAtual aqui: com o calendário antigo (regra da
+        // maioria ISO), ele valia -1 tanto no início do mês (nenhuma semana
+        // começou) quanto no fim (todas fecharam e hoje já caiu numa semana
+        // de fronteira do mês seguinte) -- calcularTendenciaSemanal tratava
+        // os dois como "nenhuma semana elapsada", fabricando uma projeção
+        // sobre um mês que já tinha terminado (achado da revisão final: 9
+        // dias/ano). O corte sempre-dentro-do-mês (2026-08-01) faz as
+        // semanas cobrirem o mês inteiro sem lacuna, então esse segundo caso
+        // não ocorre mais em uso real -- mas semanasElapsadas continua
+        // contando direto pelas datas (não por indiceAtual) por ser mais
+        // simples E permanecer correto se um chamador algum dia passar
+        // hoje/vigenteIdx inconsistentes entre si.
         var semanasElapsadas = 0;
         for (var se = 0; se < semanas.length; se++) {
           if (semanas[se].inicio <= opts.hojeEpoch) semanasElapsadas++;
@@ -276,7 +305,7 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
     return '<div class="bloco-dimensao-semanal">'
       + '<div class="tabela-semanal-titulo">' + escapeHtml(DIMENSOES_ROTULO_SEMANAL[dimensao] || dimensao) + '</div>'
       + '<table class="tabela-semanal">'
-      + renderCabecalho(dimensao, numSemanas)
+      + renderCabecalho(dimensao, numSemanas, semanas)
       + '<tbody>'
       + renderLinhaSerie('Previsto', 'previsto', semanasPrevisto, fechamentoPrevisto)
       + renderLinhaSerie('Realizado', 'realizado', semanasRealizado, fechamentoRealizado)

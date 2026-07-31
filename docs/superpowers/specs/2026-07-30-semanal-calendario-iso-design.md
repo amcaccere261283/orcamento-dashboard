@@ -1,5 +1,58 @@
 # Calendário ISO de semanas reais na Tabela Semanal — Design
 
+## Atualização 2026-08-01: corte sempre dentro do mês (substitui a regra da maioria)
+
+A regra da maioria abaixo (ISO 8601 puro) tinha um efeito colateral inaceitável pra quem
+acompanha o produzido MENSAL: uma semana cujo início cai no fim de um mês, mas cuja
+maioria dos 7 dias cai no mês seguinte, contava INTEIRA no mês seguinte -- ex.: 29 e
+30/06 (2 dias) entravam no Realizado de julho, porque a semana S27 (29/06-05/07) tinha
+maioria de dias em julho (5 contra 2). Achado do dono do projeto em 2026-08-01, comparando
+o Realizado de ST no acompanhamento semanal com uma contagem direta na planilha (2826 no
+dashboard contra 2777 na planilha para o estoque de ST -- ver o commit de mesma data que
+corrige o filtro de furos "deslocamento", causa principal dessa diferença específica; a
+regra da maioria era um problema SEPARADO, de fronteira de mês, que o dono pediu pra
+corrigir também).
+
+**Nova regra**: cada semana é cortada SEMPRE dentro do mês que a contém. A 1ª e a última
+semana de um mês ficam curtas (1 a 7 dias) sempre que o mês não começa numa segunda ou não
+termina num domingo; as do meio continuam cheias (segunda a domingo, 7 dias). Nenhum mês
+de 2026 tem exatamente 4 semanas com essa regra -- a contagem real varia de 5 a 6 (contra
+4 ou 5 da regra da maioria). Exemplo de julho/2026 (mês começa numa quarta):
+
+| Semana | Intervalo |
+|---|---|
+| S1 | 01/07 a 05/07 |
+| S2 | 06/07 a 12/07 |
+| S3 | 13/07 a 19/07 |
+| S4 | 20/07 a 26/07 |
+| S5 | 27/07 a 31/07 |
+
+Implementação em `semanasDoMes` (`tools/semanal/compute-semanal.js`): anda dia a dia
+desde o dia 1 do mês; cada semana vai até o primeiro domingo que encontrar, ou até o fim
+do mês, o que vier primeiro. `mesDaSemana` (a função de regra da maioria) foi removida --
+não tem mais consumidor.
+
+**Efeito colateral bom**: como as semanas de um mês agora cobrem TODOS os seus dias sem
+lacuna, a seção "Dias de fronteira" abaixo (e o `-1` que `indiceSemanaAtual` podia devolver
+no início/fim do mês) deixa de ocorrer em uso real -- só é alcançável se um chamador passar
+`hoje`/`vigenteIdx` inconsistentes entre si, o que não acontece no fluxo real (os dois vêm
+do mesmo relógio, ver `render-semanal.js`). O código em `render-aba-semanal.js` continua
+defensivo mesmo assim (não foi simplificado), mas o cenário descrito na seção "Caso de
+fronteira" abaixo é HISTÓRICO -- documentado como estava a regra ANTERIOR, não o
+comportamento atual.
+
+**Cabeçalho ganha o intervalo de datas**: cada coluna "Sn" passa a mostrar o intervalo ao
+lado ("S1 (01/07 a 05/07)") -- pedido do dono do projeto na mesma data, pra tirar a
+ambiguidade de qual período cada coluna representa. Implementado em
+`formatarIntervaloSemana`/`renderCabecalho` (`tools/semanal/render-aba-semanal.js`). Sem
+mês vigente válido (vigenteIdx fora de [0,11]) não há semana real pra descrever -- o
+cabeçalho cai no fallback "Sn" puro, sem intervalo.
+
+O resto deste documento (a partir daqui) descreve o design ORIGINAL (regra da maioria),
+mantido como registro histórico da motivação e do restante do desenho (fonte de dados,
+Realizado/Tendência/Pendentes por semana, renderização) -- tudo isso continua válido sem
+mudança; só `semanasDoMes` e o cabeçalho mudaram.
+
 ## Contexto e motivação
 
 A Tabela Semanal (aba 1 do Planejamento Semanal) divide hoje o mês vigente em 4 fatias
