@@ -127,6 +127,25 @@ regex de célula era guloso (`[^>]*` engole a barra de `<c r="M9" s="5"/>` e dev
 seguinte), e duas decisões de design foram tomadas em cima deles. Está registrado no bloco
 "Correção de 2026-07-30" do spec.
 
+### Botão "Atualizar dados" (live-refresh, 2026-07-31)
+
+A página semanal ganhou o mesmo botão que o orçamento já tinha: busca CSVs
+publicados ao vivo (MATRIZ -- mesma Sheet espelho do orçamento -- e Avanço
+Sond, via `tools/semanal/apps-script-espelho-avancos.gs`, Apps Script novo)
+e recalcula tudo no navegador, sem precisar de um novo build/publish. Ver
+`docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md` pro
+desenho completo. `window.__BASELINE__` nunca é tocado pelo refresh -- ao
+contrário do orçamento, a semanal mantém a linha de base separada dos
+registros desde sempre, então não precisa do transplante de
+`previstoInicial` que o orçamento precisa.
+
+**Pendência**: as URLs `URL_ESPELHO_AVANCOS_SEMANAL`/`URL_ESPELHO_LAB_SEMANAL`
+em `tools/semanal/render-semanal.js` (dentro de `SCRIPT_CLIENTE_SEMANAL`)
+são placeholder até o dono do projeto terminar o setup manual do Apps
+Script novo (ver o arquivo `.gs`) e publicar as duas abas como CSV. Até lá o
+botão funciona pra MATRIZ mas falha (com mensagem de erro clara no
+`#status-atualizacao`) ao tentar buscar Avanços/Lab.
+
 ### Pendências conhecidas
 
 **Fase 2 — os filtros: lógica compartilhada extraída, semanal ainda não
