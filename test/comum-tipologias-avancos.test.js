@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const {
   rotularTipologia, ORDEM_TIPOLOGIAS, SO_QUANDO_ACIONADA, MAPA_TIPOLOGIAS,
+  fonteParaCliente, trechosParaCliente,
 } = require('../tools/comum/tipologias-avancos.js');
 
 test('as 6 tipologias que já batem com a MATRIZ passam direto', () => {
@@ -81,4 +82,22 @@ test('todo rótulo de saída do mapa existe em ORDEM_TIPOLOGIAS', () => {
   for (const destino of Object.values(MAPA_TIPOLOGIAS)) {
     assert.ok(ORDEM_TIPOLOGIAS.includes(destino), `"${destino}" não está em ORDEM_TIPOLOGIAS`);
   }
+});
+
+test('o recorte não devolve CR nenhum', () => {
+  assert.doesNotMatch(fonteParaCliente(), /\r/);
+  trechosParaCliente().forEach((trecho, i) => assert.doesNotMatch(trecho, /\r/, `trecho ${i} tem CR`));
+});
+
+test('fonteParaCliente() avalia pros mesmos MAPA_TIPOLOGIAS/rotularTipologia/ORDEM_TIPOLOGIAS/SO_QUANDO_ACIONADA que os exports do Node', () => {
+  const fonte = fonteParaCliente();
+  const cliente = new Function(`${fonte}
+return { MAPA_TIPOLOGIAS: MAPA_TIPOLOGIAS, rotularTipologia: rotularTipologia, ORDEM_TIPOLOGIAS: ORDEM_TIPOLOGIAS, SO_QUANDO_ACIONADA: SO_QUANDO_ACIONADA };`)();
+
+  assert.deepStrictEqual(cliente.MAPA_TIPOLOGIAS, MAPA_TIPOLOGIAS);
+  assert.deepStrictEqual(cliente.ORDEM_TIPOLOGIAS, ORDEM_TIPOLOGIAS);
+  assert.deepStrictEqual(cliente.SO_QUANDO_ACIONADA, SO_QUANDO_ACIONADA);
+  assert.strictEqual(cliente.rotularTipologia('SP.F'), rotularTipologia('SP.F'));
+  assert.strictEqual(cliente.rotularTipologia('BQ'), rotularTipologia('BQ'));
+  assert.throws(() => cliente.rotularTipologia('ROTULO-INEXISTENTE'), /Tipologia desconhecida/);
 });
