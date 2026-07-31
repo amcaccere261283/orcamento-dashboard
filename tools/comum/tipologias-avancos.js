@@ -5,15 +5,18 @@
 // pelo dono do projeto em 2026-07-29 (ver o spec
 // docs/superpowers/specs/2026-07-29-base-demandas-realizado-design.md).
 //
-// Decisões que parecem erro de digitação e NÃO são:
-// - SP.F não entra em 'SP' -- é serviço tratado de forma independente, com
-//   rótulo próprio (SM.A tinha a mesma exceção até 2026-08-01; o dono do
-//   projeto decidiu juntá-la em 'SM / SM.F / SR', ver abaixo).
+// Decisão que parece erro de digitação e NÃO é:
 // - SEG.A e SEG.V ficam separadas e só aparecem na tela quando houver
 //   acionamento no período (ver SO_QUANDO_ACIONADA) -- são serviços sob
 //   demanda, e uma linha de zeros permanente só faria ruído.
 //
-// Três reclassificações feitas em 2026-08-01, a pedido do dono do projeto:
+// Quatro reclassificações feitas em 2026-08-01, a pedido do dono do
+// projeto -- SP.F, SM.A, BQ e DN tinham rótulo próprio (ou caíam em
+// 'Especiais') e passam a contar dentro de uma das 10 tipologias da
+// MATRIZ:
+// - SP.F passa a contar em 'SP' (antes era rótulo próprio -- decidido
+//   depois de SM.A, ao notar que a mesma exceção não fazia mais sentido
+//   mantida só pra SP.F).
 // - SM.A passa a contar em 'SM / SM.F / SR' (antes era rótulo próprio).
 // - BQ passa a contar em 'PI' (antes caía em 'Especiais').
 // - DN passa a contar em 'SH' (antes caía em 'Especiais'; investigado e
@@ -31,7 +34,7 @@ const MAPA_TIPOLOGIAS = {
   'SM.F': 'SM / SM.F / SR',
   SR: 'SM / SM.F / SR',
   'SM.A': 'SM / SM.F / SR',
-  'SP.F': 'SP.F',
+  'SP.F': 'SP',
   'SEG.A': 'SEG.A',
   'SEG.V': 'SEG.V',
   BQ: 'PI',
@@ -43,13 +46,12 @@ const MAPA_TIPOLOGIAS = {
 };
 
 // Ordem de exibição: primeiro as 10 da MATRIZ (mesma ordem que o orçamento
-// usa), depois as independentes, depois as de acionamento, e Especiais no
-// fim. LAB.C e LAB.E entram mesmo sem nenhuma linha no Avanços --
-// laboratório tem fonte própria, e omitir os dois rótulos faria a grade
-// parecer completa quando não está.
+// usa), depois as de acionamento, e Especiais no fim. LAB.C e LAB.E entram
+// mesmo sem nenhuma linha no Avanços -- laboratório tem fonte própria, e
+// omitir os dois rótulos faria a grade parecer completa quando não está.
 const ORDEM_TIPOLOGIAS = [
   'SP', 'SM / SM.F / SR', 'ST', 'PI', 'BL', 'CPTu', 'SH', 'VT', 'LAB.C', 'LAB.E',
-  'SP.F', 'SEG.A', 'SEG.V', 'Especiais',
+  'SEG.A', 'SEG.V', 'Especiais',
 ];
 
 const SO_QUANDO_ACIONADA = ['SEG.A', 'SEG.V'];

@@ -25,8 +25,8 @@ test('SM.A entra em SM / SM.F / SR -- reclassificado a pedido do dono em 2026-08
   assert.strictEqual(rotularTipologia('SM.A'), 'SM / SM.F / SR');
 });
 
-test('SP.F NÃO entra em SP -- decisão do dono, tem rótulo próprio', () => {
-  assert.strictEqual(rotularTipologia('SP.F'), 'SP.F');
+test('SP.F entra em SP -- reclassificado a pedido do dono em 2026-08-01', () => {
+  assert.strictEqual(rotularTipologia('SP.F'), 'SP');
 });
 
 test('SEG.A e SEG.V mantêm rótulo próprio e estão marcadas como só-quando-acionada', () => {
@@ -63,11 +63,11 @@ test('rótulo vazio LANÇA -- linha sem tipo é descartada antes, não rotulada'
   assert.throws(() => rotularTipologia(null), /vazi/i);
 });
 
-test('ORDEM_TIPOLOGIAS tem os 14 rótulos, inclui LAB.C/LAB.E e não repete nenhum', () => {
-  assert.strictEqual(ORDEM_TIPOLOGIAS.length, 14);
+test('ORDEM_TIPOLOGIAS tem os 13 rótulos, inclui LAB.C/LAB.E e não repete nenhum', () => {
+  assert.strictEqual(ORDEM_TIPOLOGIAS.length, 13);
   assert.ok(ORDEM_TIPOLOGIAS.includes('LAB.C'));
   assert.ok(ORDEM_TIPOLOGIAS.includes('LAB.E'));
-  assert.strictEqual(new Set(ORDEM_TIPOLOGIAS).size, 14);
+  assert.strictEqual(new Set(ORDEM_TIPOLOGIAS).size, 13);
 });
 
 test('todo rótulo de saída do mapa existe em ORDEM_TIPOLOGIAS', () => {

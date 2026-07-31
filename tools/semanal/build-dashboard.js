@@ -72,13 +72,15 @@ function baselineParaCliente(porChave, registros) {
 // precisam de 'sup'/'tipologia'), mesmo padrão de baselineParaCliente
 // acima, pra testar sem planilha sintética.
 //
-// Tipologias sem registro Diversos na MATRIZ (SP.F, SEG.A, SEG.V,
-// Especiais -- só existem no Avanços, sem equivalente na MATRIZ) continuam
-// de fora mesmo depois do redirecionamento: a chave vira
-// 'Diversos||<tipologia>', que também não existe entre os registros, então
-// o item continua sem "onde" contar. Isso é uma limitação estrutural (não
-// há Previsto pra atribuir a algo que a MATRIZ não modela), não um bug
-// desta função.
+// Tipologias sem registro Diversos na MATRIZ (SEG.A, SEG.V, Especiais --
+// só existem no Avanços, sem equivalente na MATRIZ; SP.F e as outras 3
+// reclassificações de 2026-08-01 -- ver tools/comum/tipologias-avancos.js
+// -- já saem de rotularTipologia coladas numa das 10 tipologias da MATRIZ,
+// então não chegam aqui como rótulo próprio) continuam de fora mesmo
+// depois do redirecionamento: a chave vira 'Diversos||<tipologia>', que
+// também não existe entre os registros, então o item continua sem "onde"
+// contar. Isso é uma limitação estrutural (não há Previsto pra atribuir a
+// algo que a MATRIZ não modela), não um bug desta função.
 function redirecionarSupsDesconhecidos(itens, registros) {
   const chavesConhecidas = new Set(registros.map(r => chaveMatriz(r.sup, r.tipologia)));
   let redirecionados = 0;
