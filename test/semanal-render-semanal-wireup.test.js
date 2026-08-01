@@ -518,3 +518,36 @@ test('atualizarDadosAoVivoSemanal NÃO reseta o mês selecionado pro vigente -- 
 
   assert.strictEqual(sandbox.mesSelecionadoIdx, 2, 'mesSelecionadoIdx não pode ser resetado pelo refresh de dados');
 });
+
+test('trocar o <select> de mês recalcula a Tabela Semanal com as semanas do mês escolhido, não mais o vigente', async () => {
+  // Julho e Agosto de 2026 têm quebras de semana DIFERENTES (números de
+  // semana distintos) -- comparar o número de semanas renderizadas entre os
+  // dois é prova suficiente de que o mês realmente mudou, sem precisar
+  // recalcular a mão o Previsto esperado de cada um.
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const semanalAntes = documentoFalso.getElementById('secao-semanal').innerHTML;
+  // renderCabecalho (tools/semanal/render-aba-semanal.js) emite um <th> por
+  // semana com o rótulo "S<n> (dd/mm a dd/mm)", sem classe nenhuma -- contar
+  // quantos <th>S\d aparecem é uma prova mais direta de que o número real de
+  // semanas mudou (julho e agosto de 2026 não têm a mesma quantidade) do que
+  // inventar uma classe CSS que o HTML real não tem.
+  const semanasNoHtml = (html) => (html.match(/<th>S\d+ /g) || []).length;
+  const colunasJulho = semanasNoHtml(semanalAntes);
+
+  // test/helpers/dom-falso-semanal.js não implementa dispatchEvent -- o
+  // padrão já estabelecido no repositório (ver test/comum-filtros-wireup.test.js,
+  // test/semanal-render-aba-demandas-wireup.test.js) é chamar o listener
+  // guardado em `.listeners.change` direto, com um evento sintético mínimo.
+  documentoFalso.getElementById('seletor-mes-semanal').listeners.change({ target: { value: '7' } }); // Agosto
+
+  assert.strictEqual(sandbox.mesSelecionadoIdx, 7, 'mesSelecionadoIdx precisa refletir a escolha do usuário');
+  const semanalDepois = documentoFalso.getElementById('secao-semanal').innerHTML;
+  assert.notStrictEqual(semanalDepois, semanalAntes, 'a Tabela Semanal precisa ter sido redesenhada de verdade, não só o estado interno mudado');
+  assert.notStrictEqual(semanasNoHtml(semanalDepois), colunasJulho, 'julho e agosto de 2026 têm quantidades de semana diferentes -- se o número bater, o mês não mudou de verdade');
+});
