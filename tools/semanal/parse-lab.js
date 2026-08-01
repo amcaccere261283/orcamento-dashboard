@@ -1,6 +1,10 @@
 'use strict';
 const { excelSerialParaData } = require('../comum/datas.js');
 const { classificarEnsaioLab } = require('../comum/tipologias-lab.js');
+// Same-dir: este require SOBREVIVE ao bundle (vira MODULOS['parse-avancos.js'],
+// ver transformaModulo) -- parse-avancos.js já vem antes de parse-lab.js em
+// BUNDLE_ARQUIVOS, então a entrada existe quando esta IIFE roda.
+const { dataDeTexto } = require('./parse-avancos.js');
 
 // Lê a aba "Lab Concluido" do Avanço Sond.xlsx: uma linha por ensaio de
 // laboratório JÁ CONCLUÍDO. Ao contrário de Avanços, esta aba não tem
@@ -10,7 +14,19 @@ const { classificarEnsaioLab } = require('../comum/tipologias-lab.js');
 // (decisão do dono do projeto, 2026-07-31 -- ele pretende trazer a
 // demanda de laboratório pra planilha depois; até lá, fica de fora).
 //
-// Node-only: NUNCA entra no bundle do navegador.
+// Roda tanto no Node (build/testes) quanto no navegador: este arquivo ESTÁ em
+// BUNDLE_ARQUIVOS (tools/semanal/render-semanal.js), porque o botão "Atualizar
+// dados" reparseia o espelho de Lab Concluido ao vivo. Os dois requires
+// '../comum/' acima são de FORA do diretório que buildBrowserBundle concatena,
+// então transformaModulo (tools/comum/browser-bundle.js) REMOVE as linhas em
+// vez de reescrevê-las pra MODULOS -- assume-se que `excelSerialParaData` e
+// `classificarEnsaioLab` já existem como globais quando este código roda. Quem
+// garante isso é renderSemanal(), que injeta fonteParaCliente() de
+// tools/comum/datas.js e tools/comum/tipologias-lab.js num <script> ANTES do
+// bundle (mesmo mecanismo já documentado em compute-balanco.js e
+// compute-demandas.js). No Node o require funciona normalmente, sem depender
+// de nada disso -- quem cobre a versão bundlada é
+// test/comum-browser-bundle.test.js.
 //
 // Colunas usadas, com o nome EXATO da planilha (medido em 2026-07-31):
 // ID Contrato · Concluído Dia · Tipo de Ensaio.
@@ -47,10 +63,17 @@ function locateColunasLab(headerRow) {
 }
 
 // Serial fora da janela, vazio ou não-numérico vira null.
+//
+// Mesmo fallback pra dataDeTexto (dd/MM/yyyy) de parse-avancos.js, pelo mesmo
+// motivo: a Sheet ESPELHO que alimenta o botão "Atualizar dados" pode publicar
+// a data como texto já formatado em vez de serial, e sem o fallback isso
+// viraria null em silêncio (Realizado/Tendência de LAB.C/LAB.E zerados, com o
+// botão reportando "Atualizado"). Continua devolvendo null quando não é nem
+// serial na janela nem dd/MM/yyyy válido.
 function dataSaneada(valor) {
   const serial = Number(valor);
-  if (!Number.isFinite(serial) || serial < SERIAL_MIN || serial > SERIAL_MAX) return null;
-  return excelSerialParaData(serial);
+  if (Number.isFinite(serial) && serial >= SERIAL_MIN && serial <= SERIAL_MAX) return excelSerialParaData(serial);
+  return dataDeTexto(valor);
 }
 
 function parseLab(grid) {

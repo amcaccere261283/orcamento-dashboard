@@ -568,6 +568,23 @@ function buscarCsvSemanal(url) {
   });
 }
 
+// parseAvancos/parseLab consomem a grade 1-INDEXADA de readXlsxSheet
+// (tools/comum/xlsx-reader.js): grid[0] é sempre um buraco vazio, grid[1] é o
+// cabeçalho, o dado começa em grid[2]. parseCsvGrid devolve uma grade
+// 0-INDEXADA normal (grid[0] = cabeçalho, já que um CSV publicado não tem a
+// linha 0 vazia que o .xlsx real tem). Sem este deslocamento, os dois parsers
+// procurariam o cabeçalho na primeira linha de DADO e ou lançariam "Coluna não
+// encontrada" ou desalinhariam tudo em silêncio.
+//
+// parseMatrizCliente NÃO passa por aqui de propósito: ele já foi escrito pra
+// consumir a grade 0-indexada de parseCsvGrid direto (ver o comentário sobre
+// grid[0] em parse-matriz-cliente.js).
+function gridCsvComoXlsx(texto) {
+  var g = ParseMatrizCliente.parseCsvGrid(texto);
+  g.unshift(null);
+  return g;
+}
+
 // Tudo-ou-nada: nenhum window.__REGISTROS__/window.__DEMANDAS__ é
 // sobrescrito antes dos 3 fetches E de todo o parsing terminarem com
 // sucesso -- uma falha parcial (ex.: MATRIZ ok, Avanços fora do ar) não
@@ -583,11 +600,23 @@ function atualizarDadosAoVivoSemanal() {
     var registrosNovos = ParseMatrizCliente.parseMatrizCliente(ParseMatrizCliente.parseCsvGrid(textos[0]));
     if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho da MATRIZ -- confira se o Apps Script já rodou pelo menos uma vez');
 
-    var furosLidos = ParseAvancos.parseAvancos(ParseMatrizCliente.parseCsvGrid(textos[1])).furos;
-    var ensaiosLidos = ParseLab.parseLab(ParseMatrizCliente.parseCsvGrid(textos[2])).ensaios;
+    var furosLidos = ParseAvancos.parseAvancos(gridCsvComoXlsx(textos[1])).furos;
+    var ensaiosLidos = ParseLab.parseLab(gridCsvComoXlsx(textos[2])).ensaios;
 
     var furos = ComputeDemandas.redirecionarSupsDesconhecidos(furosLidos, registrosNovos).itens;
     var ensaios = ComputeDemandas.redirecionarSupsDesconhecidos(ensaiosLidos, registrosNovos).itens;
+
+    // Falha alto em vez de reportar sucesso vazio: se vieram furos mas NENHUM
+    // deles tem uma única data legível, o formato de data do espelho mudou de
+    // um jeito que nem o serial nem o fallback dd/MM/yyyy de dataSaneada
+    // reconhecem -- e computeDemandas devolveria zeros em todas as séries com
+    // o status dizendo "Atualizado". Erro antes de qualquer atribuição, pra
+    // manter a atomicidade tudo-ou-nada.
+    var algumaData = furos.some(function (f) { return f.criacaoOS || f.terminoSondagem || f.conclusao; });
+    if (furos.length > 0 && !algumaData) {
+      throw new Error('nenhuma data legível encontrada nos furos do espelho de Avanços -- confira se o formato de data mudou (serial vs texto)');
+    }
+
     var demandasNovas = ComputeDemandas.computeDemandas(furos, periodosDoAnoSemanal(), ensaios);
 
     window.__REGISTROS__ = registrosNovos;

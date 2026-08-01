@@ -351,18 +351,24 @@ test('atualizarDadosAoVivoSemanal: busca os 3 CSVs, substitui window.__REGISTROS
     + Array(12).fill('0').join(',') + ',0,0,0,'
     + Array(12).fill('0').join(',') + ',0,0,\n';
   // parseAvancos/parseLab (tools/semanal/parse-avancos.js, parse-lab.js)
-  // leem o cabeçalho em grid[1], não grid[0] -- mesmo formato de 2 linhas
-  // antes do dado que a planilha real (Avanço Sond.xlsx) tem. Por isso a
-  // linha em branco antes do cabeçalho abaixo -- sem ela, locateColunas...
-  // lança "Coluna não encontrada" (comprovado à parte) e este teste de
-  // SUCESSO cairia no branch de erro.
-  const csvVazio = '\n' + 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo\n';
-  const csvLabVazio = '\n' + 'ID Contrato,Concluído Dia,Tipo de Ensaio\n';
+  // leem o cabeçalho em grid[1], não grid[0] -- quem faz esse deslocamento
+  // agora é gridCsvComoXlsx() (render-semanal.js), não um '\n' sintético no
+  // começo do CSV mockado. Estes dois CSVs trazem UMA linha de dado real cada
+  // (as 9 colunas obrigatórias de Avanços, as 3 de Lab), pra este teste de
+  // sucesso exercitar os dois parsers com dado de verdade em vez de só
+  // cabeçalho -- sem isso, um desalinhamento de índice passaria despercebido.
+  // Datas em serial Excel (46091 = 2026-03-10, 46093 = 2026-03-12,
+  // 46114 = 2026-04-02, 46117 = 2026-04-05): o fallback pra texto dd/MM/yyyy
+  // de dataSaneada é coberto pelos testes unitários de cada parser.
+  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo\n'
+    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,\n';
+  const csvLab = 'ID Contrato,Concluído Dia,Tipo de Ensaio\n'
+    + 'SUP-0002-25,46091,LL\n';
 
   const fetchMock = (url) => {
     const texto = url.indexOf('pub?gid=609773455') !== -1 ? csvMatriz
-      : url.indexOf('PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS') !== -1 ? csvVazio
-      : csvLabVazio;
+      : url.indexOf('PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS') !== -1 ? csvAvancos
+      : csvLab;
     return Promise.resolve({ ok: true, text: () => Promise.resolve(texto) });
   };
 
@@ -383,6 +389,16 @@ test('atualizarDadosAoVivoSemanal: busca os 3 CSVs, substitui window.__REGISTROS
   assert.strictEqual(sandbox.window.__REGISTROS__[0].previsto.volumeResumo.ticket, 9999, 'TICKET novo precisa aparecer -- é a motivação original desta feature');
   assert.strictEqual(sandbox.window.__BASELINE__, baselineAntes, 'baseline não pode ser tocado pelo refresh');
   assert.match(documentoFalso.getElementById('status-atualizacao').textContent, /^Atualizado às \d{2}:\d{2}$/);
+
+  // O agregado tem que refletir o dado dos CSVs de Avanços/Lab, não ficar
+  // vazio: tipologias/totais provam que parseAvancos rodou alinhado (uma
+  // grade desalinhada daria zeros em tudo, com o status ainda dizendo
+  // "Atualizado"), e porRegistroEventos prova que o ensaio de Lab chegou.
+  const demandas = sandbox.window.__DEMANDAS__;
+  assert.ok(demandas.tipologias.length > 0, '__DEMANDAS__ precisa ter tipologias');
+  assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 1, 'a única linha de Avanços tem que virar 1 chegada no ano');
+  assert.strictEqual(demandas.totais.sondagemRealizada.reduce((a, b) => a + b, 0), 1, 'a linha CONCLUIDO com Termino Sondagem tem que virar 1 sondagem realizada');
+  assert.ok(Object.keys(demandas.porRegistroEventos).length > 0, 'porRegistroEventos precisa ter entrada -- é o que alimenta Realizado/Tendência da Tabela Semanal (furos + ensaios de Lab)');
 });
 
 test('atualizarDadosAoVivoSemanal: se qualquer um dos 3 fetches falhar, window.__REGISTROS__ NÃO muda e o status mostra o erro', async () => {

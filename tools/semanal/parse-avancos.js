@@ -5,9 +5,19 @@ const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 // Lê a aba "Avanços" do Avanço Sond.xlsx: 61.927 linhas, uma por furo. Só
 // leitura e saneamento -- nenhuma agregação (isso é compute-demandas.js).
 //
-// Node-only: NUNCA entra no bundle do navegador. Os requires '../comum/'
-// acima seriam REMOVIDOS por transformaModulo (tools/comum/browser-bundle.js),
-// e as funções virariam undefined em produção com os testes passando.
+// Roda tanto no Node (build/testes) quanto no navegador: este arquivo ESTÁ em
+// BUNDLE_ARQUIVOS (tools/semanal/render-semanal.js), porque o botão "Atualizar
+// dados" reparseia o espelho de Avanços ao vivo. Os dois requires '../comum/'
+// acima são de FORA do diretório que buildBrowserBundle concatena, então
+// transformaModulo (tools/comum/browser-bundle.js) REMOVE as linhas em vez de
+// reescrevê-las pra MODULOS -- assume-se que `excelSerialParaData` e
+// `rotularTipologia` já existem como globais quando este código roda. Quem
+// garante isso é renderSemanal(), que injeta fonteParaCliente() de
+// tools/comum/datas.js e tools/comum/tipologias-avancos.js num <script> ANTES
+// do bundle (mesmo mecanismo já documentado em compute-balanco.js e
+// compute-demandas.js). No Node o require funciona normalmente, sem depender
+// de nada disso -- por isso os testes passariam mesmo se a injeção sumisse:
+// quem cobre isso é test/comum-browser-bundle.test.js.
 //
 // Colunas usadas, com o nome EXATO da planilha (medido em 2026-07-29):
 // Contrato(A) · Criação da OS(I) · Tipo(J) · Status(L) · Termino Sondagem(N,
@@ -66,10 +76,18 @@ function locateColunasAvancos(headerRow) {
 
 // Serial fora da janela, vazio ou não-numérico vira null. Sem isso, célula
 // vazia viraria 1899-12-30 e entraria como mês válido em alguma série.
+//
+// Fallback pra dataDeTexto (dd/MM/yyyy): o .xlsx real entrega estas colunas
+// como serial numérico, mas a Sheet ESPELHO que alimenta o botão "Atualizar
+// dados" (Apps Script copiando via getValues()/setValues(), depois publicada
+// como CSV) pode entregar a MESMA data como texto já formatado. Sem o
+// fallback isso virava null em silêncio -- o botão reportaria "Atualizado"
+// com Realizado/Tendência/Demandas zerados, sem erro nenhum. Continua
+// devolvendo null quando não é nem serial na janela nem dd/MM/yyyy válido.
 function dataSaneada(valor) {
   const serial = Number(valor);
-  if (!Number.isFinite(serial) || serial < SERIAL_MIN || serial > SERIAL_MAX) return null;
-  return excelSerialParaData(serial);
+  if (Number.isFinite(serial) && serial >= SERIAL_MIN && serial <= SERIAL_MAX) return excelSerialParaData(serial);
+  return dataDeTexto(valor);
 }
 
 // A coluna Cancelamento é a ÚNICA data desta aba gravada como texto
