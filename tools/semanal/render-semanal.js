@@ -49,7 +49,25 @@ const ABAS_VISUALIZACAO = [
 // de filtros -- ver a chamada de renderSemanal). Reaproveita os MESMOS ids
 // (#atualizar-dashboard/#status-atualizacao) que o CSS compartilhado em
 // cssBase() (tools/comum/render-shell.js) já estiliza.
+
+// 12 rótulos curtos (Jan..Dez), só pra montar o <select> de mês no HTML
+// estático do build -- duplicado de propósito (array pequeno e estável,
+// mesmo raciocínio de diaEpoch duplicado em compute-semanal.js): não vale
+// exportar MESES_PT de tools/comum/datas.js só por causa disto. O CLIENTE
+// tem sua PRÓPRIA cópia (MESES_PT_CURTO, dentro de SCRIPT_CLIENTE_SEMANAL,
+// Task 2) -- as duas nunca precisam concordar em tempo de execução (o
+// servidor só usa a dele pra montar o HTML inicial; o cliente nunca lê
+// esta constante).
+const MESES_PT_CURTO_SERVIDOR = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+function opcoesMesSemanal() {
+  return MESES_PT_CURTO_SERVIDOR.map(function (rotulo, i) {
+    return '<option value="' + i + '">' + rotulo + '</option>';
+  }).join('');
+}
+
 const MARKUP_ACOES_SEMANAL = `      <div class="filtros-acoes">
+        <label class="controle-mes-semanal">Mês<select id="seletor-mes-semanal">${opcoesMesSemanal()}</select></label>
         <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
         <span id="status-atualizacao" class="status-atualizacao"></span>
       </div>`;
@@ -144,6 +162,17 @@ const CSS_SEMANAL = `
      ausência de dado), não sobre em qual aba ela mora -- outras abas podem
      usar o mesmo aviso no futuro sem o nome soar deslocado. */
   .aviso-sem-dado { font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; max-width: 70ch; }
+  .controle-mes-semanal { display: flex; flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+  .controle-mes-semanal select {
+    padding: 6px 26px 6px 10px; height: 32px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface-1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23c3c2b7' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+    color: var(--text-primary);
+    font-size: 13px; cursor: pointer;
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  }
+  .controle-mes-semanal select:hover { border-color: rgba(246,181,63,0.5); }
+  .controle-mes-semanal select:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
 `;
 
 // CSS da aba Demandas (Task 5 desta fase). Mesma razão de CSS_SEMANAL/

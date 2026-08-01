@@ -308,6 +308,14 @@ test('o HTML da semanal tem o botão "Atualizar dados" e o span de status, com o
   assert.match(html, /<span id="status-atualizacao" class="status-atualizacao"><\/span>/);
 });
 
+test('o HTML da semanal tem o seletor de mês com as 12 opções (Jan..Dez, valores "0".."11")', () => {
+  const html = renderSemanal({ registros: [], baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
+  assert.match(html, /<select id="seletor-mes-semanal">/);
+  const opcoes = [...html.matchAll(/<option value="(\d+)">(\w+)<\/option>/g)];
+  assert.deepStrictEqual(opcoes.map((m) => m[1]), ['0','1','2','3','4','5','6','7','8','9','10','11']);
+  assert.deepStrictEqual(opcoes.map((m) => m[2]), ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']);
+});
+
 // Task 12 -- wire-up ponta-a-ponta de atualizarDadosAoVivoSemanal()
 // (render-semanal.js, ~linha 576): roda o botão "Atualizar dados" de
 // verdade dentro do MESMO vm.Context que os testes acima, com fetch()
