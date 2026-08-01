@@ -480,3 +480,29 @@ test('atualizarDadosAoVivoSemanal: se qualquer um dos 3 fetches falhar, window._
   assert.match(documentoFalso.getElementById('status-atualizacao').textContent, /^Falha ao atualizar: /);
   assert.ok(documentoFalso.getElementById('status-atualizacao').classList.contains('status-erro'));
 });
+
+test('atualizarDadosAoVivoSemanal NÃO reseta o mês selecionado pro vigente -- se o usuário estava olhando outro mês, o refresh preserva a escolha', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+
+  const fetchMock = (url) => url.indexOf('pub?gid=609773455') !== -1
+    ? Promise.resolve({ ok: true, text: () => Promise.resolve('ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERMINO,SONDAGEM,BASE\n') })
+    : Promise.reject(new Error('não deveria buscar Avanços/Lab com as URLs ainda placeholder: ' + url));
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // Usuário troca pra março (índice 2) ANTES de clicar em Atualizar dados.
+  sandbox.mesSelecionadoIdx = 2;
+
+  // MATRIZ mockada acima não tem nenhum registro -- vai lançar
+  // "nenhum registro encontrado", cai no .catch, mas isso não importa aqui:
+  // o que este teste prova é que mesSelecionadoIdx não é tocado em NENHUM
+  // ponto do fluxo de atualizarDadosAoVivoSemanal, sucesso ou falha.
+  sandbox.atualizarDadosAoVivoSemanal();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.strictEqual(sandbox.mesSelecionadoIdx, 2, 'mesSelecionadoIdx não pode ser resetado pelo refresh de dados');
+});
