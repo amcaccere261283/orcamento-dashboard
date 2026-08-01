@@ -328,7 +328,48 @@ function chamarEsperarAtualizacao(sandbox) {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-test('atualizarDadosAoVivoSemanal: busca os 3 CSVs, substitui window.__REGISTROS__/window.__DEMANDAS__ (sem tocar window.__BASELINE__), remonta filtros e re-renderiza a aba ativa', async () => {
+test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB ainda no placeholder (estado real de produção hoje), atualiza só a MATRIZ e deixa window.__DEMANDAS__ intocado', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-01T00:00:00Z');
+  const html = renderSemanal({ registros, baseline: [{ chave: 'SUP-0001-24||ST', previstoInicial: {} }], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+
+  const csvMatriz = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERMINO,SONDAGEM,BASE,'
+    + Array(12).fill('mes').join(',') + ',PICO,MÉDIA,PROD.,DIAS,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,TICKET,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,OBS\n'
+    + 'Origem-B,Grupo-B,Tomador-Novo,SUP-0002-25,Escopo,Apoio,01/2026,12/2026,ST,P,'
+    + Array(12).fill('0').join(',') + ',2,2,8,25,'
+    + Array(12).fill('0').join(',') + ',100,100,9999,'
+    + Array(12).fill('0').join(',') + ',100,100,\n'
+    + ',,,,,,,,,T,'
+    + Array(12).fill('0').join(',') + ',0,0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,\n';
+
+  // fetchMock só precisa responder à MATRIZ -- se atualizarDadosAoVivoSemanal
+  // tentar buscar as URLs placeholder (bug que esta task corrige), este mock
+  // rejeitaria com 'fetch não mockado' e o teste falharia de propósito.
+  const fetchMock = (url) => url.indexOf('pub?gid=609773455') !== -1
+    ? Promise.resolve({ ok: true, text: () => Promise.resolve(csvMatriz) })
+    : Promise.reject(new Error('não deveria buscar Avanços/Lab com as URLs ainda placeholder: ' + url));
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const baselineAntes = sandbox.window.__BASELINE__;
+  const demandasAntes = sandbox.window.__DEMANDAS__;
+  await chamarEsperarAtualizacao(sandbox);
+
+  assert.strictEqual(sandbox.window.__REGISTROS__.length, 1, 'registros novos vieram só do CSV da MATRIZ mockado');
+  assert.strictEqual(sandbox.window.__REGISTROS__[0].sup, 'SUP-0002-25');
+  assert.strictEqual(sandbox.window.__REGISTROS__[0].previsto.volumeResumo.ticket, 9999, 'TICKET novo precisa aparecer -- é a motivação original desta feature, e continua funcionando mesmo com Avanços/Lab pendentes');
+  assert.strictEqual(sandbox.window.__BASELINE__, baselineAntes, 'baseline não pode ser tocado pelo refresh');
+  assert.strictEqual(sandbox.window.__DEMANDAS__, demandasAntes, 'sem Avanços/Lab configurados, __DEMANDAS__ tem que ficar exatamente como estava -- nunca zerado nem recalculado com dado incompleto');
+  assert.match(documentoFalso.getElementById('status-atualizacao').textContent, /^Atualizado \(só MATRIZ\) às \d{2}:\d{2} -- Avanços\/Lab pendente de configuração do Apps Script$/);
+});
+
+test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já configuradas (não mais placeholder), busca os 3 CSVs, substitui window.__REGISTROS__/window.__DEMANDAS__ (sem tocar window.__BASELINE__), remonta filtros e re-renderiza a aba ativa', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const geradoEm = new Date('2026-07-01T00:00:00Z');
   const html = renderSemanal({ registros, baseline: [{ chave: 'SUP-0001-24||ST', previstoInicial: {} }], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
@@ -365,9 +406,11 @@ test('atualizarDadosAoVivoSemanal: busca os 3 CSVs, substitui window.__REGISTROS
   const csvLab = 'ID Contrato,Concluído Dia,Tipo de Ensaio\n'
     + 'SUP-0002-25,46091,LL\n';
 
+  // URLs fictícias, só pra deixarem de bater no padrão RE_URL_PENDENTE
+  // (render-semanal.js) -- é isso que liga o caminho completo de 3 fontes.
   const fetchMock = (url) => {
     const texto = url.indexOf('pub?gid=609773455') !== -1 ? csvMatriz
-      : url.indexOf('PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS') !== -1 ? csvAvancos
+      : url.indexOf('avancos-configurado-teste') !== -1 ? csvAvancos
       : csvLab;
     return Promise.resolve({ ok: true, text: () => Promise.resolve(texto) });
   };
@@ -380,6 +423,14 @@ test('atualizarDadosAoVivoSemanal: busca os 3 CSVs, substitui window.__REGISTROS
   // com addEventListener('click', tentarDesbloquear), não um <form>).
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
+
+  // Simula o dia em que o dono do projeto já publicou o Apps Script e trocou
+  // os dois placeholders pelas URLs reais -- `var URL_ESPELHO_...` no topo do
+  // script vira propriedade do objeto global do vm.Context (sandbox.window
+  // === sandbox), então sobrescrever aqui muda o valor que
+  // atualizarDadosAoVivoSemanal() lê na hora de checar RE_URL_PENDENTE.
+  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'https://exemplo.com/avancos-configurado-teste.csv';
+  sandbox.URL_ESPELHO_LAB_SEMANAL = 'https://exemplo.com/lab-configurado-teste.csv';
 
   const baselineAntes = sandbox.window.__BASELINE__;
   await chamarEsperarAtualizacao(sandbox);

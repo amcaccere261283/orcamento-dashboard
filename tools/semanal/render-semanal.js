@@ -585,39 +585,59 @@ function gridCsvComoXlsx(texto) {
   return g;
 }
 
-// Tudo-ou-nada: nenhum window.__REGISTROS__/window.__DEMANDAS__ é
-// sobrescrito antes dos 3 fetches E de todo o parsing terminarem com
-// sucesso -- uma falha parcial (ex.: MATRIZ ok, Avanços fora do ar) não
-// pode deixar os dois globais referindo momentos diferentes. baseline
+// URL_ESPELHO_AVANCOS_SEMANAL/URL_ESPELHO_LAB_SEMANAL ainda são o literal
+// placeholder (ver o comentário deles acima) enquanto o dono do projeto não
+// publica o Apps Script novo -- tentar buscá-los dá HTTP 404 (não é uma URL
+// de verdade). RE_URL_PENDENTE reconhece esse estado pra degradar com
+// graça em vez de falhar tudo: enquanto QUALQUER um dos dois continuar
+// placeholder, o botão atualiza só a MATRIZ (Previsto/ticket médio) e deixa
+// window.__DEMANDAS__ como estava -- assim que o dono publicar as duas
+// abas e trocar as duas URLs, esta checagem some sozinha (as URLs reais não
+// batem no padrão) e o botão passa a atualizar os três de novo, sem
+// precisar mexer neste trecho de novo.
+var RE_URL_PENDENTE = /^PENDENTE-/;
+
+// Tudo-ou-nada, mas só ENTRE as fontes que este refresh de fato tentou
+// atualizar: nenhum window.__REGISTROS__/window.__DEMANDAS__ é sobrescrito
+// antes de todos os fetches tentados E de todo o parsing terminarem com
+// sucesso -- uma falha parcial (ex.: MATRIZ ok, Avanços fora do ar) não pode
+// deixar os dois globais referindo momentos diferentes. baseline
 // (window.__BASELINE__) nunca é tocado aqui -- ver "Estado atual" no spec.
 function atualizarDadosAoVivoSemanal() {
   definirStatusAtualizacaoSemanal('Atualizando…', false);
+  var avancosLabConfigurados = !RE_URL_PENDENTE.test(URL_ESPELHO_AVANCOS_SEMANAL)
+    && !RE_URL_PENDENTE.test(URL_ESPELHO_LAB_SEMANAL);
+
   Promise.all([
     buscarCsvSemanal(URL_ESPELHO_MATRIZ_SEMANAL),
-    buscarCsvSemanal(URL_ESPELHO_AVANCOS_SEMANAL),
-    buscarCsvSemanal(URL_ESPELHO_LAB_SEMANAL),
+    avancosLabConfigurados ? buscarCsvSemanal(URL_ESPELHO_AVANCOS_SEMANAL) : Promise.resolve(null),
+    avancosLabConfigurados ? buscarCsvSemanal(URL_ESPELHO_LAB_SEMANAL) : Promise.resolve(null),
   ]).then(function (textos) {
     var registrosNovos = ParseMatrizCliente.parseMatrizCliente(ParseMatrizCliente.parseCsvGrid(textos[0]));
     if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho da MATRIZ -- confira se o Apps Script já rodou pelo menos uma vez');
 
-    var furosLidos = ParseAvancos.parseAvancos(gridCsvComoXlsx(textos[1])).furos;
-    var ensaiosLidos = ParseLab.parseLab(gridCsvComoXlsx(textos[2])).ensaios;
+    var demandasNovas = window.__DEMANDAS__;
 
-    var furos = ComputeDemandas.redirecionarSupsDesconhecidos(furosLidos, registrosNovos).itens;
-    var ensaios = ComputeDemandas.redirecionarSupsDesconhecidos(ensaiosLidos, registrosNovos).itens;
+    if (avancosLabConfigurados) {
+      var furosLidos = ParseAvancos.parseAvancos(gridCsvComoXlsx(textos[1])).furos;
+      var ensaiosLidos = ParseLab.parseLab(gridCsvComoXlsx(textos[2])).ensaios;
 
-    // Falha alto em vez de reportar sucesso vazio: se vieram furos mas NENHUM
-    // deles tem uma única data legível, o formato de data do espelho mudou de
-    // um jeito que nem o serial nem o fallback dd/MM/yyyy de dataSaneada
-    // reconhecem -- e computeDemandas devolveria zeros em todas as séries com
-    // o status dizendo "Atualizado". Erro antes de qualquer atribuição, pra
-    // manter a atomicidade tudo-ou-nada.
-    var algumaData = furos.some(function (f) { return f.criacaoOS || f.terminoSondagem || f.conclusao; });
-    if (furos.length > 0 && !algumaData) {
-      throw new Error('nenhuma data legível encontrada nos furos do espelho de Avanços -- confira se o formato de data mudou (serial vs texto)');
+      var furos = ComputeDemandas.redirecionarSupsDesconhecidos(furosLidos, registrosNovos).itens;
+      var ensaios = ComputeDemandas.redirecionarSupsDesconhecidos(ensaiosLidos, registrosNovos).itens;
+
+      // Falha alto em vez de reportar sucesso vazio: se vieram furos mas NENHUM
+      // deles tem uma única data legível, o formato de data do espelho mudou de
+      // um jeito que nem o serial nem o fallback dd/MM/yyyy de dataSaneada
+      // reconhecem -- e computeDemandas devolveria zeros em todas as séries com
+      // o status dizendo "Atualizado". Erro antes de qualquer atribuição, pra
+      // manter a atomicidade tudo-ou-nada.
+      var algumaData = furos.some(function (f) { return f.criacaoOS || f.terminoSondagem || f.conclusao; });
+      if (furos.length > 0 && !algumaData) {
+        throw new Error('nenhuma data legível encontrada nos furos do espelho de Avanços -- confira se o formato de data mudou (serial vs texto)');
+      }
+
+      demandasNovas = ComputeDemandas.computeDemandas(furos, periodosDoAnoSemanal(), ensaios);
     }
-
-    var demandasNovas = ComputeDemandas.computeDemandas(furos, periodosDoAnoSemanal(), ensaios);
 
     window.__REGISTROS__ = registrosNovos;
     window.__DEMANDAS__ = demandasNovas;
@@ -626,7 +646,11 @@ function atualizarDadosAoVivoSemanal() {
     montarAbaDemandas();
 
     var agora = new Date();
-    definirStatusAtualizacaoSemanal('Atualizado às ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), false);
+    var horario = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    var statusTexto = avancosLabConfigurados
+      ? 'Atualizado às ' + horario
+      : 'Atualizado (só MATRIZ) às ' + horario + ' -- Avanços/Lab pendente de configuração do Apps Script';
+    definirStatusAtualizacaoSemanal(statusTexto, false);
   }).catch(function (erro) {
     definirStatusAtualizacaoSemanal('Falha ao atualizar: ' + erro.message, true);
   });
