@@ -486,8 +486,21 @@ test('atualizarDadosAoVivoSemanal NÃO reseta o mês selecionado pro vigente -- 
   const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
   const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
+  const csvMatriz = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERMINO,SONDAGEM,BASE,'
+    + Array(12).fill('mes').join(',') + ',PICO,MÉDIA,PROD.,DIAS,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,TICKET,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,OBS\n'
+    + 'Origem-C,Grupo-C,Tomador-Teste,SUP-0003-26,Escopo,Apoio,01/2026,12/2026,ST,P,'
+    + Array(12).fill('0').join(',') + ',2,2,8,25,'
+    + Array(12).fill('0').join(',') + ',100,100,5000,'
+    + Array(12).fill('0').join(',') + ',100,100,\n'
+    + ',,,,,,,,,T,'
+    + Array(12).fill('0').join(',') + ',0,0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,\n';
+
   const fetchMock = (url) => url.indexOf('pub?gid=609773455') !== -1
-    ? Promise.resolve({ ok: true, text: () => Promise.resolve('ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERMINO,SONDAGEM,BASE\n') })
+    ? Promise.resolve({ ok: true, text: () => Promise.resolve(csvMatriz) })
     : Promise.reject(new Error('não deveria buscar Avanços/Lab com as URLs ainda placeholder: ' + url));
 
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
@@ -497,12 +510,11 @@ test('atualizarDadosAoVivoSemanal NÃO reseta o mês selecionado pro vigente -- 
   // Usuário troca pra março (índice 2) ANTES de clicar em Atualizar dados.
   sandbox.mesSelecionadoIdx = 2;
 
-  // MATRIZ mockada acima não tem nenhum registro -- vai lançar
-  // "nenhum registro encontrado", cai no .catch, mas isso não importa aqui:
-  // o que este teste prova é que mesSelecionadoIdx não é tocado em NENHUM
-  // ponto do fluxo de atualizarDadosAoVivoSemanal, sucesso ou falha.
-  sandbox.atualizarDadosAoVivoSemanal();
-  await new Promise((resolve) => setImmediate(resolve));
+  // O refresh atualiza os registros da MATRIZ e recalcula a aba ativa.
+  // Este teste prova que mesSelecionadoIdx não é tocado neste fluxo --
+  // se fosse resetado pro vigente (regressão), o usuário perderia a escolha
+  // de mês que fez antes de clicar em "Atualizar dados".
+  await chamarEsperarAtualizacao(sandbox);
 
   assert.strictEqual(sandbox.mesSelecionadoIdx, 2, 'mesSelecionadoIdx não pode ser resetado pelo refresh de dados');
 });
