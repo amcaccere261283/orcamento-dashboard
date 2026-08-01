@@ -97,13 +97,17 @@ nasceria sem nenhuma opção correspondente selecionada.
 
 ### Rótulos dos meses
 
-Duplica um array `MESES_PT_SEMANAL` de 3 letras (Jan..Dez) direto no
-`SCRIPT_CLIENTE_SEMANAL`, no mesmo espírito de `diaEpoch` já duplicado ali
-(ver comentário em `tools/comum/datas.js`) -- é um array de 12 strings
-estático, não vale estender `fonteParaCliente()` de `datas.js` só por causa
-dele. Usado só pra montar os `<option>` no HTML estático (build-time, Node
-já tem `MESES_PT` real em `tools/comum/datas.js` -- usa esse no servidor,
-sem duplicar lá).
+Só o servidor precisa do array de rótulos: `MESES_PT_CURTO_SERVIDOR`, 12
+strings de 3 letras (Jan..Dez) declaradas direto em `render-semanal.js`, no
+mesmo espírito de `diaEpoch` já duplicado ali (ver comentário em
+`tools/comum/datas.js`) -- é um array pequeno e estático, não vale estender
+`fonteParaCliente()` de `datas.js` só por causa dele. Usado só pra montar os
+`<option>` já rotulados no HTML estático do build.
+
+O cliente NUNCA duplica esse array nem converte índice->rótulo: os
+`<option>` já nascem rotulados no HTML gerado pelo servidor, e o cliente só
+lê/escreve o `value` numérico (`mesSelecionadoIdx`) do `<select>`. Não existe
+`MESES_PT_SEMANAL` (nem equivalente) dentro de `SCRIPT_CLIENTE_SEMANAL`.
 
 ## Fora de escopo (explícito)
 

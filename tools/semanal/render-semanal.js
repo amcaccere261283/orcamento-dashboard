@@ -53,11 +53,10 @@ const ABAS_VISUALIZACAO = [
 // 12 rótulos curtos (Jan..Dez), só pra montar o <select> de mês no HTML
 // estático do build -- duplicado de propósito (array pequeno e estável,
 // mesmo raciocínio de diaEpoch duplicado em compute-semanal.js): não vale
-// exportar MESES_PT de tools/comum/datas.js só por causa disto. O CLIENTE
-// tem sua PRÓPRIA cópia (MESES_PT_CURTO, dentro de SCRIPT_CLIENTE_SEMANAL,
-// Task 2) -- as duas nunca precisam concordar em tempo de execução (o
-// servidor só usa a dele pra montar o HTML inicial; o cliente nunca lê
-// esta constante).
+// exportar MESES_PT de tools/comum/datas.js só por causa disto. O cliente
+// NUNCA precisa converter índice->rótulo -- os <option> já nascem
+// rotulados no HTML estático gerado aqui; o cliente só lê/escreve o
+// value numérico (mesSelecionadoIdx).
 const MESES_PT_CURTO_SERVIDOR = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 function opcoesMesSemanal() {

@@ -311,9 +311,38 @@ test('o HTML da semanal tem o botão "Atualizar dados" e o span de status, com o
 test('o HTML da semanal tem o seletor de mês com as 12 opções (Jan..Dez, valores "0".."11")', () => {
   const html = renderSemanal({ registros: [], baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   assert.match(html, /<select id="seletor-mes-semanal">/);
-  const opcoes = [...html.matchAll(/<option value="(\d+)">(\w+)<\/option>/g)];
+  const marcadorAbertura = '<select id="seletor-mes-semanal">';
+  const inicioSelect = html.indexOf(marcadorAbertura) + marcadorAbertura.length;
+  const fimSelect = html.indexOf('</select>', inicioSelect);
+  assert.notStrictEqual(fimSelect, -1, 'esperava um </select> fechando o <select id="seletor-mes-semanal">');
+  const trechoSelect = html.slice(inicioSelect, fimSelect);
+  const opcoes = [...trechoSelect.matchAll(/<option value="(\d+)">(\w+)<\/option>/g)];
   assert.deepStrictEqual(opcoes.map((m) => m[1]), ['0','1','2','3','4','5','6','7','8','9','10','11']);
   assert.deepStrictEqual(opcoes.map((m) => m[2]), ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']);
+});
+
+test('mesSelecionadoIdx nasce clampado em 11 quando window.__VIGENTE_IDX__ vem 12 (ano inteiro no passado)', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2027-01-15T00:00:00Z'); // periodos são de 2026 inteiro -- vigenteIdx = 12
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  assert.strictEqual(sandbox.mesSelecionadoIdx, 11, 'clamp precisa levar 12 pra 11 (Dez), não deixar vigenteIdx inválido passar direto');
+  assert.strictEqual(documentoFalso.getElementById('seletor-mes-semanal').value, '11', 'o <select> precisa concordar com mesSelecionadoIdx no primeiro render');
+});
+
+test('mesSelecionadoIdx nasce clampado em 0 quando window.__VIGENTE_IDX__ vem -1 (ano inteiro no futuro)', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2025-12-15T00:00:00Z'); // periodos são de 2026 inteiro -- vigenteIdx = -1
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  assert.strictEqual(sandbox.mesSelecionadoIdx, 0, 'clamp precisa levar -1 pra 0 (Jan), não deixar vigenteIdx inválido passar direto');
+  assert.strictEqual(documentoFalso.getElementById('seletor-mes-semanal').value, '0', 'o <select> precisa concordar com mesSelecionadoIdx no primeiro render');
 });
 
 // Task 12 -- wire-up ponta-a-ponta de atualizarDadosAoVivoSemanal()
@@ -516,6 +545,11 @@ test('atualizarDadosAoVivoSemanal NÃO reseta o mês selecionado pro vigente -- 
   // de mês que fez antes de clicar em "Atualizar dados".
   await chamarEsperarAtualizacao(sandbox);
 
+  // Confirma que o refresh de fato completou pelo caminho de sucesso (só
+  // MATRIZ) -- sem isto, se o mock saísse de sincronia e o refresh caísse
+  // no .catch de erro, mesSelecionadoIdx continuaria 2 (nunca tocado) e o
+  // teste passaria verde sem ter exercitado o fluxo que diz proteger.
+  assert.match(documentoFalso.getElementById('status-atualizacao').textContent, /^Atualizado \(só MATRIZ\) às /);
   assert.strictEqual(sandbox.mesSelecionadoIdx, 2, 'mesSelecionadoIdx não pode ser resetado pelo refresh de dados');
 });
 
