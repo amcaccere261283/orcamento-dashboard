@@ -367,6 +367,12 @@ var filtrosSelecionadosSemanal = {};
 FILTROS_CONFIG_SEMANAL.forEach(function (cfg) { filtrosSelecionadosSemanal[cfg.chave] = new Set(); });
 filtrosSelecionadosSemanal.dimensao.add('financeiro');
 
+// Índice do mês (0-11) que a Tabela Semanal/Gráficos mostram -- começa no
+// vigente, mas o usuário pode trocar pelo <select> #seletor-mes-semanal
+// (ver montarDashboard). O clamp cobre o caso raro de window.__VIGENTE_IDX__
+// vir fora de [0,11] (ano inteiro no passado/futuro -- ver calcularVigenteIdx).
+var mesSelecionadoIdx = Math.max(0, Math.min(11, window.__VIGENTE_IDX__));
+
 // dados: o que o gate acabou de JSON.parse -- {registros, baseline} (ver o
 // ACHADO documentado acima desta constante). Guarda baseline à parte
 // (window.__BASELINE__) e devolve só o array de registros, que é o que o
@@ -397,9 +403,9 @@ function alternarAba(aba) {
 // Gráficos é uma segunda leitura visual dos MESMOS números da Tabela
 // Semanal, nunca um recorte à parte (por isso não tem controles próprios,
 // ao contrário da aba Balanço de massa).
-function montarAbaGraficoSemanal(registros, indices, dimensoes, hojeEpoch) {
+function montarAbaGraficoSemanal(registros, indices, dimensoes, vigenteIdx, hojeEpoch) {
   document.getElementById('grafico-semanal-conteudo').innerHTML = RenderAbaGraficoSemanal.renderAbaGraficoSemanal(registros, indices, dimensoes, {
-    vigenteIdx: window.__VIGENTE_IDX__,
+    vigenteIdx: vigenteIdx,
     ano: window.__ANO__,
     demandas: window.__DEMANDAS__,
     hojeEpoch: hojeEpoch,
@@ -523,10 +529,10 @@ function recalcularSemanal() {
   var agora = new Date();
   var hojeEpoch = ComputeSemanal.diaEpoch(new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate())));
   document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(
-    window.__REGISTROS__, indices, dimensoes, window.__VIGENTE_IDX__, window.__ANO__,
+    window.__REGISTROS__, indices, dimensoes, mesSelecionadoIdx, window.__ANO__,
     { demandas: window.__DEMANDAS__, hojeEpoch: hojeEpoch }
   );
-  montarAbaGraficoSemanal(window.__REGISTROS__, indices, dimensoes, hojeEpoch);
+  montarAbaGraficoSemanal(window.__REGISTROS__, indices, dimensoes, mesSelecionadoIdx, hojeEpoch);
   montarAbaBalanco(window.__REGISTROS__, indices);
 }
 
@@ -556,6 +562,12 @@ function montarDashboard(registros) {
   document.getElementById('aba-grafico-semanal').addEventListener('click', function () { alternarAba('grafico-semanal'); });
   document.getElementById('aba-balanco').addEventListener('click', function () { alternarAba('balanco'); });
   document.getElementById('aba-demandas').addEventListener('click', function () { alternarAba('demandas'); });
+  var seletorMes = document.getElementById('seletor-mes-semanal');
+  seletorMes.value = String(mesSelecionadoIdx);
+  seletorMes.addEventListener('change', function (e) {
+    mesSelecionadoIdx = parseInt(e.target.value, 10);
+    recalcularSemanal();
+  });
   montarTodosFiltrosMultiSemanal(registros);
   configurarAberturaFiltrosMulti();
   inicializarTooltipGraficoSemanal();
