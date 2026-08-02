@@ -119,10 +119,52 @@ test('construirPainelGraficoSemanalHtml: os valores desenhados no gráfico batem
 
   // Só 3 semanas de Realizado são positivas (2, 3, 1) -- construirColunasSvg
   // só desenha <path> quando a barra tem altura > 0 (0 furo = altura zero,
-  // desenharBarraArredondada devolve ''); Previsto/Tendência têm valor em
-  // toda semana, então o total de barras é maior que 3 -- não checa a
-  // contagem aqui de propósito, isso já é coberto no teste de
-  // construirGraficoSemanalSvg isolado (mais acima neste arquivo).
+  // desenharBarraArredondada devolve ''). Previsto tem valor em toda
+  // semana; Tendência (achado de 2026-08-02) fica sem-dado nas semanas já
+  // elapsadas (S1/S2/S3 aqui, hoje=15/07) e só as futuras (S4/S5) desenham
+  // barra -- não checa a contagem aqui de propósito, isso já é coberto no
+  // teste de construirGraficoSemanalSvg isolado (mais acima neste arquivo).
+});
+
+// Achado da revisão final (2026-08-02): o painel Semanal (barras) e o
+// painel Acumulado (curva S) usam a MESMA série de Tendência, mas com
+// tratamentos diferentes -- o de barras precisa da versão SUPRIMIDA (pra
+// não desenhar barra nas semanas elapsadas), o Acumulado precisa da versão
+// COMPLETA (calcularAcumulado trata null como "ainda não começou a
+// acumular" -- acumular a versão suprimida faria a curva reiniciar do zero
+// na 1ª semana futura, perdendo o que já foi realizado). Este teste prova
+// que o ponto final da curva Acumulada de Tendência bate com o Fechamento
+// que a Tabela Semanal mostra, mesmo com semanas elapsadas suprimidas no
+// painel de barras.
+test('construirPainelGraficoSemanalHtml: o ponto final da curva Acumulada de Tendência bate com o Fechamento da Tabela Semanal, mesmo com as semanas elapsadas suprimidas no painel de barras', () => {
+  const { calcularSeriesSemanaisDimensao } = require('../tools/semanal/render-aba-semanal.js');
+  const { semanasDoMes, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_REALIZADO_CONHECIDO } };
+  const semanas = semanasDoMes(ANO, VIGENTE_JULHO);
+  const indiceAtual = indiceSemanaAtual(semanas, HOJE_15_JUL);
+
+  const series = calcularSeriesSemanaisDimensao(
+    [registro(1000)], [0], 'volume', VIGENTE_JULHO, semanas, semanas.length, true, indiceAtual, demandas, HOJE_15_JUL
+  );
+  // Pré-condição: confirma que este fixture tem semanas elapsadas
+  // suprimidas na tabela (senão o teste não provaria nada) e um Fechamento
+  // de verdade calculado.
+  assert.deepStrictEqual(series.semanasTendencia.slice(0, 3), [null, null, null], 'S1/S2/S3 precisam estar suprimidas pra este teste fazer sentido');
+  assert.ok(typeof series.fechamentoTendencia === 'number' && series.fechamentoTendencia > 0);
+
+  const html = construirPainelGraficoSemanalHtml(
+    [registro(1000)], [0], 'volume', VIGENTE_JULHO, semanas, semanas.length, true, indiceAtual, demandas, HOJE_15_JUL
+  );
+  const tooltipsAcumuladoTendencia = [...html.matchAll(/data-tooltip="([^"]*Tendência: [^"]*)"/g)].map((m) => m[1]);
+  // O painel Acumulado tem 5 tooltips de Tendência (uma por semana, S1..S5
+  // -- ao contrário do painel de barras, que só teria 2, S4/S5). O último
+  // (S5) precisa bater com fechamentoTendencia formatado sem casas decimais
+  // (mesmo formatarValorGrafico dos outros números do gráfico).
+  const tooltipsPainelAcumulado = tooltipsAcumuladoTendencia.slice(-5); // últimos 5 = os do painel Acumulado (o de barras vem primeiro no HTML)
+  assert.strictEqual(tooltipsPainelAcumulado.length, 5, 'painel Acumulado precisa ter um ponto de Tendência por semana, sem supressão');
+  const valorFinal = tooltipsPainelAcumulado[4].match(/Tendência: ([\d.]+)$/)[1].replace(/\./g, '');
+  assert.strictEqual(Number(valorFinal), Math.round(series.fechamentoTendencia),
+    'o ponto final (S5) da curva Acumulada precisa bater com o Fechamento da Tabela Semanal');
 });
 
 test('construirPainelGraficoSemanalHtml: Equipes mostra só Previsto, sem legenda (1 série só) e sem painel Acumulado', () => {

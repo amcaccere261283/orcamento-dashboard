@@ -200,20 +200,25 @@ test('registro sem TICKET cadastrado (0 ou ausente) não contribui R$ nenhum em 
   assert.match(linhaRealizado, /<td class="num">0,00<\/td>/);
 });
 
-test('Tendência: semanas fechada/em-curso usam o Realizado real, futuras dividem o saldo restante do Previsto PROPORCIONALMENTE AOS DIAS de cada uma, não igualmente', () => {
+test('Tendência: semanas fechadas/em-curso ficam sem-dado (o Realizado já mostra o fato, não precisa duplicar); futuras dividem o saldo restante do Previsto PROPORCIONALMENTE AOS DIAS de cada uma', () => {
   const eventos = {
     sondagemRealizada: [diaJul(1), diaJul(1), diaJul(8), diaJul(8), diaJul(8), diaJul(14)],
     saidaEstoque: [], chegada: [],
   };
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': eventos } };
-  // Previsto do mês = 1000. Realizado até agora (S1+S2+S3 parcial) = 2+3+1 = 6.
-  // 2 semanas futuras: S4 (7 dias) e S5 (5 dias) -- saldoRestante = 1000-6 = 994,
+  // Previsto do mês = 1000. Realizado até agora (S1+S2+S3 parcial) = 2+3+1 = 6
+  // (S1, S2 e S3 são elapsadas -- hoje, 15/07, está dentro de S3 -- e ficam
+  // sem-dado na linha Tendência: mostrar o mesmo número que a linha
+  // Realizado já mostra só duplicaria, achado de 2026-08-02). 2 semanas
+  // futuras: S4 (7 dias) e S5 (5 dias) -- saldoRestante = 1000-6 = 994,
   // repartido proporcionalmente aos dias (7+5=12 dias futuros):
-  // S4 = 994 x 7/12 = 579,83; S5 = 994 x 5/12 = 414,17.
+  // S4 = 994 x 7/12 = 579,83; S5 = 994 x 5/12 = 414,17. O Fechamento
+  // continua sendo o projetado pro mês inteiro (realizado até agora +
+  // tendência futura) = 1.000,00, mesmo com as 3 primeiras colunas sem-dado.
   const html = renderAbaSemanal([registro(1000)], [0], ['volume'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
   const numeros = linhaTendencia.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
-  assert.deepStrictEqual(numeros, ['2,00', '3,00', '1,00', '579,83', '414,17', '1.000,00']);
+  assert.deepStrictEqual(numeros, ['', '', '', '579,83', '414,17', '1.000,00']);
 });
 
 test('Tendência nunca fica negativa quando o Realizado já passou o Previsto -- continua no ritmo já realizado POR DIA, multiplicado pelos dias de cada semana futura', () => {
@@ -241,7 +246,7 @@ test('Tendência nunca fica negativa quando o Realizado já passou o Previsto --
   assert.strictEqual(numeros[4], fmt(ritmoPorDia * 5), 'semana futura S5 (5 dias) idem, proporcional aos seus próprios dias');
 });
 
-test('Tendência: na última semana do mês (sem semana futura), os números batem exatamente com Realizado', () => {
+test('Tendência: na última semana do mês (sem semana futura), TODAS as colunas ficam sem-dado -- só o Realizado mostra os números; o Fechamento continua batendo (nenhuma tendência a projetar)', () => {
   const eventos = {
     sondagemRealizada: [diaJul(1), diaJul(8), diaJul(14), diaJul(22), diaJul(29)],
     saidaEstoque: [], chegada: [],
@@ -250,9 +255,13 @@ test('Tendência: na última semana do mês (sem semana futura), os números bat
   const html = renderAbaSemanal([registro(1000)], [0], ['volume'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: diaJul(31) }); // dentro de S5, a última
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
-  const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">[^<]*<\/td>/g);
-  const numerosRealizado = linhaRealizado.match(/<td class="num[^"]*">[^<]*<\/td>/g);
-  assert.deepStrictEqual(numerosTendencia, numerosRealizado);
+  const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
+  const numerosRealizado = linhaRealizado.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
+  // As 5 colunas por semana ficam sem-dado (nenhuma semana futura a
+  // projetar), mas o Fechamento (6º elemento) continua igual ao Fechamento
+  // do Realizado -- é calculado ANTES da supressão, então segue sendo o
+  // total projetado, que aqui coincide com o total realizado.
+  assert.deepStrictEqual(numerosTendencia, ['', '', '', '', '', numerosRealizado[5]]);
 });
 
 test('Tendência: indiceAtual === -1 (nenhuma semana do mês começou -- hoje antes do mês inteiro) reparte previstoMes proporcionalmente aos dias, igual ao Previsto', () => {
@@ -320,7 +329,14 @@ test('Realizado/Tendência aparecem em Volume E Financeiro (Financeiro pesado pe
   const blocoFinanceiro = html.split('<div class="bloco-dimensao-semanal">')[2];
   const semDadoEquipes = (blocoEquipes.match(/class="num sem-dado"/g) || []).length;
   assert.strictEqual(semDadoEquipes, 10, 'Equipes: 5 semanas x 2 linhas (Realizado + Tendência), nunca ativa -- não é furo, não tem ticket');
-  assert.doesNotMatch(blocoFinanceiro, /sem-dado/, 'Financeiro: Realizado/Tendência ativos (ticket médio 1 na fixture registro(), mesmos números de furos que Volume mostraria)');
+  const linhaRealizadoFinanceiro = blocoFinanceiro.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
+  const linhaTendenciaFinanceiro = blocoFinanceiro.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
+  assert.doesNotMatch(linhaRealizadoFinanceiro, /sem-dado/, 'Realizado ativo em todas as semanas (ticket médio 1 na fixture registro(), mesmos números de furos que Volume mostraria)');
+  // Tendência: S1/S2/S3 (elapsadas, hoje=15/07 dentro de S3) ficam sem-dado
+  // -- só duplicariam o Realizado; S4/S5 (futuras) continuam mostrando a
+  // projeção real.
+  const semDadoTendenciaFinanceiro = (linhaTendenciaFinanceiro.match(/class="num sem-dado"/g) || []).length;
+  assert.strictEqual(semDadoTendenciaFinanceiro, 3, 'Tendência: as 3 semanas elapsadas (S1/S2/S3) ficam sem-dado, só S4/S5 (futuras) mostram projeção');
 });
 
 test('Tendência não fabrica projeção quando hoje está depois do último dia do mês vigente (contrato defensivo)', () => {
@@ -340,10 +356,13 @@ test('Tendência não fabrica projeção quando hoje está depois do último dia
   const html = renderAbaSemanal([registro(1000)], [0], ['volume'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: hojeEmAgosto });
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
-  const numerosRealizado = linhaRealizado.match(/<td class="num[^"]*">[^<]*<\/td>/g);
-  const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">[^<]*<\/td>/g);
-  assert.deepStrictEqual(numerosTendencia, numerosRealizado,
-    'com julho inteiro já no passado, Tendência precisa mostrar os mesmos números que Realizado, não fabricar projeção sobre um mês que já terminou');
+  const numerosRealizado = linhaRealizado.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
+  const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
+  // Com julho inteiro já no passado, todas as 5 colunas de Tendência ficam
+  // sem-dado (nenhuma semana futura pra projetar -- não fabrica projeção
+  // sobre um mês que já terminou), e o Fechamento continua batendo com o
+  // do Realizado (calculado antes da supressão).
+  assert.deepStrictEqual(numerosTendencia, ['', '', '', '', '', numerosRealizado[5]]);
 });
 
 test('vigenteIdx fora do intervalo do ano (12 ou -1): Realizado/Tendência ficam sem-dado, mas Demandas Pendentes ainda mostra o fechamento -- saldo de hoje independe do mês sendo exibido', () => {

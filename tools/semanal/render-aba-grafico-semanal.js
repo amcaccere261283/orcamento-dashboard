@@ -320,9 +320,18 @@ function construirPainelGraficoSemanalHtml(registros, indices, dimensao, vigente
   // sem-dado pros dois nesse caso).
   var seriesVisiveis = dimensao === 'equipes' ? ['previsto'] : ORDEM_SERIES_GRAFICO;
   var valoresPorSerie = { previsto: series.semanasPrevisto, realizado: series.semanasRealizado, tendencia: series.semanasTendencia };
+  // O Acumulado de Tendência usa a versão COMPLETA (semanasTendenciaCompleta,
+  // sem a supressão das semanas elapsadas -- ver render-aba-semanal.js) --
+  // achado da revisão final: calcularAcumulado trata null como "ainda não
+  // começou a acumular" (contrato documentado em compute-grafico-semanal.js),
+  // então acumular a versão SUPRIMIDA faria a curva recomeçar do zero na
+  // primeira semana futura, perdendo o que já foi realizado -- o ponto final
+  // divergiria do Fechamento que a Tabela Semanal mostra (calculado a partir
+  // da versão completa). O painel Semanal (barras) continua usando a versão
+  // suprimida em 'valores', que é o que decide se desenha barra/tooltip.
+  var valoresParaAcumuladoPorSerie = { previsto: series.semanasPrevisto, realizado: series.semanasRealizado, tendencia: series.semanasTendenciaCompleta };
   var dadosPorSerie = seriesVisiveis.map(function (serie) {
-    var valores = valoresPorSerie[serie];
-    return { serie: serie, valores: valores, acumulado: calcularAcumulado(valores) };
+    return { serie: serie, valores: valoresPorSerie[serie], acumulado: calcularAcumulado(valoresParaAcumuladoPorSerie[serie]) };
   });
 
   var rotuloDimensao = DIMENSOES_ROTULO_SEMANAL[dimensao] || '';

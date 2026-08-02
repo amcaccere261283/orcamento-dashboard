@@ -272,6 +272,13 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
   var fechamentoRealizado = null;
   var semanasTendencia = semanasSemDado;
   var fechamentoTendencia = null;
+  // Versão SEM a supressão de semanas elapsadas -- só existe pra alimentar
+  // o Acumulado da aba Gráficos (ver render-aba-grafico-semanal.js), que
+  // precisa somar a partir do que já foi realizado, não recomeçar do zero
+  // na primeira semana futura (achado da revisão final: sem isso, o ponto
+  // final da curva Acumulada de Tendência divergia do Fechamento da
+  // Tabela Semanal, que É calculado a partir desta versão completa).
+  var semanasTendenciaCompleta = semanasSemDado;
 
   // Realizado/Tendência: Volume conta furos reais; Financeiro pega o MESMO
   // furo real e multiplica pelo ticket médio do registro dono daquele furo
@@ -298,8 +305,19 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
     for (var se = 0; se < semanas.length; se++) {
       if (semanas[se].inicio <= hojeEpoch) semanasElapsadas++;
     }
-    semanasTendencia = calcularTendenciaSemanal(mesVigente, semanasRealizado, semanasElapsadas - 1, semanas, hojeEpoch);
-    fechamentoTendencia = fecharMes(semanasTendencia, dimensao);
+    // O Fechamento (coluna Total) é calculado ANTES da supressão abaixo --
+    // continua sendo o projetado pro mês inteiro (realizado até agora +
+    // tendência das semanas futuras), não só a soma do que sobrar depois de
+    // suprimir. Achado de 2026-08-02: nas colunas por semana, mostrar
+    // Tendência numa semana já fechada ou em curso só duplicava o Realizado
+    // dela (calcularTendenciaSemanal usa o próprio Realizado como valor das
+    // semanas elapsadas) -- decisão do dono do projeto: Tendência por
+    // semana só faz sentido pra projetar o que ainda não aconteceu, então
+    // as colunas elapsadas (i < semanasElapsadas) viram sem-dado, e só as
+    // futuras continuam mostrando a projeção.
+    semanasTendenciaCompleta = calcularTendenciaSemanal(mesVigente, semanasRealizado, semanasElapsadas - 1, semanas, hojeEpoch);
+    fechamentoTendencia = fecharMes(semanasTendenciaCompleta, dimensao);
+    semanasTendencia = semanasTendenciaCompleta.map(function (v, i) { return i < semanasElapsadas ? null : v; });
   }
 
   return {
@@ -307,6 +325,7 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
     semanasPrevisto: semanasPrevisto, fechamentoPrevisto: fechamentoPrevisto,
     semanasRealizado: semanasRealizado, fechamentoRealizado: fechamentoRealizado,
     semanasTendencia: semanasTendencia, fechamentoTendencia: fechamentoTendencia,
+    semanasTendenciaCompleta: semanasTendenciaCompleta,
   };
 }
 
