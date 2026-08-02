@@ -1,19 +1,45 @@
 'use strict';
 
 // <<< INICIO CLIENTE
-// Volume e financeiro são FLUXOS: o mês se reparte em N fatias nominais e a
-// soma delas reconstrói o mês. Equipes é uma FOTO: 2 equipes mobilizadas no
-// mês são 2 equipes em cada semana, não valorMensal/N -- dividir produziria
-// número errado em silêncio e discordaria do orçamento, que mostra a média.
-// Mesma premissa de mediaEquipesPonderada em tools/comum/calculo-equipes.js.
-// numSemanas é OBRIGATÓRIO: o calendário abaixo mostra que um mês tem de 5 a
-// 6 semanas reais (nenhum mês de 2026 tem exatamente 4) -- ver
-// docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md.
-function dividirEmSemanas(valorMensal, dimensao, numSemanas) {
+// Quantidade de dias que uma semana (ver semanasDoMes) cobre, inclusive nos
+// dois extremos -- mesma convenção de diaEpoch. Não confundir com
+// diaDaSemana (abaixo): esta conta DIAS DENTRO de um intervalo {inicio,fim},
+// aquela devolve o dia-da-semana (0=segunda..6=domingo) de um dia isolado.
+function diasNaSemana(semana) {
+  return semana.fim - semana.inicio + 1;
+}
+
+// Volume e financeiro são FLUXOS: o mês se reparte PROPORCIONALMENTE AOS
+// DIAS de cada semana -- uma semana de 7 dias produz o dobro de uma de 3-4
+// dias, não a mesma fatia. Achado de 2026-08-01: dividir em N fatias iguais
+// (por número de semana, não por dia) superestimava as semanas de borda
+// curtas -- agosto/2026 tem S1 com 2 dias e S6 com 1 dia, e ambas recebiam
+// a MESMA fatia que uma semana cheia de 7 dias, inflando o ritmo esperado
+// nelas e reduzindo o das semanas cheias. Equipes é uma FOTO: 2 equipes
+// mobilizadas no mês são 2 equipes em cada semana, não valorMensal
+// repartido de nenhuma forma -- dividir (por semana OU por dia) produziria
+// número errado em silêncio e discordaria do orçamento, que mostra a
+// média. Mesma premissa de mediaEquipesPonderada em
+// tools/comum/calculo-equipes.js.
+// 'semanas' (opcional): as semanas reais do mês (ver semanasDoMes) --
+// necessárias pra pesar por dia. Sem elas, ou com comprimento diferente de
+// numSemanas (não deveria acontecer no fluxo real: quem chama sempre tem as
+// semanas reais à mão), cai na divisão igual antiga como fallback
+// defensivo, em vez de dividir por uma contagem de dias que não bate com o
+// número de fatias pedido.
+function dividirEmSemanas(valorMensal, dimensao, numSemanas, semanas) {
+  var semanasValidas = Array.isArray(semanas) && semanas.length === numSemanas;
+  var diasTotal = 0;
+  if (semanasValidas) {
+    for (var d = 0; d < numSemanas; d++) diasTotal += diasNaSemana(semanas[d]);
+  }
   var saida = [];
   for (var i = 0; i < numSemanas; i++) {
     if (valorMensal === null || valorMensal === undefined) { saida.push(null); continue; }
-    saida.push(dimensao === 'equipes' ? valorMensal : valorMensal / numSemanas);
+    if (dimensao === 'equipes') { saida.push(valorMensal); continue; }
+    saida.push(semanasValidas && diasTotal > 0
+      ? valorMensal * diasNaSemana(semanas[i]) / diasTotal
+      : valorMensal / numSemanas);
   }
   return saida;
 }
@@ -105,4 +131,4 @@ function indiceSemanaAtual(semanas, hojeEpoch) {
 }
 // FIM CLIENTE >>>
 
-module.exports = { dividirEmSemanas, fecharMes, diaEpoch, semanasDoMes, indiceSemanaAtual };
+module.exports = { dividirEmSemanas, fecharMes, diaEpoch, semanasDoMes, indiceSemanaAtual, diasNaSemana };

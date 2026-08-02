@@ -1,8 +1,9 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { renderAbaSemanal, rotuloColunaFechamento } = require('../tools/semanal/render-aba-semanal.js');
+const { renderAbaSemanal, rotuloColunaFechamento, calcularTendenciaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
+const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
 
 const ANO = 2026;
 const VIGENTE_JULHO = 6; // julho tem 5 semanas (S1..S5, corte sempre dentro do mês) -- cenário principal
@@ -47,14 +48,25 @@ test('mostra as 6 semanas de agosto (mês que começa num sábado -- confirma qu
   assert.doesNotMatch(html, /S7/);
 });
 
-test('previsto de volume divide pelo número REAL de semanas do mês -- 1000/5 em julho, 1200/6 em agosto', () => {
+test('previsto de volume reparte proporcionalmente aos DIAS de cada semana, não em fatias iguais por número de semana -- julho (5+7+7+7+5=31 dias) e agosto (2+7+7+7+7+1=31 dias)', () => {
+  // Julho: 1000 / 31 dias x [5,7,7,7,5] = [161,29; 225,81; 225,81; 225,81; 161,29].
+  // S1 e S5 (semanas de borda, 5 dias) recebem menos que S2-S4 (semana cheia,
+  // 7 dias) -- ao contrário da divisão igual antiga, que dava 200,00 pras 5.
   const htmlJulho = renderAbaSemanal([registro(1000)], [0], ['volume'], VIGENTE_JULHO, ANO);
-  assert.match(htmlJulho, /<td class="num">200,00<\/td>/);
+  const linhaPrevistoJulho = htmlJulho.match(/<tr class="linha-serie-semanal linha-previsto">[\s\S]*?<\/tr>/)[0];
+  const numerosJulho = linhaPrevistoJulho.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
+  assert.deepStrictEqual(numerosJulho, ['161,29', '225,81', '225,81', '225,81', '161,29', '1.000,00']);
 
+  // Agosto: 1200 / 31 dias x [2,7,7,7,7,1] -- S1 (2 dias) e S6 (1 dia) recebem
+  // bem menos que as 4 semanas cheias -- é o exemplo que motivou o ajuste
+  // (S1 tinha 2 dias e S6 só 1, mas as duas recebiam a mesma fatia que uma
+  // semana cheia de 7 dias na divisão igual antiga).
   const registroAgosto = registro(0);
   registroAgosto.previsto.volume[VIGENTE_AGOSTO] = 1200;
   const htmlAgosto = renderAbaSemanal([registroAgosto], [0], ['volume'], VIGENTE_AGOSTO, ANO);
-  assert.match(htmlAgosto, /<td class="num">200,00<\/td>/);
+  const linhaPrevistoAgosto = htmlAgosto.match(/<tr class="linha-serie-semanal linha-previsto">[\s\S]*?<\/tr>/)[0];
+  const numerosAgosto = linhaPrevistoAgosto.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
+  assert.deepStrictEqual(numerosAgosto, ['77,42', '270,97', '270,97', '270,97', '270,97', '38,71', '1.200,00']);
 });
 
 test('a coluna de fechamento muda de rótulo conforme a dimensão', () => {
@@ -188,21 +200,23 @@ test('registro sem TICKET cadastrado (0 ou ausente) não contribui R$ nenhum em 
   assert.match(linhaRealizado, /<td class="num">0,00<\/td>/);
 });
 
-test('Tendência: semanas fechada/em-curso usam o Realizado real, futuras dividem igualmente o saldo restante do Previsto', () => {
+test('Tendência: semanas fechada/em-curso usam o Realizado real, futuras dividem o saldo restante do Previsto PROPORCIONALMENTE AOS DIAS de cada uma, não igualmente', () => {
   const eventos = {
     sondagemRealizada: [diaJul(1), diaJul(1), diaJul(8), diaJul(8), diaJul(8), diaJul(14)],
     saidaEstoque: [], chegada: [],
   };
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': eventos } };
   // Previsto do mês = 1000. Realizado até agora (S1+S2+S3 parcial) = 2+3+1 = 6.
-  // 2 semanas futuras (S4, S5): saldoRestante = 1000 - 6 = 994, /2 = 497 cada.
+  // 2 semanas futuras: S4 (7 dias) e S5 (5 dias) -- saldoRestante = 1000-6 = 994,
+  // repartido proporcionalmente aos dias (7+5=12 dias futuros):
+  // S4 = 994 x 7/12 = 579,83; S5 = 994 x 5/12 = 414,17.
   const html = renderAbaSemanal([registro(1000)], [0], ['volume'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
   const numeros = linhaTendencia.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
-  assert.deepStrictEqual(numeros, ['2,00', '3,00', '1,00', '497,00', '497,00', '1.000,00']);
+  assert.deepStrictEqual(numeros, ['2,00', '3,00', '1,00', '579,83', '414,17', '1.000,00']);
 });
 
-test('Tendência nunca fica negativa quando o Realizado já passou o Previsto -- continua no ritmo já realizado', () => {
+test('Tendência nunca fica negativa quando o Realizado já passou o Previsto -- continua no ritmo já realizado POR DIA, multiplicado pelos dias de cada semana futura', () => {
   const eventos = {
     // 20 furos concentrados em S27+S28: realizado até agora bem acima do Previsto.
     sondagemRealizada: new Array(10).fill(diaJul(1)).concat(new Array(10).fill(diaJul(8))),
@@ -212,11 +226,19 @@ test('Tendência nunca fica negativa quando o Realizado já passou o Previsto --
   const html = renderAbaSemanal([registro(5)], [0], ['volume'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
   assert.doesNotMatch(linhaTendencia, />-/, 'nenhum valor negativo -- ">-" isola número negativo dos hífens em nomes de classe');
-  // realizadoAteAgora (S1+S2+S3) = 10+10+0 = 20; ritmo = 20/3 semanas elapsadas.
-  const ritmo = (20 / 3).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // realizadoAteAgora (S1+S2+S3 até hoje) = 10+10+0 = 20; dias elapsados
+  // clampados em hojeEpoch (15/07, dentro de S3): S1 inteira (5) + S2
+  // inteira (7) + S3 só até hoje (13 a 15/07 = 3 dias, não os 7 inteiros da
+  // semana -- ela ainda está em curso) = 5+7+3 = 15. ritmo por dia = 20/15.
+  // S4 (7 dias) = 20/15*7 = 9,33; S5 (5 dias) = 20/15*5 = 6,67 -- diferentes
+  // entre si, ao contrário da divisão igual antiga (que dava 6,67 pras
+  // duas por acaso, sem relação com o clamp -- aqui é 20/15*5, lá era
+  // 20/3 direto).
+  const ritmoPorDia = 20 / 15;
+  const fmt = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const numeros = linhaTendencia.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
-  assert.strictEqual(numeros[3], ritmo, 'semana futura S4 continua no ritmo médio já realizado');
-  assert.strictEqual(numeros[4], ritmo, 'semana futura S5 idem');
+  assert.strictEqual(numeros[3], fmt(ritmoPorDia * 7), 'semana futura S4 (7 dias) continua no ritmo médio já realizado por dia');
+  assert.strictEqual(numeros[4], fmt(ritmoPorDia * 5), 'semana futura S5 (5 dias) idem, proporcional aos seus próprios dias');
 });
 
 test('Tendência: na última semana do mês (sem semana futura), os números batem exatamente com Realizado', () => {
@@ -231,6 +253,36 @@ test('Tendência: na última semana do mês (sem semana futura), os números bat
   const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">[^<]*<\/td>/g);
   const numerosRealizado = linhaRealizado.match(/<td class="num[^"]*">[^<]*<\/td>/g);
   assert.deepStrictEqual(numerosTendencia, numerosRealizado);
+});
+
+test('Tendência: indiceAtual === -1 (nenhuma semana do mês começou -- hoje antes do mês inteiro) reparte previstoMes proporcionalmente aos dias, igual ao Previsto', () => {
+  const registroAgosto = registro(0);
+  registroAgosto.previsto.volume[VIGENTE_AGOSTO] = 1200;
+  const hojeAntesDeAgosto = diaEpoch(new Date(Date.UTC(2026, 6, 20))); // 20/07 -- antes de agosto começar (01/08)
+  const demandas = { porRegistroEventos: {} }; // agregado real vazio -- ativa Realizado/Tendência, tudo fecha em 0
+  const html = renderAbaSemanal([registroAgosto], [0], ['volume'], VIGENTE_AGOSTO, ANO, { demandas, hojeEpoch: hojeAntesDeAgosto });
+  const linhaPrevisto = html.match(/<tr class="linha-serie-semanal linha-previsto">[\s\S]*?<\/tr>/)[0];
+  const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
+  const numerosPrevisto = linhaPrevisto.match(/<td class="num[^"]*">[^<]*<\/td>/g);
+  const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">[^<]*<\/td>/g);
+  assert.deepStrictEqual(numerosTendencia, numerosPrevisto,
+    'sem nenhuma semana elapsada, Tendência reparte o mês inteiro proporcionalmente aos dias de cada semana -- mesma conta do Previsto');
+});
+
+test('calcularTendenciaSemanal: sem "semanas" (5º/4º parâmetros omitidos), cai no fallback de divisão igual por semana -- fluxo real sempre passa "semanas", este é só o contrato defensivo', () => {
+  const semanasRealizado = [100, 200, 0, 0, 0];
+  const resultado = calcularTendenciaSemanal(1000, semanasRealizado, 1);
+  // saldoRestante = 1000 - (100+200) = 700; 3 semanas futuras; 700/3 igualmente.
+  const ritmo = 700 / 3;
+  assert.deepStrictEqual(resultado, [100, 200, ritmo, ritmo, ritmo]);
+});
+
+test('calcularTendenciaSemanal: "semanas" com comprimento incompatível cai no mesmo fallback, em vez de dividir por uma contagem de dias que não bate', () => {
+  const semanasRealizado = [100, 200, 0, 0, 0];
+  const semanasCurtas = semanasDoMes(2026, 6).slice(0, 2); // só 2, mas semanasRealizado tem 5
+  const resultado = calcularTendenciaSemanal(1000, semanasRealizado, 1, semanasCurtas, diaEpoch(new Date(Date.UTC(2026, 6, 10))));
+  const ritmo = 700 / 3;
+  assert.deepStrictEqual(resultado, [100, 200, ritmo, ritmo, ritmo]);
 });
 
 test('Demandas Pendentes: semana fechada mostra o saldo no domingo daquela semana, semana em curso mostra o saldo de hoje, semana futura fica sem-dado', () => {

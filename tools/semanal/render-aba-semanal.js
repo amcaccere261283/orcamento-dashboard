@@ -1,5 +1,5 @@
 'use strict';
-const { semanasDoMes, indiceSemanaAtual, dividirEmSemanas, fecharMes } = require('./compute-semanal.js');
+const { semanasDoMes, indiceSemanaAtual, dividirEmSemanas, fecharMes, diasNaSemana } = require('./compute-semanal.js');
 
 // Rótulo de exibição de cada dimensão -- só as 3 que a barra de filtros da
 // semanal expõe (ver FILTROS_CONFIG_SEMANAL/DIMENSOES_CONFIG_SEMANAL em
@@ -127,14 +127,35 @@ function pendentesNaData(registros, indices, demandas, dataEpoch) {
 
 // Tendência semanal (Volume): semanas já fechadas ou em curso usam o
 // Realizado REAL daquela semana (já é fato, não precisa projetar); semanas
-// futuras distribuem igualmente o que falta pra bater o Previsto do mês.
-// Quando o Realizado até agora já bateu ou passou o Previsto (saldo <= 0),
-// as semanas futuras continuam no mesmo ritmo médio já realizado em vez de
-// projetar um valor negativo. indiceAtual === -1 (nenhuma semana do mês
-// começou ainda -- dias de fronteira entre meses) conta como "nenhuma
-// semana elapsada": todas as semanas do mês são futuras, e a Tendência
-// mostra previstoMes/numSemanas igualmente em todas.
-function calcularTendenciaSemanal(previstoMes, semanasRealizado, indiceAtual) {
+// futuras distribuem PROPORCIONALMENTE AOS DIAS o que falta pra bater o
+// Previsto do mês -- mesmo raciocínio de dividirEmSemanas (compute-semanal.js):
+// uma semana futura de 7 dias recebe o dobro do saldo restante que uma de
+// 3-4 dias, não a mesma fatia igual por semana (achado de 2026-08-01,
+// mesmo problema que motivou o ajuste em dividirEmSemanas). Quando o
+// Realizado até agora já bateu ou passou o Previsto (saldo <= 0), as
+// semanas futuras continuam no mesmo ritmo médio já realizado POR DIA
+// (não por semana) em vez de projetar um valor negativo. indiceAtual === -1
+// (nenhuma semana do mês começou ainda -- dias de fronteira entre meses)
+// conta como "nenhuma semana elapsada": todas as semanas do mês são
+// futuras, e a Tendência reparte previstoMes proporcionalmente aos dias de
+// cada uma (mesmo padrão do Previsto).
+// 'semanas' (opcional): as semanas reais do mês (ver semanasDoMes) --
+// necessárias pra pesar por dia. Sem elas, ou com comprimento diferente de
+// semanasRealizado.length (não deveria acontecer no fluxo real), cai na
+// divisão igual por semana antiga como fallback defensivo, mesmo padrão de
+// dividirEmSemanas. 'hojeEpoch' (opcional, mas sempre presente no fluxo
+// real -- ver temSemanasReais/temDemandas em renderAbaSemanal) clampa os
+// dias contados da ÚLTIMA semana elapsada: ela pode estar EM CURSO (ainda
+// não terminou), e realizadoAteAgora só soma produção até hojeEpoch --
+// contar os 7 dias inteiros dessa semana no denominador (em vez de só os
+// que já passaram) subestimaria o ritmo real (achado da revisão final:
+// julho com hoje=15/07 dentro de S3 contava 19 dias elapsados quando só 15
+// tinham de fato passado, subestimando o ritmo em ~21%). Pra semanas
+// TOTALMENTE no passado (mês selecionado já fechou por completo),
+// hojeEpoch-inicio+1 excede os dias da própria semana, e o Math.min
+// devolve os dias cheios de volta -- sem isso, o denominador ficaria maior
+// que o real quando o usuário olha um mês já fechado.
+function calcularTendenciaSemanal(previstoMes, semanasRealizado, indiceAtual, semanas, hojeEpoch) {
   var numSemanas = semanasRealizado.length;
   if (previstoMes === null) return semanasRealizado.map(function () { return null; });
 
@@ -144,14 +165,36 @@ function calcularTendenciaSemanal(previstoMes, semanasRealizado, indiceAtual) {
 
   var semanasFuturas = numSemanas - semanasElapsadas;
   var saldoRestante = previstoMes - realizadoAteAgora;
-  var ritmoRealizado = semanasElapsadas > 0 ? realizadoAteAgora / semanasElapsadas : previstoMes / numSemanas;
-  var tendenciaFutura = semanasFuturas > 0
-    ? (saldoRestante > 0 ? saldoRestante / semanasFuturas : ritmoRealizado)
-    : 0;
+  var semanasValidas = Array.isArray(semanas) && semanas.length === numSemanas;
 
   var saida = [];
-  for (var i = 0; i < numSemanas; i++) {
-    saida.push(i < semanasElapsadas ? semanasRealizado[i] : tendenciaFutura);
+  if (semanasValidas) {
+    var diasElapsados = 0;
+    for (var se = 0; se < semanasElapsadas; se++) {
+      var diasCheios = diasNaSemana(semanas[se]);
+      var diasAteHoje = typeof hojeEpoch === 'number' ? hojeEpoch - semanas[se].inicio + 1 : diasCheios;
+      diasElapsados += Math.min(diasCheios, diasAteHoje);
+    }
+    var diasFuturos = 0;
+    for (var fu = semanasElapsadas; fu < numSemanas; fu++) diasFuturos += diasNaSemana(semanas[fu]);
+    var ritmoPorDia = diasElapsados > 0 ? realizadoAteAgora / diasElapsados
+      : (diasElapsados + diasFuturos > 0 ? previstoMes / (diasElapsados + diasFuturos) : 0);
+
+    for (var i = 0; i < numSemanas; i++) {
+      if (i < semanasElapsadas) { saida.push(semanasRealizado[i]); continue; }
+      var dias = diasNaSemana(semanas[i]);
+      saida.push(saldoRestante > 0
+        ? (diasFuturos > 0 ? saldoRestante * dias / diasFuturos : 0)
+        : ritmoPorDia * dias);
+    }
+  } else {
+    var ritmoRealizado = semanasElapsadas > 0 ? realizadoAteAgora / semanasElapsadas : previstoMes / numSemanas;
+    var tendenciaFutura = semanasFuturas > 0
+      ? (saldoRestante > 0 ? saldoRestante / semanasFuturas : ritmoRealizado)
+      : 0;
+    for (var j = 0; j < numSemanas; j++) {
+      saida.push(j < semanasElapsadas ? semanasRealizado[j] : tendenciaFutura);
+    }
   }
   return saida;
 }
@@ -221,7 +264,7 @@ function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento) {
 // contarEventosNoIntervalo/calcularTendenciaSemanal já usavam inline.
 function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx, semanas, numSemanas, temSemanasReais, indiceAtual, demandas, hojeEpoch) {
   var mesVigente = previstoMesVigente(registros, indices, dimensao, vigenteIdx);
-  var semanasPrevisto = dividirEmSemanas(mesVigente, dimensao, numSemanas);
+  var semanasPrevisto = dividirEmSemanas(mesVigente, dimensao, numSemanas, semanas);
   var fechamentoPrevisto = fecharMes(semanasPrevisto, dimensao);
   var semanasSemDado = new Array(numSemanas).fill(null);
 
@@ -255,7 +298,7 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
     for (var se = 0; se < semanas.length; se++) {
       if (semanas[se].inicio <= hojeEpoch) semanasElapsadas++;
     }
-    semanasTendencia = calcularTendenciaSemanal(mesVigente, semanasRealizado, semanasElapsadas - 1);
+    semanasTendencia = calcularTendenciaSemanal(mesVigente, semanasRealizado, semanasElapsadas - 1, semanas, hojeEpoch);
     fechamentoTendencia = fecharMes(semanasTendencia, dimensao);
   }
 
@@ -341,4 +384,7 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
   }).join('');
 }
 
-module.exports = { renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao, formatarIntervaloSemana };
+module.exports = {
+  renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao, formatarIntervaloSemana,
+  calcularTendenciaSemanal,
+};

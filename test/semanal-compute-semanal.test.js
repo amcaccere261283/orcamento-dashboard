@@ -3,21 +3,61 @@ const test = require('node:test');
 const assert = require('node:assert');
 const {
   dividirEmSemanas, fecharMes,
-  diaEpoch, semanasDoMes, indiceSemanaAtual,
+  diaEpoch, semanasDoMes, indiceSemanaAtual, diasNaSemana,
 } = require('../tools/semanal/compute-semanal.js');
 
-test('volume divide o mês em N partes iguais', () => {
+test('sem "semanas" (4º parâmetro omitido), cai no fallback de N partes iguais -- fluxo real sempre passa "semanas", este é só o contrato defensivo', () => {
   assert.deepStrictEqual(dividirEmSemanas(400, 'volume', 4), [100, 100, 100, 100]);
   assert.deepStrictEqual(dividirEmSemanas(500, 'volume', 5), [100, 100, 100, 100, 100]);
 });
 
-test('financeiro divide igual a volume', () => {
+test('financeiro divide igual a volume no fallback sem "semanas"', () => {
   assert.deepStrictEqual(dividirEmSemanas(1000, 'financeiro', 4), [250, 250, 250, 250]);
 });
 
 test('equipes NÃO divide: 2 equipes no mês são 2 em cada semana, mesmo com 5 semanas', () => {
   assert.deepStrictEqual(dividirEmSemanas(2, 'equipes', 4), [2, 2, 2, 2]);
   assert.deepStrictEqual(dividirEmSemanas(2, 'equipes', 5), [2, 2, 2, 2, 2]);
+});
+
+// --- Achado de 2026-08-01: divisão proporcional aos DIAS de cada semana,
+// não em N fatias iguais -- uma semana de 1-2 dias (borda de mês) não pode
+// receber a mesma fatia que uma semana cheia de 7 dias. -----------------
+
+test('com "semanas" real passada, volume/financeiro repartem proporcionalmente aos dias de cada semana, não em fatias iguais', () => {
+  // Julho de 2026: 5 semanas reais, dias [5,7,7,7,5], total 31.
+  const julho = semanasDoMes(2026, 6);
+  assert.deepStrictEqual(julho.map(diasNaSemana), [5, 7, 7, 7, 5]);
+  const resultado = dividirEmSemanas(3100, 'volume', julho.length, julho);
+  // 3100/31 = 100 por dia -- fecha redondo de propósito, pra conferir a
+  // conta sem depender de arredondamento de ponto flutuante.
+  assert.deepStrictEqual(resultado, [500, 700, 700, 700, 500]);
+  assert.strictEqual(resultado.reduce((a, b) => a + b, 0), 3100, 'a soma das semanas continua fechando o mês inteiro');
+});
+
+test('agosto de 2026 (S1 com 2 dias, S6 com 1 dia -- o caso que motivou o ajuste): as duas semanas de borda recebem MENOS que as semanas cheias, nunca a mesma fatia', () => {
+  const agosto = semanasDoMes(2026, 7);
+  assert.deepStrictEqual(agosto.map(diasNaSemana), [2, 7, 7, 7, 7, 1]);
+  const resultado = dividirEmSemanas(3100, 'volume', agosto.length, agosto);
+  // 3100/31 = 100 por dia.
+  assert.deepStrictEqual(resultado, [200, 700, 700, 700, 700, 100]);
+  assert.ok(resultado[0] < resultado[1], 'S1 (2 dias) tem que receber menos que S2 (7 dias)');
+  assert.ok(resultado[5] < resultado[1], 'S6 (1 dia) tem que receber menos que S2 (7 dias)');
+});
+
+test('equipes continua sem dividir mesmo com "semanas" real passada -- é foto, não flui por dia', () => {
+  const julho = semanasDoMes(2026, 6);
+  assert.deepStrictEqual(dividirEmSemanas(2, 'equipes', julho.length, julho), [2, 2, 2, 2, 2]);
+});
+
+test('"semanas" com comprimento diferente de numSemanas cai no fallback de fatias iguais, em vez de dividir por uma contagem de dias que não bate', () => {
+  const semanasCurtas = semanasDoMes(2026, 6).slice(0, 3); // só 3, mas numSemanas pede 5
+  assert.deepStrictEqual(dividirEmSemanas(500, 'volume', 5, semanasCurtas), [100, 100, 100, 100, 100]);
+});
+
+test('null continua propagando null mesmo com "semanas" real passada -- ausência de dado não vira zero nem fatia por dia', () => {
+  const julho = semanasDoMes(2026, 6);
+  assert.deepStrictEqual(dividirEmSemanas(null, 'volume', julho.length, julho), [null, null, null, null, null]);
 });
 
 test('volume fecha somando as semanas', () => {
@@ -34,11 +74,28 @@ test('mês sem dado propaga null em vez de virar zero', () => {
   assert.strictEqual(fecharMes([null, null, null, null], 'volume'), null);
 });
 
-test('ida e volta fecha para as três dimensões, com 4 ou 5 semanas', () => {
+test('ida e volta fecha para as três dimensões, com 4 ou 5 semanas (fallback sem "semanas")', () => {
   for (const numSemanas of [4, 5]) {
     for (const [valor, dim] of [[400, 'volume'], [1000, 'financeiro'], [3, 'equipes']]) {
       assert.strictEqual(fecharMes(dividirEmSemanas(valor, dim, numSemanas), dim), valor,
         `dimensão ${dim} não fechou com ${numSemanas} semanas`);
+    }
+  }
+});
+
+// Mesmo invariante do teste acima, mas no caminho que a produção REALMENTE
+// usa (com "semanas" real, ponderando por dia) -- valores que NÃO dividem
+// redondo por dia (7 e 1234.56), pra provar que o fechamento bate mesmo com
+// resto de ponto flutuante, não só nos múltiplos exatos de 31 já cobertos
+// acima no teste de agosto/julho.
+test('ida e volta fecha pro mês vigente mesmo ponderando por dia, com valores que não dividem redondo', () => {
+  const julho = semanasDoMes(2026, 6);
+  const agosto = semanasDoMes(2026, 7);
+  for (const semanas of [julho, agosto]) {
+    for (const [valor, dim] of [[7, 'volume'], [1234.56, 'financeiro'], [3, 'equipes']]) {
+      const fechado = fecharMes(dividirEmSemanas(valor, dim, semanas.length, semanas), dim);
+      assert.ok(Math.abs(fechado - valor) < 1e-9,
+        `dimensão ${dim} não fechou (${fechado} vs ${valor}) com semanas reais de ${semanas.length} colunas`);
     }
   }
 });

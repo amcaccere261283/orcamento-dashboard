@@ -123,9 +123,11 @@ test('filtrar por tipologia na barra compartilhada recalcula a aba Gráficos -- 
   checkboxVolume.checked = true;
   checkboxVolume.listeners.change();
 
-  // Sem filtro de tipologia: previsto semanal combinado = (1000+500)/5 = 300.
+  // Sem filtro de tipologia: previsto semanal combinado (1000+500=1500)
+  // reparte proporcionalmente aos dias de cada semana de julho (31 dias) --
+  // S2/S3/S4 (7 dias) = 1500x7/31 = 339 (casasDecimais=0).
   let htmlGrafico = documentoFalso.getElementById('grafico-semanal-conteudo').innerHTML;
-  assert.match(htmlGrafico, /Previsto: 300/);
+  assert.match(htmlGrafico, /Previsto: 339/);
 
   const painelTipologia = documentoFalso.getElementById('filtro-tipologia-painel');
   const checkboxes = painelTipologia.querySelectorAll('input[type="checkbox"]');
@@ -134,10 +136,11 @@ test('filtrar por tipologia na barra compartilhada recalcula a aba Gráficos -- 
   checkboxSintetica.checked = true;
   checkboxSintetica.listeners.change();
 
-  // Filtrado só na tipologia sintética: previsto semanal = 1000/5 = 200.
+  // Filtrado só na tipologia sintética (previsto 1000): S2/S3/S4 (7 dias)
+  // = 1000x7/31 = 226 (casasDecimais=0).
   htmlGrafico = documentoFalso.getElementById('grafico-semanal-conteudo').innerHTML;
-  assert.match(htmlGrafico, /Previsto: 200/);
-  assert.doesNotMatch(htmlGrafico, /Previsto: 300/, 'depois do filtro, o valor combinado dos dois registros não pode mais aparecer');
+  assert.match(htmlGrafico, /Previsto: 226/);
+  assert.doesNotMatch(htmlGrafico, /Previsto: 339/, 'depois do filtro, o valor combinado dos dois registros não pode mais aparecer');
 });
 
 test('trocar de aba pra Gráficos e voltar pra Semanal alterna a visibilidade certinho (mutuamente exclusivas com Balanço/Demandas)', async () => {

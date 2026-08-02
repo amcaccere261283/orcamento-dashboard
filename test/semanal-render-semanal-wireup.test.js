@@ -132,13 +132,14 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
   );
 
   // Prova de conteúdo, não só de igualdade de string: soma dos 2 registros
-  // no mês vigente (4000+2000=6000), dividida em 5 semanas (1200 cada) --
-  // julho de 2026 tem 5 semanas ISO reais, não 4 -- formatada em pt-BR --
+  // no mês vigente (4000+2000=6000), repartida proporcionalmente aos DIAS
+  // de cada semana de julho de 2026 (5 semanas reais: 5+7+7+7+5=31 dias --
+  // S2/S3/S4 são semana cheia, 6000x7/31=1.354,84) -- formatada em pt-BR --
   // os mesmos números que um humano abrindo a página veria na tela.
   const seiscentos = (6000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const milEDuzentos = (1200).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const milTrezentosECinquentaEQuatro = (6000 * 7 / 31).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   assert.match(htmlMontado, /S1/);
-  assert.match(htmlMontado, new RegExp(milEDuzentos.replace(/\./g, '\\.')));
+  assert.match(htmlMontado, new RegExp(milTrezentosECinquentaEQuatro.replace(/\./g, '\\.')));
   assert.match(htmlMontado, new RegExp(seiscentos.replace(/\./g, '\\.')));
 });
 
@@ -226,11 +227,12 @@ test('filtrar por SUP na barra compartilhada recalcula a aba Semanal só com os 
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
   assert.equal(htmlMontado, esperado, 'depois de filtrar por SUP-0001-24, a Tabela semanal deve recalcular só com esse registro, não os 2');
 
-  // Prova de conteúdo: 4000 ÷ 5 = 800 por semana (só o SUP-0001-24, 5
-  // semanas reais de julho), não 1200 (que seria 6000 ÷ 5, a soma dos 2
-  // registros sem filtro).
-  const oitocentos = (800).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  assert.match(htmlMontado, new RegExp(oitocentos.replace(/\./g, '\\.')));
+  // Prova de conteúdo: 4000 repartido proporcionalmente aos dias de cada
+  // semana de julho (só o SUP-0001-24, 5 semanas reais, 31 dias) --
+  // 4000x7/31 = 903,23 nas semanas cheias (S2/S3/S4), não 1.354,84 (que
+  // seria 6000x7/31, a soma dos 2 registros sem filtro).
+  const novecentosETres = (4000 * 7 / 31).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  assert.match(htmlMontado, new RegExp(novecentosETres.replace(/\./g, '\\.')));
 });
 
 test('a soma de todas as semanas do Previsto continua batendo com o mês vigente mesmo com um filtro de recorte ativo, não só sem filtro', async () => {
@@ -255,12 +257,26 @@ test('a soma de todas as semanas do Previsto continua batendo com o mês vigente
     .map((td) => td.match(/>([\d.,]+)</)[1])
     .map((n) => Number(n.replace(/\./g, '').replace(',', '.')));
   // As 5 primeiras células numéricas da linha Previsto: S1..S5 (julho de
-  // 2026 tem 5 semanas ISO reais). Cada uma deve ser 800 (4000 ÷ 5, só o
-  // SUP-0001-24 depois do filtro), e a soma das 5 deve bater com o 4000 do
-  // mês vigente filtrado -- não com os 6000 de antes do filtro.
+  // 2026 tem 5 semanas ISO reais, dias [5,7,7,7,5] de 31 no total). 4000
+  // (só o SUP-0001-24 depois do filtro) reparte proporcionalmente aos dias
+  // de cada semana -- S1/S5 (5 dias) = 4000x5/31, S2/S3/S4 (7 dias) =
+  // 4000x7/31 -- e a soma das 5 deve bater com o 4000 do mês vigente
+  // filtrado, não com os 6000 de antes do filtro.
   const semanasPrevisto = numeros.slice(0, 5);
-  assert.deepStrictEqual(semanasPrevisto, [800, 800, 800, 800, 800]);
-  assert.strictEqual(semanasPrevisto.reduce((a, b) => a + b, 0), 4000);
+  const s1S5 = 4000 * 5 / 31;
+  const s2S3S4 = 4000 * 7 / 31;
+  semanasPrevisto.forEach((v, i) => {
+    const esperado = [0, 4].includes(i) ? s1S5 : s2S3S4;
+    assert.ok(Math.abs(v - esperado) < 0.01, `semana ${i}: esperava ${esperado}, veio ${v}`);
+  });
+  // Soma das 5 células JÁ ARREDONDADAS pro HTML (2 casas cada) -- diferente
+  // do fechamento interno (celula-total-linha, calculado com o float cheio
+  // ANTES de arredondar, sempre exato), somar 5 números independentemente
+  // arredondados pode derivar alguns centavos (aqui: 4000,01, não 4000,00
+  // -- 0,01 de deriva de arredondamento, não um erro de cálculo). Ver
+  // o teste "celula-total-linha" da Tabela Semanal pra prova de exatidão.
+  const somaArredondada = semanasPrevisto.reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(somaArredondada - 4000) < 0.05, `soma das semanas (${somaArredondada}) precisa bater com 4000 dentro da deriva de arredondamento de exibição`);
 });
 
 test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume está marcada e demandas.porRegistroEventos tem dado real', async () => {

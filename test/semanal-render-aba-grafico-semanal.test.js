@@ -184,8 +184,9 @@ test('construirGraficoSemanalSvg: eixo X usa rótulo curto "Sn", sem intervalo d
 test('renderAbaGraficoSemanal: soma o Previsto só dos registros em "indices" -- respeita o recorte já filtrado, não os registros inteiros', () => {
   const registros = [registro(100), Object.assign(registro(200), { sup: 'SUP-0002-24', tipologia: 'SP' })];
   const html = renderAbaGraficoSemanal(registros, [1], ['volume'], { vigenteIdx: VIGENTE_JULHO, ano: ANO });
-  // Só o índice 1 (SUP-0002-24, previsto 200) entra -- previsto semanal =
-  // 200/5 = 40 por semana (casasDecimais=0), não deveria ter nenhum traço
-  // do registro 0.
-  assert.match(html, />40</);
+  // Só o índice 1 (SUP-0002-24, previsto 200) entra -- previsto semanal
+  // reparte 200 proporcionalmente aos dias de cada semana de julho (31
+  // dias): S2/S3/S4 (7 dias) = 200x7/31 = 45,16 -> 45 (casasDecimais=0);
+  // não deveria ter nenhum traço do registro 0 (previsto 100).
+  assert.match(html, />45</);
 });
