@@ -647,7 +647,12 @@ function renderControles(estado) {
   var html = '<div class="controles-balanco">';
   html += '<label class="controle-balanco">Período'
     + '<select id="balanco-periodo">'
-    + opcao('mesVigente', 'Mês vigente', periodo)
+    // "Mês selecionado" e não "Mês vigente": desde 2026-08-03 a aba segue o
+    // seletor de mês do topo (ver montarAbaBalanco), então o rótulo antigo
+    // passaria a mentir assim que alguém escolhesse outro mês. O VALUE
+    // continua 'mesVigente' de propósito -- ele é o identificador do modo, não
+    // um texto de tela, e trocá-lo quebraria o estado sem ganho nenhum.
+    + opcao('mesVigente', 'Mês selecionado', periodo)
     + opcao('acumuladoAteMes', 'Acumulado até o mês', periodo)
     + '</select></label>';
   html += '<label class="controle-balanco">Base'

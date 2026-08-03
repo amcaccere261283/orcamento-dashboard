@@ -601,3 +601,26 @@ test('trocar o <select> de mês recalcula a Tabela Semanal com as semanas do mê
   assert.notStrictEqual(semanalDepois, semanalAntes, 'a Tabela Semanal precisa ter sido redesenhada de verdade, não só o estado interno mudado');
   assert.notStrictEqual(semanasNoHtml(semanalDepois), colunasJulho, 'julho e agosto de 2026 têm quantidades de semana diferentes -- se o número bater, o mês não mudou de verdade');
 });
+
+test('trocar o mês no seletor redesenha TAMBÉM a aba Balanço de massa, não só a Tabela e os Gráficos', async () => {
+  // Até 2026-08-03 a aba Balanço ficava presa a window.__VIGENTE_IDX__: trocar
+  // o mês mudava três abas e deixava a quarta descrevendo outro período, sem
+  // nada na tela dizendo isso. Duas coisas provam que ela seguiu o seletor:
+  // o número muda, e as semanas do recorte passam a ser as do mês escolhido.
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-15T00:00:00Z'); // vigenteIdx = 6 (julho, 5 semanas)
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const caixasDe = () => (documentoFalso.getElementById('secao-balanco').innerHTML.match(/class="balanco-semana"/g) || []).length;
+  assert.strictEqual(caixasDe(), 5, 'pré-condição: julho/2026 tem 5 semanas');
+
+  // Agosto/2026 tem 6 semanas (S1 com 2 dias, S6 com 1) -- é justamente esse
+  // calendário irregular que denuncia se a aba tivesse ficado no mês antigo.
+  documentoFalso.getElementById('seletor-mes-semanal').listeners.change({ target: { value: '7' } });
+
+  assert.strictEqual(sandbox.mesSelecionadoIdx, 7);
+  assert.strictEqual(caixasDe(), 6, 'o recorte semanal precisa passar a descrever agosto, com 6 semanas');
+});

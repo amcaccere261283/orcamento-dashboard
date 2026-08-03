@@ -102,11 +102,18 @@ marcado = mês inteiro, e todas marcadas cai no mesmo caminho, então o número 
 bit igual ao de antes do recurso. Fora de "Mês vigente" o grupo aparece desabilitado e o
 cálculo ignora a seleção.
 
-**A aba Balanço não segue o seletor de mês do topo** — ela usa `window.__VIGENTE_IDX__`,
-enquanto a Tabela Semanal e os Gráficos usam `mesSelecionadoIdx`. É anterior a estas
-mudanças e continua assim de propósito (nenhuma decisão do dono do projeto sobre isso);
-se um dia mudar, `semanas` e `vigenteIdx` em `montarAbaBalanco` têm que mudar JUNTOS, ou
-o recorte S1..Sn descreve as semanas de um mês e recorta o dado de outro.
+**A aba Balanço passou a seguir o seletor de mês** (2026-08-03) — antes ficava presa a
+`window.__VIGENTE_IDX__` enquanto as outras três abas usavam `mesSelecionadoIdx`, então
+trocar o mês mudava três abas e deixava a quarta descrevendo outro período sem avisar. Por
+isso o rótulo do controle é **"Mês selecionado"**, não mais "Mês vigente" (o `value`
+continua `'mesVigente'`: é identificador de modo, não texto de tela). `vigenteIdx` e
+`semanas` em `montarAbaBalanco` têm que sair SEMPRE do mesmo índice — separados, o recorte
+S1..Sn descreveria as semanas de um mês e recortaria o dado de outro.
+
+O subtítulo do cabeçalho (`formatarMesAno(geradoEm)`) continua sendo a data de GERAÇÃO do
+build, não o mês selecionado. Parece o mês do relatório e não é — mas é a única pista de
+recência que a página tem (ver a pendência do carimbo "Gerado em" abaixo), então não vale
+trocar sem antes resolver aquela.
 
 A casca visual (`tools/comum/render-shell.js`) e os utilitários são compartilhados com o
 orçamento. `cssBase()` **não** é uma base neutra: cerca de 79 das 254 linhas são CSS

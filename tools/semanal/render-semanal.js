@@ -594,18 +594,22 @@ function montarAbaBalanco(registros, indices) {
     base: ESTADO_BALANCO.base,
     dimensao: ESTADO_BALANCO.dimensao,
     somenteAtivos: ESTADO_BALANCO.somenteAtivos,
-    vigenteIdx: window.__VIGENTE_IDX__,
+    // mesSelecionadoIdx, não __VIGENTE_IDX__: desde 2026-08-03 esta aba também
+    // segue o seletor de mês do topo, como a Tabela Semanal e os Gráficos já
+    // seguiam. Antes ela ficava presa ao mês corrente, então trocar o mês
+    // mudava três abas e deixava a quarta descrevendo outro período, sem nada
+    // na tela dizendo isso. É por isso que o rótulo do controle é "Mês
+    // selecionado" e não mais "Mês vigente".
+    vigenteIdx: mesSelecionadoIdx,
     baseline: window.__BASELINE__,
     demandas: window.__DEMANDAS__,
     ano: window.__ANO__,
-    // As semanas reais do mês -- o MESMO calendário da Tabela Semanal
+    // As semanas reais do mesmo mês -- o MESMO calendário da Tabela Semanal
     // (semanasDoMes, cortando sempre dentro do mês), nunca uma segunda
-    // contagem de semanas. Sai de __VIGENTE_IDX__ e não de mesSelecionadoIdx
-    // porque é esse o índice que a própria aba Balanço usa em vigenteIdx logo
-    // acima: o seletor de mês do topo governa a Tabela Semanal e os Gráficos,
-    // mas não esta aba. Usar índices diferentes nas duas linhas faria o
-    // recorte S1..Sn descrever as semanas de um mês e recortar o dado de outro.
-    semanas: ComputeSemanal.semanasDoMes(window.__ANO__, window.__VIGENTE_IDX__),
+    // contagem de semanas. Tem que sair do MESMO índice da linha vigenteIdx
+    // acima: índices diferentes fariam o recorte S1..Sn descrever as semanas
+    // de um mês e recortar o dado de outro.
+    semanas: ComputeSemanal.semanasDoMes(window.__ANO__, mesSelecionadoIdx),
     semanasSelecionadas: ESTADO_BALANCO.semanas,
   });
 
