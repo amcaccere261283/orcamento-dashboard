@@ -490,3 +490,106 @@ test('equipes: "Acumulado até o mês" nunca é coberto por um mapa de um mês s
   cfg.equipesAtivasPeriodo = { ano: ANO_TESTE, mes: 7 };
   assert.strictEqual(calcularLinhas(cfg)[0].equipesRealizado, null);
 });
+
+// --- Dimensão "Demandas" no Balanço de massa (2026-08-03) -----------------
+//
+// Pedido do dono do projeto: o seletor Dimensão da aba ganha uma terceira
+// opção, ao lado de Financeiro/Volumetria. A pergunta que ela responde é
+// diferente das outras duas: Volumetria compara o que foi EXECUTADO (furos
+// concluídos, evento sondagemRealizada) contra o previsto; Demandas compara o
+// que CHEGOU (evento chegada) contra o mesmo previsto de volume -- "estamos
+// recebendo mais ou menos demanda do que planejamos atender?".
+//
+// Duas consequências que a implementação tem de respeitar:
+//   - a base é o previsto de VOLUME (furos), não uma coluna própria: a MATRIZ
+//     não tem previsão de demanda separada, e furo previsto é a grandeza
+//     comparável;
+//   - o Realizado vem SEMPRE do Avanço Sond, em qualquer período -- ao
+//     contrário de volume/financeiro, que só usam a planilha em Mês Vigente.
+//     Não existe coluna de demandas na MATRIZ pra servir de fallback em
+//     Acumulado até o mês; cair nela devolveria o número de outra grandeza.
+
+function demandasComChegadas(chave, dias) {
+  var porRegistroEventos = {};
+  porRegistroEventos[chave] = { chegada: dias, saidaEstoque: [], sondagemRealizada: [] };
+  return { porRegistroEventos: porRegistroEventos };
+}
+
+test('dimensão demandas: Realizado conta as CHEGADAS do Avanço Sond, não os furos concluídos', () => {
+  const cfg = Object.assign(cenario({ previstoVol: 100, realizadoVol: 999 }), {
+    dimensao: 'demandas',
+    demandas: {
+      porRegistroEventos: {
+        'SUP-0001-24||ST': {
+          chegada: [diaJul(2), diaJul(9), diaJul(16), diaJul(23)],
+          saidaEstoque: [],
+          sondagemRealizada: [diaJul(3)], // executado -- NÃO pode entrar nesta dimensão
+        },
+      },
+    },
+    ano: ANO_TESTE,
+  });
+  const linhas = calcularLinhas(cfg);
+  assert.strictEqual(linhas[0].valorRealizado, 4, '4 chegadas em julho -- o furo concluído e os 999 da MATRIZ ficam de fora');
+  assert.strictEqual(linhas[0].valorBase, 100, 'a base é o Previsto de VOLUME da MATRIZ');
+  assert.strictEqual(linhas[0].desvio, -96);
+});
+
+test('dimensão demandas em "Acumulado até o mês": continua contando as chegadas do Avanço Sond, nunca cai na coluna da MATRIZ', () => {
+  // Volume/financeiro caem na coluna Realizado da MATRIZ fora de Mês Vigente.
+  // Demandas não pode: não existe coluna de demandas lá, e a de volume
+  // responderia outra pergunta.
+  const cfg = Object.assign(cenario({ previstoVol: 100, realizadoVol: 999 }), {
+    dimensao: 'demandas', periodo: 'acumuladoAteMes',
+    demandas: demandasComChegadas('SUP-0001-24||ST', [
+      diaEpoch(new Date(Date.UTC(ANO_TESTE, 2, 10))), // março
+      diaJul(9),
+      diaEpoch(new Date(Date.UTC(ANO_TESTE, 9, 1))),  // outubro -- fora do acumulado até julho
+    ]),
+    ano: ANO_TESTE,
+  });
+  const linhas = calcularLinhas(cfg);
+  assert.strictEqual(linhas[0].valorRealizado, 2, 'março e julho entram; outubro está depois do mês selecionado');
+});
+
+test('dimensão demandas respeita o recorte por semana igual às outras dimensões', () => {
+  const semanas = semanasDoMes(ANO_TESTE, VIGENTE_JULHO); // S1 = 01-05/07
+  const cfg = {
+    registros: [{
+      sup: 'SUP-0001-24', tipologia: 'ST', tomador: 'T',
+      previsto: { volume: (() => { const v = new Array(12).fill(0); v[6] = 310; return v; })(), equipes: new Array(12).fill(0), financeiro: new Array(12).fill(0) },
+      realizado: { volume: new Array(12).fill(0), equipes: new Array(12).fill(0), financeiro: new Array(12).fill(0) },
+      total: { volume: new Array(12).fill(0), equipes: new Array(12).fill(0), financeiro: new Array(12).fill(0) },
+    }],
+    indices: [0], tipologia: 'ST', base: 'previsto', dimensao: 'demandas', periodo: 'mesVigente',
+    vigenteIdx: VIGENTE_JULHO, baseline: [], ano: ANO_TESTE,
+    demandas: demandasComChegadas('SUP-0001-24||ST', [diaJul(2), diaJul(3), diaJul(20)]),
+    semanas: semanas, semanasSelecionadas: [0],
+  };
+  const linhas = calcularLinhas(cfg);
+  assert.strictEqual(linhas[0].valorRealizado, 2, 'só as 2 chegadas de S1 (01-05/07); a de 20/07 fica fora');
+  // A base mensal (310 furos em 31 dias = 10/dia) recortada nos 5 dias de S1.
+  assert.ok(Math.abs(linhas[0].valorBase - 50) < 1e-9, `esperava 50 de base em S1, veio ${linhas[0].valorBase}`);
+});
+
+test('dimensão demandas com base Previsto Inicial usa o volume do estudo, não uma coluna inexistente', () => {
+  const cfg = Object.assign(cenario({
+    previstoVol: 100, realizadoVol: 0, base: 'previstoInicial',
+    baseline: [mkBaseline('SUP-0001-24||ST', 80, 2)],
+  }), {
+    dimensao: 'demandas',
+    demandas: demandasComChegadas('SUP-0001-24||ST', [diaJul(4), diaJul(5)]),
+    ano: ANO_TESTE,
+  });
+  const linhas = calcularLinhas(cfg);
+  assert.strictEqual(linhas[0].semBase, false);
+  assert.strictEqual(linhas[0].valorBase, 80);
+  assert.strictEqual(linhas[0].desvio, -78); // 2 - 80
+});
+
+test('dimensão demandas sem o agregado de demandas fica sem dado, nunca zero -- zero seria lido como "nenhuma demanda chegou"', () => {
+  const cfg = Object.assign(cenario({ previstoVol: 100, realizadoVol: 50 }), { dimensao: 'demandas', ano: ANO_TESTE });
+  const linhas = calcularLinhas(cfg);
+  assert.strictEqual(linhas[0].valorRealizado, null);
+  assert.strictEqual(linhas[0].desvio, null);
+});

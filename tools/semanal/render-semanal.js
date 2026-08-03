@@ -41,14 +41,36 @@ const ABAS_VISUALIZACAO = [
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>' },
   { id: 'aba-demandas', rotulo: 'Demandas', ativa: false,
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>' },
+  // Alertas e Consolidado (2026-08-03) reaproveitam os MESMOS ícones que o
+  // orçamento já usa nas abas equivalentes -- triângulo de atenção e grade de
+  // tabela --, pelo mesmo motivo dos dois primeiros: um leitor que conhece um
+  // dashboard reconhece o outro.
+  { id: 'aba-alertas', rotulo: 'Alertas', ativa: false,
+    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.9 21h16.2a2 2 0 0 0 1.79-2.96L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' },
+  { id: 'aba-consolidado', rotulo: 'Consolidado', ativa: false,
+    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>' },
 ];
 
-// Só o botão de atualização ao vivo + status -- ao contrário do orçamento,
-// a semanal não tem "#limpar-filtros" nem as abas dentro deste slot (as
-// abas já são renderizadas à parte, via markupAbas() logo abaixo da barra
-// de filtros -- ver a chamada de renderSemanal). Reaproveita os MESMOS ids
-// (#atualizar-dashboard/#status-atualizacao) que o CSS compartilhado em
-// cssBase() (tools/comum/render-shell.js) já estiliza.
+// Os 5 seletores próprios da aba Alertas -- mesmos ids do orçamento, porque o
+// CSS deles (.filtros-alertas, .filtro-multi, .status-circulo, .busca-alertas)
+// já vive em cssBase() (tools/comum/render-shell.js), compartilhado pelas duas
+// páginas. Os rótulos iniciais descrevem o estado com que a aba abre (ver
+// filtrosAlertasSemanal em SCRIPT_CLIENTE_SEMANAL).
+const FILTROS_ALERTAS_SEMANAL = [
+  { id: 'filtro-alertas-agrupar-por', rotulo: 'SUP' },
+  { id: 'filtro-alertas-numerico', rotulo: '2 selecionadas' },
+  { id: 'filtro-alertas-baseline', rotulo: 'Previsto' },
+  { id: 'filtro-alertas-periodo', rotulo: '2 selecionadas' },
+  { id: 'filtro-alertas-status', rotulo: 'Status' },
+];
+
+// Seletor de mês + "Limpar filtros" + atualização ao vivo. As abas continuam
+// FORA deste slot (renderizadas à parte, via markupAbas() logo abaixo da barra
+// de filtros -- ver a chamada de renderSemanal), diferente do orçamento.
+// Reaproveita os MESMOS ids (#limpar-filtros/#atualizar-dashboard/
+// #status-atualizacao) e o MESMO ícone que o orçamento usa, porque o CSS
+// compartilhado em cssBase() (tools/comum/render-shell.js) já estiliza os três
+// -- nada de CSS novo por causa deste botão.
 
 // 12 rótulos curtos (Jan..Dez), só pra montar o <select> de mês no HTML
 // estático do build -- duplicado de propósito (array pequeno e estável,
@@ -67,6 +89,7 @@ function opcoesMesSemanal() {
 
 const MARKUP_ACOES_SEMANAL = `      <div class="filtros-acoes">
         <label class="controle-mes-semanal">Mês<select id="seletor-mes-semanal">${opcoesMesSemanal()}</select></label>
+        <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
         <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
         <span id="status-atualizacao" class="status-atualizacao"></span>
       </div>`;
@@ -101,14 +124,19 @@ const FILTROS_SEMANAL = [
 // .grafico-painel (o invólucro de cada gráfico de tipologia) e .grafico-svg
 // (a tag <svg> em si) já têm regra em cssBase() -- não duplicados aqui.
 const CSS_BALANCO = `
-  .controles-balanco {
+  /* Os controles da aba CONSOLIDADO (semana/dimensão) entram nas MESMAS
+     regras, com nome próprio: são o mesmo componente visual, e uma segunda
+     cópia das regras seria a forma mais fácil das duas abas divergirem de
+     aparência com o tempo. */
+  .controles-balanco, .controles-consolidado {
     display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px;
     margin-bottom: 20px;
   }
-  .controle-balanco {
+  .controle-balanco, .controle-consolidado {
     display: flex; flex-direction: column; gap: 6px;
     font-size: 12px; color: var(--text-secondary);
   }
+  .controle-consolidado select,
   .controle-balanco select {
     padding: 8px 30px 8px 10px; height: 36px;
     border: 1px solid var(--border); border-radius: 6px;
@@ -117,8 +145,17 @@ const CSS_BALANCO = `
     font-size: 13px; cursor: pointer;
     appearance: none; -webkit-appearance: none; -moz-appearance: none;
   }
-  .controle-balanco select:hover { border-color: rgba(246,181,63,0.5); }
-  .controle-balanco select:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
+  .controle-balanco select:hover, .controle-consolidado select:hover { border-color: rgba(246,181,63,0.5); }
+  .controle-balanco select:focus-visible, .controle-consolidado select:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
+
+  /* Aba CONSOLIDADO. As colunas de premissa (equipes previstas/produtividade/
+     ticket) são do MÊS, não da semana -- a borda à esquerda separa
+     visualmente esses dois recortes dentro da mesma linha, e o cinza as
+     rebaixa em relação aos números da semana, que são o assunto da aba. */
+  .celula-premissa { color: var(--text-secondary); border-left: 2px solid var(--border); white-space: nowrap; }
+  .nota-consolidado { font-size: 12px; color: var(--text-secondary); margin: 0 0 14px; max-width: 90ch; }
+  #tabela-consolidado .col-sup, #tabela-consolidado .col-grupo, #tabela-consolidado .col-tomador { white-space: nowrap; }
+  #tabela-consolidado tr:hover { filter: brightness(1.14); }
   .controle-balanco-check {
     flex-direction: row; align-items: center; gap: 8px;
     height: 36px; font-size: 13px; color: var(--text-primary);
@@ -364,7 +401,15 @@ const CSS_DEMANDAS = `
 // produção com ReferenceError, mesmo com os testes em Node passando (Node
 // resolve o require normalmente).
 const BUNDLE_ARQUIVOS = [
-  'compute-semanal.js', 'render-aba-semanal.js',
+  // render-aba-alertas.js consome compute-semanal.js E render-aba-semanal.js
+  // (calcularSeriesSemanaisDimensao/formatarIntervaloSemana) -- os dois têm de
+  // vir ANTES dele na lista, senão o require reescrito lê undefined de MODULOS.
+  // render-aba-consolidado.js tem a mesma dependência de render-aba-semanal.js
+  // (calcularSeriesSemanaisDimensao/formatarIntervaloSemana) e mais um require
+  // de '../comum/calculo-equipes.js', que o bundler REMOVE -- DIAS_PREMISSA_MES
+  // chega como global pelo <script> de fonteParaCliente(), igual ao que
+  // compute-balanco.js já faz com mediaEquipesPonderada.
+  'compute-semanal.js', 'render-aba-semanal.js', 'render-aba-alertas.js', 'render-aba-consolidado.js',
   'compute-grafico-semanal.js', 'render-aba-grafico-semanal.js',
   // compute-equipes-mobilizadas.js (2026-08-03) vem ANTES de
   // compute-balanco.js, que o consome (equipesEquivalentes) para o Δ equipes
@@ -443,6 +488,8 @@ const SCRIPT_CLIENTE_SEMANAL = `
 // aqui e continuar achando o mesmo de ComputeSemanal por engano.
 var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaSemanal = MODULOS['render-aba-semanal.js'];
+var RenderAbaAlertas = MODULOS['render-aba-alertas.js'];
+var RenderAbaConsolidado = MODULOS['render-aba-consolidado.js'];
 var RenderAbaGraficoSemanal = MODULOS['render-aba-grafico-semanal.js'];
 var ComputeBalanco = MODULOS['compute-balanco.js'];
 var RenderAbaBalanco = MODULOS['render-aba-balanco.js'];
@@ -498,11 +545,83 @@ var filtrosSelecionadosSemanal = {};
 FILTROS_CONFIG_SEMANAL.forEach(function (cfg) { filtrosSelecionadosSemanal[cfg.chave] = new Set(); });
 filtrosSelecionadosSemanal.dimensao.add('financeiro');
 
+// Estado dos 5 seletores próprios da aba Alertas -- separado de
+// filtrosSelecionadosSemanal (a barra de recorte de cima), exatamente como o
+// orçamento separa filtrosAlertas de filtrosSelecionados. Os defaults abrem a
+// aba já mostrando algo útil: agrupado por SUP, Realizado E Tendência contra
+// Previsto, no acumulado até a semana atual e no mês inteiro -- o paralelo
+// direto de "Acumulado até Vigente + Total Ano" no orçamento.
+//
+// 'periodo' é o único cujas OPÇÕES mudam com o mês selecionado (um mês tem 5
+// ou 6 semanas), por isso a config é uma função, não uma constante -- ver
+// configFiltrosAlertasSemanal.
+var filtrosAlertasSemanal = {
+  agruparPor: new Set(['sup']),
+  numerico: new Set(['realizado', 'total']),
+  baseline: new Set(['previsto']),
+  periodo: new Set([RenderAbaAlertas.PERIODO_ACUMULADO, RenderAbaAlertas.PERIODO_MES]),
+  status: new Set(),
+};
+
+var PERIODOS_ALERTAS_PADRAO = [RenderAbaAlertas.PERIODO_ACUMULADO, RenderAbaAlertas.PERIODO_MES];
+
+function configFiltrosAlertasSemanal() {
+  return [
+    { id: 'filtro-alertas-agrupar-por', chave: 'agruparPor', rotuloPadrao: 'Agrupar por', exclusivo: true, opcoesFixas: [
+      { valor: 'sup', rotulo: 'SUP' },
+      { valor: 'tipologia', rotulo: 'Tipologia' },
+      { valor: 'grupo', rotulo: 'Grupo' },
+      { valor: 'categoria', rotulo: 'Categoria' },
+      { valor: 'origem', rotulo: 'Origem' },
+    ] },
+    { id: 'filtro-alertas-numerico', chave: 'numerico', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: [
+      { valor: 'realizado', rotulo: 'Realizado' },
+      { valor: 'total', rotulo: 'Tendência' },
+    ] },
+    { id: 'filtro-alertas-baseline', chave: 'baseline', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true, opcoesFixas: [
+      { valor: 'previsto', rotulo: 'Previsto' },
+      { valor: 'previstoInicial', rotulo: 'Previsto Inicial' },
+    ] },
+    // Dinâmico: S1..Sn do mês SELECIONADO (com o intervalo de datas no
+    // rótulo) + os dois acumulados.
+    { id: 'filtro-alertas-periodo', chave: 'periodo', rotuloPadrao: 'Selecione ao menos 1', minimoUm: true,
+      opcoesFixas: RenderAbaAlertas.periodosDisponiveis(semanasDoMesSelecionado()) },
+    // Único dos 5 que FILTRA linhas (os outros decidem que colunas/grupos
+    // aparecem) -- por isso sem minimoUm/exclusivo: Set vazio mostra tudo,
+    // igual aos filtros de recorte da barra de cima. O valor de cada opção é
+    // o próprio rótulo que classificarSemaforo devolve.
+    { id: 'filtro-alertas-status', chave: 'status', rotuloPadrao: 'Status',
+      opcoesFixas: RenderAbaAlertas.STATUS_ORDEM.map(function (s) { return { valor: s, rotulo: s }; }) },
+  ];
+}
+
 // Índice do mês (0-11) que a Tabela Semanal/Gráficos mostram -- começa no
 // vigente, mas o usuário pode trocar pelo <select> #seletor-mes-semanal
 // (ver montarDashboard). O clamp cobre o caso raro de window.__VIGENTE_IDX__
 // vir fora de [0,11] (ano inteiro no passado/futuro -- ver calcularVigenteIdx).
 var mesSelecionadoIdx = Math.max(0, Math.min(11, window.__VIGENTE_IDX__));
+
+// "Hoje" em dia-desde-época, na convenção do projeto inteiro: o dia civil
+// LOCAL de quem está vendo a página (getFullYear/getMonth/getDate, o dia que a
+// pessoa vê no relógio dela) ancorado em UTC ANTES de virar número -- ver o
+// comentário longo em diaEpoch (compute-semanal.js). Calculado a cada chamada,
+// nunca guardado: a aba fica aberta e pode atravessar a meia-noite.
+//
+// Uma função só, e não a mesma expressão repetida em cada aba: a versão
+// anterior de montarAbaBalanco construía TRÊS Dates novos na mesma expressão,
+// o que numa virada de meia-noite entre eles montaria uma data que nunca
+// existiu.
+function hojeEpochDoNavegador() {
+  var agora = new Date();
+  return ComputeSemanal.diaEpoch(new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate())));
+}
+
+// As semanas reais do mês SELECIONADO -- o mesmo calendário que a Tabela
+// Semanal, os Gráficos e o recorte do Balanço usam (semanasDoMes, cortando
+// sempre dentro do mês). Nunca uma segunda contagem de semanas.
+function semanasDoMesSelecionado() {
+  return ComputeSemanal.semanasDoMes(window.__ANO__, mesSelecionadoIdx);
+}
 
 // dados: o que o gate acabou de JSON.parse -- {registros, baseline} (ver o
 // ACHADO documentado acima desta constante). Guarda baseline à parte
@@ -519,10 +638,14 @@ function alternarAba(aba) {
   document.getElementById('secao-grafico-semanal').style.display = aba === 'grafico-semanal' ? '' : 'none';
   document.getElementById('secao-balanco').style.display = aba === 'balanco' ? '' : 'none';
   document.getElementById('secao-demandas').style.display = aba === 'demandas' ? '' : 'none';
+  document.getElementById('secao-alertas').style.display = aba === 'alertas' ? '' : 'none';
+  document.getElementById('secao-consolidado').style.display = aba === 'consolidado' ? '' : 'none';
   document.getElementById('aba-semanal').classList.toggle('aba-ativa', aba === 'semanal');
   document.getElementById('aba-grafico-semanal').classList.toggle('aba-ativa', aba === 'grafico-semanal');
   document.getElementById('aba-balanco').classList.toggle('aba-ativa', aba === 'balanco');
   document.getElementById('aba-demandas').classList.toggle('aba-ativa', aba === 'demandas');
+  document.getElementById('aba-alertas').classList.toggle('aba-ativa', aba === 'alertas');
+  document.getElementById('aba-consolidado').classList.toggle('aba-ativa', aba === 'consolidado');
 }
 
 // Redesenha só o CONTEÚDO de #secao-grafico-semanal (não a div inteira --
@@ -703,6 +826,161 @@ function montarAbaDemandas() {
   });
 }
 
+// Estado dos 2 controles próprios da aba CONSOLIDADO. 'semana' começa null =
+// AUTOMÁTICO: a aba abre na semana em curso do mês selecionado (a última que
+// já começou; S1 num mês que ainda não começou). Depois que a pessoa escolhe
+// uma, o número escolhido manda -- até trocar de mês para um com menos
+// semanas, quando volta pro automático em vez de apontar pra uma semana que
+// não existe (ver montarAbaConsolidado).
+//
+// 'dimensao' abre em Volume, e não em Financeiro como o resto da página: é a
+// aba onde as colunas de premissa física (equipes previstas, produtividade
+// esperada) só existem nessa dimensão, e abrir sem elas esconderia justamente
+// o que a aba tem de próprio.
+var ESTADO_CONSOLIDADO = { semana: null, dimensao: 'volume' };
+
+// Índice da semana a exibir: o escolhido, ou o automático quando não há
+// escolha válida. "A semana em curso" é a última que já começou -- mesmo
+// critério de semanasElapsadas na aba Alertas, e não indiceSemanaAtual, que
+// devolve -1 quando o mês selecionado não contém hoje (mês passado ou futuro,
+// onde a aba ainda precisa mostrar alguma semana).
+function semanaConsolidadoIdx(semanas, hojeEpoch) {
+  if (!semanas.length) return 0;
+  if (typeof ESTADO_CONSOLIDADO.semana === 'number'
+      && ESTADO_CONSOLIDADO.semana >= 0 && ESTADO_CONSOLIDADO.semana < semanas.length) {
+    return ESTADO_CONSOLIDADO.semana;
+  }
+  var elapsadas = 0;
+  for (var i = 0; i < semanas.length; i++) {
+    if (semanas[i].inicio <= hojeEpoch) elapsadas++;
+  }
+  return elapsadas > 0 ? elapsadas - 1 : 0;
+}
+
+// Redesenha #secao-consolidado inteira e religa os 2 controles, recriados a
+// cada innerHTML -- mesmo motivo já documentado em montarAbaBalanco.
+function montarAbaConsolidado(registros, indices) {
+  var semanas = semanasDoMesSelecionado();
+  var hojeEpoch = hojeEpochDoNavegador();
+  // Uma escolha que não existe mais no mês novo é DESCARTADA (volta ao
+  // automático), não clampada: clampar mostraria a última semana do mês novo
+  // como se tivesse sido escolhida, e o <select> concordaria com a mentira.
+  if (typeof ESTADO_CONSOLIDADO.semana === 'number' && ESTADO_CONSOLIDADO.semana >= semanas.length) {
+    ESTADO_CONSOLIDADO.semana = null;
+  }
+  document.getElementById('secao-consolidado').innerHTML = RenderAbaConsolidado.renderAbaConsolidado(registros, indices, {
+    semanaIdx: semanaConsolidadoIdx(semanas, hojeEpoch),
+    dimensao: ESTADO_CONSOLIDADO.dimensao,
+    mesIdx: mesSelecionadoIdx,
+    semanas: semanas,
+    demandas: window.__DEMANDAS__,
+    hojeEpoch: hojeEpoch,
+  });
+  var seletorSemana = document.getElementById('consolidado-semana');
+  if (seletorSemana) {
+    seletorSemana.addEventListener('change', function (e) {
+      ESTADO_CONSOLIDADO.semana = parseInt(e.target.value, 10);
+      montarAbaConsolidado(registros, indices);
+    });
+  }
+  var seletorDimensao = document.getElementById('consolidado-dimensao');
+  if (seletorDimensao) {
+    seletorDimensao.addEventListener('change', function (e) {
+      ESTADO_CONSOLIDADO.dimensao = e.target.value;
+      montarAbaConsolidado(registros, indices);
+    });
+  }
+}
+
+// Redesenha cabeçalho + corpo da aba Alertas inteiros a cada mudança (de
+// recorte OU de um dos 5 seletores próprios) -- sem estado incremental, mesma
+// filosofia do orçamento: qualquer mudança aqui muda linhas E colunas ao mesmo
+// tempo, então não vale a pena ter dois caminhos.
+//
+// 'dimensao' é a PRIMEIRA marcada na barra compartilhada, igual ao orçamento
+// (a tabela de alertas tem uma coluna de valor só, não dá pra empilhar
+// dimensões nela). Com Equipes marcada, as células saem "Sem dado": a página
+// não mede equipes por semana em lugar nenhum (ver calcularSeriesSemanaisDimensao),
+// e cinza é a resposta honesta -- o filtro de Status esconde essas linhas
+// para quem não quiser vê-las.
+function recalcularAlertasSemanal(indices, dimensoes) {
+  var dimensao = dimensoes[0];
+  var agruparPor = filtrosAlertasSemanal.agruparPor.values().next().value || 'sup';
+  document.getElementById('cabecalho-alertas').innerHTML = RenderAbaAlertas.renderCabecalhoAlertas(
+    RenderAbaAlertas.AGRUPAR_POR_ROTULO[agruparPor] || agruparPor,
+    RenderAbaAlertas.DIMENSOES_ROTULO[dimensao] || dimensao
+  );
+  document.getElementById('corpo-alertas').innerHTML = RenderAbaAlertas.renderCorpoAlertas(
+    window.__REGISTROS__, indices, {
+      agruparPor: agruparPor,
+      dimensao: dimensao,
+      numericos: Array.from(filtrosAlertasSemanal.numerico),
+      baselines: Array.from(filtrosAlertasSemanal.baseline),
+      // A ordem das colunas de período segue periodosDisponiveis (S1..Sn,
+      // depois os acumulados), não a ordem em que a pessoa marcou -- por isso
+      // a lista é filtrada a partir dela, e não lida do Set direto.
+      periodos: RenderAbaAlertas.periodosDisponiveis(semanasDoMesSelecionado())
+        .map(function (p) { return p.valor; })
+        .filter(function (v) { return filtrosAlertasSemanal.periodo.has(v); }),
+      statusFiltro: Array.from(filtrosAlertasSemanal.status),
+      mesIdx: mesSelecionadoIdx,
+      semanas: semanasDoMesSelecionado(),
+      demandas: window.__DEMANDAS__,
+      hojeEpoch: hojeEpochDoNavegador(),
+      baseline: window.__BASELINE__,
+    }
+  );
+  aplicarBuscaAlertasSemanal();
+}
+
+// Filtra as linhas JÁ renderizadas por texto -- nunca refaz o cálculo, só
+// esconde/mostra <tr> pelo data-search que renderLinhaAlerta embutiu. Termo
+// vazio mostra tudo, mesma convenção da busca dentro de cada filtro-multi.
+function aplicarBuscaAlertasSemanal() {
+  var campo = document.getElementById('busca-alertas');
+  if (!campo) return;
+  var termo = RenderAbaAlertas.normalizarBusca(campo.value);
+  document.querySelectorAll('#tabela-alertas tbody tr').forEach(function (tr) {
+    var combina = termo === '' || (tr.dataset.search || '').indexOf(termo) !== -1;
+    tr.style.display = combina ? '' : 'none';
+  });
+}
+
+// (Re)monta os 5 seletores da aba. Chamada também na troca de mês, porque as
+// opções de PERÍODO mudam com ele: montarFiltroMulti já apaga do estado os
+// valores que sumiram (um 's6' marcado ao ir de agosto para julho), mas o
+// filtro é minimoUm:true -- se a poda esvaziar o Set, a aba ficaria sem coluna
+// nenhuma e sem como voltar, então os padrões são readicionados aqui.
+function montarFiltrosAlertasSemanal(registros) {
+  configFiltrosAlertasSemanal().forEach(function (cfg) {
+    montarFiltroMulti(cfg, registros, filtrosAlertasSemanal, aoMudarAlertasSemanal);
+  });
+  if (filtrosAlertasSemanal.periodo.size === 0) {
+    PERIODOS_ALERTAS_PADRAO.forEach(function (p) { filtrosAlertasSemanal.periodo.add(p); });
+    var cfgPeriodo = configFiltrosAlertasSemanal().filter(function (c) { return c.chave === 'periodo'; })[0];
+    montarFiltroMulti(cfgPeriodo, registros, filtrosAlertasSemanal, aoMudarAlertasSemanal);
+  }
+}
+
+// Mudar um seletor da aba Alertas não mexe nas outras abas (elas não olham
+// esse estado), então recalcula só ela -- ao contrário de aoMudarSemanal, que
+// vem da barra compartilhada e precisa redesenhar tudo.
+function aoMudarAlertasSemanal() {
+  recalcularSemanalAlertasSozinho();
+}
+
+function recalcularSemanalAlertasSozinho() {
+  var indices = indicesFiltrados(
+    window.__REGISTROS__,
+    filtrosSelecionadosSemanal.tipologia,
+    filtrosSelecionadosSemanal.categoria,
+    filtrosSelecionadosSemanal.grupo,
+    filtrosSelecionadosSemanal.sup,
+    filtrosSelecionadosSemanal.origem
+  );
+  recalcularAlertasSemanal(indices, dimensoesEmOrdemSemanal(filtrosSelecionadosSemanal.dimensao));
+}
+
 // Recalcula o recorte a partir da barra de filtros compartilhada e redesenha
 // as abas Semanal e Balanço de massa com o mesmo 'indices' -- é a única
 // função que decide "o que recalcular" quando um filtro muda (equivalente a
@@ -732,14 +1010,21 @@ function recalcularSemanal() {
   // rola pro dia seguinte a partir de 21h em fusos atrás de UTC (o caso do
   // Brasil), e discorda de vez em fusos à frente de UTC (achado da revisão
   // final da branch).
-  var agora = new Date();
-  var hojeEpoch = ComputeSemanal.diaEpoch(new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate())));
+  var hojeEpoch = hojeEpochDoNavegador();
   document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(
     window.__REGISTROS__, indices, dimensoes, mesSelecionadoIdx, window.__ANO__,
     { demandas: window.__DEMANDAS__, hojeEpoch: hojeEpoch }
   );
   montarAbaGraficoSemanal(window.__REGISTROS__, indices, dimensoes, mesSelecionadoIdx, hojeEpoch);
   montarAbaBalanco(window.__REGISTROS__, indices);
+  // A aba Alertas entra no MESMO recorte das outras. O orçamento já registrou o
+  // que acontece quando não entra: por um tempo, filtrar por SUP na barra de
+  // cima nunca atualizava os Alertas de lá, porque só os seletores próprios da
+  // aba acionavam o recálculo dela.
+  recalcularAlertasSemanal(indices, dimensoes);
+  // O Consolidado usa a dimensão PRÓPRIA dele (volume/financeiro), não a da
+  // barra -- mas o RECORTE de registros é o mesmo das outras abas.
+  montarAbaConsolidado(window.__REGISTROS__, indices);
 }
 
 // Callback de mudança de filtro (aoMudar, ver montarFiltroMulti em
@@ -760,6 +1045,24 @@ function montarTodosFiltrosMultiSemanal(registros) {
   FILTROS_CONFIG_SEMANAL.forEach(function (cfg) { montarFiltroMulti(cfg, registros, filtrosSelecionadosSemanal, aoMudarSemanal); });
 }
 
+// Zera a barra de filtros compartilhada e redesenha tudo -- mesmo contrato de
+// limparFiltros no orçamento (tools/orcamento/render-dashboard.js): volta ao
+// estado em que a página abre, com os 5 recortes vazios ("nada marcado =
+// tudo") e a dimensão de volta em Financeiro, que é o único filtro com
+// minimoUm:true e portanto não pode ficar vazio.
+//
+// O que este botão deliberadamente NÃO toca, pelo mesmo motivo que o orçamento
+// não toca: o mês selecionado (é navegação, não recorte -- quem está olhando
+// agosto continua em agosto) e os controles PRÓPRIOS das abas Balanço/Alertas/
+// Consolidado (período, base, dimensão, semanas, status...), que vivem em
+// estado separado e são parte do desenho daquela aba, não da barra de cima.
+function limparFiltrosSemanal() {
+  FILTROS_CONFIG_SEMANAL.forEach(function (cfg) { filtrosSelecionadosSemanal[cfg.chave].clear(); });
+  filtrosSelecionadosSemanal.dimensao.add('financeiro');
+  montarTodosFiltrosMultiSemanal(window.__REGISTROS__);
+  recalcularSemanal();
+}
+
 // registros: já decifrados (só é chamada de dentro de tentarDesbloquear,
 // depois de decifrarComSenha) -- ver o comentário grande acima desta
 // constante.
@@ -768,13 +1071,22 @@ function montarDashboard(registros) {
   document.getElementById('aba-grafico-semanal').addEventListener('click', function () { alternarAba('grafico-semanal'); });
   document.getElementById('aba-balanco').addEventListener('click', function () { alternarAba('balanco'); });
   document.getElementById('aba-demandas').addEventListener('click', function () { alternarAba('demandas'); });
+  document.getElementById('aba-alertas').addEventListener('click', function () { alternarAba('alertas'); });
+  document.getElementById('aba-consolidado').addEventListener('click', function () { alternarAba('consolidado'); });
+  document.getElementById('busca-alertas').addEventListener('input', aplicarBuscaAlertasSemanal);
+  document.getElementById('limpar-filtros').addEventListener('click', limparFiltrosSemanal);
   var seletorMes = document.getElementById('seletor-mes-semanal');
   seletorMes.value = String(mesSelecionadoIdx);
   seletorMes.addEventListener('change', function (e) {
     mesSelecionadoIdx = parseInt(e.target.value, 10);
+    // As opções de PERÍODO da aba Alertas são as semanas do mês -- remontadas
+    // antes do recálculo, senão o painel continuaria oferecendo as semanas do
+    // mês antigo (e um "S6" que não existe no mês novo).
+    montarFiltrosAlertasSemanal(window.__REGISTROS__);
     recalcularSemanal();
   });
   montarTodosFiltrosMultiSemanal(registros);
+  montarFiltrosAlertasSemanal(registros);
   configurarAberturaFiltrosMulti();
   inicializarTooltipGraficoSemanal();
   recalcularSemanal();
@@ -1076,6 +1388,15 @@ ${markupAbas(ABAS_VISUALIZACAO, '    ')}
     </div>
     <div id="secao-balanco" style="display:none"></div>
     <div id="secao-demandas" style="display:none"></div>
+    <div id="secao-alertas" style="display:none">
+${markupFiltros(FILTROS_ALERTAS_SEMANAL, { recuo: '      ', classes: 'filtros-alertas' })}
+      <input id="busca-alertas" type="text" class="busca-alertas" placeholder="Buscar..." autocomplete="off">
+      <table id="tabela-alertas">
+        <thead id="cabecalho-alertas"></thead>
+        <tbody id="corpo-alertas"></tbody>
+      </table>
+    </div>
+    <div id="secao-consolidado" style="display:none"></div>
   </div>
   </main>
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx}; window.__ANO__ = ${periodos[0].getUTCFullYear()};</script>

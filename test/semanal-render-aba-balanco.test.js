@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const {
   renderGraficoTipologia, escalaIndependente, calcularEscalaAncorada,
-  calcularDivisaoTicks, passoBonito, renderAbaBalanco, GEOMETRIA,
+  calcularDivisaoTicks, passoBonito, renderAbaBalanco, renderControles, GEOMETRIA,
 } = require('../tools/semanal/render-aba-balanco.js');
 
 const LINHAS = [
@@ -384,4 +384,25 @@ test('"Acumulado até o mês" sempre avisa -- um mapa de um mês não responde p
 test('sem equipes ativas configuradas (fonte antiga), nenhum aviso -- nada mudou para quem não tem a aba EQ', () => {
   const html = renderAbaBalanco([], [], { periodo: 'mesVigente', vigenteIdx: 7, ano: 2026 });
   assert.doesNotMatch(html, /aviso-equipes/);
+});
+
+// --- Dimensão "Demandas" no seletor da aba (2026-08-03) -------------------
+
+test('o seletor Dimensão tem as três opções, com Demandas ao lado de Financeiro/Volumetria', () => {
+  const html = renderControles({});
+  assert.match(html, /<option value="financeiro"[^>]*>Financeiro<\/option>/);
+  assert.match(html, /<option value="volume"[^>]*>Volumetria<\/option>/);
+  assert.match(html, /<option value="demandas"[^>]*>Demandas<\/option>/);
+});
+
+test('o seletor Dimensão marca "demandas" como selecionado quando é o estado atual', () => {
+  const html = renderControles({ dimensao: 'demandas' });
+  assert.match(html, /<option value="demandas" selected>Demandas<\/option>/);
+  assert.doesNotMatch(html, /<option value="financeiro" selected>/);
+});
+
+test('o título de cada painel diz "Desvio de demandas" -- não pode reaproveitar o rótulo de volume, as duas são contagem de furo e só o nome as distingue', () => {
+  const linhas = [{ sup: 'SUP-0001-24', tomador: 'T', valorBase: 100, valorRealizado: 60, desvio: -40, equipesBase: null, equipesRealizado: null, desvioEquipes: null, ativo: true, semBase: false }];
+  const html = renderGraficoTipologia('ST', linhas, { dimensao: 'demandas' });
+  assert.match(html, /ST — Desvio de demandas/);
 });

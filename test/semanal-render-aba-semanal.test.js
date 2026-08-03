@@ -49,13 +49,15 @@ test('mostra as 6 semanas de agosto (mês que começa num sábado -- confirma qu
 });
 
 test('previsto de volume reparte proporcionalmente aos DIAS de cada semana, não em fatias iguais por número de semana -- julho (5+7+7+7+5=31 dias) e agosto (2+7+7+7+7+1=31 dias)', () => {
-  // Julho: 1000 / 31 dias x [5,7,7,7,5] = [161,29; 225,81; 225,81; 225,81; 161,29].
-  // S1 e S5 (semanas de borda, 5 dias) recebem menos que S2-S4 (semana cheia,
-  // 7 dias) -- ao contrário da divisão igual antiga, que dava 200,00 pras 5.
+  // Julho: 1000 / 31 dias x [5,7,7,7,5] = [161,29; 225,81; 225,81; 225,81; 161,29],
+  // arredondado pro inteiro pelo maior resto (2026-08-03) -> [161, 226, 226, 226, 161],
+  // que soma 1000 exatamente. S1 e S5 (semanas de borda, 5 dias) recebem menos que
+  // S2-S4 (semana cheia, 7 dias) -- ao contrário da divisão igual antiga, que dava
+  // 200 pras 5.
   const htmlJulho = renderAbaSemanal([registro(1000)], [0], ['volume'], VIGENTE_JULHO, ANO);
   const linhaPrevistoJulho = htmlJulho.match(/<tr class="linha-serie-semanal linha-previsto">[\s\S]*?<\/tr>/)[0];
   const numerosJulho = linhaPrevistoJulho.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
-  assert.deepStrictEqual(numerosJulho, ['161,29', '225,81', '225,81', '225,81', '161,29', '1.000,00']);
+  assert.deepStrictEqual(numerosJulho, ['161', '226', '226', '226', '161', '1.000']);
 
   // Agosto: 1200 / 31 dias x [2,7,7,7,7,1] -- S1 (2 dias) e S6 (1 dia) recebem
   // bem menos que as 4 semanas cheias -- é o exemplo que motivou o ajuste
@@ -66,7 +68,28 @@ test('previsto de volume reparte proporcionalmente aos DIAS de cada semana, não
   const htmlAgosto = renderAbaSemanal([registroAgosto], [0], ['volume'], VIGENTE_AGOSTO, ANO);
   const linhaPrevistoAgosto = htmlAgosto.match(/<tr class="linha-serie-semanal linha-previsto">[\s\S]*?<\/tr>/)[0];
   const numerosAgosto = linhaPrevistoAgosto.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
-  assert.deepStrictEqual(numerosAgosto, ['77,42', '270,97', '270,97', '270,97', '270,97', '38,71', '1.200,00']);
+  assert.deepStrictEqual(numerosAgosto, ['77', '271', '271', '271', '271', '39', '1.200']);
+});
+
+// Pedido do dono do projeto (2026-08-03): "no previsto semanal, sempre deixar
+// numeros inteiros e ajustar semanalmente para nao superar o total do mês".
+test('a linha Previsto nunca mostra casa decimal nem soma mais que o total do mês, em qualquer mês e com total quebrado', () => {
+  for (const mesIdx of [0, 1, 6, 7, 11]) {
+    for (const total of [1000.9, 7, 12345.67]) {
+      const reg = registro(0);
+      reg.previsto.volume[mesIdx] = total;
+      const html = renderAbaSemanal([reg], [0], ['volume'], mesIdx, ANO);
+      const linha = html.match(/<tr class="linha-serie-semanal linha-previsto">[\s\S]*?<\/tr>/)[0];
+      const celulas = linha.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
+      celulas.forEach((c) => assert.ok(!c.includes(','), `mês ${mesIdx}, total ${total}: "${c}" tem casa decimal`));
+      const semanas = celulas.slice(0, -1).map((c) => Number(c.replace(/\./g, '')));
+      const soma = semanas.reduce((a, b) => a + b, 0);
+      assert.ok(soma <= total, `mês ${mesIdx}, total ${total}: a soma das semanas (${soma}) superou o mês`);
+      // A coluna de fechamento mostra a soma que está na tela, não o total
+      // cru -- a linha fecha na conta que dá pra conferir somando as células.
+      assert.strictEqual(Number(celulas[celulas.length - 1].replace(/\./g, '')), soma);
+    }
+  }
 });
 
 test('a coluna de fechamento muda de rótulo conforme a dimensão', () => {
@@ -321,12 +344,14 @@ test('Tendência: indiceAtual === -1 (nenhuma semana do mês começou -- hoje an
   const hojeAntesDeAgosto = diaEpoch(new Date(Date.UTC(2026, 6, 20))); // 20/07 -- antes de agosto começar (01/08)
   const demandas = { porRegistroEventos: {} }; // agregado real vazio -- ativa Realizado/Tendência, tudo fecha em 0
   const html = renderAbaSemanal([registroAgosto], [0], ['volume'], VIGENTE_AGOSTO, ANO, { demandas, hojeEpoch: hojeAntesDeAgosto });
-  const linhaPrevisto = html.match(/<tr class="linha-serie-semanal linha-previsto">[\s\S]*?<\/tr>/)[0];
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
-  const numerosPrevisto = linhaPrevisto.match(/<td class="num[^"]*">[^<]*<\/td>/g);
-  const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">[^<]*<\/td>/g);
-  assert.deepStrictEqual(numerosTendencia, numerosPrevisto,
-    'sem nenhuma semana elapsada, Tendência reparte o mês inteiro proporcionalmente aos dias de cada semana -- mesma conta do Previsto');
+  const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
+  // Agosto: 1200 / 31 dias x [2,7,7,7,7,1]. A Tendência NÃO passa pelo
+  // arredondamento inteiro que o Previsto ganhou em 2026-08-03 (ela é
+  // projeção, não uma meta a cumprir) -- por isso a comparação aqui é contra
+  // a repartição crua por dia, e não mais célula a célula contra o Previsto.
+  assert.deepStrictEqual(numerosTendencia, ['77,42', '270,97', '270,97', '270,97', '270,97', '38,71', '1.200,00'],
+    'sem nenhuma semana elapsada, Tendência reparte o mês inteiro proporcionalmente aos dias de cada semana -- mesma repartição do Previsto, antes de arredondar');
 });
 
 test('calcularTendenciaSemanal: sem "semanas" (5º/4º parâmetros omitidos), cai no fallback de divisão igual por semana -- fluxo real sempre passa "semanas", este é só o contrato defensivo', () => {

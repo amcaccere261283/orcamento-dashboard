@@ -1,5 +1,5 @@
 'use strict';
-const { semanasDoMes, indiceSemanaAtual, dividirEmSemanas, fecharMes, diasNaSemana } = require('./compute-semanal.js');
+const { semanasDoMes, indiceSemanaAtual, dividirEmSemanasInteiras, fecharMes, diasNaSemana } = require('./compute-semanal.js');
 
 // Rótulo de exibição de cada dimensão -- só as 3 que a barra de filtros da
 // semanal expõe (ver FILTROS_CONFIG_SEMANAL/DIMENSOES_CONFIG_SEMANAL em
@@ -257,15 +257,17 @@ function renderCabecalho(dimensao, numSemanas, semanas) {
 
 // 'semanas' são os N valores por semana (ou null); 'fechamento' é o valor já
 // fechado (fecharMes) pra a coluna final. null em qualquer um vira a classe
-// sem-dado.
-function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento) {
+// sem-dado. 'casasDecimais' (opcional, padrão 2) existe pela linha Previsto,
+// que desde 2026-08-03 é inteira por construção (ver dividirEmSemanasInteiras)
+// -- mostrá-la com ",00" anunciaria uma precisão que ela não tem mais.
+function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento, casasDecimais) {
   var celulasSemana = semanas.map(function (v) {
     if (v === null || v === undefined) return '<td class="num sem-dado"></td>';
-    return '<td class="num">' + formatarNumero(v) + '</td>';
+    return '<td class="num">' + formatarNumero(v, casasDecimais) + '</td>';
   }).join('');
   var celulaFechamento = (fechamento === null || fechamento === undefined)
     ? '<td class="num celula-total-linha sem-dado"></td>'
-    : '<td class="num celula-total-linha">' + formatarNumero(fechamento) + '</td>';
+    : '<td class="num celula-total-linha">' + formatarNumero(fechamento, casasDecimais) + '</td>';
   return '<tr class="linha-serie-semanal linha-' + classeSerie + '">'
     + '<td class="serie-label">' + escapeHtml(rotulo) + '</td>'
     + celulasSemana + celulaFechamento + '</tr>';
@@ -288,7 +290,11 @@ function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento) {
 // contarEventosNoIntervalo/calcularTendenciaSemanal já usavam inline.
 function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx, semanas, numSemanas, temSemanasReais, indiceAtual, demandas, hojeEpoch) {
   var mesVigente = previstoMesVigente(registros, indices, dimensao, vigenteIdx);
-  var semanasPrevisto = dividirEmSemanas(mesVigente, dimensao, numSemanas, semanas);
+  // INTEIRAS desde 2026-08-03 (pedido do dono do projeto): a soma das semanas
+  // é exatamente Math.floor(mesVigente) -- nunca supera o total do mês, e o
+  // Fechamento abaixo passa a ser essa soma, então a linha fecha na conta que
+  // está na tela. Ver dividirEmSemanasInteiras em compute-semanal.js.
+  var semanasPrevisto = dividirEmSemanasInteiras(mesVigente, dimensao, numSemanas, semanas);
   var fechamentoPrevisto = fecharMes(semanasPrevisto, dimensao);
   var semanasSemDado = new Array(numSemanas).fill(null);
 
@@ -435,7 +441,9 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
       + '<table class="tabela-semanal">'
       + renderCabecalho(dimensao, numSemanas, semanas)
       + '<tbody>'
-      + renderLinhaSerie('Previsto', 'previsto', series.semanasPrevisto, series.fechamentoPrevisto)
+      // Equipes continua com 2 casas: é média ponderada (foto), não passa pelo
+      // arredondamento inteiro -- ver dividirEmSemanasInteiras.
+      + renderLinhaSerie('Previsto', 'previsto', series.semanasPrevisto, series.fechamentoPrevisto, dimensao === 'equipes' ? 2 : 0)
       + renderLinhaSerie('Realizado', 'realizado', series.semanasRealizado, series.fechamentoRealizado)
       + renderLinhaSerie('Tendência', 'tendencia', series.semanasTendencia, series.fechamentoTendencia)
       + linhaPendentes

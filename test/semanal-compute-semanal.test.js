@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  dividirEmSemanas, fecharMes,
+  dividirEmSemanas, dividirEmSemanasInteiras, fecharMes,
   diaEpoch, semanasDoMes, indiceSemanaAtual, diasNaSemana,
 } = require('../tools/semanal/compute-semanal.js');
 
@@ -98,6 +98,60 @@ test('ida e volta fecha pro mês vigente mesmo ponderando por dia, com valores q
         `dimensão ${dim} não fechou (${fechado} vs ${valor}) com semanas reais de ${semanas.length} colunas`);
     }
   }
+});
+
+// --- Previsto semanal em números inteiros (pedido do dono do projeto,
+// 2026-08-03): a linha Previsto da Tabela Semanal não mostra fração de furo
+// nem centavo repartido, e a soma das semanas NUNCA pode estourar o total do
+// mês. -----------------------------------------------------------------
+
+test('dividirEmSemanasInteiras devolve só inteiros e a soma nunca supera o total do mês', () => {
+  const julho = semanasDoMes(2026, 6); // dias [5,7,7,7,5], 31 no total
+  const resultado = dividirEmSemanasInteiras(4000, 'volume', julho.length, julho);
+  // 4000x5/31 = 645,16 e 4000x7/31 = 903,23 -- os pisos somam 3999, sobra 1
+  // unidade, que vai pra maior parte fracionária (empate entre S2/S3/S4,
+  // desempatado pelo menor índice).
+  assert.deepStrictEqual(resultado, [645, 904, 903, 903, 645]);
+  assert.strictEqual(resultado.reduce((a, b) => a + b, 0), 4000);
+});
+
+test('a soma das semanas inteiras nunca supera o total do mês, em qualquer mês de 2026 e com valores quebrados', () => {
+  for (let mes = 0; mes < 12; mes++) {
+    const semanas = semanasDoMes(2026, mes);
+    for (const valor of [7, 100.4, 1234.56, 99999.99, 3, 0]) {
+      for (const dim of ['volume', 'financeiro']) {
+        const fatias = dividirEmSemanasInteiras(valor, dim, semanas.length, semanas);
+        fatias.forEach((v) => assert.ok(Number.isInteger(v), `${dim} ${valor} mês ${mes}: ${v} não é inteiro`));
+        const soma = fatias.reduce((a, b) => a + b, 0);
+        assert.ok(soma <= valor, `mês ${mes}, ${dim} ${valor}: a soma ${soma} superou o total do mês`);
+        assert.ok(valor - soma < 1, `mês ${mes}, ${dim} ${valor}: a soma ${soma} perdeu mais de 1 unidade do total`);
+      }
+    }
+  }
+});
+
+test('semana de borda curta continua recebendo menos que a semana cheia depois de arredondar', () => {
+  const agosto = semanasDoMes(2026, 7); // dias [2,7,7,7,7,1]
+  const resultado = dividirEmSemanasInteiras(3100, 'volume', agosto.length, agosto);
+  assert.deepStrictEqual(resultado, [200, 700, 700, 700, 700, 100]);
+});
+
+test('equipes é foto: dividirEmSemanasInteiras devolve o valor do mês repetido, sem arredondar (meia equipe é média real, não fração de furo)', () => {
+  const julho = semanasDoMes(2026, 6);
+  assert.deepStrictEqual(dividirEmSemanasInteiras(2.5, 'equipes', julho.length, julho), [2.5, 2.5, 2.5, 2.5, 2.5]);
+});
+
+test('null continua propagando null -- ausência de dado não vira zero inteiro', () => {
+  const julho = semanasDoMes(2026, 6);
+  assert.deepStrictEqual(dividirEmSemanasInteiras(null, 'volume', julho.length, julho), [null, null, null, null, null]);
+});
+
+test('valor negativo não passa pelo arredondamento (não existe Previsto negativo; se aparecer, Math.floor o afastaria do zero em vez de aproximar)', () => {
+  const julho = semanasDoMes(2026, 6);
+  assert.deepStrictEqual(
+    dividirEmSemanasInteiras(-310, 'volume', julho.length, julho),
+    dividirEmSemanas(-310, 'volume', julho.length, julho)
+  );
 });
 
 // --- Calendário de semanas reais, corte sempre dentro do mês ---------------

@@ -11,6 +11,7 @@
 function criarDocumentoFalso() {
   const elementos = {};
   const checkboxesPorPainel = new Map();
+  const linhasPorTabela = new Map();
 
   function criarCheckboxFake(valor, checked) {
     const listeners = {};
@@ -93,7 +94,27 @@ function criarDocumentoFalso() {
       const m = /^#([\w-]+) (\.filtro-multi-(?:trigger|painel))$/.exec(sel);
       return m ? elemento(m[1]).querySelector(m[2]) : null;
     },
-    querySelectorAll() { return []; }, // .filtro-multi-trigger/.filtro-multi.aberto globais -- vazios de propósito, nenhum teste depende de achar outro filtro já aberto
+    // Um único seletor GLOBAL é resolvido de verdade: as linhas já
+    // renderizadas da tabela de Alertas, que aplicarBuscaAlertasSemanal
+    // percorre para esconder/mostrar. Sintetizadas do innerHTML de
+    // #corpo-alertas pelo mesmo mecanismo (e com o mesmo cache por innerHTML)
+    // que checkboxesDoPainel usa -- sem isso a busca "passaria" num array
+    // vazio e o teste não provaria nada.
+    //
+    // Os demais (.filtro-multi-trigger, .filtro-multi.aberto) continuam
+    // vazios de propósito: nenhum teste depende de achar outro filtro aberto.
+    querySelectorAll(sel) {
+      if (sel !== '#tabela-alertas tbody tr') return [];
+      const corpo = elemento('corpo-alertas');
+      const cache = linhasPorTabela.get(corpo);
+      if (cache && cache.key === corpo.innerHTML) return cache.lista;
+      const lista = [];
+      const re = /<tr data-search="([^"]*)">/g;
+      let m;
+      while ((m = re.exec(corpo.innerHTML))) lista.push({ dataset: { search: m[1] }, style: {} });
+      linhasPorTabela.set(corpo, { key: corpo.innerHTML, lista });
+      return lista;
+    },
     addEventListener() {},
   };
 }

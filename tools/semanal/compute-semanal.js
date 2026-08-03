@@ -44,6 +44,52 @@ function dividirEmSemanas(valorMensal, dimensao, numSemanas, semanas) {
   return saida;
 }
 
+// A MESMA repartição de dividirEmSemanas, só que em números INTEIROS --
+// pedido do dono do projeto em 2026-08-03: a linha Previsto da Tabela
+// Semanal não mostra fração de furo nem centavo repartido, e a soma das
+// semanas NUNCA pode estourar o total do mês.
+//
+// Método do maior resto (Hare-Niemeyer), com o teto em Math.floor(valorMensal):
+// cada semana leva o piso da sua fatia proporcional aos dias, e as unidades
+// que sobram até fechar o teto vão, uma a uma, pras semanas de maior parte
+// fracionária (empate desempatado pelo menor índice, para ser determinístico).
+// Duas garantias que valem por construção, não por tolerância:
+//
+//   - a soma das fatias é EXATAMENTE Math.floor(valorMensal) -- nunca passa do
+//     mês, e nunca fica mais de 1 unidade abaixo dele;
+//   - arredondar cada semana isoladamente (Math.round) NÃO daria isso: as
+//     bordas para cima somariam mais que o mês, que é justamente o que este
+//     pedido veio impedir.
+//
+// Duas dimensões saem pelo caminho de sempre, sem arredondar:
+//
+//   - equipes, que é FOTO e não fluxo (ver dividirEmSemanas): "2,5 equipes"
+//     é uma média ponderada real, não meia unidade repartida, e arredondar
+//     faria a Tabela discordar do Balanço de massa sobre o mesmo número;
+//   - valor negativo, que não existe em Previsto: Math.floor afastaria do
+//     zero (-3,2 -> -4) e a "soma que não supera o mês" viraria o oposto.
+function dividirEmSemanasInteiras(valorMensal, dimensao, numSemanas, semanas) {
+  var bruto = dividirEmSemanas(valorMensal, dimensao, numSemanas, semanas);
+  if (dimensao === 'equipes') return bruto;
+  if (valorMensal === null || valorMensal === undefined || valorMensal < 0) return bruto;
+
+  var pisos = [];
+  var restos = [];
+  var somaPisos = 0;
+  for (var i = 0; i < numSemanas; i++) {
+    var v = bruto[i] === null || bruto[i] === undefined ? 0 : bruto[i];
+    var piso = Math.floor(v);
+    pisos.push(piso);
+    restos.push({ indice: i, resto: v - piso });
+    somaPisos += piso;
+  }
+
+  var sobra = Math.floor(valorMensal) - somaPisos;
+  restos.sort(function (a, b) { return b.resto - a.resto || a.indice - b.indice; });
+  for (var s = 0; s < sobra && s < restos.length; s++) pisos[restos[s].indice] += 1;
+  return pisos;
+}
+
 function fecharMes(semanas, dimensao) {
   var validos = (semanas || []).filter(function (v) { return v !== null && v !== undefined; });
   if (!validos.length) return null;
@@ -131,4 +177,4 @@ function indiceSemanaAtual(semanas, hojeEpoch) {
 }
 // FIM CLIENTE >>>
 
-module.exports = { dividirEmSemanas, fecharMes, diaEpoch, semanasDoMes, indiceSemanaAtual, diasNaSemana };
+module.exports = { dividirEmSemanas, dividirEmSemanasInteiras, fecharMes, diaEpoch, semanasDoMes, indiceSemanaAtual, diasNaSemana };

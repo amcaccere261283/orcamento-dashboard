@@ -280,7 +280,12 @@ var COR_ACIMA = '#7fd858';   // mesmo verde de .linha-realizado no orçamento
 var COR_ABAIXO = '#e0684f';  // mesmo vermelho de .status-erro
 var COR_EQUIPES = '#f6b53f'; // mesmo laranja/dourado do resto da UI
 
-var ROTULO_DIMENSAO = { financeiro: 'Desvio financeiro', volume: 'Desvio de volume' };
+// 'demandas' (2026-08-03) é a terceira dimensão da aba: chegadas medidas no
+// Avanço Sond contra o mesmo Previsto de volume (ver calcularLinhas em
+// compute-balanco.js). O rótulo diz "de demandas" e não "de volume" de
+// propósito -- as duas são contagens de furo, e só o nome distingue "o que
+// chegou" de "o que foi executado".
+var ROTULO_DIMENSAO = { financeiro: 'Desvio financeiro', volume: 'Desvio de volume', demandas: 'Desvio de demandas' };
 
 // Largura aproximada de um texto em px, para decidir se o rótulo cabe DENTRO
 // da barra ou tem que ir para fora dela. Não precisa ser exata -- precisa
@@ -673,6 +678,9 @@ function renderControles(estado) {
     + '<select id="balanco-dimensao">'
     + opcao('financeiro', 'Financeiro', dimensao)
     + opcao('volume', 'Volumetria', dimensao)
+    // Demandas responde outra pergunta que as duas de cima: não "quanto foi
+    // executado contra o previsto", e sim "quanto CHEGOU contra o previsto".
+    + opcao('demandas', 'Demandas', dimensao)
     + '</select></label>';
   html += '<label class="controle-balanco controle-balanco-check">'
     + '<input type="checkbox" id="balanco-somente-ativos"' + (somenteAtivos ? ' checked' : '') + '>'

@@ -209,10 +209,16 @@ function intervaloParaEpoch(ano, intervalo) {
 // semanal está ativo. As janelas de semana nunca se sobrepõem (semanasDoMes
 // devolve semana a semana, cortadas dentro do mês), então somar as contagens
 // não conta furo duas vezes.
-function realizadoDoAvancos(demandas, sup, tipologia, intervalosEpoch, peso) {
+// 'serie' (opcional, padrão 'sondagemRealizada') escolhe QUAL evento do furo
+// conta -- a dimensão Demandas (2026-08-03) passa 'chegada' pra medir o que
+// ENTROU no período em vez do que foi executado nele. É o único parâmetro
+// que separa as duas leituras: o resto da conta (janelas, peso, "ausência =
+// zero") é idêntico, e duplicar a função por causa de um nome de campo faria
+// as duas divergirem na primeira correção que só uma recebesse.
+function realizadoDoAvancos(demandas, sup, tipologia, intervalosEpoch, peso, serie) {
   var porRegistroEventos = (demandas && demandas.porRegistroEventos) || {};
   var entrada = porRegistroEventos[chaveDemandas(sup, tipologia)];
-  var eventos = (entrada && entrada.sondagemRealizada) || [];
+  var eventos = (entrada && entrada[serie || 'sondagemRealizada']) || [];
   var contagem = 0;
   for (var i = 0; i < eventos.length; i++) {
     for (var j = 0; j < intervalosEpoch.length; j++) {
@@ -250,6 +256,21 @@ function realizadoDoAvancos(demandas, sup, tipologia, intervalosEpoch, peso) {
 // mesVigente: ali a coluna da MATRIZ é confiável depois do fechamento, aqui
 // não é.
 function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline, demandas, ano, semanas, semanasSelecionadas, equipesPorDia, hojeEpoch, equipesAtivasPeriodo }) {
+  // Dimensão "Demandas" (2026-08-03): o que CHEGOU no período (evento
+  // 'chegada' do Avanço Sond) contra o mesmo Previsto de VOLUME da MATRIZ.
+  // Duas diferenças de comportamento, ambas deliberadas:
+  //
+  //   - a base sai da coluna de volume (dimensaoBase abaixo): a MATRIZ não tem
+  //     previsão de demanda separada, e furo previsto é a grandeza comparável
+  //     com furo chegado. Vale igual pra 'previsto' e pra 'previstoInicial';
+  //   - o Realizado vem SEMPRE do Avanço Sond, em qualquer período -- volume e
+  //     financeiro caem na coluna Realizado da MATRIZ fora de Mês Vigente, mas
+  //     não existe coluna de demandas lá pra servir de fallback, e a de volume
+  //     responderia outra pergunta. Sem o agregado de demandas, a linha fica
+  //     SEM DADO (null), nunca zero: zero seria lido como "nenhuma demanda
+  //     chegou", que é uma afirmação, não uma ausência.
+  var ehDemandas = dimensao === 'demandas';
+  var dimensaoBase = ehDemandas ? 'volume' : dimensao;
   var intervalo = periodoParaIntervalo(periodo, vigenteIdx);
   var intervaloEpoch = periodo === 'mesVigente' && typeof ano === 'number' ? intervaloParaEpoch(ano, intervalo) : null;
   var usarAvancosNoRealizado = periodo === 'mesVigente' && !!demandas && !!intervaloEpoch;
@@ -273,6 +294,14 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
     ? selecao.map(function (i) { return { inicio: semanas[i].inicio, fim: semanas[i].fim }; })
     : null;
   var intervalosEpoch = !intervaloEpoch ? [] : (janelasSemana || [intervaloEpoch]);
+  // Janelas em que as CHEGADAS são contadas: as semanas marcadas, ou o período
+  // INTEIRO (intervaloEpochPeriodo, não intervaloEpoch -- este último é só do
+  // mês vigente de propósito, e demandas vale em qualquer período). Ao
+  // contrário das janelas de equipes logo abaixo, NÃO são truncadas em hoje:
+  // não é uma média diluída pelos dias que ainda não aconteceram, é uma
+  // contagem de eventos, e nenhum evento existe no futuro pra inflar nada.
+  var janelasDemandas = janelasSemana || (intervaloEpochPeriodo ? [intervaloEpochPeriodo] : []);
+  var usarAvancosNasDemandas = ehDemandas && !!demandas && janelasDemandas.length > 0;
   // Janelas de equipes: as semanas marcadas, ou o período inteiro -- SEMPRE
   // truncadas em hoje.
   //
@@ -317,13 +346,17 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
     var registro = registros[i];
     if (!registro || registro.tipologia !== tipologia) return;
 
-    var mensalPrevisto = registro.previsto && registro.previsto[dimensao];
-    var mensalRealizado = registro.realizado && registro.realizado[dimensao];
+    var mensalPrevisto = registro.previsto && registro.previsto[dimensaoBase];
+    var mensalRealizado = registro.realizado && registro.realizado[dimensaoBase];
 
     var previstoPeriodo = somarIntervalo(mensalPrevisto, intervalo);
     if (recortarBase) previstoPeriodo = baseNasSemanas(previstoPeriodo, semanas, selecao);
     var realizadoPeriodo;
-    if (usarAvancosNoRealizado) {
+    if (ehDemandas) {
+      realizadoPeriodo = usarAvancosNasDemandas
+        ? realizadoDoAvancos(demandas, registro.sup, tipologia, janelasDemandas, 1, 'chegada')
+        : null;
+    } else if (usarAvancosNoRealizado) {
       var peso = dimensao === 'financeiro' ? ticketMedio(registro) : 1;
       realizadoPeriodo = realizadoDoAvancos(demandas, registro.sup, tipologia, intervalosEpoch, peso);
     } else {
@@ -361,7 +394,7 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
       if (!entradaBaseline) {
         semBase = true;
       } else {
-        valorBase = somarIntervalo(entradaBaseline[dimensao], intervalo);
+        valorBase = somarIntervalo(entradaBaseline[dimensaoBase], intervalo);
         if (recortarBase) valorBase = baseNasSemanas(valorBase, semanas, selecao);
         equipesBase = equipesNoIntervalo(entradaBaseline.equipes, intervalo);
         if (valorBase === null) semBase = true;

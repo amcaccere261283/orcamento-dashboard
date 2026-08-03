@@ -71,11 +71,12 @@ retomar, parta destas descobertas em vez de investigar de novo:
 
 ## Planejamento Semanal (segunda página, publicada em 2026-07-29)
 
-`docs/planejamento-semanal.html` — aba 1 com o mês vigente dividido em semanas reais
-(segunda a domingo, cortadas SEMPRE dentro do mês -- nenhum dia de um mês conta no
-acompanhamento do mês vizinho; ver `tools/semanal/compute-semanal.js` e
-`docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md`), aba 2 com o
-gráfico Balanço de massa (barras divergentes por tipologia). Build:
+`docs/planejamento-semanal.html` — SEIS abas: Semanal (o mês dividido em semanas
+reais — segunda a domingo, cortadas SEMPRE dentro do mês, nenhum dia de um mês
+conta no acompanhamento do vizinho; ver `tools/semanal/compute-semanal.js` e
+`docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md`), Gráficos,
+Balanço de massa (barras divergentes por tipologia), Demandas, Alertas e
+Consolidado. Build:
 `ORCAMENTO_SENHA='...' node tools/semanal/build-dashboard.js`, e **sempre**
 `cp dist/planejamento-semanal.html docs/planejamento-semanal.html` antes de commitar.
 `test/publicacao-docs-sincronizado.test.js` trava essa cópia para as duas páginas.
@@ -125,6 +126,54 @@ passam por ela. Não monte a chave `sup||tipologia` crua: `LAB.C` e `LAB.E` têm
 diferentes no estudo, e 7 SUPs foram renomeados. Sem os mapas, 68 das 340 linhas viram
 "sem base", indistinguível de "contrato entrou depois do estudo" — foi o Critical que a
 revisão final pegou.
+
+### Cinco decisões de 2026-08-03 (segunda leva de pedidos)
+
+**O Previsto semanal é INTEIRO.** `dividirEmSemanasInteiras` (`compute-semanal.js`)
+reparte pelo método do maior resto com teto em `Math.floor(total do mês)`: a soma das
+semanas é exatamente esse piso — nunca supera o mês, nunca fica mais de 1 unidade
+abaixo. A coluna Total passa a mostrar essa soma, então a linha fecha na conta que
+está na tela. `dividirEmSemanas` (fracionária) continua existindo e é o que
+`baseNasSemanas` (`compute-balanco.js`) e a Tendência usam — **não troque uma pela
+outra sem pensar**: Tendência é projeção, não meta, e arredondá-la não faria sentido.
+Equipes fica fora dos dois arredondamentos (é foto/média ponderada, "2,5 equipes" é
+um número real). Consequência aceita: linhas de registro arredondadas
+independentemente podem somar 1 a menos que a linha de TOTAL do mesmo bloco.
+
+**Balanço de massa tem uma 3ª dimensão, "Demandas".** Compara o que CHEGOU (evento
+`chegada` do Avanço Sond) contra o Previsto de VOLUME da MATRIZ — a MATRIZ não tem
+previsão de demanda própria, e furo previsto é a grandeza comparável. Diferente de
+volume/financeiro, usa o Avanço Sond em QUALQUER período (não só Mês Vigente): não
+existe coluna de demandas na MATRIZ pra servir de fallback, e a de volume responderia
+outra pergunta. Sem o agregado de demandas a linha fica sem dado, nunca zero.
+
+**Aba Alertas** (`tools/semanal/render-aba-alertas.js`) é o porte da aba Alertas do
+orçamento — mesmo semáforo (hex e rótulos copiados literalmente), mesmas 7 colunas,
+mesma busca, mesmos 5 filtros próprios. A ÚNICA mudança de lógica são os períodos:
+S1..Sn do mês selecionado + "Acumulado até a semana atual" + "Mês inteiro", em vez dos
+8 buckets mensais. Isso torna a lista de períodos **dinâmica** (um mês tem 5 ou 6
+semanas), então `montarFiltrosAlertasSemanal` é chamada de novo a cada troca de mês e
+readiciona os padrões se a poda esvaziar o filtro (ele é `minimoUm`). Os números NÃO
+são recalculados ali: saem de `calcularSeriesSemanaisDimensao`, a mesma função da
+Tabela Semanal e dos Gráficos. Com a dimensão Equipes marcada as células ficam "Sem
+dado" — a página não mede equipes por semana em lugar nenhum, e cinza é a resposta
+honesta.
+
+**Aba Consolidado** (`tools/semanal/render-aba-consolidado.js`) porta a ABERTURA DE
+LINHAS da Tabela do orçamento (TOTAL GERAL → total por tipologia → registros do SUP →
+TOTAL do SUP), mas não a forma das colunas: como só há UMA semana, as três séries
+viram colunas e cada abertura é uma linha só. Controles próprios: semana (padrão
+automático = a última que já começou) e dimensão (abre em **Volume**, ao contrário do
+resto da página, porque as colunas de premissa física só existem nessa dimensão).
+Separação pedida explicitamente — **Volume mostra Equipes previstas + Produtividade
+média esperada; Financeiro mostra só o Ticket médio**, nunca os dois juntos. As três
+premissas são do MÊS (equipes é foto; PROD./TICKET valem o ano), ao lado de colunas
+que são da semana — a nota no rodapé da aba diz isso na tela. Regra de dois ramos
+herdada do orçamento: um registro só usa a premissa da planilha; agregado recalcula
+(volume ÷ equipes×`DIAS_PREMISSA_MES`, e financeiro ÷ volume).
+
+**Botão "Limpar filtros"**, o mesmo do orçamento. Zera só a barra compartilhada — não
+o mês selecionado (é navegação) nem os controles próprios das abas.
 
 ### Aba Demandas (base do Avanço Sond)
 

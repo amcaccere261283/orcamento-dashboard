@@ -1,0 +1,339 @@
+'use strict';
+const { diasNaSemana } = require('./compute-semanal.js');
+const { calcularSeriesSemanaisDimensao, formatarIntervaloSemana } = require('./render-aba-semanal.js');
+const { DIAS_PREMISSA_MES } = require('../comum/calculo-equipes.js');
+
+// Aba CONSOLIDADO (2026-08-03) -- "uma tabela com o consolidado da semana, na
+// mesma abertura de linhas da planilha tabela do orçamento, porém com as
+// informações apenas da semana".
+//
+// A "abertura de linhas" portada é a HIERARQUIA da Tabela do orçamento
+// (renderCorpoTabela, tools/orcamento/render-dashboard.js), nesta ordem:
+//
+//   TOTAL GERAL                      (todos os registros do recorte atual)
+//   TOTAL GERAL por tipologia        (uma por tipologia presente, alfabética)
+//   por SUP:  uma linha por registro (= por tipologia daquele SUP)
+//             TOTAL <SUP>
+//
+// O que NÃO é portado é a forma das colunas: lá, cada série (Previsto/
+// Realizado/Tendência) é uma LINHA e os 12 meses são colunas. Aqui só existe
+// UMA semana, então as três séries cabem como colunas e cada abertura vira uma
+// linha só -- é o que torna a tabela legível como "o consolidado da semana",
+// em vez de triplicar a altura para preencher uma coluna única.
+//
+// As colunas extras seguem a regra que o dono do projeto deu explicitamente --
+// "não misturar as informações físicas e financeiras":
+//
+//   Volume     -> Equipes previstas + Produtividade média esperada
+//   Financeiro -> Ticket médio previsto
+//
+// As três são PREMISSAS do mês, não grandezas da semana: equipes é foto (2
+// equipes no mês são 2 equipes em qualquer semana -- mesma premissa de
+// dividirEmSemanas), e produtividade/ticket vêm das colunas PROD./TICKET da
+// MATRIZ, que valem para o ano inteiro. Repartir qualquer uma delas por semana
+// produziria número errado em silêncio; a nota no rodapé da aba diz isso na
+// tela, não só aqui.
+//
+// Este módulo roda no Node (testes) e no navegador (bundle) -- por isso
+// 'var'/'function'. O require de '../comum/calculo-equipes.js' é REMOVIDO pelo
+// bundler e DIAS_PREMISSA_MES chega como global (fonteParaCliente(), injetada
+// num <script> antes do bundle) -- mesmo mecanismo que compute-balanco.js já
+// usa para mediaEquipesPonderada; ver o comentário no topo daquele arquivo.
+
+function escapeHtml(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function formatarNumero(v, casasDecimais) {
+  if (v === null || v === undefined) return '—';
+  var casas = casasDecimais === undefined ? 2 : casasDecimais;
+  var fator = Math.pow(10, casas);
+  return (Math.round(v * fator) / fator).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
+// Cópia de tipologiaColor do orçamento (tools/orcamento/render-dashboard.js),
+// que por sua vez veio de tools/matriz/render-dashboard.js do repositório
+// irmão -- duplicada pelo mesmo motivo de sempre neste bundle: a tipologia é
+// dado protegido por senha e o chip é montado no navegador, então a cor tem de
+// existir aqui dentro.
+var TIPOLOGIA_COLOR = {
+  SP: '#3f851a', SM: '#2f6ad0', ST: '#8d6f00', PI: '#606060',
+  BL: '#4a3aa7', CPTU: '#db244e', SH: '#e87ba4', VT: '#eda100',
+  'SEGURANÇA': '#2775b8', ESPECIAIS: '#db244e', SSMA: '#2775b8',
+};
+var TIPOLOGIA_COMPOSTA_COLOR = {
+  'CPTU / VT / SH': TIPOLOGIA_COLOR.CPTU,
+  'SP/SM': TIPOLOGIA_COLOR.SP,
+};
+function tipologiaColor(tipologia) {
+  var raw = String(tipologia || '').trim();
+  var key = raw.toUpperCase();
+  if (TIPOLOGIA_COLOR[key]) return TIPOLOGIA_COLOR[key];
+  if (TIPOLOGIA_COMPOSTA_COLOR[key]) return TIPOLOGIA_COMPOSTA_COLOR[key];
+  var parenMatch = raw.match(/\(([^)]+)\)\s*$/);
+  if (parenMatch) {
+    var viaParen = TIPOLOGIA_COLOR[parenMatch[1].trim().toUpperCase()];
+    if (viaParen) return viaParen;
+  }
+  var primeiroToken = key.split('/')[0].trim();
+  if (TIPOLOGIA_COLOR[primeiroToken]) return TIPOLOGIA_COLOR[primeiroToken];
+  return '#898781';
+}
+
+var DIMENSOES = [
+  { valor: 'volume', rotulo: 'Volume' },
+  { valor: 'financeiro', rotulo: 'Financeiro' },
+];
+
+// Soma um campo mensal do Previsto através dos registros do grupo. null só
+// quando NENHUM registro tem valor naquele mês -- mesma convenção de
+// previstoMesVigente (render-aba-semanal.js), inclusive para 'equipes': somar
+// equipes de CONTRATOS diferentes no mesmo mês é válido (times simultâneos se
+// somam); o que não se soma é equipes ao longo do TEMPO.
+function somarPrevistoMes(registros, indices, campo, mesIdx) {
+  var soma = null;
+  (indices || []).forEach(function (i) {
+    var registro = registros[i];
+    var mensal = registro && registro.previsto && registro.previsto[campo];
+    if (!Array.isArray(mensal)) return;
+    var v = mensal[mesIdx];
+    if (v === null || v === undefined) return;
+    soma = (soma === null ? 0 : soma) + v;
+  });
+  return soma;
+}
+
+// Produtividade média ESPERADA, em furos por equipe-dia. Segue a mesma regra
+// que o orçamento usa para a produtividade do Previsto (bucketIntervalo,
+// tools/orcamento/render-dashboard.js):
+//
+//   - UM registro só: a premissa PROD. digitada na planilha, lida direto. Ela
+//     JÁ é uma taxa diária e não passa por DIAS_PREMISSA_MES;
+//   - agregado de vários: recalcula volume ÷ (equipes x dias do mês), porque
+//     a média das premissas de tipologias diferentes não é a premissa da soma.
+//
+// DIAS_PREMISSA_MES (15 em Jan/Dez, 30 nos demais) é a premissa de dias úteis
+// do projeto inteiro -- não os dias do calendário. Usar o calendário aqui faria
+// esta coluna discordar do mesmo número no dashboard de orçamento.
+function produtividadeEsperada(registros, indices, mesIdx) {
+  var lista = indices || [];
+  if (lista.length === 1) {
+    var registro = registros[lista[0]];
+    var prod = registro && registro.previsto && registro.previsto.equipesResumo && registro.previsto.equipesResumo.prod;
+    return (prod === null || prod === undefined) ? null : prod;
+  }
+  var volume = somarPrevistoMes(registros, lista, 'volume', mesIdx);
+  var equipes = somarPrevistoMes(registros, lista, 'equipes', mesIdx);
+  var dias = DIAS_PREMISSA_MES[mesIdx];
+  if (volume === null || !equipes || !dias) return null;
+  return volume / (equipes * dias);
+}
+
+// Ticket médio previsto (R$ por furo), pela mesma regra de dois ramos acima:
+// premissa TICKET da planilha para um registro só, razão recalculada para o
+// agregado.
+function ticketMedioPrevisto(registros, indices, mesIdx) {
+  var lista = indices || [];
+  if (lista.length === 1) {
+    var registro = registros[lista[0]];
+    var ticket = registro && registro.previsto && registro.previsto.volumeResumo && registro.previsto.volumeResumo.ticket;
+    return (ticket === null || ticket === undefined) ? null : ticket;
+  }
+  var financeiro = somarPrevistoMes(registros, lista, 'financeiro', mesIdx);
+  var volume = somarPrevistoMes(registros, lista, 'volume', mesIdx);
+  if (financeiro === null || !volume) return null;
+  return financeiro / volume;
+}
+
+// As colunas extras de CADA dimensão -- a separação física/financeira que o
+// dono do projeto pediu explicitamente. Volume não mostra ticket, Financeiro
+// não mostra equipes nem produtividade.
+function colunasExtras(dimensao) {
+  if (dimensao === 'financeiro') {
+    return [{ chave: 'ticket', rotulo: 'Ticket médio previsto (R$/furo)', casas: 2 }];
+  }
+  return [
+    { chave: 'equipes', rotulo: 'Equipes previstas', casas: 2 },
+    { chave: 'produtividade', rotulo: 'Produtividade média esperada', casas: 2 },
+  ];
+}
+
+function valorExtra(chave, registros, indices, mesIdx) {
+  if (chave === 'equipes') return somarPrevistoMes(registros, indices, 'equipes', mesIdx);
+  if (chave === 'produtividade') return produtividadeEsperada(registros, indices, mesIdx);
+  return ticketMedioPrevisto(registros, indices, mesIdx);
+}
+
+function renderCabecalho(dimensao, semana) {
+  var sufixo = semana ? ' (' + formatarIntervaloSemana(semana.inicio, semana.fim) + ')' : '';
+  var ths = '<th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th>'
+    + '<th class="num">Previsto' + escapeHtml(sufixo) + '</th>'
+    + '<th class="num">Realizado' + escapeHtml(sufixo) + '</th>'
+    + '<th class="num">Tendência' + escapeHtml(sufixo) + '</th>';
+  colunasExtras(dimensao).forEach(function (c) {
+    ths += '<th class="num">' + escapeHtml(c.rotulo) + '</th>';
+  });
+  return '<thead><tr>' + ths + '</tr></thead>';
+}
+
+// Uma linha da tabela. 'celulas' são as 4 primeiras (SUP/Grupo/Tomador/
+// Tipologia), montadas por quem chama porque é só nelas que os 4 tipos de
+// linha (registro, total do SUP, total geral, total geral por tipologia)
+// diferem -- mesma decomposição de renderBlocosDimensao no orçamento.
+function renderLinha(celulas, classe, registros, indices, ctx) {
+  var series = calcularSeriesSemanaisDimensao(
+    registros, indices, ctx.dimensao, ctx.mesIdx, ctx.semanas, ctx.numSemanas,
+    ctx.temSemanasReais, ctx.indiceAtual, ctx.demandas, ctx.hojeEpoch
+  );
+  function celulaSemana(fatias) {
+    var v = Array.isArray(fatias) ? fatias[ctx.semanaIdx] : null;
+    if (v === null || v === undefined) return '<td class="num sem-dado"></td>';
+    return '<td class="num">' + formatarNumero(v, 0) + '</td>';
+  }
+  var html = '<tr class="' + classe + '">' + celulas
+    + celulaSemana(series.semanasPrevisto)
+    + celulaSemana(series.semanasRealizado)
+    + celulaSemana(series.semanasTendenciaCompleta);
+  colunasExtras(ctx.dimensao).forEach(function (c) {
+    html += '<td class="num celula-premissa">' + formatarNumero(valorExtra(c.chave, registros, indices, ctx.mesIdx), c.casas) + '</td>';
+  });
+  return html + '</tr>';
+}
+
+function celula(classe, texto) {
+  return '<td class="' + classe + '">' + escapeHtml(texto) + '</td>';
+}
+
+function celulaChip(tipologia) {
+  return '<td class="col-tipologia"><span class="tipologia-chip" style="--chip-color:'
+    + tipologiaColor(tipologia) + '">' + escapeHtml(tipologia) + '</span></td>';
+}
+
+function celulaChipTotal(rotulo, classeExtra) {
+  return '<td class="col-tipologia"><span class="tipologia-chip tipologia-chip-total'
+    + (classeExtra ? ' ' + classeExtra : '') + '">' + escapeHtml(rotulo) + '</span></td>';
+}
+
+// Agrupa por SUP preservando a ordem em que os SUPs aparecem nos registros --
+// a MATRIZ já vem ordenada por SUP, e reordenar aqui faria a aba discordar da
+// ordem que a Tabela do orçamento mostra para os mesmos dados.
+function blocosPorSup(registros, indices) {
+  var porSup = {};
+  var ordem = [];
+  (indices || []).forEach(function (i) {
+    var registro = registros[i];
+    if (!registro) return;
+    if (!porSup[registro.sup]) { porSup[registro.sup] = []; ordem.push(registro.sup); }
+    porSup[registro.sup].push(i);
+  });
+  return ordem.map(function (sup) { return { sup: sup, indices: porSup[sup] }; });
+}
+
+function tipologiasPresentes(registros, indices) {
+  var porTipologia = {};
+  var ordem = [];
+  (indices || []).forEach(function (i) {
+    var registro = registros[i];
+    if (!registro || !registro.tipologia) return;
+    if (!porTipologia[registro.tipologia]) { porTipologia[registro.tipologia] = []; ordem.push(registro.tipologia); }
+    porTipologia[registro.tipologia].push(i);
+  });
+  ordem.sort();
+  return ordem.map(function (t) { return { tipologia: t, indices: porTipologia[t] }; });
+}
+
+function renderControles(estado) {
+  var e = estado || {};
+  var semanas = e.semanas || [];
+  var opcoesSemana = semanas.map(function (semana, i) {
+    return '<option value="' + i + '"' + (i === e.semanaIdx ? ' selected' : '') + '>'
+      + escapeHtml('S' + (i + 1) + ' (' + formatarIntervaloSemana(semana.inicio, semana.fim) + ')') + '</option>';
+  }).join('');
+  var opcoesDimensao = DIMENSOES.map(function (d) {
+    return '<option value="' + d.valor + '"' + (d.valor === e.dimensao ? ' selected' : '') + '>' + escapeHtml(d.rotulo) + '</option>';
+  }).join('');
+  return '<div class="controles-consolidado">'
+    + '<label class="controle-consolidado">Semana<select id="consolidado-semana">' + opcoesSemana + '</select></label>'
+    + '<label class="controle-consolidado">Dimensão<select id="consolidado-dimensao">' + opcoesDimensao + '</select></label>'
+    + '</div>';
+}
+
+// A nota existe na TELA, e não só no comentário do topo: as três colunas de
+// premissa são do MÊS, ao lado de três colunas que são da SEMANA, e ninguém
+// tem como adivinhar isso olhando a tabela.
+function renderNota(dimensao) {
+  var premissas = dimensao === 'financeiro'
+    ? 'O ticket médio previsto é a premissa TICKET da MATRIZ'
+    : 'As equipes previstas são a foto do mês (não se repartem por semana) e a produtividade esperada é a premissa PROD. da MATRIZ, em furos por equipe-dia';
+  return '<p class="nota-consolidado">Previsto, Realizado e Tendência são da SEMANA selecionada. '
+    + escapeHtml(premissas) + ' — valem para o mês inteiro, e por isso repetem em todas as semanas.</p>';
+}
+
+// registros/indices: mesmo par do resto do projeto. opcoes: { semanaIdx,
+// dimensao, mesIdx, semanas, demandas, hojeEpoch }.
+function renderAbaConsolidado(registros, indices, opcoes) {
+  var o = opcoes || {};
+  var semanas = o.semanas || [];
+  var numSemanas = semanas.length;
+  var dimensao = o.dimensao === 'financeiro' ? 'financeiro' : 'volume';
+  var semanaIdx = typeof o.semanaIdx === 'number' ? Math.max(0, Math.min(numSemanas - 1, o.semanaIdx)) : 0;
+  var temDemandas = !!(o.demandas && o.demandas.porRegistroEventos && typeof o.hojeEpoch === 'number');
+
+  var controles = renderControles({ semanas: semanas, semanaIdx: semanaIdx, dimensao: dimensao });
+  if (!numSemanas) {
+    return controles + '<p class="nota-consolidado">Sem semanas para o mês selecionado — nada a consolidar.</p>';
+  }
+
+  var elapsadas = 0;
+  for (var i = 0; i < numSemanas; i++) {
+    if (typeof o.hojeEpoch === 'number' && semanas[i].inicio <= o.hojeEpoch) elapsadas++;
+  }
+  var ctx = {
+    dimensao: dimensao, mesIdx: o.mesIdx, semanas: semanas, numSemanas: numSemanas,
+    temSemanasReais: temDemandas, indiceAtual: elapsadas > 0 ? elapsadas - 1 : -1,
+    demandas: o.demandas, hojeEpoch: o.hojeEpoch, semanaIdx: semanaIdx,
+  };
+
+  var todos = indices || [];
+  var linhas = renderLinha(
+    celula('col-sup', '—') + celula('col-grupo', 'Todos') + celula('col-tomador', 'Todos')
+      + celulaChipTotal('TOTAL GERAL', 'chip-total-geral'),
+    'linha-total-geral', registros, todos, ctx
+  );
+
+  tipologiasPresentes(registros, todos).forEach(function (bloco) {
+    linhas += renderLinha(
+      celula('col-sup', '—') + celula('col-grupo', 'Todos') + celula('col-tomador', 'Todos')
+        + celulaChip(bloco.tipologia),
+      'linha-total-geral linha-total-geral-tipologia', registros, bloco.indices, ctx
+    );
+  });
+
+  blocosPorSup(registros, todos).forEach(function (bloco) {
+    bloco.indices.forEach(function (idx) {
+      var registro = registros[idx];
+      linhas += renderLinha(
+        celula('col-sup', registro.sup) + celula('col-grupo', registro.grupo)
+          + celula('col-tomador', registro.tomador) + celulaChip(registro.tipologia),
+        'linha-consolidado', registros, [idx], ctx
+      );
+    });
+    var primeiro = registros[bloco.indices[0]];
+    linhas += renderLinha(
+      celula('col-sup', bloco.sup) + celula('col-grupo', primeiro.grupo)
+        + celula('col-tomador', primeiro.tomador) + celulaChipTotal('TOTAL'),
+      'linha-total-sup', registros, bloco.indices, ctx
+    );
+  });
+
+  return controles + renderNota(dimensao)
+    + '<table id="tabela-consolidado">' + renderCabecalho(dimensao, semanas[semanaIdx])
+    + '<tbody>' + linhas + '</tbody></table>';
+}
+
+module.exports = {
+  renderAbaConsolidado, renderControles, renderCabecalho, colunasExtras,
+  produtividadeEsperada, ticketMedioPrevisto, somarPrevistoMes,
+  blocosPorSup, tipologiasPresentes, tipologiaColor,
+};

@@ -6,6 +6,7 @@ const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
+const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
 
 // Task 8 originalmente deixou o módulo pronto no bundle mas NUNCA chamado --
 // a aba Semanal abria vazia no navegador (achado do coordenador). Este
@@ -134,13 +135,12 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
   // Prova de conteúdo, não só de igualdade de string: soma dos 2 registros
   // no mês vigente (4000+2000=6000), repartida proporcionalmente aos DIAS
   // de cada semana de julho de 2026 (5 semanas reais: 5+7+7+7+5=31 dias --
-  // S2/S3/S4 são semana cheia, 6000x7/31=1.354,84) -- formatada em pt-BR --
-  // os mesmos números que um humano abrindo a página veria na tela.
-  const seiscentos = (6000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const milTrezentosECinquentaEQuatro = (6000 * 7 / 31).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // S2/S3/S4 são semana cheia, 6000x7/31=1.354,84, que o arredondamento
+  // inteiro de 2026-08-03 fecha em 1.355) -- formatada em pt-BR -- os mesmos
+  // números que um humano abrindo a página veria na tela.
   assert.match(htmlMontado, /S1/);
-  assert.match(htmlMontado, new RegExp(milTrezentosECinquentaEQuatro.replace(/\./g, '\\.')));
-  assert.match(htmlMontado, new RegExp(seiscentos.replace(/\./g, '\\.')));
+  assert.match(htmlMontado, />1\.355</, 'S2/S3/S4 (semana cheia de 7 dias) fecham em 1.355 furos previstos');
+  assert.match(htmlMontado, />6\.000</, 'a coluna Total fecha exatamente nos 6.000 do mês vigente');
 });
 
 test('com a senha errada, a aba Semanal continua vazia -- nunca monta antes de decifrar de verdade', async () => {
@@ -229,10 +229,11 @@ test('filtrar por SUP na barra compartilhada recalcula a aba Semanal só com os 
 
   // Prova de conteúdo: 4000 repartido proporcionalmente aos dias de cada
   // semana de julho (só o SUP-0001-24, 5 semanas reais, 31 dias) --
-  // 4000x7/31 = 903,23 nas semanas cheias (S2/S3/S4), não 1.354,84 (que
-  // seria 6000x7/31, a soma dos 2 registros sem filtro).
-  const novecentosETres = (4000 * 7 / 31).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  assert.match(htmlMontado, new RegExp(novecentosETres.replace(/\./g, '\\.')));
+  // 4000x7/31 = 903,23 -> 903 nas semanas cheias (S3/S4, depois do
+  // arredondamento inteiro de 2026-08-03), não 1.355 (que seria 6000x7/31, a
+  // soma dos 2 registros sem filtro).
+  assert.match(htmlMontado, />903</);
+  assert.doesNotMatch(htmlMontado, />1\.355</, 'o registro filtrado fora não pode continuar somando na tabela');
 });
 
 test('a soma de todas as semanas do Previsto continua batendo com o mês vigente mesmo com um filtro de recorte ativo, não só sem filtro', async () => {
@@ -259,24 +260,16 @@ test('a soma de todas as semanas do Previsto continua batendo com o mês vigente
   // As 5 primeiras células numéricas da linha Previsto: S1..S5 (julho de
   // 2026 tem 5 semanas ISO reais, dias [5,7,7,7,5] de 31 no total). 4000
   // (só o SUP-0001-24 depois do filtro) reparte proporcionalmente aos dias
-  // de cada semana -- S1/S5 (5 dias) = 4000x5/31, S2/S3/S4 (7 dias) =
-  // 4000x7/31 -- e a soma das 5 deve bater com o 4000 do mês vigente
-  // filtrado, não com os 6000 de antes do filtro.
+  // de cada semana -- S1/S5 (5 dias) = 4000x5/31 = 645,16, S2/S3/S4 (7 dias)
+  // = 4000x7/31 = 903,23 -- e desde 2026-08-03 cada fatia é arredondada pro
+  // inteiro pelo maior resto, somando 4000 EXATOS (não "dentro da deriva de
+  // arredondamento": a soma agora é exata por construção). O que importa aqui
+  // é que a soma bate com o 4000 do mês vigente filtrado, não com os 6000 de
+  // antes do filtro.
   const semanasPrevisto = numeros.slice(0, 5);
-  const s1S5 = 4000 * 5 / 31;
-  const s2S3S4 = 4000 * 7 / 31;
-  semanasPrevisto.forEach((v, i) => {
-    const esperado = [0, 4].includes(i) ? s1S5 : s2S3S4;
-    assert.ok(Math.abs(v - esperado) < 0.01, `semana ${i}: esperava ${esperado}, veio ${v}`);
-  });
-  // Soma das 5 células JÁ ARREDONDADAS pro HTML (2 casas cada) -- diferente
-  // do fechamento interno (celula-total-linha, calculado com o float cheio
-  // ANTES de arredondar, sempre exato), somar 5 números independentemente
-  // arredondados pode derivar alguns centavos (aqui: 4000,01, não 4000,00
-  // -- 0,01 de deriva de arredondamento, não um erro de cálculo). Ver
-  // o teste "celula-total-linha" da Tabela Semanal pra prova de exatidão.
-  const somaArredondada = semanasPrevisto.reduce((a, b) => a + b, 0);
-  assert.ok(Math.abs(somaArredondada - 4000) < 0.05, `soma das semanas (${somaArredondada}) precisa bater com 4000 dentro da deriva de arredondamento de exibição`);
+  assert.deepStrictEqual(semanasPrevisto, [645, 904, 903, 903, 645]);
+  const soma = semanasPrevisto.reduce((a, b) => a + b, 0);
+  assert.strictEqual(soma, 4000, `soma das semanas (${soma}) precisa fechar exatamente nos 4000 do mês vigente filtrado`);
 });
 
 test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume está marcada e demandas.porRegistroEventos tem dado real', async () => {
@@ -645,4 +638,355 @@ test('trocar o mês no seletor redesenha TAMBÉM a aba Balanço de massa, não s
 
   assert.strictEqual(sandbox.mesSelecionadoIdx, 7);
   assert.strictEqual(caixasDe(), 6, 'o recorte semanal precisa passar a descrever agosto, com 6 semanas');
+});
+
+// --- Botão "Limpar filtros" (2026-08-03) ---------------------------------
+// A semanal não tinha o botão que o orçamento já tinha; quem estreitava o
+// recorte em 5 painéis diferentes precisava desmarcar tudo à mão.
+
+test('o HTML da semanal tem o botão "Limpar filtros" com o MESMO id que o CSS compartilhado (cssBase) já estiliza', () => {
+  const html = renderSemanal({
+    registros: [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)],
+    baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  assert.match(html, /<button id="limpar-filtros" type="button">/);
+  assert.match(html, /Limpar filtros<\/button>/);
+});
+
+test('clicar em "Limpar filtros" desmarca os recortes da barra, volta a dimensão pra Financeiro e redesenha a Tabela Semanal com todos os registros', async () => {
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 2000),
+  ];
+  const geradoEm = new Date('2026-07-01T00:00:00Z');
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const semanalCompleta = documentoFalso.getElementById('secao-semanal').innerHTML;
+
+  // Estreita por SUP E troca a dimensão -- os dois tipos de filtro da barra
+  // (recorte e minimoUm) precisam voltar, não só um deles.
+  const painelSup = documentoFalso.getElementById('filtro-sup-painel');
+  const checkboxAlfa = painelSup.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'SUP-0001-24')[0];
+  checkboxAlfa.checked = true;
+  checkboxAlfa.listeners.change();
+  const painelDimensao = documentoFalso.getElementById('seletor-dimensao-painel');
+  const checkboxVolume = painelDimensao.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'volume')[0];
+  checkboxVolume.checked = true;
+  checkboxVolume.listeners.change();
+
+  assert.strictEqual(sandbox.filtrosSelecionadosSemanal.sup.size, 1, 'pré-condição: o filtro de SUP está estreitado');
+  assert.ok(sandbox.filtrosSelecionadosSemanal.dimensao.has('volume'), 'pré-condição: Volume entrou na dimensão');
+  assert.notStrictEqual(documentoFalso.getElementById('secao-semanal').innerHTML, semanalCompleta);
+
+  documentoFalso.getElementById('limpar-filtros').listeners.click();
+
+  assert.strictEqual(sandbox.filtrosSelecionadosSemanal.sup.size, 0, 'o recorte de SUP tem que voltar a vazio ("nada marcado = tudo")');
+  assert.deepStrictEqual(Array.from(sandbox.filtrosSelecionadosSemanal.dimensao), ['financeiro'],
+    'a dimensão é minimoUm:true -- não pode ficar vazia, volta pro padrão Financeiro');
+  assert.strictEqual(documentoFalso.getElementById('secao-semanal').innerHTML, semanalCompleta,
+    'depois de limpar, a Tabela Semanal precisa voltar a ser exatamente a de antes do filtro -- não basta zerar o estado interno');
+});
+
+test('"Limpar filtros" NÃO mexe no mês selecionado -- é navegação, não recorte', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  documentoFalso.getElementById('seletor-mes-semanal').listeners.change({ target: { value: '7' } });
+  documentoFalso.getElementById('limpar-filtros').listeners.click();
+
+  assert.strictEqual(sandbox.mesSelecionadoIdx, 7, 'quem estava olhando agosto continua em agosto depois de limpar os filtros');
+});
+
+// --- Aba Alertas (2026-08-03) --------------------------------------------
+// Porte da aba Alertas do orçamento, com os períodos trocados por semanas.
+// Estes testes provam o WIRE-UP (o módulo existe no bundle, é chamado, e a
+// tabela sai preenchida); a lógica em si está em
+// test/semanal-render-aba-alertas.test.js.
+
+test('o HTML tem a aba Alertas, a seção escondida, os 5 filtros próprios e a tabela vazia -- nada montado antes da senha', () => {
+  const html = renderSemanal({
+    registros: [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)],
+    baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  assert.match(html, /<button id="aba-alertas" type="button">/);
+  assert.match(html, /Alertas<\/button>/);
+  assert.match(html, /<div id="secao-alertas" style="display:none">/);
+  ['agrupar-por', 'numerico', 'baseline', 'periodo', 'status'].forEach((chave) => {
+    assert.match(html, new RegExp('id="filtro-alertas-' + chave + '"'), 'esperava o filtro ' + chave + ' na aba Alertas');
+  });
+  assert.match(html, /<input id="busca-alertas"/);
+  assert.match(html, /<thead id="cabecalho-alertas"><\/thead>/);
+  assert.match(html, /<tbody id="corpo-alertas"><\/tbody>/);
+});
+
+test('depois da senha, a aba Alertas é preenchida com o semáforo, e abrir Alertas esconde as outras quatro seções', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const corpo = documentoFalso.getElementById('corpo-alertas').innerHTML;
+  assert.notStrictEqual(corpo, '', '#corpo-alertas continua vazio depois da senha -- o módulo está no bundle mas nunca é chamado');
+  assert.match(corpo, /status-circulo/, 'cada linha precisa do círculo de status do semáforo');
+  assert.match(corpo, /SUP-0001-24/);
+  assert.match(corpo, /TOTAL GERAL/);
+  assert.match(documentoFalso.getElementById('cabecalho-alertas').innerHTML, /<th>SUP<\/th>/);
+
+  documentoFalso.getElementById('aba-alertas').listeners.click();
+  assert.strictEqual(documentoFalso.getElementById('secao-alertas').style.display, '');
+  ['secao-semanal', 'secao-grafico-semanal', 'secao-balanco', 'secao-demandas'].forEach((id) => {
+    assert.strictEqual(documentoFalso.getElementById(id).style.display, 'none', id + ' devia estar escondida com a aba Alertas ativa');
+  });
+});
+
+test('as opções de PERÍODO da aba Alertas são as semanas do mês selecionado, e acompanham a troca de mês', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'), // julho: 5 semanas
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const valoresPeriodo = () => documentoFalso.getElementById('filtro-alertas-periodo-painel')
+    .querySelectorAll('input[type="checkbox"]').map((c) => c.value);
+
+  assert.deepStrictEqual(valoresPeriodo(), ['s1', 's2', 's3', 's4', 's5', 'acumuladoAteSemanaAtual', 'mesInteiro']);
+  const painelJulho = documentoFalso.getElementById('filtro-alertas-periodo-painel').innerHTML;
+  assert.match(painelJulho, /S1 \(01\/07 a 05\/07\)/, 'o rótulo carrega as datas reais -- "S1" sozinho não distingue julho de agosto');
+
+  // Agosto/2026 tem 6 semanas -- é o calendário irregular que denuncia se as
+  // opções tivessem ficado no mês antigo.
+  documentoFalso.getElementById('seletor-mes-semanal').listeners.change({ target: { value: '7' } });
+  assert.deepStrictEqual(valoresPeriodo(), ['s1', 's2', 's3', 's4', 's5', 's6', 'acumuladoAteSemanaAtual', 'mesInteiro']);
+  assert.match(documentoFalso.getElementById('filtro-alertas-periodo-painel').innerHTML, /S1 \(01\/08 a 02\/08\)/);
+});
+
+test('um "S6" marcado em agosto não sobrevive à volta pra julho, e o filtro nunca fica sem período nenhum (minimoUm)', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  documentoFalso.getElementById('seletor-mes-semanal').listeners.change({ target: { value: '7' } }); // agosto, 6 semanas
+
+  // Marca S6 e desmarca os dois padrões -- deixa o Set SÓ com um período que
+  // não existe em julho, que é o caso que esvaziaria o filtro na volta.
+  const painel = documentoFalso.getElementById('filtro-alertas-periodo-painel');
+  const caixa = (valor) => painel.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === valor)[0];
+  caixa('s6').checked = true;
+  caixa('s6').listeners.change();
+  ['acumuladoAteSemanaAtual', 'mesInteiro'].forEach((v) => {
+    caixa(v).checked = false;
+    caixa(v).listeners.change();
+  });
+  assert.deepStrictEqual(Array.from(sandbox.filtrosAlertasSemanal.periodo), ['s6']);
+
+  documentoFalso.getElementById('seletor-mes-semanal').listeners.change({ target: { value: '6' } }); // julho, 5 semanas
+
+  const restantes = Array.from(sandbox.filtrosAlertasSemanal.periodo);
+  assert.ok(!restantes.includes('s6'), 'S6 não existe em julho -- não pode continuar marcado');
+  assert.deepStrictEqual(restantes, ['acumuladoAteSemanaAtual', 'mesInteiro'],
+    'esvaziar um filtro minimoUm deixaria a aba sem coluna nenhuma e sem como voltar -- os padrões têm que ser readicionados');
+  assert.notStrictEqual(documentoFalso.getElementById('corpo-alertas').innerHTML, '');
+});
+
+test('filtrar por SUP na barra compartilhada TAMBÉM recalcula a aba Alertas -- é o bug que o orçamento já teve', async () => {
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 2000),
+  ];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  assert.match(documentoFalso.getElementById('corpo-alertas').innerHTML, /SUP-0002-24/);
+
+  const painelSup = documentoFalso.getElementById('filtro-sup-painel');
+  const checkboxAlfa = painelSup.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'SUP-0001-24')[0];
+  checkboxAlfa.checked = true;
+  checkboxAlfa.listeners.change();
+
+  const corpo = documentoFalso.getElementById('corpo-alertas').innerHTML;
+  assert.match(corpo, /SUP-0001-24/);
+  assert.doesNotMatch(corpo, /SUP-0002-24/, 'o SUP filtrado fora não pode continuar aparecendo nos Alertas');
+});
+
+test('a busca da aba Alertas esconde as linhas que não combinam, sem refazer o cálculo', async () => {
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 2000),
+  ];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const busca = documentoFalso.getElementById('busca-alertas');
+  busca.value = 'SUP-0002';
+  busca.listeners.input();
+
+  const linhas = documentoFalso.querySelectorAll('#tabela-alertas tbody tr');
+  assert.ok(linhas.length > 0, 'pré-condição: a tabela tem linhas renderizadas');
+  linhas.forEach((tr) => {
+    const combina = (tr.dataset.search || '').indexOf('sup-0002') !== -1;
+    assert.strictEqual(tr.style.display, combina ? '' : 'none');
+  });
+});
+
+// --- Aba CONSOLIDADO (2026-08-03) ----------------------------------------
+// A abertura de linhas da Tabela do orçamento, mas com os números de UMA
+// semana. A lógica está em test/semanal-render-aba-consolidado.test.js; aqui
+// se prova o wire-up e o estado dos 2 controles próprios da aba.
+
+test('o HTML tem a aba Consolidado e a seção escondida, vazia antes da senha', () => {
+  const html = renderSemanal({
+    registros: [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)],
+    baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  assert.match(html, /<button id="aba-consolidado" type="button">/);
+  assert.match(html, /Consolidado<\/button>/);
+  assert.match(html, /<div id="secao-consolidado" style="display:none"><\/div>/);
+});
+
+test('depois da senha a aba Consolidado é montada, abre em Volume e esconde as outras cinco seções quando ativada', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.notStrictEqual(secao, '', '#secao-consolidado continua vazia depois da senha -- o módulo está no bundle mas nunca é chamado');
+  assert.match(secao, /<table id="tabela-consolidado">/);
+  assert.match(secao, /TOTAL GERAL/);
+  assert.match(secao, /Equipes previstas/, 'abre em Volume, então as colunas físicas aparecem');
+  assert.doesNotMatch(secao, /Ticket médio/);
+
+  documentoFalso.getElementById('aba-consolidado').listeners.click();
+  assert.strictEqual(documentoFalso.getElementById('secao-consolidado').style.display, '');
+  ['secao-semanal', 'secao-grafico-semanal', 'secao-balanco', 'secao-demandas', 'secao-alertas'].forEach((id) => {
+    assert.strictEqual(documentoFalso.getElementById(id).style.display, 'none', id + ' devia estar escondida com a aba Consolidado ativa');
+  });
+});
+
+test('trocar a dimensão do Consolidado pra Financeiro troca as colunas de premissa, sem misturar físico e financeiro', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  documentoFalso.getElementById('consolidado-dimensao').listeners.change({ target: { value: 'financeiro' } });
+
+  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.match(secao, /Ticket médio previsto/);
+  assert.doesNotMatch(secao, /Equipes previstas/);
+  assert.doesNotMatch(secao, /Produtividade/);
+  assert.strictEqual(sandbox.ESTADO_CONSOLIDADO.dimensao, 'financeiro');
+});
+
+test('a aba Consolidado abre na semana EM CURSO do mês selecionado, não em S1', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // "Hoje" é o relógio de quem roda o teste, então o índice esperado é
+  // derivado da mesma regra (última semana que já começou), não fixado num
+  // número -- fixar quebraria o teste em toda semana que passasse.
+  const semanas = semanasDoMes(2026, sandbox.mesSelecionadoIdx);
+  const agora = new Date();
+  const hoje = diaEpoch(new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate())));
+  let elapsadas = 0;
+  semanas.forEach((s) => { if (s.inicio <= hoje) elapsadas++; });
+  const esperado = elapsadas > 0 ? elapsadas - 1 : 0;
+
+  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.match(secao, new RegExp('<option value="' + esperado + '" selected>'));
+});
+
+test('uma semana escolhida à mão volta ao automático se o mês novo não tiver aquela semana -- nunca aponta pra uma que não existe', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  documentoFalso.getElementById('seletor-mes-semanal').listeners.change({ target: { value: '7' } }); // agosto, 6 semanas
+  documentoFalso.getElementById('consolidado-semana').listeners.change({ target: { value: '5' } }); // S6
+  assert.strictEqual(sandbox.ESTADO_CONSOLIDADO.semana, 5);
+  assert.match(documentoFalso.getElementById('secao-consolidado').innerHTML, /<option value="5" selected>/);
+
+  documentoFalso.getElementById('seletor-mes-semanal').listeners.change({ target: { value: '6' } }); // julho, 5 semanas
+
+  assert.strictEqual(sandbox.ESTADO_CONSOLIDADO.semana, null, 'S6 não existe em julho -- volta ao automático em vez de clampar em S5 como se tivesse sido escolhida');
+  const opcoesSelecionadas = documentoFalso.getElementById('secao-consolidado').innerHTML.match(/<option value="(\d)" selected>/g) || [];
+  assert.strictEqual(opcoesSelecionadas.length, 1, 'o <select> de semana precisa ter exatamente uma opção marcada');
+});
+
+test('filtrar por SUP na barra compartilhada TAMBÉM recalcula o Consolidado', async () => {
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 2000),
+  ];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  assert.match(documentoFalso.getElementById('secao-consolidado').innerHTML, /SUP-0002-24/);
+
+  const painelSup = documentoFalso.getElementById('filtro-sup-painel');
+  const checkboxAlfa = painelSup.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'SUP-0001-24')[0];
+  checkboxAlfa.checked = true;
+  checkboxAlfa.listeners.change();
+
+  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.match(secao, /SUP-0001-24/);
+  assert.doesNotMatch(secao, /SUP-0002-24/, 'o SUP filtrado fora não pode continuar aparecendo no Consolidado');
 });
