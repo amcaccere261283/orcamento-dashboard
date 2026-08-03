@@ -149,15 +149,20 @@ botão funciona pra MATRIZ mas falha (com mensagem de erro clara no
 
 ### Pendências conhecidas
 
-**Fase 2 — os filtros: lógica compartilhada extraída, semanal ainda não
-consome.** `tools/comum/render-shell.js` agora exporta `scriptFiltros()`
-(estado, `indicesFiltrados`, `montarFiltroMulti` com `aoMudar(cfg)`) --
-ver docs/superpowers/specs/2026-07-29-planejamento-semanal-filtros-design.md
-e docs/superpowers/plans/2026-07-29-planejamento-semanal-filtros-fase1-extracao.md.
-O orçamento já consome (comportamento idêntico, golden regenerado de
-propósito). A página semanal (aba 1 com a barra completa + seletor de
-dimensão, aba 2 só com o filtro de tipologia da mesma barra) ainda não foi
-ligada -- é o Plano 2, a escrever separadamente.
+**Fase 2 — os filtros: FEITA em 6ff1bfc.** `tools/comum/render-shell.js` exporta
+`scriptFiltros()` (estado, `indicesFiltrados`, `montarFiltroMulti` com
+`aoMudar(cfg)`), consumido pelas duas páginas -- ver `FILTROS_SEMANAL` em
+`tools/semanal/render-semanal.js` (origem/categoria/tipologia/grupo/SUP +
+seletor de dimensão). A aba Balanço de massa ficou com 4 controles PRÓPRIOS
+(período/base/dimensão/somente ativos, em `renderControles`), não com o filtro
+de tipologia da barra como o plano original supunha. Specs de referência:
+docs/superpowers/specs/2026-07-29-planejamento-semanal-filtros-design.md.
+
+O branch `semanal-filtros-layout-orcamento` ficou ÓRFÃO: ele saiu de um master
+velho (2502943) e extraía a lógica de cliente para `tools/comum/trechos-cliente.js`,
+`filtros-cliente.js` e `refresh-cliente.js`, arquivos que não existem no master
+atual. Nada dele foi incorporado -- se a extração ainda interessar, é replanejar,
+não rebase.
 
 **A página semanal não tem carimbo "Gerado em"**, ao contrário do orçamento. Sem ele não
 dá para confirmar um deploy pelo conteúdo — que é justamente a verificação que este
