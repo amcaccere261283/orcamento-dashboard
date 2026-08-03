@@ -1,6 +1,7 @@
 'use strict';
 const { mediaEquipesPonderada } = require('../comum/calculo-equipes.js');
 const { diaEpoch, dividirEmSemanas } = require('./compute-semanal.js');
+const { equipesEquivalentes } = require('./compute-equipes-mobilizadas.js');
 
 // Este módulo roda tanto no Node (testes) quanto embrulhado no navegador via
 // buildBrowserBundle -- por isso 'var'/'function', não 'const'/arrow (ver o
@@ -220,24 +221,65 @@ function realizadoDoAvancos(demandas, sup, tipologia, intervalosEpoch, peso) {
 // sem mudança. Sem 'demandas' (chamador não passou, ou 'ano' ausente),
 // cai no comportamento de sempre (coluna da MATRIZ) -- retrocompatível com
 // quem ainda não tem 'demandas' à mão.
-function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline, demandas, ano, semanas, semanasSelecionadas }) {
+// 'equipesPorDia' (2026-08-03): { 'sup||tipologia': { dia: nSondadores } },
+// vindo de agregarEquipesPorDia (compute-equipes-mobilizadas.js). Quando
+// presente, o Realizado de EQUIPES passa a ser as equipes MOBILIZADAS medidas
+// no Avanço Sond, em qualquer período -- decisão do dono do projeto em
+// 2026-08-03 ("contar sempre pela avanço sond, não pela matriz"), depois de a
+// coluna Realizado de equipes da MATRIZ se mostrar inservível nos dois
+// sentidos: 0 no mês corrente (déficit falso do previsto inteiro) e vazia no
+// mês fechado (350 de 350 registros em julho/2026).
+//
+// Diferente do Realizado de volume/financeiro, que só usa o Avanço Sond em
+// mesVigente: ali a coluna da MATRIZ é confiável depois do fechamento, aqui
+// não é.
+function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline, demandas, ano, semanas, semanasSelecionadas, equipesPorDia, hojeEpoch }) {
   var intervalo = periodoParaIntervalo(periodo, vigenteIdx);
   var intervaloEpoch = periodo === 'mesVigente' && typeof ano === 'number' ? intervaloParaEpoch(ano, intervalo) : null;
   var usarAvancosNoRealizado = periodo === 'mesVigente' && !!demandas && !!intervaloEpoch;
+  // O intervalo de equipes cobre o período INTEIRO (mesVigente ou o acumulado
+  // de janeiro até o mês), por isso não reaproveita intervaloEpoch acima, que
+  // é deliberadamente só do mês vigente.
+  var intervaloEpochPeriodo = typeof ano === 'number' ? intervaloParaEpoch(ano, intervalo) : null;
 
   // Recorte por semana: só dentro de Mês Vigente. Num acumulado de vários
   // meses as semanas do mês corrente não significam nada, então a seleção é
   // ignorada (a UI também desabilita o controle -- aqui é a garantia de que o
   // número não muda nem se alguém chamar direto).
   //
-  // Equipes fica de fora do recorte da BASE por ser foto e não fluxo; o
-  // realizado de equipes já vem da MATRIZ por outro caminho (equipesNoIntervalo).
+  // Equipes fica de fora do recorte da BASE por ser foto e não fluxo -- o
+  // Previsto de 2 equipes no mês são 2 equipes em qualquer semana. Já o
+  // REALIZADO de equipes é medido por dia (equipesPorDia), então ele respeita
+  // o recorte semanal normalmente: é fluxo de ocupação, não foto.
   var selecao = periodo === 'mesVigente' ? selecaoDeSemanas(semanas, semanasSelecionadas) : null;
   var recortarBase = !!selecao && dimensao !== 'equipes';
-  var intervalosEpoch = !intervaloEpoch ? []
-    : (selecao
-      ? selecao.map(function (i) { return { inicio: semanas[i].inicio, fim: semanas[i].fim }; })
-      : [intervaloEpoch]);
+  var janelasSemana = selecao
+    ? selecao.map(function (i) { return { inicio: semanas[i].inicio, fim: semanas[i].fim }; })
+    : null;
+  var intervalosEpoch = !intervaloEpoch ? [] : (janelasSemana || [intervaloEpoch]);
+  // Janelas de equipes: as semanas marcadas, ou o período inteiro -- SEMPRE
+  // truncadas em hoje.
+  //
+  // Sem o truncamento a média sai diluída pelos dias que ainda não
+  // aconteceram: medido em 03/08/2026, agosto dava 3,5 equipes equivalentes
+  // contra 52,8 de julho, não porque a operação parou, mas porque 3 dias de
+  // ocupação estavam sendo divididos por 31. A barra mostraria um déficit
+  // enorme e falso -- exatamente o defeito que trocar a fonte veio corrigir.
+  // Mesmo princípio que a Tabela Semanal já aplica ao contar eventos da
+  // semana em curso só até hojeEpoch (ver calcularSeriesSemanaisDimensao).
+  //
+  // Janela inteiramente no futuro vira vazia e o realizado fica null (sem
+  // dado), não zero: mês que ainda não começou não tem o que mostrar.
+  var janelasEquipes = (janelasSemana || (intervaloEpochPeriodo ? [intervaloEpochPeriodo] : []))
+    .map(function (janela) {
+      if (typeof hojeEpoch !== 'number') return janela;
+      return { inicio: janela.inicio, fim: Math.min(janela.fim, hojeEpoch) };
+    })
+    .filter(function (janela) { return janela.fim >= janela.inicio; });
+  // Basta ter o mapa: uma janela VAZIA (período inteiro no futuro) tem de
+  // virar sem-dado, e não cair no fallback da MATRIZ -- que responderia com o
+  // 0 morto da coluna e desenharia déficit num mês que nem começou.
+  var usarAvancosNasEquipes = !!equipesPorDia;
   var linhas = [];
 
   (indices || []).forEach(function (i) {
@@ -300,7 +342,12 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
     }
 
     var valorRealizado = realizadoPeriodo;
-    var equipesRealizado = equipesNoIntervalo(registro.realizado && registro.realizado.equipes, intervalo);
+    // Equipes MOBILIZADAS do Avanço Sond quando disponível; a coluna da MATRIZ
+    // fica como fallback só para quem chama sem equipesPorDia (testes antigos,
+    // e a página antes de 2026-08-03).
+    var equipesRealizado = usarAvancosNasEquipes
+      ? equipesEquivalentes(equipesPorDia[chaveDemandas(registro.sup, tipologia)], janelasEquipes)
+      : equipesNoIntervalo(registro.realizado && registro.realizado.equipes, intervalo);
 
     var desvio = (semBase || valorBase === null || valorRealizado === null) ? null : (valorRealizado - valorBase);
     var desvioEquipes = (semBase || equipesBase === null || equipesRealizado === null) ? null : (equipesRealizado - equipesBase);

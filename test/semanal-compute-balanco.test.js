@@ -352,3 +352,107 @@ test('semanas: o recorte só vale para Mês Vigente -- Acumulado até o mês ign
   const linhas = calcularLinhas(cfg);
   assert.strictEqual(linhas[0].valorBase, 310, 'o acumulado continua somando o mês inteiro');
 });
+
+// --- Equipes mobilizadas do Avanço Sond (2026-08-03) -----------------------
+
+test('equipes: com equipesPorDia, o Realizado vem do Avanço Sond e não da coluna morta da MATRIZ', () => {
+  // A MATRIZ traz 0 em equipes no mês corrente (medido: 349 de 350 registros
+  // em agosto/2026), o que desenhava um déficit igual ao previsto inteiro.
+  const cfg = cenarioSemanas({ semanasSelecionadas: null });
+  cfg.dimensao = 'equipes';
+  const semanas = semanasDoMes(ANO_TESTE, VIGENTE_JULHO);
+  const primeiroDia = semanas[0].inicio;
+  // 2 equipes em todos os 31 dias de julho = 2,0 equivalentes.
+  const porDia = {};
+  for (let d = primeiroDia; d <= semanas[semanas.length - 1].fim; d++) porDia[d] = 2;
+  cfg.equipesPorDia = { 'SUP-0001-24||ST': porDia };
+
+  const linhas = calcularLinhas(cfg);
+  assert.ok(Math.abs(linhas[0].equipesRealizado - 2) < 0.0001,
+    `esperava 2,0 equipes equivalentes, veio ${linhas[0].equipesRealizado}`);
+  assert.strictEqual(linhas[0].equipesBase, 2, 'a base continua sendo o Previsto da MATRIZ');
+  assert.ok(Math.abs(linhas[0].desvioEquipes) < 0.0001, 'mobilizado igual ao previsto = desvio zero');
+});
+
+test('equipes: sem equipesPorDia, cai no comportamento antigo (coluna da MATRIZ) -- retrocompatível', () => {
+  const cfg = cenarioSemanas({ semanasSelecionadas: null });
+  cfg.dimensao = 'equipes';
+  const linhas = calcularLinhas(cfg);
+  // A fixture tem realizado.equipes zerado; o importante é não quebrar quem
+  // ainda não passa equipesPorDia.
+  assert.strictEqual(linhas[0].equipesRealizado, 0);
+});
+
+test('equipes: o Realizado respeita o recorte semanal -- é ocupação por dia, não foto', () => {
+  // Este é o ponto em que equipes deixa de ser foto: a BASE continua sem se
+  // repartir (2 equipes no mês são 2 em qualquer semana), mas o MOBILIZADO é
+  // medido dia a dia, então marcar só S1 mostra o que rodou em S1.
+  const semanas = semanasDoMes(ANO_TESTE, VIGENTE_JULHO);
+  const porDia = {};
+  // 4 equipes só nos dias da semana 1; nada no resto do mês.
+  for (let d = semanas[0].inicio; d <= semanas[0].fim; d++) porDia[d] = 4;
+
+  const soS1 = cenarioSemanas({ semanasSelecionadas: [0] });
+  soS1.dimensao = 'equipes';
+  soS1.equipesPorDia = { 'SUP-0001-24||ST': porDia };
+  assert.ok(Math.abs(calcularLinhas(soS1)[0].equipesRealizado - 4) < 0.0001,
+    'em S1 rodaram 4 equipes em todos os dias da semana');
+
+  const soS2 = cenarioSemanas({ semanasSelecionadas: [1] });
+  soS2.dimensao = 'equipes';
+  soS2.equipesPorDia = { 'SUP-0001-24||ST': porDia };
+  assert.strictEqual(calcularLinhas(soS2)[0].equipesRealizado, 0, 'em S2 não rodou ninguém');
+
+  // E a base NÃO se repartiu em nenhum dos dois -- continua a foto do mês.
+  assert.strictEqual(calcularLinhas(soS1)[0].equipesBase, 2);
+});
+
+test('equipes: em Acumulado até o mês a janela cobre janeiro..mês, não só o mês vigente', () => {
+  const cfg = cenarioSemanas({ semanasSelecionadas: null });
+  cfg.dimensao = 'equipes';
+  cfg.periodo = 'acumuladoAteMes';
+  // 1 equipe todo dia de janeiro a julho (212 dias) -> 1,0 equivalente.
+  const porDia = {};
+  const ini = diaEpoch(new Date(Date.UTC(ANO_TESTE, 0, 1)));
+  const fim = diaEpoch(new Date(Date.UTC(ANO_TESTE, 6, 31)));
+  for (let d = ini; d <= fim; d++) porDia[d] = 1;
+  cfg.equipesPorDia = { 'SUP-0001-24||ST': porDia };
+
+  assert.ok(Math.abs(calcularLinhas(cfg)[0].equipesRealizado - 1) < 0.0001,
+    'a janela do acumulado tem que ser o intervalo inteiro, senão a média sai diluída');
+});
+
+test('equipes: a janela para em HOJE -- média do mês corrente não é diluída pelos dias que faltam', () => {
+  // Medido em 03/08/2026: sem isso, agosto dava 3,5 equipes equivalentes
+  // contra 52,8 de julho -- não porque a operação parou, mas porque 3 dias de
+  // ocupação eram divididos por 31. A barra mostraria um déficit falso, que é
+  // exatamente o defeito que trocar a fonte veio corrigir.
+  const semanas = semanasDoMes(ANO_TESTE, VIGENTE_JULHO);
+  const primeiro = semanas[0].inicio;
+  const hoje = primeiro + 2; // 3 dias decorridos (dias 0, 1 e 2)
+  const porDia = {};
+  for (let d = primeiro; d <= hoje; d++) porDia[d] = 3;
+
+  const cfg = cenarioSemanas({ semanasSelecionadas: null });
+  cfg.dimensao = 'equipes';
+  cfg.equipesPorDia = { 'SUP-0001-24||ST': porDia };
+  cfg.hojeEpoch = hoje;
+
+  assert.ok(Math.abs(calcularLinhas(cfg)[0].equipesRealizado - 3) < 0.0001,
+    'com a janela até hoje, 3 equipes em todos os dias decorridos = 3,0');
+
+  // Sem hojeEpoch (chamador antigo), volta a dividir pelo mês inteiro.
+  delete cfg.hojeEpoch;
+  assert.ok(calcularLinhas(cfg)[0].equipesRealizado < 1,
+    'pré-condição: sem o corte a média cai, é essa a diluição que o teste acima previne');
+});
+
+test('equipes: mês inteiramente no futuro fica sem dado, não zero', () => {
+  const semanas = semanasDoMes(ANO_TESTE, VIGENTE_JULHO);
+  const cfg = cenarioSemanas({ semanasSelecionadas: null });
+  cfg.dimensao = 'equipes';
+  cfg.equipesPorDia = { 'SUP-0001-24||ST': {} };
+  cfg.hojeEpoch = semanas[0].inicio - 10; // hoje é antes do mês começar
+  assert.strictEqual(calcularLinhas(cfg)[0].equipesRealizado, null,
+    'nada aconteceu ainda: sem-dado, não uma medição de zero');
+});

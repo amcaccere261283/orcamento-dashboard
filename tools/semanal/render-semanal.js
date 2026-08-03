@@ -355,6 +355,11 @@ const CSS_DEMANDAS = `
 const BUNDLE_ARQUIVOS = [
   'compute-semanal.js', 'render-aba-semanal.js',
   'compute-grafico-semanal.js', 'render-aba-grafico-semanal.js',
+  // compute-equipes-mobilizadas.js (2026-08-03) vem ANTES de
+  // compute-balanco.js, que o consome (equipesEquivalentes) para o Δ equipes
+  // do Balanço. Não tem require nenhum -- é matemática pura sobre o mapa
+  // { 'sup||tipologia': { dia: n } } que o build embute.
+  'compute-equipes-mobilizadas.js',
   'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js',
   // Os 4 abaixo alimentam o botão "Atualizar dados" (live-refresh) -- ver
   // docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md.
@@ -426,6 +431,7 @@ var ParseMatrizCliente = MODULOS['parse-matriz-cliente.js'];
 var ParseAvancos = MODULOS['parse-avancos.js'];
 var ParseLab = MODULOS['parse-lab.js'];
 var ComputeDemandas = MODULOS['compute-demandas.js'];
+var ComputeEquipes = MODULOS['compute-equipes-mobilizadas.js'];
 
 var MODO_DEMANDAS = 'mensal';
 
@@ -611,6 +617,18 @@ function montarAbaBalanco(registros, indices) {
     // de um mês e recortar o dado de outro.
     semanas: ComputeSemanal.semanasDoMes(window.__ANO__, mesSelecionadoIdx),
     semanasSelecionadas: ESTADO_BALANCO.semanas,
+    // Equipes MOBILIZADAS medidas no Avanço Sond (2026-08-03) -- viaja dentro
+    // de __DEMANDAS__ porque sai da mesma planilha e é recalculada junto no
+    // live-refresh. Ausente (HTML de um build anterior), compute-balanco cai
+    // sozinho na coluna da MATRIZ.
+    equipesPorDia: window.__DEMANDAS__ && window.__DEMANDAS__.equipesPorDia,
+    // Trunca a janela de equipes em hoje: sem isso a média do mês corrente sai
+    // dividida pelos dias que ainda não aconteceram (ver calcularLinhas).
+    // Calculado aqui, e não no build, porque a página fica aberta e o refresh
+    // ao vivo tem de enxergar o dia de hoje, não o do build.
+    hojeEpoch: ComputeSemanal.diaEpoch(new Date(Date.UTC(
+      new Date().getFullYear(), new Date().getMonth(), new Date().getDate()
+    ))),
   });
 
   document.getElementById('balanco-periodo').addEventListener('change', function (e) {
@@ -856,6 +874,10 @@ function atualizarDadosAoVivoSemanal() {
       }
 
       demandasNovas = ComputeDemandas.computeDemandas(furos, periodosDoAnoSemanal(), ensaios);
+      // Mesma agregação que o build faz (build-dashboard.js), sobre os MESMOS
+      // furos já redirecionados -- sem isso o refresh atualizaria volume e
+      // financeiro do Balanço e deixaria o Δ equipes preso ao dado do build.
+      demandasNovas.equipesPorDia = ComputeEquipes.agregarEquipesPorDia(furos);
     }
 
     window.__REGISTROS__ = registrosNovos;

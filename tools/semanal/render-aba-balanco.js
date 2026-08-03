@@ -564,10 +564,11 @@ function renderGraficoTipologia(tipologia, linhas, opcoes) {
       + '" height="' + ALTURA_LINHA + '" fill="transparent"></rect>';
 
     // --- Série secundária: o desvio de equipes, no plot próprio -----------
-    // SEMPRE lido da MATRIZ (Avanço Sond não rastreia equipes por furo -- ver
-    // compute-balanco.js), então pode ficar "sem dado" mesmo quando o desvio
-    // principal já tem valor. Mesmo cuidado: null não vira barra de
-    // comprimento zero, só não desenha.
+    // Desde 2026-08-03 o lado realizado são as equipes MOBILIZADAS medidas no
+    // Avanço Sond (sondador distinto por dia, ver compute-equipes-mobilizadas.js);
+    // antes vinha da coluna de equipes da MATRIZ, que é 0 no mês corrente e
+    // vazia no mês fechado. Continua podendo ficar "sem dado" (SUP sem base),
+    // e null nunca vira barra de comprimento zero -- só não desenha.
     if (linha.desvioEquipes === null || linha.desvioEquipes === undefined) return;
 
     var desvioEq = linha.desvioEquipes;
@@ -575,8 +576,16 @@ function renderGraficoTipologia(tipologia, linhas, opcoes) {
     var comprimentoEqCru = escalaEquipes(desvioEq);
     var comprimentoEq = desvioEq === 0 ? 0 : Math.max(COMPRIMENTO_MINIMO_BARRA, comprimentoEqCru);
 
+    // Verde acima da base, vermelho abaixo -- a MESMA leitura de polaridade do
+    // desvio de valor ao lado, a pedido do dono do projeto (2026-08-03). O
+    // âmbar antigo dizia só "isto é a série de equipes": obrigava a ler o lado
+    // da barra para saber o sinal, enquanto na barra vizinha a cor já
+    // respondia. Agora as duas séries se leem do mesmo jeito, e o que
+    // distingue equipes continua sendo a coluna própria, com seu eixo e
+    // cabeçalho.
+    var corEq = paraDireitaEq ? COR_ACIMA : COR_ABAIXO;
     marcas += barraDivergente(CENTRO_EQUIPES, comprimentoEq, y, ALTURA_BARRA_EQUIPES,
-      'barra-equipes', COR_EQUIPES, paraDireitaEq);
+      'barra-equipes', corEq, paraDireitaEq);
 
     // Rótulo SEMPRE fora da barra (ela é fina demais para conter texto) e em
     // tinta de texto, não em âmbar: quem carrega a identidade da série é a
@@ -715,12 +724,13 @@ function renderLegenda() {
   return '<div class="legenda-balanco">'
     + item(COR_ACIMA, 'Acima da base')
     + item(COR_ABAIXO, 'Abaixo da base')
-    // "escala própria" sozinho ficou contando a história pela metade depois
-    // que a escala virou global: ela continua sendo própria em relação ao eixo
-    // financeiro (é o que o texto sempre quis dizer), mas agora é a MESMA nos
-    // 10 painéis -- e é essa segunda metade que autoriza comparar o
-    // comprimento de uma barra âmbar com a do painel de cima.
-    + item(COR_EQUIPES, 'Δ equipes (escala própria, igual em todos os painéis)')
+    // Sem swatch próprio para equipes desde 2026-08-03: as duas séries usam as
+    // MESMAS duas cores agora, e um terceiro quadradinho âmbar anunciaria uma
+    // cor que não existe mais no desenho. O que a coluna de equipes precisa
+    // dizer é outra coisa -- que a régua dela é própria (não dá para comparar
+    // o comprimento com o da barra de valor ao lado) e, desde o redesenho,
+    // igual nos 10 painéis (aí dá para comparar com o painel de cima).
+    + '<span class="legenda-item legenda-nota">Δ equipes: escala própria, igual em todos os painéis</span>'
     + '<span class="legenda-item legenda-nota">sem base / não lançado: nenhuma barra</span>'
     + '</div>';
 }
@@ -751,6 +761,10 @@ function renderAbaBalanco(registros, indices, opcoes) {
   // quem chama sem eles (testes antigos, e a página antes de 2026-08-03).
   var semanas = opts.semanas;
   var semanasSelecionadas = opts.semanasSelecionadas;
+  // equipesPorDia/hojeEpoch (2026-08-03): equipes MOBILIZADAS do Avanço Sond,
+  // com a janela truncada em hoje -- ver calcularLinhas em compute-balanco.js.
+  var equipesPorDia = opts.equipesPorDia;
+  var hojeEpoch = opts.hojeEpoch;
 
   var tipologias = listarTipologias(registros, indices);
 
@@ -774,6 +788,7 @@ function renderAbaBalanco(registros, indices, opcoes) {
         base: base, dimensao: dimensao, periodo: periodo,
         vigenteIdx: vigenteIdx, baseline: baseline, demandas: demandas, ano: ano,
         semanas: semanas, semanasSelecionadas: semanasSelecionadas,
+        equipesPorDia: equipesPorDia, hojeEpoch: hojeEpoch,
       }),
     };
   });

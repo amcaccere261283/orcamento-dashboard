@@ -123,7 +123,12 @@ test('compute-balanco.js bundlado + fonteParaCliente() resolve mediaEquipesPonde
   // agora também consome diaEpoch de lá (achado de 2026-08-01, Realizado do
   // Avanço Sond em Mês Vigente) -- mesma ordem de dependência que
   // BUNDLE_ARQUIVOS usa em render-semanal.js.
-  const bundle = buildReal(dirSemanal, ['compute-semanal.js', 'compute-balanco.js']);
+  // compute-equipes-mobilizadas.js entrou em 2026-08-03: compute-balanco.js
+  // consome equipesEquivalentes de lá para o Δ equipes (equipes MOBILIZADAS do
+  // Avanço Sond). Mesma ordem de BUNDLE_ARQUIVOS em render-semanal.js -- um
+  // require same-dir vira MODULOS['...'], então o módulo tem que existir no
+  // bundle antes de quem o desestrutura.
+  const bundle = buildReal(dirSemanal, ['compute-semanal.js', 'compute-equipes-mobilizadas.js', 'compute-balanco.js']);
   assert.doesNotMatch(bundle, /require\(/, 'compute-balanco.js bundlado não pode deixar nenhum require sobrando');
 
   const scriptDeNavegador = `

@@ -17,6 +17,7 @@ const config = require('../orcamento/config.js');
 const { parseAvancos } = require('./parse-avancos.js');
 const { parseLab } = require('./parse-lab.js');
 const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos } = require('./compute-demandas.js');
+const { agregarEquipesPorDia } = require('./compute-equipes-mobilizadas.js');
 const configDemandas = require('./config-demandas.js');
 const configLab = require('./config-lab.js');
 
@@ -118,6 +119,15 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   // MATRIZ, então apareceria como "SUP conhecido" no relatório).
   const { itens: furos, redirecionados: furosRedirecionados } = redirecionarSupsDesconhecidos(furosLidos, registros);
   const demandas = computeDemandas(furos, periodos, ensaios);
+  // Equipes mobilizadas por (SUP, tipologia) e por dia -- alimenta o Δ equipes
+  // do Balanço de massa (ver compute-equipes-mobilizadas.js). Sai dos furos JÁ
+  // redirecionados, igual computeDemandas acima, para que "Diversos" agregue os
+  // mesmos SUPs nos dois lugares. Só de Sondagem: os ensaios de Lab não têm
+  // sondador (é outra operação, dentro do laboratório).
+  demandas.equipesPorDia = agregarEquipesPorDia(furos);
+  const paresComEquipe = Object.keys(demandas.equipesPorDia).length;
+  const furosSemSondador = furos.filter((f) => !f.sondador).length;
+  console.log(`Equipes: ${paresComEquipe} par(es) (SUP, tipologia) com equipe mobilizada; ${furosSemSondador} furo(s) sem Sondador preenchido ficam fora da conta.`);
   console.log(`Demandas: ${furosLidos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${deslocamentos} linha(s) de "deslocamento" descartada(s) (furo impenetrável reposicionado, não é demanda nova), ${furosRedirecionados} furo(s) redirecionado(s) pra "Diversos" (SUP sem registro na MATRIZ pra aquela tipologia), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
 
   // Relatório dos DOIS lados do desencontro de SUP, com os furos ORIGINAIS

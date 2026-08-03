@@ -39,11 +39,20 @@ const COLUNAS_OBRIGATORIAS = {
   criacaoOS: 'Criação da OS',
   tipo: 'Tipo',
   status: 'Status',
+  inicioSondagem: 'Inicio Sondagem',
   terminoSondagem: 'Termino Sondagem',
   conclusao: 'Conclusão',
   cancelamento: 'Cancelamento',
   atualizado: 'Atualizado',
   observacoesCampo: 'Observações de Campo',
+  // 'Sondador' (coluna Y) é quem executou o furo -- a única pista de EQUIPE
+  // que existe numa fonte com data e SUP na mesma linha. Entra como
+  // obrigatória, e não opcional, pelo mesmo motivo das outras: se a planilha
+  // mudar de layout, o build tem que parar alto em vez de silenciosamente
+  // zerar a série de equipes (mesmo princípio de tipologias-avancos.js).
+  // 'Inicio Sondagem' vem junto porque a ocupação de uma equipe é o INTERVALO
+  // do furo, não só o dia em que terminou.
+  sondador: 'Sondador',
 };
 
 function texto(valor) {
@@ -160,10 +169,15 @@ function parseAvancos(grid) {
       tipologia,
       status,
       criacaoOS: dataSaneada(linha[cols.criacaoOS]),
+      inicioSondagem: dataSaneada(linha[cols.inicioSondagem]),
       terminoSondagem,
       conclusao: dataSaneada(linha[cols.conclusao]),
       cancelamento,
       atualizado: dataSaneada(linha[cols.atualizado]),
+      // Vazio em 16,4% das linhas da planilha real (medido em 2026-08-03) --
+      // string vazia, nunca null, pra quem consome poder testar sem se
+      // preocupar com o tipo. Furo sem sondador não entra na conta de equipes.
+      sondador: texto(linha[cols.sondador]),
     });
   }
 

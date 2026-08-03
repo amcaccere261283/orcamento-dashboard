@@ -467,8 +467,11 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
   // Datas em serial Excel (46091 = 2026-03-10, 46093 = 2026-03-12,
   // 46114 = 2026-04-02, 46117 = 2026-04-05): o fallback pra texto dd/MM/yyyy
   // de dataSaneada é coberto pelos testes unitários de cada parser.
-  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo\n'
-    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,\n';
+  // "Inicio Sondagem" e "Sondador" entraram em 2026-08-03 (equipes
+  // mobilizadas, ver compute-equipes-mobilizadas.js) -- são obrigatórias no
+  // parser, então precisam existir aqui ou locateColunasAvancos lança.
+  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo,Inicio Sondagem,Sondador\n'
+    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,,46091,Sondador Sintético\n';
   const csvLab = 'ID Contrato,Concluído Dia,Tipo de Ensaio\n'
     + 'SUP-0002-25,46091,LL\n';
 

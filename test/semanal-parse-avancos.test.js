@@ -12,10 +12,15 @@ CABECALHO[1] = 'Tomador';
 CABECALHO[8] = 'Criação da OS';
 CABECALHO[9] = 'Tipo';
 CABECALHO[11] = 'Status';
+CABECALHO[12] = 'Inicio Sondagem';
 CABECALHO[13] = 'Termino Sondagem';
 CABECALHO[14] = 'Conclusão';
 CABECALHO[15] = 'Cancelamento';
 CABECALHO[16] = 'Atualizado';
+// Coluna Y na planilha real -- entrou em 2026-08-03 junto com Inicio
+// Sondagem, para a contagem de equipes mobilizadas (ver
+// compute-equipes-mobilizadas.js). Índices mantidos iguais aos reais.
+CABECALHO[24] = 'Sondador';
 CABECALHO[27] = 'Observações de Campo';
 
 // 2026-03-10, 2026-03-12, 2026-04-02, 2026-04-05 em serial Excel.
@@ -166,6 +171,8 @@ test('as colunas são achadas pelo NOME, não por posição fixa', () => {
   deslocado[1][9] = 'Cancelamento';
   deslocado[1][10] = 'Atualizado';
   deslocado[1][11] = 'Observações de Campo';
+  deslocado[1][12] = 'Inicio Sondagem';
+  deslocado[1][13] = 'Sondador';
   deslocado[2] = [];
   deslocado[2][3] = 'SUP-9999-26';
   deslocado[2][4] = MAR10;

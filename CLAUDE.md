@@ -224,6 +224,32 @@ arquivo exige por causa do incidente de 2026-07-22. Vale acrescentar.
 exercita isso hoje (Realizado e Tendência são nulos até a planilha semanal existir), mas
 decida a semântica da semana corrente incompleta **antes** de escrever `parse-semanal.js`.
 
+**RESOLVIDO em 2026-08-03 — Δ equipes agora sai do Avanço Sond.** O texto abaixo fica
+como histórico do problema. A barra passou a comparar **equipes mobilizadas** (medidas)
+contra o Previsto da MATRIZ, com verde/vermelho igual ao desvio de valor:
+
+- Fonte: coluna `Sondador` (Y) do Avanço Sond. Sondador distinto por dia é o proxy de
+  equipe. Ver `tools/semanal/compute-equipes-mobilizadas.js`.
+- **A unidade é "equipe equivalente" (equipe-dia ÷ dias do período), não pessoas
+  distintas.** Contar distintos por (SUP, tipologia) infla: em julho/2026, 95 pessoas
+  viravam 185 "equipes", porque o mesmo sondador atende vários contratos e era contado
+  inteiro em cada um. Com equivalentes dá 52,8 — cabe dentro das 95, como tem de ser.
+- **A janela sempre para em hoje.** Sem isso a média do mês corrente é dividida pelos
+  dias que ainda não aconteceram: em 03/08 agosto dava 3,5 contra 52,8 de julho, e a
+  barra mostrava um déficit falso — o mesmo defeito que a troca de fonte veio corrigir.
+- Ocupação é o INTERVALO do furo (`Inicio Sondagem`..`Termino Sondagem`), não o dia do
+  término. `Inicio Sondagem` e `Sondador` viraram colunas obrigatórias em `parse-avancos.js`.
+- 10.195 furos sem Sondador preenchido (16,4%) ficam fora da conta; o build reporta.
+- **Atenção ao tipo:** `parseAvancos` entrega `Date`, não dia-desde-época. A primeira
+  versão assumiu número, passou nos testes sintéticos e travou o build na planilha real
+  (o laço por dia iterava de milissegundo em milissegundo: 2,87 trilhões de iterações).
+  `paraDiaEpoch` normaliza os dois, e há teste prendendo o tipo real.
+- Diferente de volume/financeiro, que só usam o Avanço Sond em Mês Vigente, equipes usa
+  **sempre**: a coluna da MATRIZ é inservível nos dois sentidos (0 no mês corrente, vazia
+  no mês fechado — 350 de 350 registros em julho/2026).
+
+O histórico do problema:
+
 **Balanço de Massa: barra de equipes em Mês Vigente continua sem dado (2026-08-01).**
 Depois de mover o Realizado de Volume/Financeiro pra Mês Vigente pro Avanço Sond (ver
 `compute-balanco.js`, `realizadoDoAvancos`), `equipesRealizado` continua vindo só da
