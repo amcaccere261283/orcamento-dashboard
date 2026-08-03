@@ -140,3 +140,94 @@ test('cabeçalho que não é dia continua fora -- o \d{4} do ano impede casar "1
   const equipes = parseAbaEq(csv);
   assert.deepStrictEqual(equipes[0].dias, [{ dia: 1, texto: 'OK' }], 'só a coluna 1-Aug é dia');
 });
+
+// --- agregarEquipesAtivas --------------------------------------------------
+
+const { agregarEquipesAtivas, juntarPorDia } = require('../tools/semanal/compute-equipes-ativas.js');
+
+const diaEp = (d) => Math.floor(Date.UTC(2026, 7, d) / 86400000); // agosto/2026
+
+function equipe(id, servicos, textos, nome) {
+  return { id, nome: nome || ('Lider ' + id), servicos, dias: textos.map((t, i) => ({ dia: i + 1, texto: t })) };
+}
+
+test('a OS do dia dá o SUP, e o equipe-dia entra em (SUP, tipologia)', () => {
+  const r = agregarEquipesAtivas({
+    equipes: [equipe('1', 'SM', ['CCR RioSP (16925-25)', 'OK'])],
+    osParaSup: { '16925-25': 'SUP-7285-24' },
+    ano: 2026, mes: 8,
+  });
+  // Dia 1 tem OS; dia 2 é "OK" (mobilizada sem OS) e herda o mesmo SUP.
+  assert.deepStrictEqual(r.porDia['SUP-7285-24||SM'], { [diaEp(1)]: 1, [diaEp(2)]: 1 });
+});
+
+test('dia ativo sem OS herda a ÚLTIMA OS -- baixada não rompe o vínculo com o contrato', () => {
+  const r = agregarEquipesAtivas({
+    equipes: [equipe('1', 'SP', ['EPR (17739-26)', 'Mobilização', 'chuva'])],
+    osParaSup: { '17739-26': 'SUP-7128-24' },
+    ano: 2026, mes: 8,
+  });
+  assert.deepStrictEqual(r.porDia['SUP-7128-24||SP'], { [diaEp(1)]: 1, [diaEp(2)]: 1, [diaEp(3)]: 1 });
+});
+
+test('férias e baixada NÃO entram, mesmo entre dias mobilizados', () => {
+  const r = agregarEquipesAtivas({
+    equipes: [equipe('1', 'SP', ['EPR (17739-26)', 'Baixada', 'Férias', 'OK'])],
+    osParaSup: { '17739-26': 'SUP-7128-24' },
+    ano: 2026, mes: 8,
+  });
+  assert.deepStrictEqual(r.porDia['SUP-7128-24||SP'], { [diaEp(1)]: 1, [diaEp(4)]: 1 });
+  assert.strictEqual(r.diasPorEstado.fora, 2);
+});
+
+test('equipe que nunca teve OS no mês vai para naoApropriadas, nunca rateada', () => {
+  const r = agregarEquipesAtivas({
+    equipes: [equipe('1', 'SP', ['Mobilização', 'chuva'])],
+    osParaSup: {},
+    ano: 2026, mes: 8,
+  });
+  assert.deepStrictEqual(r.porDia, {});
+  assert.strictEqual(r.naoApropriadas, 2);
+});
+
+test('"ST | PI | BL" resolve a tipologia pelo sondador que lidera a equipe', () => {
+  const r = agregarEquipesAtivas({
+    equipes: [equipe('353', 'ST | PI | BL', ['CCR RioSP (16925-25)'], 'Lucas Oliveira')],
+    osParaSup: { '16925-25': 'SUP-7285-24' },
+    nomesSondadores: ['Lucas de Oliveira Silva'],
+    tipologiaPorSondador: { 'Lucas de Oliveira Silva': 'ST' },
+    ano: 2026, mes: 8,
+  });
+  assert.deepStrictEqual(r.porDia['SUP-7285-24||ST'], { [diaEp(1)]: 1 });
+});
+
+test('sem conseguir resolver a tipologia, o equipe-dia é contado à parte -- não vira Especiais nem some', () => {
+  const r = agregarEquipesAtivas({
+    equipes: [equipe('629', 'ST | PI | BL', ['CCR RioSP (16925-25)'], 'Wanderson Silvestre')],
+    osParaSup: { '16925-25': 'SUP-7285-24' },
+    nomesSondadores: ['Lucas de Oliveira Silva'],
+    ano: 2026, mes: 8,
+  });
+  assert.deepStrictEqual(r.porDia, {});
+  assert.strictEqual(r.semTipologia, 1);
+});
+
+test('duas equipes no mesmo SUP, tipologia e dia contam 2', () => {
+  // OS com o formato REAL (5 dígitos): o padrão exige \d{3,6}-\d{2}, então
+  // um "(1-26)" inventado não seria reconhecido como OS.
+  const r = agregarEquipesAtivas({
+    equipes: [equipe('1', 'SM', ['A (17851-26)']), equipe('2', 'SM', ['B (17851-26)'])],
+    osParaSup: { '17851-26': 'SUP-X' },
+    ano: 2026, mes: 8,
+  });
+  assert.strictEqual(r.porDia['SUP-X||SM'][diaEp(1)], 2);
+});
+
+test('juntarPorDia soma vários meses sem perder dia nenhum', () => {
+  const a = { 'SUP-X||SM': { 100: 2 } };
+  const b = { 'SUP-X||SM': { 100: 1, 131: 3 }, 'SUP-Y||SP': { 131: 1 } };
+  assert.deepStrictEqual(juntarPorDia([a, b]), {
+    'SUP-X||SM': { 100: 3, 131: 3 },
+    'SUP-Y||SP': { 131: 1 },
+  });
+});

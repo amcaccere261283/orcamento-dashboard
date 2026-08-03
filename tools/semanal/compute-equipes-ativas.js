@@ -131,7 +131,97 @@ function tipologiaDireta(servicos) {
   return null;
 }
 
+// Agrega o equipe-dia ATIVO por (SUP, tipologia) e por dia.
+//
+// entradas:
+//   equipes        -- de parseAbaEq
+//   ano, mes       -- do calendário daquela aba (mes 1..12); o dia da coluna
+//                     mais os dois viram dia-desde-época
+//   osParaSup      -- { '17851-26': 'SUP-7128-24' }, do Avanço Sond. Medido:
+//                     1.960 de 1.960 OS resolvem para UM SUP.
+//   tipologiaPorSondador -- { 'Lucas de Oliveira Silva': 'ST' }, para as
+//                     equipes cuja coluna Serviços é múltipla ("ST | PI | BL")
+//   nomesSondadores -- lista para casarSondador
+//
+// APROPRIAÇÃO AO SUP: a OS na célula do dia diz o contrato. Nos dias ativos sem
+// OS (mobilização, chuva, veículo quebrado), vale a ÚLTIMA OS vista daquela
+// equipe -- o vínculo não se rompe porque a equipe passou um dia sem furar. Uma
+// equipe que nunca teve OS no mês entra em naoApropriadas, visível, nunca
+// rateada em silêncio entre contratos.
+//
+// Devolve { porDia, naoApropriadas, semTipologia, diasPorEstado }.
+function agregarEquipesAtivas(opcoes) {
+  var o = opcoes || {};
+  var equipes = o.equipes || [];
+  var osParaSup = o.osParaSup || {};
+  var tipologiaPorSondador = o.tipologiaPorSondador || {};
+  var nomesSondadores = o.nomesSondadores || [];
+  var ano = o.ano;
+  var mes = o.mes;
+
+  var porDia = {};
+  var naoApropriadas = 0;
+  var semTipologia = 0;
+  var diasPorEstado = { mobilizada: 0, campoSemFuro: 0, fora: 0, naoEquipe: 0 };
+  var textosNoDefault = {};
+
+  equipes.forEach(function (equipe) {
+    var tipologia = tipologiaDireta(equipe.servicos);
+    if (!tipologia) {
+      // Múltipla ("ST | PI | BL"): a tipologia sai dos furos do sondador que
+      // lidera a equipe -- ver casarSondador.
+      var sondador = casarSondador(equipe.nome, nomesSondadores);
+      if (sondador) tipologia = tipologiaPorSondador[sondador] || null;
+    }
+
+    var ultimoSup = null;
+    equipe.dias.forEach(function (d) {
+      var classe = classificarDiaEquipe(d.texto);
+      if (!classe) return;
+      diasPorEstado[classe.estado] += 1;
+      if (classe.noDefault) textosNoDefault[d.texto] = (textosNoDefault[d.texto] || 0) + 1;
+      if (!contaComoAtiva(classe.estado)) return;
+
+      // A OS atualiza o vínculo mesmo quando a tipologia é desconhecida: se a
+      // equipe voltar a ser identificável depois, o SUP já está em mãos.
+      if (classe.os && osParaSup[classe.os]) ultimoSup = osParaSup[classe.os];
+
+      if (!tipologia) { semTipologia += 1; return; }
+      if (!ultimoSup) { naoApropriadas += 1; return; }
+
+      var chave = ultimoSup + '||' + tipologia;
+      var diaEpoch = Math.floor(Date.UTC(ano, mes - 1, d.dia) / 86400000);
+      if (!porDia[chave]) porDia[chave] = {};
+      porDia[chave][diaEpoch] = (porDia[chave][diaEpoch] || 0) + 1;
+    });
+  });
+
+  return {
+    porDia: porDia,
+    naoApropriadas: naoApropriadas,
+    semTipologia: semTipologia,
+    diasPorEstado: diasPorEstado,
+    textosNoDefault: textosNoDefault,
+  };
+}
+
+// Junta o porDia de vários meses num mapa só (o Balanço pergunta por período,
+// que pode cobrir o ano inteiro em "Acumulado até o mês").
+function juntarPorDia(mapas) {
+  var saida = {};
+  (mapas || []).forEach(function (mapa) {
+    Object.keys(mapa || {}).forEach(function (chave) {
+      if (!saida[chave]) saida[chave] = {};
+      Object.keys(mapa[chave]).forEach(function (dia) {
+        saida[chave][dia] = (saida[chave][dia] || 0) + mapa[chave][dia];
+      });
+    });
+  });
+  return saida;
+}
+
 module.exports = {
   parseAbaEq, tokensDoNome, casarSondador, tipologiaDireta,
+  agregarEquipesAtivas, juntarPorDia,
   RE_COLUNA_DIA, TIPOLOGIA_DIRETA,
 };
