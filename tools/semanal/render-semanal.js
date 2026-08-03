@@ -145,6 +145,17 @@ const CSS_BALANCO = `
   .controle-balanco-desabilitado .caixa-semana,
   .controle-balanco-desabilitado .caixa-semana input { cursor: not-allowed; }
 
+  /* Aviso de Δ equipes sem dado no período. Âmbar (a cor de atenção da página,
+     mesma do foco e das abas), não vermelho: não é erro, é uma informação que
+     falta -- e o resto da aba continua válido, o que a última frase diz. */
+  .aviso-equipes {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 0 16px; padding: 10px 12px;
+    border: 1px solid rgba(246,181,63,0.35); border-left: 3px solid #f6b53f;
+    border-radius: 6px; background: rgba(246,181,63,0.07);
+    font-size: 12px; color: var(--text-secondary); line-height: 1.5;
+  }
+
   /* O painel dos gráficos ganha a MESMA superfície que #secao-grafico tem no
      orçamento (rgba(26,26,25,0.68) + cantos de 8px), mas aplicada em
      .graficos-balanco e não em #secao-balanco: os controles e a legenda ficam
@@ -360,6 +371,15 @@ const BUNDLE_ARQUIVOS = [
   // do Balanço. Não tem require nenhum -- é matemática pura sobre o mapa
   // { 'sup||tipologia': { dia: n } } que o build embute.
   'compute-equipes-mobilizadas.js',
+  // Equipes ATIVAS (2026-08-03): classificar-dia-equipe.js nao tem require
+  // nenhum; compute-equipes-ativas.js consome ele e parse-matriz-cliente.js,
+  // entao os dois precisam vir ANTES dele na lista.
+  // parse-matriz-cliente.js sobe para cá (antes ficava no grupo do
+  // live-refresh, mais abaixo): compute-equipes-ativas.js consome parseCsvGrid
+  // dele, e um require same-dir vira MODULOS['...'] -- que precisa existir
+  // ANTES de quem o desestrutura.
+  'parse-matriz-cliente.js',
+  'classificar-dia-equipe.js', 'compute-equipes-ativas.js',
   'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js',
   // Os 4 abaixo alimentam o botão "Atualizar dados" (live-refresh) -- ver
   // docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md.
@@ -372,7 +392,7 @@ const BUNDLE_ARQUIVOS = [
   // também precisa vir DEPOIS de compute-semanal.js na lista -- ele lê
   // diaEpoch de lá agora (require('./compute-semanal.js'), same-dir,
   // resolvido normalmente pelo bundler).
-  'parse-matriz-cliente.js', 'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js',
+  'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js',
 ];
 
 // O gate de senha (scriptDesbloqueio, casca compartilhada) sempre chama
@@ -432,6 +452,7 @@ var ParseAvancos = MODULOS['parse-avancos.js'];
 var ParseLab = MODULOS['parse-lab.js'];
 var ComputeDemandas = MODULOS['compute-demandas.js'];
 var ComputeEquipes = MODULOS['compute-equipes-mobilizadas.js'];
+var ComputeEquipesAtivas = MODULOS['compute-equipes-ativas.js'];
 
 var MODO_DEMANDAS = 'mensal';
 
@@ -783,6 +804,7 @@ function montarDashboard(registros) {
 // ordem: confira o cabeçalho se um dia forem republicadas.
 var URL_ESPELHO_MATRIZ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRaOjGxPYWKj-as9RwErptIND7PE_zxsND19PReV1MdOup1ZY3iAu_DGrQ0gatPyYFEy3hg-LWE2esw/pub?gid=609773455&single=true&output=csv';
 var URL_ESPELHO_AVANCOS_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_Lmfr3EG4OwDb8xlc7670XrCXd2VL9vAiCjHeh8sxpLGFHNf_WgbXMGFe33XIKTXxTkaFXo8ls2eR/pub?gid=943230110&single=true&output=csv';
+var URL_ESPELHO_EQ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7SaAZI8VwQaZD0nPxtOyw56b1XmKfqDTC6qSkj-1PAQr4A8ihTY4vZCOhF4PuMNIYm_-hN_CNdNrX/pub?gid=199381651&single=true&output=csv';
 var URL_ESPELHO_LAB_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_Lmfr3EG4OwDb8xlc7670XrCXd2VL9vAiCjHeh8sxpLGFHNf_WgbXMGFe33XIKTXxTkaFXo8ls2eR/pub?gid=213649864&single=true&output=csv';
 
 function definirStatusAtualizacaoSemanal(texto, ehErro) {
@@ -850,6 +872,11 @@ function atualizarDadosAoVivoSemanal() {
     buscarCsvSemanal(URL_ESPELHO_MATRIZ_SEMANAL),
     avancosLabConfigurados ? buscarCsvSemanal(URL_ESPELHO_AVANCOS_SEMANAL) : Promise.resolve(null),
     avancosLabConfigurados ? buscarCsvSemanal(URL_ESPELHO_LAB_SEMANAL) : Promise.resolve(null),
+    // Espelho da aba EQ (equipes ATIVAS). Falha sozinha: se esta única fonte
+    // cair, o refresh continua atualizando MATRIZ/Avanços/Lab e o Δ equipes
+    // fica com o dado do build -- em vez de o botão inteiro dar erro por causa
+    // da série secundária.
+    buscarCsvSemanal(URL_ESPELHO_EQ_SEMANAL).catch(function () { return null; }),
   ]).then(function (textos) {
     var registrosNovos = ParseMatrizCliente.parseMatrizCliente(ParseMatrizCliente.parseCsvGrid(textos[0]));
     if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho da MATRIZ -- confira se o Apps Script já rodou pelo menos uma vez');
@@ -879,6 +906,48 @@ function atualizarDadosAoVivoSemanal() {
       // furos já redirecionados -- sem isso o refresh atualizaria volume e
       // financeiro do Balanço e deixaria o Δ equipes preso ao dado do build.
       demandasNovas.equipesPorDia = ComputeEquipes.agregarEquipesPorDia(furos);
+
+      // Equipes ATIVAS: mesma montagem que o build faz (build-dashboard.js,
+      // montarEquipesAtivas), sobre os MESMOS furos já redirecionados. Sem
+      // isso o refresh atualizaria volume e financeiro e deixaria o Δ equipes
+      // preso ao build.
+      var csvEq = textos[3];
+      var periodoEq = csvEq ? ComputeEquipesAtivas.mesDaAbaEq(csvEq) : null;
+      if (periodoEq) {
+        var osParaSup = {};
+        var contagemTip = {};
+        furos.forEach(function (f) {
+          if (f.os && f.sup && !osParaSup[f.os]) osParaSup[f.os] = f.sup;
+          if (f.sondador && f.tipologia) {
+            var k = f.sondador + '||' + f.tipologia;
+            contagemTip[k] = (contagemTip[k] || 0) + 1;
+          }
+        });
+        var melhorTip = {};
+        Object.keys(contagemTip).forEach(function (k) {
+          var partes = k.split('||');
+          if (!melhorTip[partes[0]] || contagemTip[k] > melhorTip[partes[0]].n) {
+            melhorTip[partes[0]] = { tipologia: partes[1], n: contagemTip[k] };
+          }
+        });
+        var tipologiaPorSondador = {};
+        Object.keys(melhorTip).forEach(function (s) { tipologiaPorSondador[s] = melhorTip[s].tipologia; });
+
+        var agregado = ComputeEquipesAtivas.agregarEquipesAtivas({
+          equipes: ComputeEquipesAtivas.parseAbaEq(csvEq),
+          osParaSup: osParaSup,
+          tipologiaPorSondador: tipologiaPorSondador,
+          nomesSondadores: Object.keys(tipologiaPorSondador),
+          // rotularTipologia vem de tipologias-avancos.js, injetado como global
+          // por fonteParaCliente() antes do bundle -- mesmo mecanismo de
+          // mediaEquipesPonderada. Sem traduzir, a chave não casa com a do
+          // Balanço e o Realizado sai 0,0 em todas as linhas.
+          rotularTipologia: typeof rotularTipologia === 'function' ? rotularTipologia : null,
+          ano: periodoEq.ano, mes: periodoEq.mes,
+        });
+        demandasNovas.equipesPorDia = agregado.porDia;
+        demandasNovas.equipesAtivasPeriodo = periodoEq;
+      }
     }
 
     window.__REGISTROS__ = registrosNovos;

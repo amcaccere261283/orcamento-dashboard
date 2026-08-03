@@ -352,3 +352,36 @@ test('a aba traz legenda única e o balão de tooltip, não uma legenda por pain
     'um balão só, reposicionado pelo listener delegado de render-semanal.js');
   assert.strictEqual(html.split('class="grafico-painel"').length - 1, 2, 'um painel por tipologia');
 });
+
+// --- Aviso de Δ equipes sem dado (2026-08-03) ------------------------------
+
+test('mês fora da cobertura da aba EQ mostra o aviso, e diz QUAL mês tem dado', () => {
+  const html = renderAbaBalanco([], [], {
+    periodo: 'mesVigente', vigenteIdx: 6, ano: 2026, // julho na tela
+    equipesAtivasPeriodo: { ano: 2026, mes: 8 },      // espelho traz agosto
+  });
+  assert.match(html, /aviso-equipes/);
+  assert.match(html, /Ago\/2026/, 'o aviso precisa dizer qual mês tem dado -- é a saída do problema');
+  assert.match(html, /não são afetadas/, 'e deixar claro que o desvio de valor continua válido');
+});
+
+test('no mês coberto, nenhum aviso aparece', () => {
+  const html = renderAbaBalanco([], [], {
+    periodo: 'mesVigente', vigenteIdx: 7, ano: 2026,
+    equipesAtivasPeriodo: { ano: 2026, mes: 8 },
+  });
+  assert.doesNotMatch(html, /aviso-equipes/);
+});
+
+test('"Acumulado até o mês" sempre avisa -- um mapa de um mês não responde pelo acumulado', () => {
+  const html = renderAbaBalanco([], [], {
+    periodo: 'acumuladoAteMes', vigenteIdx: 7, ano: 2026,
+    equipesAtivasPeriodo: { ano: 2026, mes: 8 },
+  });
+  assert.match(html, /aviso-equipes/);
+});
+
+test('sem equipes ativas configuradas (fonte antiga), nenhum aviso -- nada mudou para quem não tem a aba EQ', () => {
+  const html = renderAbaBalanco([], [], { periodo: 'mesVigente', vigenteIdx: 7, ano: 2026 });
+  assert.doesNotMatch(html, /aviso-equipes/);
+});

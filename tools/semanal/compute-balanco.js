@@ -37,6 +37,22 @@ const { equipesEquivalentes } = require('./compute-equipes-mobilizadas.js');
 // porque as duas coisas respondem a perguntas diferentes -- "que meses?" e
 // "que semanas do mês vigente?" -- e o usuário pode querer as duas ao mesmo
 // tempo no futuro.
+// O mapa de equipes ATIVAS cobre UM mês (o da Sheet espelho da aba EQ). Esta
+// função responde se o período pedido está fora dele -- e é a MESMA usada pelo
+// cálculo (para devolver sem-dado) e pelo desenho (para mostrar o aviso), de
+// propósito: duas cópias da regra acabariam discordando, e a tela mostraria
+// barra sem aviso ou aviso sem barra.
+//
+// 'acumuladoAteMes' nunca é coberto: ele soma de janeiro até o mês, e um mapa
+// de um mês só responderia por uma fatia, dando um número menor sem aviso.
+function foraDaCoberturaDeEquipes(periodo, vigenteIdx, ano, equipesAtivasPeriodo) {
+  if (!equipesAtivasPeriodo) return false;
+  return periodo !== 'mesVigente'
+    || typeof ano !== 'number'
+    || ano !== equipesAtivasPeriodo.ano
+    || vigenteIdx !== (equipesAtivasPeriodo.mes - 1);
+}
+
 function periodoParaIntervalo(periodo, vigenteIdx) {
   if (periodo === 'mesVigente') return { inicio: vigenteIdx, fim: vigenteIdx + 1 };
   if (periodo === 'acumuladoAteMes') return { inicio: 0, fim: vigenteIdx + 1 };
@@ -294,13 +310,7 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
   // 'acumuladoAteMes' nunca é coberto: ele soma de janeiro até o mês, e um
   // mapa de um mês só responderia por uma fatia, dando um número menor sem
   // nenhum aviso.
-  var equipesForaDaCobertura = false;
-  if (equipesAtivasPeriodo) {
-    equipesForaDaCobertura = periodo !== 'mesVigente'
-      || typeof ano !== 'number'
-      || ano !== equipesAtivasPeriodo.ano
-      || vigenteIdx !== (equipesAtivasPeriodo.mes - 1);
-  }
+  var equipesForaDaCobertura = foraDaCoberturaDeEquipes(periodo, vigenteIdx, ano, equipesAtivasPeriodo);
   var linhas = [];
 
   (indices || []).forEach(function (i) {
@@ -404,4 +414,4 @@ function ordenarPorDesvio(linhas) {
   });
 }
 
-module.exports = { calcularLinhas, ordenarPorDesvio };
+module.exports = { calcularLinhas, ordenarPorDesvio, foraDaCoberturaDeEquipes };

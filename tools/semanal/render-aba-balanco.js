@@ -1,5 +1,5 @@
 'use strict';
-const { calcularLinhas, ordenarPorDesvio } = require('./compute-balanco.js');
+const { calcularLinhas, ordenarPorDesvio, foraDaCoberturaDeEquipes } = require('./compute-balanco.js');
 
 // Este módulo roda tanto no Node (testes) quanto embrulhado no navegador via
 // buildBrowserBundle -- por isso 'var'/'function', não 'const'/arrow (mesmo
@@ -679,7 +679,24 @@ function renderControles(estado) {
     + ' Somente SUPs ativos no período</label>';
   html += renderControleSemanas(e.semanas, e.semanasSelecionadas, periodo);
   html += '</div>';
+  html += renderAvisoEquipes(e.equipesForaDaCobertura, e.equipesAtivasPeriodo);
   return html;
+}
+
+var MESES_CURTOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+// Aviso de que o Δ equipes está sem dado no período escolhido.
+//
+// Decisão do dono do projeto (2026-08-03): "ficar sem dado e avisar". Sem o
+// aviso, a coluna de equipes some e o usuário não tem como distinguir "não
+// havia equipe" de "não temos o dado deste mês" -- que é justamente a
+// ambiguidade que trocar a fonte veio eliminar. Diz também QUAL mês tem dado,
+// para a saída ser óbvia (voltar o seletor para ele).
+function renderAvisoEquipes(foraDaCobertura, periodoCoberto) {
+  if (!foraDaCobertura || !periodoCoberto) return '';
+  var rotulo = (MESES_CURTOS[periodoCoberto.mes - 1] || '?') + '/' + periodoCoberto.ano;
+  return '<div class="aviso-equipes">Δ equipes sem dado neste período — a aba EQ da planilha de equipes cobre '
+    + escapeHtml(rotulo) + '. As barras de desvio de valor não são afetadas.</div>';
 }
 
 // Recorte por semana do mês vigente: uma caixa por semana real do mês (4 a 6,
@@ -837,6 +854,10 @@ function renderAbaBalanco(registros, indices, opcoes) {
   return renderControles({
     periodo: periodo, base: base, dimensao: dimensao, somenteAtivos: somenteAtivos,
     semanas: semanas, semanasSelecionadas: semanasSelecionadas,
+    // A MESMA função que o cálculo usa para devolver sem-dado -- ver
+    // foraDaCoberturaDeEquipes em compute-balanco.js.
+    equipesForaDaCobertura: foraDaCoberturaDeEquipes(periodo, vigenteIdx, ano, equipesAtivasPeriodo),
+    equipesAtivasPeriodo: equipesAtivasPeriodo,
   })
     + renderLegenda()
     + aviso
