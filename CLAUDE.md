@@ -239,7 +239,14 @@ contra o Previsto da MATRIZ, com verde/vermelho igual ao desvio de valor:
   barra mostrava um déficit falso — o mesmo defeito que a troca de fonte veio corrigir.
 - Ocupação é o INTERVALO do furo (`Inicio Sondagem`..`Termino Sondagem`), não o dia do
   término. `Inicio Sondagem` e `Sondador` viraram colunas obrigatórias em `parse-avancos.js`.
-- 10.195 furos sem Sondador preenchido (16,4%) ficam fora da conta; o build reporta.
+- **Sondador vazio não é lacuna de preenchimento.** São 10.195 dos 51.819 furos úteis,
+  e a distribuição por status explica tudo (medido em 2026-08-03): CONCLUIDO 40.749 com
+  ZERO vazios, EXECUTADO 859 com zero, PENDENTE 5.910 todos vazios, CANCELADO 4.301 com
+  4.285. Todo furo executado tem sondador; os vazios são os que ninguém executou, que
+  por definição não ocuparam equipe. A conta cobre 100% do que existe para medir — não
+  há nada a corrigir na planilha. O build vigia o inverso: se aparecer furo
+  CONCLUIDO/EXECUTADO sem sondador, ele avisa, porque aí a conta passaria a subestimar
+  em silêncio.
 - **Atenção ao tipo:** `parseAvancos` entrega `Date`, não dia-desde-época. A primeira
   versão assumiu número, passou nos testes sintéticos e travou o build na planilha real
   (o laço por dia iterava de milissegundo em milissegundo: 2,87 trilhões de iterações).

@@ -174,9 +174,16 @@ function parseAvancos(grid) {
       conclusao: dataSaneada(linha[cols.conclusao]),
       cancelamento,
       atualizado: dataSaneada(linha[cols.atualizado]),
-      // Vazio em 16,4% das linhas da planilha real (medido em 2026-08-03) --
-      // string vazia, nunca null, pra quem consome poder testar sem se
-      // preocupar com o tipo. Furo sem sondador não entra na conta de equipes.
+      // String vazia, nunca null, pra quem consome poder testar sem se
+      // preocupar com o tipo.
+      //
+      // Vazio em 10.195 dos 51.819 furos úteis (medido em 2026-08-03), e isso
+      // NÃO é lacuna de preenchimento: são exatamente os furos que ninguém
+      // executou. Por status -- CONCLUIDO 40.749 furos com ZERO vazios,
+      // EXECUTADO 859 com zero, PENDENTE 5.910 todos vazios, CANCELADO 4.301
+      // com 4.285 vazios. Ou seja, todo furo executado tem sondador, e furo
+      // não executado não ocupou equipe. A conta de equipes mobilizadas cobre
+      // 100% do que existe para medir.
       sondador: texto(linha[cols.sondador]),
     });
   }

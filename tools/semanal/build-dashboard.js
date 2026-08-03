@@ -126,8 +126,18 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   // sondador (é outra operação, dentro do laboratório).
   demandas.equipesPorDia = agregarEquipesPorDia(furos);
   const paresComEquipe = Object.keys(demandas.equipesPorDia).length;
-  const furosSemSondador = furos.filter((f) => !f.sondador).length;
-  console.log(`Equipes: ${paresComEquipe} par(es) (SUP, tipologia) com equipe mobilizada; ${furosSemSondador} furo(s) sem Sondador preenchido ficam fora da conta.`);
+  // Sondador vazio é esperado, não perda: PENDENTE e CANCELADO não têm quem
+  // executou (medido em 2026-08-03: CONCLUIDO/EXECUTADO com ZERO vazios).
+  // O que o build vigia é o contrário -- um furo EXECUTADO sem sondador seria
+  // sinal de mudança na planilha, e aí a conta de equipes começaria a
+  // subestimar em silêncio.
+  const executadosSemSondador = furos.filter(
+    (f) => !f.sondador && (f.status === 'CONCLUIDO' || f.status === 'EXECUTADO')
+  ).length;
+  const aviso = executadosSemSondador
+    ? ` ATENÇÃO: ${executadosSemSondador} furo(s) CONCLUIDO/EXECUTADO sem Sondador -- estes ficam fora da conta de equipes.`
+    : ' Todo furo executado tem Sondador (os vazios são PENDENTE/CANCELADO, que não ocupam equipe).';
+  console.log(`Equipes: ${paresComEquipe} par(es) (SUP, tipologia) com equipe mobilizada.${aviso}`);
   console.log(`Demandas: ${furosLidos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${deslocamentos} linha(s) de "deslocamento" descartada(s) (furo impenetrável reposicionado, não é demanda nova), ${furosRedirecionados} furo(s) redirecionado(s) pra "Diversos" (SUP sem registro na MATRIZ pra aquela tipologia), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
 
   // Relatório dos DOIS lados do desencontro de SUP, com os furos ORIGINAIS

@@ -46,7 +46,10 @@ test('o mesmo sondador em dois SUPs no mesmo dia conta em cada um -- é assim qu
   assert.strictEqual(porDia['SUP-B||ST'][dia(1)], 1);
 });
 
-test('furo sem sondador não entra -- 16,4% da planilha real está assim', () => {
+// Furo sem sondador é PENDENTE ou CANCELADO na planilha real (medido em
+// 2026-08-03: CONCLUIDO/EXECUTADO têm ZERO vazios) -- ninguém executou, então
+// não ocupou equipe. Ignorar é o comportamento certo, não uma perda.
+test('furo sem sondador não entra na conta', () => {
   const porDia = agregarEquipesPorDia([
     furo({ sondador: '', ini: dia(1), fim: dia(1) }),
     furo({ sondador: '   ', ini: dia(2), fim: dia(2) }),
