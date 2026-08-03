@@ -18,10 +18,50 @@ const { calcularLinhas, ordenarPorDesvio } = require('./compute-balanco.js');
 // test/semanal-render-aba-balanco-wireup.test.js.
 
 // Gráfico Balanço de massa: barras divergentes, um gráfico por tipologia,
-// uma linha por SUP. Privacidade: SUP e tipologia SÃO renderizados neste
-// SVG -- não é um vazamento porque este módulo só roda no navegador, DEPOIS
-// da decifragem (nunca durante o build de render-semanal.js) -- mesmo
+// uma linha por SUP. Privacidade: SUP, Tomador e tipologia SÃO renderizados
+// neste SVG -- não é um vazamento porque este módulo só roda no navegador,
+// DEPOIS da decifragem (nunca durante o build de render-semanal.js) -- mesmo
 // contrato que render-aba-semanal.js já segue para SUP/Tomador.
+//
+// ============================================================================
+// A ANATOMIA (redesenho de 2026-08-02) -- por que DOIS plots, lado a lado
+// ============================================================================
+// Até aqui as duas séries (desvio de valor e desvio de equipes) divergiam do
+// MESMO eixo central, com escalas independentes, uma desenhada por cima da
+// outra. Três defeitos se somavam:
+//
+//   1. A barra de equipes (desenhada depois) COBRIA a barra de valor -- a
+//      série principal do gráfico ficava escondida atrás da secundária.
+//   2. Duas escalas diferentes no mesmo eixo é o clássico "gráfico de eixo
+//      duplo": a régua de uma série não vale para a outra, então comprimentos
+//      vizinhos inventam uma correlação que não existe no dado.
+//   3. Sem régua nenhuma (nem tick, nem gridline), o comprimento das barras
+//      não era legível em número nenhum -- e o rótulo na ponta mostrava o
+//      REALIZADO numa barra cujo comprimento é o DESVIO: dois números
+//      diferentes no mesmo lugar.
+//
+// Agora são dois plots separados na mesma faixa horizontal, cada um com o seu
+// próprio zero e a sua própria escala:
+//
+//   [ SUP — Tomador ][ desvio de valor -- eixo com ticks ][ Δ equipes ]
+//
+// A escala independente por série continua sendo a decisão certa (equipes anda
+// em unidades, valor em centenas de milhares -- numa régua só, 10 equipes ao
+// lado de 100.000 vira um traço de 1 pixel), mas agora ela mora em plots
+// separados, então não há mais como ler um comprimento contra a régua errada.
+// Só o plot de valor ganha ticks/gridlines: é a série principal e a única
+// cujo eixo tem números redondos com significado.
+//
+// CORES -- os três tons (#7fd858 acima, #e0684f abaixo, #f6b53f equipes) são
+// os mesmos do resto dos dois dashboards e foram mantidos de propósito. O
+// validador de paleta do skill dataviz reprova a "faixa de luminosidade" deles
+// (regra de paleta CATEGÓRICA), mas aqui verde/vermelho são um par DIVERGENTE
+// (polaridade, não identidade) e o âmbar é o acento da marca, já usado nas
+// abas, no checkbox e no foco. O que importa nesse caso -- separação sob
+// daltonismo -- passa folgado (ΔE 13,5 deuteranopia, alvo >= 8), e a
+// polaridade ainda é codificada de forma redundante pela DIREÇÃO da barra e
+// pelo sinal do rótulo, nunca só pela cor. Todas as alternativas testadas
+// pioravam o ΔE.
 
 function escapeHtml(value) {
   return String(value === null || value === undefined ? '' : value)
@@ -37,18 +77,49 @@ function formatarNumero(v, casasDecimais) {
   return (Math.round(v * fator) / fator).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
 }
 
-// id de <pattern> só pode ter [A-Za-z0-9_-] -- tipologia pode trazer espaço,
-// acento etc. Não precisa ser reversível, só estável e sem colisão entre
-// gráficos da MESMA página (cada tipologia aparece uma vez só).
-function slug(texto) {
-  return String(texto || '').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase();
+// Formata o que aparece NO gráfico (tick do eixo, rótulo na ponta da barra) --
+// em milhares quando o recorte é grande o bastante. MESMA regra do orçamento
+// (formatarValorGrafico, em tools/orcamento/render-dashboard.js): o tooltip
+// nunca passa por aqui, ele mostra o número exato, porque hover é onde a
+// pessoa vai quando quer o valor completo e não o arredondado.
+function formatarValorGrafico(valor, usarMilhares, casasDecimais) {
+  if (valor === null || valor === undefined) return '—';
+  var casas = casasDecimais === undefined ? 0 : casasDecimais;
+  return formatarNumero(usarMilhares ? valor / 1000 : valor, casas);
 }
 
-// Uma escala POR SÉRIE, não uma régua comum. Equipes andam em unidades e
-// volume em centenas ou milhares; numa régua só, 10 equipes ao lado de 100
-// de volume viraria um traço de 1 pixel. Cada série usa toda a largura
-// disponível, então os comprimentos são comparáveis DENTRO da série e
-// nunca entre séries -- por isso os rótulos numéricos são obrigatórios.
+// Rótulo de um desvio: sempre com sinal explícito, porque o número sozinho
+// não diz de que lado do zero ele está quando o rótulo cai FORA da barra.
+// Usa o sinal de menos tipográfico (U+2212), não o hífen -- alinha com os
+// dígitos em fonte tabular, o hífen não.
+function formatarDesvio(valor, usarMilhares, casasDecimais) {
+  if (valor === null || valor === undefined) return '—';
+  var casas = casasDecimais === undefined ? 0 : casasDecimais;
+  var texto = formatarValorGrafico(Math.abs(valor), usarMilhares, casas);
+
+  // O sinal é decidido sobre o número JÁ ARREDONDADO, não sobre o bruto: um
+  // desvio de -0,04 equipe arredonda para "0,0" e sairia como "−0,0", que
+  // parece defeito de formatação. Quem arredonda para zero não tem sinal.
+  var fator = Math.pow(10, casas);
+  var arredondado = Math.round((usarMilhares ? valor / 1000 : valor) * fator) / fator;
+  if (arredondado > 0) return '+' + texto;
+  if (arredondado < 0) return '−' + texto;
+  return texto;
+}
+
+// Corta um texto que não caberia na calha de rótulos. O nome inteiro continua
+// no tooltip da linha, então nada se perde -- e um rótulo cortado é melhor que
+// um rótulo atravessando o plot.
+function truncar(texto, maxCaracteres) {
+  var t = String(texto || '');
+  return t.length > maxCaracteres ? t.slice(0, maxCaracteres - 1) + '…' : t;
+}
+
+// Uma escala POR SÉRIE, não uma régua comum -- ver a nota sobre a anatomia no
+// topo do arquivo. Continua sendo usada pela série de equipes, que vive no seu
+// próprio plot e não tem eixo numerado (o rótulo em cada barra carrega o
+// valor). O plot de valor usa calcularEscalaDivergente, abaixo, porque ele TEM
+// eixo e um eixo precisa cair em números redondos.
 function escalaIndependente(valores, larguraMax) {
   var maximo = 0;
   for (var i = 0; i < valores.length; i++) {
@@ -59,151 +130,401 @@ function escalaIndependente(valores, larguraMax) {
   return function (valor) { return Math.abs(valor || 0) / maximo * larguraMax; };
 }
 
-var LARGURA_SVG = 900;
-var CENTRO_X = 460;
-var LARGURA_BARRA_MAX = 280;
-var ALTURA_CABECALHO = 36;
-var ALTURA_LINHA = 46;
-var ALTURA_RODAPE = 14;
+// MESMOS degraus de GRAFICO_DEGRAUS_ESCALA (tools/orcamento/render-dashboard.js):
+// 1/1,5/2/2,5/3/4/5/6/8/10, não só 1/2/2,5/5/10 -- com os degraus
+// intermediários o pior caso de eixo sobrando cai de ~100% pra ~50%. Copiado
+// e não importado de propósito: render-dashboard.js é um módulo de BUILD (ele
+// emite o HTML do orçamento), enquanto este aqui vai inteiro pro navegador
+// dentro do bundle; importar de lá arrastaria o renderizador do orçamento
+// junto pra dentro da página semanal.
+var DEGRAUS_ESCALA = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+
+// Eixo do plot de valor. NÃO é simétrico de propósito: o zero cai onde o dado
+// coloca, e cada lado recebe só os passos que precisa.
+//
+// Um eixo simétrico (o mesmo teto dos dois lados) é o reflexo natural para um
+// gráfico divergente, mas aqui ele desperdiçava metade da largura na maioria
+// dos painéis: no dado real quase todo SUP está ABAIXO da base, então o lado
+// positivo ficava vazio de ponta a ponta e as barras negativas se espremiam na
+// metade que sobrou. Vale lembrar que cada painel já tem escala própria (os
+// números do eixo mudam de tipologia para tipologia), então uma posição fixa
+// do zero não compraria comparação de comprimento entre painéis -- essa
+// comparação se faz pelo eixo, e o eixo é local. Trocar meia largura morta por
+// barras com o dobro do comprimento é ganho líquido.
+//
+// Devolve { passo, min, max } com min <= 0 <= max, os dois múltiplos inteiros
+// de 'passo' (um número redondo, dos mesmos degraus do orçamento). null quando
+// não há nenhum desvio comparável no recorte -- quem chama usa isso para não
+// desenhar régua nenhuma (um eixo "0 / 0,25 / 0,5" sobre um gráfico sem dado
+// nenhum é pior que nenhum eixo).
+function calcularEscalaDivergente(minDesvio, maxDesvio, ticksAlvo) {
+  var min = Math.min(0, minDesvio || 0);
+  var max = Math.max(0, maxDesvio || 0);
+  var amplitude = max - min;
+  if (!(amplitude > 0)) return null;
+
+  var passoBruto = amplitude / ticksAlvo;
+  var magnitude = Math.pow(10, Math.floor(Math.log10(passoBruto)));
+  var normalizado = passoBruto / magnitude;
+  var degrau = 10;
+  for (var i = 0; i < DEGRAUS_ESCALA.length; i++) {
+    if (normalizado <= DEGRAUS_ESCALA[i]) { degrau = DEGRAUS_ESCALA[i]; break; }
+  }
+  var passo = degrau * magnitude;
+
+  return {
+    passo: passo,
+    min: -Math.ceil(-min / passo) * passo,
+    max: Math.ceil(max / passo) * passo,
+  };
+}
+
+// 1000 é a MESMA largura de viewBox que GRAFICO_LARGURA usa no orçamento --
+// os dois dashboards passam a desenhar no mesmo sistema de coordenadas, então
+// 11px de fonte tem o mesmo tamanho aparente nas duas abas.
+var LARGURA_SVG = 1000;
+// esquerda: a calha de "SUP — Tomador". baixo: a faixa dos ticks do eixo.
+var MARGEM = { topo: 24, baixo: 34, esquerda: 260, direita: 12 };
+var ALTURA_LINHA = 34;
+var ALTURA_BARRA = 14;          // <= 24px (teto de espessura de barra do sistema)
+var ALTURA_BARRA_EQUIPES = 9;   // série subordinada: mais fina que a principal
+var RAIO_BARRA = 3;
+// Quantos passos o eixo do plot de valor tenta caber na amplitude INTEIRA
+// (do desvio mais negativo ao mais positivo) -- não por lado.
+// calcularEscalaDivergente arredonda cada ponta para cima, então o resultado
+// costuma ficar entre 4 e 6 ticks: denso o bastante para ler, esparso o
+// bastante para os rótulos não colidirem.
+var TICKS_ALVO = 4;
+
+// Acima desse desvio bruto o plot de valor passa a exibir em milhares (mesmo
+// GRAFICO_LIMIAR_MILHARES do orçamento) -- assim um recorte pequeno não vira
+// "0" depois de dividido, e o título do painel ganha "(em milhares)".
+var LIMIAR_MILHARES = 1000;
+
+// Quantos caracteres cabem na calha de rótulo (MARGEM.esquerda menos o respiro
+// de cada lado, a ~6,2px por caractere em 11px). O nome inteiro fica no
+// tooltip -- ver truncar().
+var MAX_CARACTERES_ROTULO = 40;
+
+// --- Geometria dos dois plots (constante: não depende dos dados) ------------
+// Exportada porque os testes precisam saber onde cada plot começa e termina
+// para provar que as duas séries usam réguas separadas -- sem isso o teste
+// teria que repetir os números à mão e sairia de sincronia no primeiro ajuste.
+var LARGURA_COLUNA_EQUIPES = 150;
+var GAP_ENTRE_PLOTS = 36;
+
+var PLOT_EQUIPES_FIM = LARGURA_SVG - MARGEM.direita;
+var PLOT_EQUIPES_INI = PLOT_EQUIPES_FIM - LARGURA_COLUNA_EQUIPES;
+var CENTRO_EQUIPES = (PLOT_EQUIPES_INI + PLOT_EQUIPES_FIM) / 2;
+// A barra de equipes não pode encostar na borda do próprio plot: o rótulo
+// ("+0,2") fica FORA da ponta e precisa do que sobra de cada lado.
+var MEIA_LARGURA_EQUIPES = 40;
+
+var PLOT_VALOR_INI = MARGEM.esquerda;
+var PLOT_VALOR_FIM = PLOT_EQUIPES_INI - GAP_ENTRE_PLOTS;
+var LARGURA_PLOT_VALOR = PLOT_VALOR_FIM - PLOT_VALOR_INI;
+
+// Mapeador valor -> x dentro do plot de valor. Com eixo assimétrico o zero não
+// é mais uma constante do módulo: ele depende da escala do painel, então quem
+// desenha pede a função e pergunta por xDe(0).
+function projetorValor(escala) {
+  return function (valor) {
+    return PLOT_VALOR_INI + ((valor - escala.min) / (escala.max - escala.min)) * LARGURA_PLOT_VALOR;
+  };
+}
+
+var GEOMETRIA = {
+  larguraSvg: LARGURA_SVG,
+  alturaLinha: ALTURA_LINHA,
+  margem: MARGEM,
+  ticksAlvo: TICKS_ALVO,
+  valor: { inicio: PLOT_VALOR_INI, fim: PLOT_VALOR_FIM, largura: LARGURA_PLOT_VALOR },
+  equipes: { inicio: PLOT_EQUIPES_INI, fim: PLOT_EQUIPES_FIM, centro: CENTRO_EQUIPES, meiaLargura: MEIA_LARGURA_EQUIPES },
+};
 
 var COR_ACIMA = '#7fd858';   // mesmo verde de .linha-realizado no orçamento
 var COR_ABAIXO = '#e0684f';  // mesmo vermelho de .status-erro
 var COR_EQUIPES = '#f6b53f'; // mesmo laranja/dourado do resto da UI
-var COR_TEXTO_SECUNDARIO = '#c3c2b7';
-var COR_TEXTO = '#ffffff';
-var COR_EIXO = '#2c2c2a';
-var COR_DIVISORIA = 'rgba(255,255,255,0.10)'; // mesmo valor de --border em cssBase()
 
-// tipologia: string (cabeçalho do gráfico). linhas: array no formato que
-// calcularLinhas() (compute-balanco.js) produz -- consumido diretamente,
-// não reimplementado. opcoes.somenteAtivos: default true (mesmo default da
-// aba -- ver comentário no topo de render-semanal.js sobre a grade densa:
-// sem o filtro, toda tipologia mostraria 34 SUPs, a maioria com barra de
-// comprimento zero).
+var ROTULO_DIMENSAO = { financeiro: 'Desvio financeiro', volume: 'Desvio de volume' };
+
+// Largura aproximada de um texto em px, para decidir se o rótulo cabe DENTRO
+// da barra ou tem que ir para fora dela. Não precisa ser exata -- precisa
+// errar para MAIS, porque o custo de errar para menos é um rótulo estourando
+// a própria barra (o modo de falha da versão anterior: número branco por cima
+// da barra âmbar, ilegível).
+function larguraAproximadaTexto(texto, tamanhoFonte) {
+  return String(texto).length * tamanhoFonte * 0.62;
+}
+
+// Uma barra divergente. 'x' já é a BORDA ESQUERDA (quem chama resolve o lado:
+// o zero para desvio positivo, zero-comprimento para negativo).
+// <rect> com rx (e não <path>) de propósito: o teste de escala lê a largura
+// desenhada direto do atributo width, e um path a esconderia dentro do 'd'.
+// rx=3 arredonda também o lado colado no zero, o que numa barra de 14px é um
+// chanfro imperceptível. Comprimento zero não desenha nada -- um desvio
+// exatamente zero ("bateu a base") continua sendo dito pelo rótulo "0"
+// encostado no eixo, não por um retângulo invisível.
+function barraDivergente(x, comprimento, yCentro, altura, classe, cor) {
+  if (!(comprimento > 0)) return '';
+  return '<rect class="' + classe + '" x="' + x.toFixed(1) + '" y="' + (yCentro - altura / 2).toFixed(1)
+    + '" width="' + comprimento.toFixed(1) + '" height="' + altura + '" rx="' + RAIO_BARRA + '" fill="' + cor + '"></rect>';
+}
+
+// tipologia: string (vira o título do painel, FORA do SVG). linhas: array no
+// formato que calcularLinhas() (compute-balanco.js) produz -- consumido
+// diretamente, não reimplementado. opcoes.somenteAtivos: default true (mesmo
+// default da aba -- sem o filtro, toda tipologia mostraria 34 SUPs, a maioria
+// com barra de comprimento zero). opcoes.dimensao só alimenta o título.
+//
+// Devolve o painel INTEIRO (título + svg), não só o <svg>: o título saiu de
+// dentro do desenho e virou um <div class="grafico-titulo">, o mesmo elemento
+// que a aba Gráfico do orçamento usa. Além de ficar consistente, o título
+// agora é texto de verdade (selecionável, lido por leitor de tela, e no
+// tamanho real da página em vez de escalado junto com o viewBox) e é onde
+// cabe o sufixo "(em milhares)", que depende dos dados.
 function renderGraficoTipologia(tipologia, linhas, opcoes) {
   var opts = opcoes || {};
   var somenteAtivos = opts.somenteAtivos === undefined ? true : opts.somenteAtivos;
+  var dimensao = opts.dimensao || 'financeiro';
 
   var linhasFiltradas = (linhas || []).filter(function (linha) {
     return somenteAtivos ? !!linha.ativo : true;
   });
   var linhasOrdenadas = ordenarPorDesvio(linhasFiltradas);
 
-  // Cada série (valor principal / equipes) normaliza pelo PRÓPRIO maior
-  // valor absoluto -- linhas semBase não têm desvio numérico e não entram
-  // no cálculo do teto (ficam de fora da conta, não viram zero espúrio
-  // porque o filtro abaixo as ignora de qualquer forma).
-  var desvios = linhasOrdenadas.filter(function (l) { return !l.semBase; }).map(function (l) { return l.desvio || 0; });
-  var desviosEquipes = linhasOrdenadas.filter(function (l) { return !l.semBase; }).map(function (l) { return l.desvioEquipes || 0; });
-  var escalaValor = escalaIndependente(desvios, LARGURA_BARRA_MAX);
-  var escalaEquipes = escalaIndependente(desviosEquipes, LARGURA_BARRA_MAX);
+  function temDesvio(linha) {
+    return !linha.semBase && linha.desvio !== null && linha.desvio !== undefined;
+  }
 
-  var altura = ALTURA_CABECALHO + Math.max(linhasOrdenadas.length, 1) * ALTURA_LINHA + ALTURA_RODAPE;
-  var patternId = 'hachura-equipes-' + slug(tipologia);
+  // As pontas do eixo saem só das linhas COMPARÁVEIS. 'sem base' (nunca houve
+  // base) e 'Realizado não lançado' (o período ainda não fechou) não têm
+  // desvio numérico e não podem virar zero espúrio na conta das pontas.
+  var minDesvio = 0, maxDesvio = 0, maxAbsoluto = 0;
+  linhasOrdenadas.forEach(function (linha) {
+    if (!temDesvio(linha)) return;
+    if (linha.desvio < minDesvio) minDesvio = linha.desvio;
+    if (linha.desvio > maxDesvio) maxDesvio = linha.desvio;
+    if (Math.abs(linha.desvio) > maxAbsoluto) maxAbsoluto = Math.abs(linha.desvio);
+  });
+  var escala = calcularEscalaDivergente(minDesvio, maxDesvio, TICKS_ALVO);
+  var xDe = escala ? projetorValor(escala) : null;
+  var xZero = escala ? xDe(0) : (PLOT_VALOR_INI + LARGURA_PLOT_VALOR / 2);
+  var usarMilhares = maxAbsoluto >= LIMIAR_MILHARES;
+
+  var desviosEquipes = linhasOrdenadas
+    .filter(function (l) { return l.desvioEquipes !== null && l.desvioEquipes !== undefined; })
+    .map(function (l) { return l.desvioEquipes; });
+  var escalaEquipes = escalaIndependente(desviosEquipes, MEIA_LARGURA_EQUIPES);
+  var temAlgumaEquipe = desviosEquipes.length > 0;
+
+  var numLinhas = Math.max(linhasOrdenadas.length, 1);
+  var yBaseLinhas = MARGEM.topo;
+  var yFimLinhas = yBaseLinhas + numLinhas * ALTURA_LINHA;
+  var altura = yFimLinhas + MARGEM.baixo;
+
+  var tituloTexto = tipologia + ' — ' + (ROTULO_DIMENSAO[dimensao] || 'Desvio')
+    + (usarMilhares ? ' (em milhares)' : '');
 
   // 'grafico-svg' é a classe que cssBase() (casca compartilhada com o
   // orçamento) já estiliza (width:100%; height:auto; display:block;) --
-  // reaproveitada aqui de propósito, em vez de duplicar a regra numa folha
-  // à parte. 'grafico-balanco' é só o gancho específico deste gráfico
-  // (nenhuma regra própria hoje).
-  var svg = '<svg class="grafico-svg grafico-balanco" viewBox="0 0 ' + LARGURA_SVG + ' ' + altura + '" width="100%" height="' + altura + '" role="img" aria-label="Balanço de massa -- ' + escapeHtml(tipologia) + '">';
+  // reaproveitada aqui de propósito. Sem width/height fixos no atributo: só
+  // viewBox, exatamente como finalizarPainelSvg() faz no orçamento, senão o
+  // height do atributo briga com o height:auto do CSS.
+  var svg = '<svg class="grafico-svg grafico-balanco" viewBox="0 0 ' + LARGURA_SVG + ' ' + altura
+    + '" role="img" aria-label="' + escapeHtml(tituloTexto) + '">';
 
-  svg += '<defs><pattern id="' + patternId + '" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">'
-    + '<rect width="6" height="6" fill="' + COR_EQUIPES + '"></rect>'
-    + '<line x1="0" y1="0" x2="0" y2="6" stroke="#000000" stroke-opacity="0.35" stroke-width="2"></line>'
-    + '</pattern></defs>';
-
-  svg += '<text x="' + CENTRO_X + '" y="20" text-anchor="middle" fill="' + COR_TEXTO + '" font-size="13" font-weight="600">' + escapeHtml(tipologia) + '</text>';
-  svg += '<line x1="' + CENTRO_X + '" y1="' + ALTURA_CABECALHO + '" x2="' + CENTRO_X + '" y2="' + (altura - ALTURA_RODAPE) + '" stroke="' + COR_EIXO + '" stroke-width="1"></line>';
-
-  if (!linhasOrdenadas.length) {
-    svg += '<text x="' + CENTRO_X + '" y="' + (ALTURA_CABECALHO + ALTURA_LINHA / 2) + '" text-anchor="middle" fill="' + COR_TEXTO_SECUNDARIO + '" font-size="12">nenhum SUP ativo neste período</text>';
-    svg += '</svg>';
-    return svg;
+  // --- Régua do plot de valor: gridlines primeiro, tudo o mais por cima -----
+  // Os ticks são todos os múltiplos de 'passo' entre min e max, inclusive --
+  // com o eixo assimétrico não dá para contar "n por lado", porque cada lado
+  // tem a sua própria quantidade de passos.
+  var ticks = [];
+  if (escala) {
+    for (var v = escala.min; v <= escala.max + escala.passo / 2; v += escala.passo) {
+      // Arredonda o acumulador: somar passo repetidamente acumula erro de
+      // ponto flutuante e um tick sairia como "-1,0000000000000002".
+      ticks.push(Math.round(v / escala.passo) * escala.passo);
+    }
+    ticks.forEach(function (valorTick) {
+      if (valorTick === 0) return; // o zero é o eixo, desenhado à parte e mais forte
+      var xGrid = xDe(valorTick);
+      svg += '<line class="grafico-gridline" x1="' + xGrid.toFixed(1) + '" y1="' + yBaseLinhas
+        + '" x2="' + xGrid.toFixed(1) + '" y2="' + yFimLinhas + '"></line>';
+    });
   }
 
-  linhasOrdenadas.forEach(function (linha, i) {
-    var y = ALTURA_CABECALHO + i * ALTURA_LINHA + ALTURA_LINHA / 2;
+  // Os dois zeros. O do plot de valor é a "base" contra a qual todo desvio é
+  // medido -- por isso é mais forte que uma gridline comum. Só existe se
+  // houver ao menos um desvio numérico: num painel inteiro de "Realizado não
+  // lançado" uma linha vertical solta prometeria um eixo que não está lá.
+  var temAlgumDesvio = linhasOrdenadas.some(temDesvio);
+  if (temAlgumDesvio) {
+    svg += '<line class="balanco-eixo-zero" x1="' + xZero.toFixed(1) + '" y1="' + yBaseLinhas
+      + '" x2="' + xZero.toFixed(1) + '" y2="' + yFimLinhas + '"></line>';
+  }
+  if (temAlgumaEquipe) {
+    svg += '<line class="balanco-eixo-zero" x1="' + CENTRO_EQUIPES + '" y1="' + yBaseLinhas
+      + '" x2="' + CENTRO_EQUIPES + '" y2="' + yFimLinhas + '"></line>';
+    svg += '<text class="balanco-cabecalho-coluna" x="' + CENTRO_EQUIPES + '" y="' + (yBaseLinhas - 9)
+      + '" text-anchor="middle">Δ equipes</text>';
+  }
 
-    // Divisória entre linhas -- nunca antes da primeira (o eixo/cabeçalho já
-    // marca esse limite). Facilita a leitura com muitos SUPs na tela.
+  if (!linhasOrdenadas.length) {
+    svg += '<text class="balanco-vazio" x="' + xZero.toFixed(1) + '" y="' + (yBaseLinhas + ALTURA_LINHA / 2 + 4)
+      + '" text-anchor="middle">nenhum SUP ativo neste período</text>';
+    svg += '</svg>';
+    return '<div class="grafico-titulo">' + escapeHtml(tituloTexto) + '</div>' + svg;
+  }
+
+  // Rótulos e áreas de hover são acumulados e emitidos DEPOIS de todas as
+  // barras, numa passada só: rótulo por cima de qualquer barra vizinha (com
+  // halo), e área de hover por cima da barra mas por baixo do rótulo (que é
+  // pointer-events:none no CSS, então não abre buraco no hover).
+  var marcas = '';
+  var alvos = '';
+  var rotulos = '';
+
+  linhasOrdenadas.forEach(function (linha, i) {
+    var y = yBaseLinhas + i * ALTURA_LINHA + ALTURA_LINHA / 2;
+
+    // Divisória entre linhas -- nunca antes da primeira (o cabeçalho já marca
+    // esse limite). Facilita a leitura com muitos SUPs na tela.
     if (i > 0) {
-      var yDivisoria = ALTURA_CABECALHO + i * ALTURA_LINHA;
-      svg += '<line x1="0" y1="' + yDivisoria + '" x2="' + LARGURA_SVG + '" y2="' + yDivisoria + '" stroke="' + COR_DIVISORIA + '" stroke-width="1"></line>';
+      var yDivisoria = yBaseLinhas + i * ALTURA_LINHA;
+      svg += '<line class="balanco-divisoria" x1="0" y1="' + yDivisoria + '" x2="' + LARGURA_SVG
+        + '" y2="' + yDivisoria + '"></line>';
     }
 
-    // Fonte menor (era 12) pra caber o Tomador na mesma linha sem espremer.
-    // <tspan> em vez de escapeHtml simples porque SUP e Tomador têm cores
-    // diferentes (SUP em destaque, Tomador em cor secundária) dentro do
-    // MESMO <text> -- é assim que SVG mistura estilo numa linha só.
-    // "Facilita a leitura quando o filtro estiver sem SUP específico
-    // selecionado" (dono do projeto) -- com muitas linhas visíveis de uma
-    // vez, o tomador ajuda a identificar rápido de quem é cada uma.
-    svg += '<text x="8" y="' + (y + 4) + '" font-size="11">'
-      + '<tspan fill="' + COR_TEXTO + '">' + escapeHtml(linha.sup) + '</tspan>'
-      + (linha.tomador ? '<tspan fill="' + COR_TEXTO_SECUNDARIO + '"> — ' + escapeHtml(linha.tomador) + '</tspan>' : '')
+    // SUP e Tomador na MESMA linha, em cores diferentes, dentro de um <text>
+    // só -- é assim que SVG mistura estilo numa linha (<tspan>). "Facilita a
+    // leitura quando o filtro estiver sem SUP específico selecionado" (dono
+    // do projeto): com muitas linhas visíveis de uma vez, o tomador ajuda a
+    // identificar rápido de quem é cada uma. Truncado para não invadir o
+    // plot -- o nome inteiro está no tooltip da linha.
+    var sufixoTomador = linha.tomador ? ' — ' + linha.tomador : '';
+    var espacoTomador = Math.max(0, MAX_CARACTERES_ROTULO - String(linha.sup || '').length);
+    rotulos += '<text class="balanco-sup" x="8" y="' + (y + 4) + '">'
+      + '<tspan>' + escapeHtml(linha.sup) + '</tspan>'
+      + (sufixoTomador ? '<tspan class="balanco-tomador">' + escapeHtml(truncar(sufixoTomador, espacoTomador)) + '</tspan>' : '')
       + '</text>';
 
+    // --- Série principal: o desvio de valor -------------------------------
     if (linha.semBase) {
-      // "Não havia base" e "o realizado bateu a base" são opostos -- por
-      // isso NENHUMA barra é desenhada aqui, só o rótulo "sem base" preso à
-      // linha central, em vez de um desvio 0 que pareceria "bateu certinho".
-      svg += '<text x="' + CENTRO_X + '" y="' + (y + 4) + '" text-anchor="middle" fill="' + COR_TEXTO_SECUNDARIO + '" font-size="11" font-style="italic">sem base</text>';
-      return;
-    }
-
-    // Rótulo da base, junto à linha central -- sempre aparece a partir daqui
-    // (linha.semBase já teria retornado acima; valorBase existe).
-    svg += '<text x="' + CENTRO_X + '" y="' + (y - 12) + '" text-anchor="middle" fill="' + COR_TEXTO_SECUNDARIO + '" font-size="10">' + formatarNumero(linha.valorBase, 0) + '</text>';
-
-    if (linha.desvio === null) {
-      // Mesmo cuidado que "sem base" (linha.semBase acima), mas pro outro
-      // lado do desvio: havia base, mas o Realizado ainda não existe --
-      // "não lançado" e "bateu exatamente a base" são coisas opostas que
-      // apareceriam idênticas se ambas virassem uma barra de comprimento
-      // zero. Acontece pra Acumulado até o mês quando a coluna Realizado da
-      // MATRIZ está em branco pro período (achado de 2026-08-01; Mês
-      // Vigente não cai mais aqui, ver realizadoDoAvancos em
-      // compute-balanco.js -- furos reais nunca são "sem dado", só zero).
-      svg += '<text x="' + CENTRO_X + '" y="' + (y + 4) + '" text-anchor="middle" fill="' + COR_TEXTO_SECUNDARIO + '" font-size="11" font-style="italic">Realizado não lançado</text>';
+      // "Não havia base" e "o realizado bateu a base" são opostos -- por isso
+      // NENHUMA barra é desenhada, só o rótulo preso ao zero, em vez de um
+      // desvio 0 que pareceria "bateu certinho".
+      rotulos += '<text class="balanco-vazio" x="' + xZero.toFixed(1) + '" y="' + (y + 4)
+        + '" text-anchor="middle">sem base</text>';
+    } else if (linha.desvio === null || linha.desvio === undefined) {
+      // Mesmo cuidado que "sem base", mas do outro lado do desvio: havia
+      // base, mas o Realizado ainda não existe. "Não lançado" e "bateu
+      // exatamente a base" são opostos que apareceriam idênticos se ambos
+      // virassem uma barra de comprimento zero. Acontece em Acumulado até o
+      // mês quando a coluna Realizado da MATRIZ está em branco pro período
+      // (achado de 2026-08-01; Mês Vigente não cai mais aqui, ver
+      // realizadoDoAvancos em compute-balanco.js -- furos reais nunca são
+      // "sem dado", só zero).
+      rotulos += '<text class="balanco-vazio" x="' + xZero.toFixed(1) + '" y="' + (y + 4)
+        + '" text-anchor="middle">Realizado não lançado</text>';
     } else {
       var desvio = linha.desvio;
-      var comprimento = escalaValor(desvio);
+      // Sem escala (calcularEscalaDivergente devolveu null) TODOS os desvios
+      // comparáveis desta tipologia são exatamente zero -- o caso real de um
+      // mês fechado em que a MATRIZ copia Realizado = Previsto linha a linha.
+      // Esses zeros continuam sendo linhas legítimas ("bateu a base"), então
+      // caem aqui e não no ramo de "não lançado": ficam presos ao eixo, sem
+      // barra, com o rótulo "0". Sem esta guarda, xDe é null e a aba inteira
+      // quebrava com "xDe is not a function".
+      var xPonta = xDe ? xDe(desvio) : xZero;
+      var comprimento = Math.abs(xPonta - xZero);
       var paraDireita = desvio >= 0;
+      var xBarra = paraDireita ? xZero : xPonta;
       var classeCor = paraDireita ? 'barra-acima' : 'barra-abaixo';
-      var cor = paraDireita ? COR_ACIMA : COR_ABAIXO;
-      var xBarra = paraDireita ? CENTRO_X : CENTRO_X - comprimento;
 
-      svg += '<rect class="' + classeCor + '" x="' + xBarra + '" y="' + (y - 9) + '" width="' + comprimento + '" height="18" fill="' + cor + '"></rect>';
+      marcas += barraDivergente(xBarra, comprimento, y, ALTURA_BARRA, classeCor,
+        paraDireita ? COR_ACIMA : COR_ABAIXO);
 
-      // Rótulo do realizado, na ponta da barra.
-      var xPonta = paraDireita ? (CENTRO_X + comprimento + 6) : (CENTRO_X - comprimento - 6);
-      var ancoraPonta = paraDireita ? 'start' : 'end';
-      svg += '<text x="' + xPonta + '" y="' + (y + 4) + '" text-anchor="' + ancoraPonta + '" fill="' + COR_TEXTO + '" font-size="11" font-weight="600">' + formatarNumero(linha.valorRealizado, 0) + '</text>';
+      // O rótulo mostra o DESVIO -- que é o que o comprimento da barra
+      // codifica. A versão anterior mostrava o Realizado na ponta de uma
+      // barra cujo comprimento era o desvio: dois números diferentes no
+      // mesmo lugar. Base e Realizado passaram para o tooltip.
+      var textoDesvio = formatarDesvio(desvio, usarMilhares, 0);
+      var larguraTexto = larguraAproximadaTexto(textoDesvio, 10);
+      var cabeDentro = comprimento >= larguraTexto + 14;
+      var xRotulo, ancora, classeRotulo;
+      if (cabeDentro) {
+        xRotulo = paraDireita ? (xPonta - 7) : (xPonta + 7);
+        ancora = paraDireita ? 'end' : 'start';
+        classeRotulo = 'balanco-rotulo-dentro';
+      } else {
+        xRotulo = paraDireita ? (xPonta + 7) : (xPonta - 7);
+        ancora = paraDireita ? 'start' : 'end';
+        classeRotulo = 'grafico-rotulo-final';
+      }
+      rotulos += '<text class="' + classeRotulo + '" x="' + xRotulo.toFixed(1) + '" y="' + (y + 4)
+        + '" text-anchor="' + ancora + '">' + textoDesvio + '</text>';
     }
 
-    // Barra de equipes: SEMPRE lida da MATRIZ (Avanço Sond não rastreia
-    // equipes por furo -- ver compute-balanco.js), então pode ficar "sem
-    // dado" mesmo quando o desvio principal (acima) já tem valor. Mesmo
-    // cuidado: null não vira barra de comprimento zero, só não desenha.
-    if (linha.desvioEquipes !== null) {
-      var desvioEq = linha.desvioEquipes;
-      var comprimentoEq = escalaEquipes(desvioEq);
-      var paraDireitaEq = desvioEq >= 0;
-      var xEq = paraDireitaEq ? CENTRO_X : CENTRO_X - comprimentoEq;
+    // Área de hover da linha inteira do plot de valor -- 34px de alto, bem
+    // acima do mínimo de alvo de toque, em vez de exigir que a pessoa acerte
+    // uma barra de 14px. O tooltip carrega os números EXATOS (sem milhares),
+    // mesma regra do orçamento, e o Tomador INTEIRO (o rótulo pode estar
+    // truncado).
+    var tipValor = escapeHtml(linha.sup) + (linha.tomador ? ' — ' + escapeHtml(linha.tomador) : '')
+      + ' · Base ' + formatarNumero(linha.valorBase, 0)
+      + ' · Realizado ' + formatarNumero(linha.valorRealizado, 0)
+      + ' · Desvio ' + formatarDesvio(linha.desvio, false, 0);
+    alvos += '<rect class="grafico-hit" data-tooltip="' + tipValor + '" x="0"'
+      + ' y="' + (y - ALTURA_LINHA / 2) + '" width="' + PLOT_VALOR_FIM
+      + '" height="' + ALTURA_LINHA + '" fill="transparent"></rect>';
 
-      svg += '<rect class="barra-equipes" x="' + xEq + '" y="' + (y - 5) + '" width="' + comprimentoEq + '" height="10" fill="url(#' + patternId + ')" stroke="' + COR_EQUIPES + '" stroke-width="0.5"></rect>';
+    // --- Série secundária: o desvio de equipes, no plot próprio -----------
+    // SEMPRE lido da MATRIZ (Avanço Sond não rastreia equipes por furo -- ver
+    // compute-balanco.js), então pode ficar "sem dado" mesmo quando o desvio
+    // principal já tem valor. Mesmo cuidado: null não vira barra de
+    // comprimento zero, só não desenha.
+    if (linha.desvioEquipes === null || linha.desvioEquipes === undefined) return;
 
-      // Rótulo das equipes, em laranja, na ponta da barra de equipes.
-      var xPontaEq = paraDireitaEq ? (CENTRO_X + comprimentoEq + 6) : (CENTRO_X - comprimentoEq - 6);
-      var ancoraEq = paraDireitaEq ? 'start' : 'end';
-      var sinalEq = desvioEq > 0 ? '+' : '';
-      svg += '<text x="' + xPontaEq + '" y="' + (y + 15) + '" text-anchor="' + ancoraEq + '" fill="' + COR_EQUIPES + '" font-size="10">' + sinalEq + formatarNumero(desvioEq, 1) + ' eq.</text>';
-    }
+    var desvioEq = linha.desvioEquipes;
+    var comprimentoEq = escalaEquipes(desvioEq);
+    var paraDireitaEq = desvioEq >= 0;
+    var xEq = paraDireitaEq ? CENTRO_EQUIPES : CENTRO_EQUIPES - comprimentoEq;
+
+    marcas += barraDivergente(xEq, comprimentoEq, y, ALTURA_BARRA_EQUIPES, 'barra-equipes', COR_EQUIPES);
+
+    // Rótulo SEMPRE fora da barra (ela é fina demais para conter texto) e em
+    // tinta de texto, não em âmbar: quem carrega a identidade da série é a
+    // barra colorida ao lado, não o número. Em âmbar sobre fundo escuro o
+    // número ficava com contraste pior que o resto da página.
+    var xRotuloEq = paraDireitaEq ? (CENTRO_EQUIPES + comprimentoEq + 7) : (CENTRO_EQUIPES - comprimentoEq - 7);
+    rotulos += '<text class="balanco-rotulo-equipes" x="' + xRotuloEq.toFixed(1) + '" y="' + (y + 4)
+      + '" text-anchor="' + (paraDireitaEq ? 'start' : 'end') + '">'
+      + formatarDesvio(desvioEq, false, 1) + '</text>';
+
+    var tipEquipes = escapeHtml(linha.sup) + ' · Equipes base ' + formatarNumero(linha.equipesBase, 1)
+      + ' · Realizado ' + formatarNumero(linha.equipesRealizado, 1)
+      + ' · Δ ' + formatarDesvio(desvioEq, false, 1);
+    alvos += '<rect class="grafico-hit" data-tooltip="' + tipEquipes + '" x="' + PLOT_VALOR_FIM
+      + '" y="' + (y - ALTURA_LINHA / 2) + '" width="' + (LARGURA_SVG - PLOT_VALOR_FIM)
+      + '" height="' + ALTURA_LINHA + '" fill="transparent"></rect>';
   });
 
+  svg += marcas + alvos + rotulos;
+
+  // --- Ticks do eixo de valor, embaixo -------------------------------------
+  // Só existem quando existe escala (ou seja, quando há pelo menos um desvio
+  // comparável). Sem isso um gráfico inteiro de "Realizado não lançado"
+  // ganharia uma régua "0 / 0,25 / 0,5" inventada do nada.
+  if (escala) {
+    var yTicks = yFimLinhas + 18;
+    ticks.forEach(function (valorTick) {
+      svg += '<text class="grafico-eixo-texto" x="' + xDe(valorTick).toFixed(1) + '" y="' + yTicks
+        + '" text-anchor="middle">' + formatarDesvio(valorTick, usarMilhares, 0) + '</text>';
+    });
+  }
+
   svg += '</svg>';
-  return svg;
+  return '<div class="grafico-titulo">' + escapeHtml(tituloTexto) + '</div>' + svg;
 }
 
 // Junta as tipologias distintas presentes em 'indices', na ordem em que
@@ -260,16 +581,34 @@ function renderControles(estado) {
   return html;
 }
 
-// Monta a aba inteira: controles + um <div class="grafico-painel"> por
-// tipologia presente em 'indices'. registros/indices: mesmo par que o resto
-// do projeto usa (registros: array completo da MATRIZ; indices: quais
-// entram). opcoes: { periodo, base, dimensao, somenteAtivos, vigenteIdx,
-// baseline, demandas, ano } -- os 4 primeiros têm default (mesmos da aba:
-// mês vigente, Previsto, financeiro, somente ativos ligado); vigenteIdx e
-// baseline não têm default sensato e vêm de quem chama (render-semanal.js).
-// demandas/ano (opcionais, achado de 2026-08-01): ativam o Realizado do
-// Avanço Sond só pra Mês Vigente -- ver o comentário de calcularLinhas em
-// compute-balanco.js.
+// Legenda ÚNICA para a aba inteira, não uma por painel: são as mesmas três
+// séries em todos os gráficos, e repetir a legenda 10 vezes seria só ruído.
+// Em HTML e não em SVG porque assim ela não escala junto com o viewBox e o
+// texto fica no tamanho real da página.
+function renderLegenda() {
+  function item(cor, rotulo) {
+    return '<span class="legenda-item"><span class="legenda-swatch" style="background:' + cor + '"></span>'
+      + escapeHtml(rotulo) + '</span>';
+  }
+  return '<div class="legenda-balanco">'
+    + item(COR_ACIMA, 'Acima da base')
+    + item(COR_ABAIXO, 'Abaixo da base')
+    + item(COR_EQUIPES, 'Δ equipes (escala própria)')
+    + '<span class="legenda-item legenda-nota">sem base / não lançado: nenhuma barra</span>'
+    + '</div>';
+}
+
+// Monta a aba inteira: controles + legenda + um <div class="grafico-painel">
+// por tipologia presente em 'indices' + o balão de tooltip (posicionado por
+// inicializarTooltipBalanco, em render-semanal.js). registros/indices: mesmo
+// par que o resto do projeto usa (registros: array completo da MATRIZ;
+// indices: quais entram). opcoes: { periodo, base, dimensao, somenteAtivos,
+// vigenteIdx, baseline, demandas, ano } -- os 4 primeiros têm default (mesmos
+// da aba: mês vigente, Previsto, financeiro, somente ativos ligado);
+// vigenteIdx e baseline não têm default sensato e vêm de quem chama
+// (render-semanal.js). demandas/ano (opcionais, achado de 2026-08-01): ativam
+// o Realizado do Avanço Sond só pra Mês Vigente -- ver o comentário de
+// calcularLinhas em compute-balanco.js.
 function renderAbaBalanco(registros, indices, opcoes) {
   var opts = opcoes || {};
   var periodo = opts.periodo || 'mesVigente';
@@ -283,17 +622,42 @@ function renderAbaBalanco(registros, indices, opcoes) {
 
   var tipologias = listarTipologias(registros, indices);
 
+  // Quando NENHUMA tipologia tem um único desvio numérico, o problema não é de
+  // desenho: é que o período escolhido ainda não tem Realizado lançado. Sem
+  // este aviso a aba abre com dez painéis de "Realizado não lançado" e a
+  // pessoa fica sem saber se o dashboard quebrou ou se o dado é que não
+  // existe. Um aviso só, acima de tudo -- não um por painel.
+  var algumDesvio = false;
+
   var graficos = tipologias.map(function (tipologia) {
     var linhas = calcularLinhas({
       registros: registros, indices: indices, tipologia: tipologia,
       base: base, dimensao: dimensao, periodo: periodo,
       vigenteIdx: vigenteIdx, baseline: baseline, demandas: demandas, ano: ano,
     });
-    return '<div class="grafico-painel">' + renderGraficoTipologia(tipologia, linhas, { somenteAtivos: somenteAtivos }) + '</div>';
+    if (!algumDesvio) {
+      algumDesvio = linhas.some(function (linha) {
+        return !linha.semBase && linha.desvio !== null && linha.desvio !== undefined;
+      });
+    }
+    return '<div class="grafico-painel">'
+      + renderGraficoTipologia(tipologia, linhas, { somenteAtivos: somenteAtivos, dimensao: dimensao })
+      + '</div>';
   }).join('');
 
+  var aviso = (tipologias.length && !algumDesvio)
+    ? '<p class="aviso-balanco">Nenhum SUP tem Realizado lançado no período selecionado — só a coluna'
+      + ' <strong>Δ equipes</strong> tem dado. Troque o Período para comparar contra a base.</p>'
+    : '';
+
   return renderControles({ periodo: periodo, base: base, dimensao: dimensao, somenteAtivos: somenteAtivos })
-    + '<div class="graficos-balanco">' + graficos + '</div>';
+    + renderLegenda()
+    + aviso
+    + '<div class="graficos-balanco">' + graficos + '</div>'
+    + '<div id="balanco-tooltip" class="grafico-tooltip" style="display:none"></div>';
 }
 
-module.exports = { renderGraficoTipologia, escalaIndependente, renderAbaBalanco, renderControles, listarTipologias };
+module.exports = {
+  renderGraficoTipologia, escalaIndependente, calcularEscalaDivergente,
+  renderAbaBalanco, renderControles, renderLegenda, listarTipologias, GEOMETRIA,
+};

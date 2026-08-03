@@ -124,7 +124,55 @@ const CSS_BALANCO = `
     height: 36px; font-size: 13px; color: var(--text-primary);
   }
   .controle-balanco-check input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; }
-  .graficos-balanco { display: flex; flex-direction: column; gap: 28px; }
+
+  /* O painel dos gráficos ganha a MESMA superfície que #secao-grafico tem no
+     orçamento (rgba(26,26,25,0.68) + cantos de 8px), mas aplicada em
+     .graficos-balanco e não em #secao-balanco: os controles e a legenda ficam
+     ACIMA dessa superfície, como a barra de filtros do orçamento fica acima
+     da dele. #secao-balanco só precisa do position:relative, que é o que
+     ancora o balão de tooltip absoluto. */
+  #secao-balanco { position: relative; z-index: 1; }
+  .graficos-balanco {
+    display: flex; flex-direction: column; gap: 28px;
+    background: rgba(26,26,25,0.68); border-radius: 8px; padding: 18px 12px;
+  }
+
+  .legenda-balanco {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 18px;
+    margin: 0 0 16px; font-size: 12px; color: var(--text-secondary);
+  }
+  .legenda-item { display: inline-flex; align-items: center; gap: 7px; }
+  .legenda-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
+  .legenda-nota { color: var(--muted); font-style: italic; }
+
+  /* Aviso de "o período não tem Realizado" -- borda âmbar à esquerda, o mesmo
+     acento que a UI usa para chamar atenção sem gritar (não é um erro). */
+  .aviso-balanco {
+    margin: 0 0 16px; padding: 10px 14px; max-width: 90ch;
+    border-left: 3px solid #f6b53f; border-radius: 0 6px 6px 0;
+    background: rgba(246,181,63,0.07);
+    font-size: 13px; line-height: 1.5; color: var(--text-secondary);
+  }
+  .aviso-balanco strong { color: var(--text-primary); font-weight: 600; }
+
+  /* Nenhum <text> do gráfico pode capturar o mouse: as áreas de hover
+     (.grafico-hit) são desenhadas ANTES dos rótulos, então sem isto cada
+     rótulo abriria um buraco no hover da própria linha. */
+  .grafico-balanco text { pointer-events: none; }
+  .balanco-sup { fill: var(--text-primary); font-size: 11px; }
+  .balanco-tomador { fill: var(--text-secondary); }
+  .balanco-vazio { fill: var(--muted); font-size: 11px; font-style: italic; }
+  .balanco-cabecalho-coluna { fill: var(--muted); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .balanco-divisoria { stroke: var(--border); stroke-width: 1; }
+  /* Rótulo DENTRO da barra: tinta escura, escolhida pela luminância dos dois
+     preenchimentos (#7fd858 e #e0684f são claros o bastante para pedir tinta
+     escura em cima). Sem halo -- ele existe para separar texto do FUNDO da
+     página, e aqui o fundo é a própria barra. */
+  .balanco-rotulo-dentro { fill: #0d0d0d; font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .balanco-rotulo-equipes { fill: var(--text-secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
+  /* Um passo acima de --gridline (#2c2c2a): o zero é a base contra a qual
+     todo desvio é medido, não mais uma linha de grade. */
+  .balanco-eixo-zero { stroke: #4a4a46; stroke-width: 1; }
 `;
 
 // CSS da aba Semanal. Só uma regra hoje: a 3ª linha da tabela
@@ -432,6 +480,35 @@ function inicializarTooltipGraficoSemanal() {
   secao.addEventListener('mouseleave', function () { tooltip.style.display = 'none'; });
 }
 
+// Mesma mecânica para a aba Balanço de massa, com UMA diferença que justifica
+// a função separada em vez de reaproveitar a de cima: lá o balão
+// (#grafico-semanal-tooltip) vive FORA do innerHTML que é reescrito, então dá
+// para guardar a referência uma vez; aqui #balanco-tooltip é emitido por
+// renderAbaBalanco, ou seja, ele é DESCARTADO e recriado a cada redesenho
+// (troca de período/base/dimensão/filtro). Guardar a referência apontaria para
+// um elemento órfão depois do primeiro redesenho -- por isso a busca pelo id
+// acontece a cada evento. Quem escuta é #secao-balanco, que nunca é recriada,
+// então esta função é chamada UMA vez, de montarDashboard.
+function inicializarTooltipBalanco() {
+  var secao = document.getElementById('secao-balanco');
+  function esconder() {
+    var balao = document.getElementById('balanco-tooltip');
+    if (balao) balao.style.display = 'none';
+  }
+  secao.addEventListener('mousemove', function (e) {
+    var balao = document.getElementById('balanco-tooltip');
+    if (!balao) return;
+    var alvo = e.target.closest ? e.target.closest('[data-tooltip]') : null;
+    if (!alvo) { balao.style.display = 'none'; return; }
+    var rectSecao = secao.getBoundingClientRect();
+    balao.textContent = alvo.getAttribute('data-tooltip');
+    balao.style.display = 'block';
+    balao.style.left = (e.clientX - rectSecao.left + 14) + 'px';
+    balao.style.top = (e.clientY - rectSecao.top - 12) + 'px';
+  });
+  secao.addEventListener('mouseleave', esconder);
+}
+
 // Estado dos controles PRÓPRIOS da aba Balanço de massa (Período/Base/
 // Dimensão-2/Ativos) -- continuam locais a esta aba, aplicados DEPOIS do
 // indices que a barra compartilhada já filtrou (ver "Fluxo de dados" no
@@ -571,6 +648,9 @@ function montarDashboard(registros) {
   configurarAberturaFiltrosMulti();
   inicializarTooltipGraficoSemanal();
   recalcularSemanal();
+  // Depois de recalcularSemanal (que é quem cria #balanco-tooltip, via
+  // montarAbaBalanco) e UMA vez só -- ver inicializarTooltipBalanco.
+  inicializarTooltipBalanco();
   montarAbaDemandas();
 }
 

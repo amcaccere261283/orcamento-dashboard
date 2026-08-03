@@ -212,7 +212,12 @@ test('na página gerada, a base "Previsto Inicial" só marca "sem base" no SUP q
   // A asserção que a reconciliação sustenta: DOS TRÊS SUPs, exatamente UM
   // aparece como "sem base". Com as chaves cruas (sem reconciliarLinhaBase),
   // os três apareceriam -- e o rótulo perderia todo o significado.
-  assert.strictEqual(contarOcorrencias(svg, 'sem base'), 1, 'só SUP-0009-26 (o que de fato não estava no estudo) pode aparecer como "sem base"');
+  // Conta '>sem base<', não 'sem base' solto: a legenda da aba (renderLegenda,
+  // em render-aba-balanco.js) também traz a expressão em prosa ("sem base /
+  // não lançado: nenhuma barra"), e contar a substring crua somaria a legenda
+  // ao rótulo de verdade. '>sem base<' só casa com o conteúdo de um <text>,
+  // que é o rótulo preso ao eixo.
+  assert.strictEqual(contarOcorrencias(svg, '>sem base<'), 1, 'só SUP-0009-26 (o que de fato não estava no estudo) pode aparecer como "sem base"');
   assert.match(svg, /class="barra-acima"/, 'os dois SUPs com base têm desvio positivo (+700 e +300) -- precisa haver barra desenhada, não só rótulo');
 });
 
