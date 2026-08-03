@@ -125,36 +125,53 @@ function pendentesNaData(registros, indices, demandas, dataEpoch) {
   return total;
 }
 
-// Tendência semanal (Volume): semanas já fechadas ou em curso usam o
-// Realizado REAL daquela semana (já é fato, não precisa projetar); semanas
-// futuras distribuem PROPORCIONALMENTE AOS DIAS o que falta pra bater o
-// Previsto do mês -- mesmo raciocínio de dividirEmSemanas (compute-semanal.js):
-// uma semana futura de 7 dias recebe o dobro do saldo restante que uma de
-// 3-4 dias, não a mesma fatia igual por semana (achado de 2026-08-01,
-// mesmo problema que motivou o ajuste em dividirEmSemanas). Quando o
-// Realizado até agora já bateu ou passou o Previsto (saldo <= 0), as
-// semanas futuras continuam no mesmo ritmo médio já realizado POR DIA
-// (não por semana) em vez de projetar um valor negativo. indiceAtual === -1
-// (nenhuma semana do mês começou ainda -- dias de fronteira entre meses)
-// conta como "nenhuma semana elapsada": todas as semanas do mês são
-// futuras, e a Tendência reparte previstoMes proporcionalmente aos dias de
-// cada uma (mesmo padrão do Previsto).
+// Tendência semanal (Volume): semanas TOTALMENTE fechadas (antes da vigente)
+// usam o Realizado REAL daquela semana (já é fato, não precisa projetar). A
+// semana VIGENTE (em curso, ainda não fechou) projeta o TOTAL da semana
+// inteira: o que já foi realizado nela + o ritmo médio nos dias que ainda
+// faltam dela -- nunca só o Realizado parcial, que no primeiro dia de uma
+// semana nova é perto de zero e criaria um "degrau" irreal no gráfico
+// (achado de 2026-08-03: 1º dia de uma semana nova, Realizado ainda não
+// chegou, e a semana vigente caía no mesmo ramo das semanas fechadas --
+// mostrava um valor artificialmente baixo em vez de uma projeção). Semanas
+// futuras distribuem PROPORCIONALMENTE AOS DIAS o saldo que falta pra bater
+// o Previsto do mês -- mesmo raciocínio de dividirEmSemanas
+// (compute-semanal.js): uma semana futura de 7 dias recebe o dobro do saldo
+// restante que uma de 3-4 dias, não a mesma fatia igual por semana (achado
+// de 2026-08-01). Quando o Realizado até agora já bateu ou passou o
+// Previsto (saldo <= 0), os dias restantes (da vigente e das futuras)
+// continuam no mesmo ritmo médio já realizado POR DIA (não por semana) em
+// vez de projetar um valor negativo. indiceAtual === -1 (nenhuma semana do
+// mês começou ainda -- dias de fronteira entre meses) conta como "nenhuma
+// semana elapsada": todas as semanas do mês são futuras, e a Tendência
+// reparte previstoMes proporcionalmente aos dias de cada uma (mesmo padrão
+// do Previsto).
 // 'semanas' (opcional): as semanas reais do mês (ver semanasDoMes) --
 // necessárias pra pesar por dia. Sem elas, ou com comprimento diferente de
 // semanasRealizado.length (não deveria acontecer no fluxo real), cai na
 // divisão igual por semana antiga como fallback defensivo, mesmo padrão de
-// dividirEmSemanas. 'hojeEpoch' (opcional, mas sempre presente no fluxo
-// real -- ver temSemanasReais/temDemandas em renderAbaSemanal) clampa os
-// dias contados da ÚLTIMA semana elapsada: ela pode estar EM CURSO (ainda
-// não terminou), e realizadoAteAgora só soma produção até hojeEpoch --
-// contar os 7 dias inteiros dessa semana no denominador (em vez de só os
-// que já passaram) subestimaria o ritmo real (achado da revisão final:
-// julho com hoje=15/07 dentro de S3 contava 19 dias elapsados quando só 15
-// tinham de fato passado, subestimando o ritmo em ~21%). Pra semanas
+// dividirEmSemanas -- sem granularidade de dia, não dá pra saber quanto
+// falta da semana vigente, então ela cai no mesmo tratamento das semanas
+// futuras (comportamento anterior, inalterado). 'hojeEpoch' (opcional, mas
+// sempre presente no fluxo real -- ver temSemanasReais/temDemandas em
+// renderAbaSemanal) clampa os dias contados da ÚLTIMA semana elapsada: ela
+// pode estar EM CURSO (ainda não terminou), e realizadoAteAgora só soma
+// produção até hojeEpoch -- contar os 7 dias inteiros dessa semana no
+// denominador (em vez de só os que já passaram) subestimaria o ritmo real
+// (achado da revisão final: julho com hoje=15/07 dentro de S3 contava 19
+// dias elapsados quando só 15 tinham de fato passado, subestimando o ritmo
+// em ~21%). Os dias que SOBRAM da semana vigente (diasCheios - diasContados)
+// entram no pool de dias futuros (diasFuturos) -- sem isso eles
+// desapareciam do cálculo (não contavam nem como "já aconteceu" nem como
+// "falta acontecer"), e o saldo restante do mês acabava distribuído só
+// entre as semanas totalmente futuras, sobrecarregando-as (achado de
+// 2026-08-03, mesmo golpe que motivou toda a correção acima). Pra semanas
 // TOTALMENTE no passado (mês selecionado já fechou por completo),
-// hojeEpoch-inicio+1 excede os dias da própria semana, e o Math.min
-// devolve os dias cheios de volta -- sem isso, o denominador ficaria maior
-// que o real quando o usuário olha um mês já fechado.
+// hojeEpoch-inicio+1 excede os dias da própria semana, o Math.min devolve
+// os dias cheios de volta, e os "dias restantes" da última semana viram 0 --
+// sem isso, o denominador ficaria maior que o real quando o usuário olha um
+// mês já fechado, e a "projeção" da última semana coincidiria com seu
+// Realizado de qualquer forma (nada a mais pra somar).
 function calcularTendenciaSemanal(previstoMes, semanasRealizado, indiceAtual, semanas, hojeEpoch) {
   var numSemanas = semanasRealizado.length;
   if (previstoMes === null) return semanasRealizado.map(function () { return null; });
@@ -170,22 +187,29 @@ function calcularTendenciaSemanal(previstoMes, semanasRealizado, indiceAtual, se
   var saida = [];
   if (semanasValidas) {
     var diasElapsados = 0;
+    var diasRestantesSemanaVigente = 0; // dias que faltam pra fechar a última semana elapsada (0 se ela já fechou por completo, ou se nenhuma semana começou)
     for (var se = 0; se < semanasElapsadas; se++) {
       var diasCheios = diasNaSemana(semanas[se]);
       var diasAteHoje = typeof hojeEpoch === 'number' ? hojeEpoch - semanas[se].inicio + 1 : diasCheios;
-      diasElapsados += Math.min(diasCheios, diasAteHoje);
+      var diasContados = Math.min(diasCheios, diasAteHoje);
+      diasElapsados += diasContados;
+      if (se === semanasElapsadas - 1) diasRestantesSemanaVigente = diasCheios - diasContados;
     }
-    var diasFuturos = 0;
+    var diasFuturos = diasRestantesSemanaVigente;
     for (var fu = semanasElapsadas; fu < numSemanas; fu++) diasFuturos += diasNaSemana(semanas[fu]);
     var ritmoPorDia = diasElapsados > 0 ? realizadoAteAgora / diasElapsados
       : (diasElapsados + diasFuturos > 0 ? previstoMes / (diasElapsados + diasFuturos) : 0);
 
     for (var i = 0; i < numSemanas; i++) {
-      if (i < semanasElapsadas) { saida.push(semanasRealizado[i]); continue; }
-      var dias = diasNaSemana(semanas[i]);
-      saida.push(saldoRestante > 0
-        ? (diasFuturos > 0 ? saldoRestante * dias / diasFuturos : 0)
-        : ritmoPorDia * dias);
+      if (i < semanasElapsadas - 1) { saida.push(semanasRealizado[i]); continue; } // semana TOTALMENTE fechada antes da vigente
+      var diasDestaSemana = i === semanasElapsadas - 1 ? diasRestantesSemanaVigente : diasNaSemana(semanas[i]);
+      var projecaoDias = saldoRestante > 0
+        ? (diasFuturos > 0 ? saldoRestante * diasDestaSemana / diasFuturos : 0)
+        : ritmoPorDia * diasDestaSemana;
+      // Semana vigente: soma o que já é fato (semanasRealizado[i]) + o ritmo
+      // projetado só pros dias que ainda faltam dela. Semana futura: nenhum
+      // fato ainda, então a projeção sozinha já é o total da semana.
+      saida.push(i === semanasElapsadas - 1 ? semanasRealizado[i] + projecaoDias : projecaoDias);
     }
   } else {
     var ritmoRealizado = semanasElapsadas > 0 ? realizadoAteAgora / semanasElapsadas : previstoMes / numSemanas;
@@ -314,16 +338,25 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
     // O Fechamento (coluna Total) é calculado ANTES da supressão abaixo --
     // continua sendo o projetado pro mês inteiro (realizado até agora +
     // tendência das semanas futuras), não só a soma do que sobrar depois de
-    // suprimir. Achado de 2026-08-02: nas colunas por semana, mostrar
-    // Tendência numa semana já fechada ou em curso só duplicava o Realizado
-    // dela (calcularTendenciaSemanal usa o próprio Realizado como valor das
-    // semanas elapsadas) -- decisão do dono do projeto: Tendência por
-    // semana só faz sentido pra projetar o que ainda não aconteceu, então
-    // as colunas elapsadas (i < semanasElapsadas) viram sem-dado, e só as
-    // futuras continuam mostrando a projeção.
+    // suprimir.
     semanasTendenciaCompleta = calcularTendenciaSemanal(mesVigente, semanasRealizado, semanasElapsadas - 1, semanas, hojeEpoch);
     fechamentoTendencia = fecharMes(semanasTendenciaCompleta, dimensao);
-    semanasTendencia = semanasTendenciaCompleta.map(function (v, i) { return i < semanasElapsadas ? null : v; });
+
+    // Supressão por coluna: só as semanas TOTALMENTE fechadas (fim < hoje)
+    // viram sem-dado -- Tendência ali só duplicaria o Realizado, que já é
+    // fato (achado de 2026-08-02). A semana VIGENTE (em curso, fim >= hoje)
+    // continua mostrando Tendência: é a projeção do total dela
+    // (calcularTendenciaSemanal já soma o Realizado parcial + o ritmo nos
+    // dias que faltam), nunca o Realizado parcial sozinho -- mostrar só o
+    // Realizado parcial da vigente criava um degrau irreal no primeiro dia
+    // de uma semana nova (Realizado ainda zerado) e sobrecarregava as
+    // semanas futuras, que herdavam o saldo que deveria ter sido repartido
+    // com os dias restantes dela (achado de 2026-08-03).
+    var semanasFechadas = 0;
+    for (var sf = 0; sf < semanas.length; sf++) {
+      if (semanas[sf].fim < hojeEpoch) semanasFechadas++;
+    }
+    semanasTendencia = semanasTendenciaCompleta.map(function (v, i) { return i < semanasFechadas ? null : v; });
   }
 
   return {

@@ -49,24 +49,35 @@ function cortarAcumuladoNasElapsadas(acumulado, semanasElapsadas) {
 // Realizado (as semanas elapsadas da série completa SÃO o Realizado, ver
 // calcularTendenciaSemanal), a curva nasce no ponto onde o Realizado parou e
 // só sobe a partir da primeira semana ainda não começada. O ponto de junção --
-// índice semanasElapsadas-1, a semana em curso -- recebe o acumulado REAL do
-// Realizado ali, que é o que dá continuidade visual entre as duas linhas.
+// índice semanasElapsadas-1, a semana em curso -- recebe o acumulado da
+// própria série completa até ali (soma de semanasCompletas[0..ancora]), NÃO o
+// acumulado do Realizado bruto (achado de 2026-08-03, ver Tendência da semana
+// vigente em render-aba-semanal.js): desde que a semana vigente passou a
+// projetar seu PRÓPRIO total (Realizado parcial dela + ritmo nos dias que
+// faltam, em vez de só o Realizado parcial), o valor de semanasCompletas no
+// índice-âncora pode ser MAIOR que o Realizado bruto ali -- somar a partir do
+// Realizado bruto, como antes, perderia essa parcela e o fim da curva ficava
+// menor que o Fechamento da Tabela Semanal (quebra do invariante abaixo).
+// Nas semanas TOTALMENTE fechadas antes da âncora, semanasCompletas já é
+// idêntico ao Realizado bruto -- por isso este cálculo não muda nada quando
+// não há projeção nenhuma acontecendo na semana vigente (ex.: hoje é o último
+// dia dela, sem dias restantes pra projetar).
 //
-// O ponto final não muda com esse recorte: a soma das semanas elapsadas da
-// série completa é, por construção, o próprio acumulado de Realizado no ponto
-// de junção. Ou seja, o fim da curva continua sendo o projetado do mês inteiro
-// -- o mesmo número da coluna Total da Tabela Semanal, invariante travado pela
+// O ponto final não muda com esse recorte: a soma de TODA a série completa é,
+// por construção (calcularTendenciaSemanal), sempre o previstoMes do mês --
+// o mesmo número da coluna Total da Tabela Semanal, invariante travado pela
 // revisão de 2026-08-02 e por teste.
 //
 // Mês inteiramente futuro (semanasElapsadas 0): não há de onde partir, a série
 // acumula sozinha desde a primeira semana, do jeito usual.
-function calcularAcumuladoAposElapsadas(semanasFuturas, acumuladoRealizado, semanasElapsadas) {
-  var valores = semanasFuturas || [];
+function calcularAcumuladoAposElapsadas(semanasCompletas, semanasElapsadas) {
+  var valores = semanasCompletas || [];
   var ancora = semanasElapsadas - 1;
   if (ancora < 0) return calcularAcumulado(valores);
 
   var resultado = new Array(valores.length).fill(null);
-  var soma = (acumuladoRealizado || [])[ancora] || 0;
+  var soma = 0;
+  for (var s = 0; s <= ancora; s++) soma += valores[s] || 0;
   resultado[ancora] = soma;
   for (var i = ancora + 1; i < valores.length; i++) {
     soma += valores[i] || 0;

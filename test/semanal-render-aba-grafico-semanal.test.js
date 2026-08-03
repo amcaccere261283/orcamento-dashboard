@@ -120,23 +120,25 @@ test('construirPainelGraficoSemanalHtml: os valores desenhados no gráfico batem
   // Só 3 semanas de Realizado são positivas (2, 3, 1) -- construirColunasSvg
   // só desenha <path> quando a barra tem altura > 0 (0 furo = altura zero,
   // desenharBarraArredondada devolve ''). Previsto tem valor em toda
-  // semana; Tendência (achado de 2026-08-02) fica sem-dado nas semanas já
-  // elapsadas (S1/S2/S3 aqui, hoje=15/07) e só as futuras (S4/S5) desenham
-  // barra -- não checa a contagem aqui de propósito, isso já é coberto no
-  // teste de construirGraficoSemanalSvg isolado (mais acima neste arquivo).
+  // semana; Tendência fica sem-dado só nas semanas TOTALMENTE fechadas
+  // (S1/S2 aqui, hoje=15/07 dentro de S3 -- achado de 2026-08-03: a semana
+  // vigente projeta seu próprio total em vez de ficar sem-dado) e S3/S4/S5
+  // desenham barra -- não checa a contagem aqui de propósito, isso já é
+  // coberto no teste de construirGraficoSemanalSvg isolado (mais acima
+  // neste arquivo).
 });
 
 // Achado da revisão final (2026-08-02): o painel Semanal (barras) e o
 // painel Acumulado (curva S) usam a MESMA série de Tendência, mas com
 // tratamentos diferentes -- o de barras precisa da versão SUPRIMIDA (pra
-// não desenhar barra nas semanas elapsadas), o Acumulado precisa da versão
-// COMPLETA (calcularAcumulado trata null como "ainda não começou a
-// acumular" -- acumular a versão suprimida faria a curva reiniciar do zero
-// na 1ª semana futura, perdendo o que já foi realizado). Este teste prova
-// que o ponto final da curva Acumulada de Tendência bate com o Fechamento
-// que a Tabela Semanal mostra, mesmo com semanas elapsadas suprimidas no
-// painel de barras.
-test('construirPainelGraficoSemanalHtml: o ponto final da curva Acumulada de Tendência bate com o Fechamento da Tabela Semanal, mesmo com as semanas elapsadas suprimidas no painel de barras', () => {
+// não desenhar barra nas semanas TOTALMENTE fechadas), o Acumulado precisa
+// da versão COMPLETA (calcularAcumulado trata null como "ainda não começou
+// a acumular" -- acumular a versão suprimida faria a curva reiniciar do
+// zero na 1ª semana futura, perdendo o que já foi realizado). Este teste
+// prova que o ponto final da curva Acumulada de Tendência bate com o
+// Fechamento que a Tabela Semanal mostra, mesmo com as semanas fechadas
+// suprimidas no painel de barras.
+test('construirPainelGraficoSemanalHtml: o ponto final da curva Acumulada de Tendência bate com o Fechamento da Tabela Semanal, mesmo com as semanas fechadas suprimidas no painel de barras', () => {
   const { calcularSeriesSemanaisDimensao } = require('../tools/semanal/render-aba-semanal.js');
   const { semanasDoMes, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_REALIZADO_CONHECIDO } };
@@ -146,10 +148,13 @@ test('construirPainelGraficoSemanalHtml: o ponto final da curva Acumulada de Ten
   const series = calcularSeriesSemanaisDimensao(
     [registro(1000)], [0], 'volume', VIGENTE_JULHO, semanas, semanas.length, true, indiceAtual, demandas, HOJE_15_JUL
   );
-  // Pré-condição: confirma que este fixture tem semanas elapsadas
+  // Pré-condição: confirma que este fixture tem semanas TOTALMENTE fechadas
   // suprimidas na tabela (senão o teste não provaria nada) e um Fechamento
-  // de verdade calculado.
-  assert.deepStrictEqual(series.semanasTendencia.slice(0, 3), [null, null, null], 'S1/S2/S3 precisam estar suprimidas pra este teste fazer sentido');
+  // de verdade calculado. Hoje=15/07 está dentro de S3 (vigente, em curso)
+  // -- só S1/S2 (fim < hoje) estão totalmente fechadas; S3 mostra sua
+  // própria projeção (achado de 2026-08-03), não fica sem-dado.
+  assert.deepStrictEqual(series.semanasTendencia.slice(0, 2), [null, null], 'S1/S2 precisam estar suprimidas pra este teste fazer sentido');
+  assert.ok(typeof series.semanasTendencia[2] === 'number', 'S3 (vigente) mostra sua própria projeção, não fica sem-dado');
   assert.ok(typeof series.fechamentoTendencia === 'number' && series.fechamentoTendencia > 0);
 
   const html = construirPainelGraficoSemanalHtml(

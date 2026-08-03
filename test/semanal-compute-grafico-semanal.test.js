@@ -93,30 +93,47 @@ test('o corte usa o CALENDÁRIO, não os valores -- semana passada que fechou em
 });
 
 test('a Tendência acumulada nasce exatamente onde o Realizado parou, e só sobe depois da semana em curso', () => {
-  const acumuladoRealizado = calcularAcumulado([10, 20, 0, 0, 0]); // [10,30,30,30,30]
   // Série completa da Tendência: as elapsadas repetem o Realizado (ver
-  // calcularTendenciaSemanal), as futuras trazem a projeção.
+  // calcularTendenciaSemanal), as futuras trazem a projeção. Quando a última
+  // elapsada NÃO tem projeção extra (seu valor na série completa é igual ao
+  // Realizado bruto dela), o ponto de junção soma o mesmo que o acumulado do
+  // Realizado somaria.
   const tendenciaCompleta = [10, 20, 25, 25, 25];
 
-  const curva = calcularAcumuladoAposElapsadas(tendenciaCompleta, acumuladoRealizado, 2);
+  const curva = calcularAcumuladoAposElapsadas(tendenciaCompleta, 2);
 
   assert.deepStrictEqual(curva.slice(0, 1), [null], 'nada de Tendência antes do ponto de junção');
-  assert.strictEqual(curva[1], 30, 'o ponto de junção é a última semana elapsada, no valor acumulado do Realizado');
+  assert.strictEqual(curva[1], 30, 'o ponto de junção é a soma da série completa até a última semana elapsada');
   assert.deepStrictEqual(curva, [null, 30, 55, 80, 105]);
+});
+
+test('quando a última semana elapsada TEM projeção extra (semana vigente, achado de 2026-08-03), o ponto de junção soma essa parcela -- não só o Realizado bruto dela', () => {
+  // A semana vigente (índice 1) tem Realizado bruto 20, mas a série completa
+  // da Tendência projeta 35 pra ela (Realizado parcial + ritmo nos dias que
+  // faltam) -- ver calcularTendenciaSemanal, render-aba-semanal.js. O ponto
+  // de junção precisa refletir essa parcela extra (15), não só o Realizado
+  // bruto (que somaria 30): senão o fim da curva ficaria menor que o
+  // Fechamento da Tabela Semanal (fecharMes sobre a série completa inteira).
+  const tendenciaCompleta = [10, 35, 25, 25, 25];
+
+  const curva = calcularAcumuladoAposElapsadas(tendenciaCompleta, 2);
+
+  assert.strictEqual(curva[1], 45, 'ponto de junção = soma da série completa até ali (10+35), não do Realizado bruto (10+20=30)');
+  assert.strictEqual(curva[curva.length - 1], tendenciaCompleta.reduce((a, b) => a + b, 0),
+    'o fim da curva continua batendo com a soma da série completa inteira -- o mesmo número do Fechamento da Tabela');
 });
 
 test('o fim da Tendência acumulada continua batendo com o Fechamento da Tabela Semanal', () => {
   // O invariante que a revisão de 2026-08-02 já tinha travado: o ponto final
   // desta curva é o projetado do mês inteiro, o MESMO número que a coluna
   // Total mostra (fecharMes sobre a série completa). Recortar o começo da
-  // linha não pode mexer nisso -- e não mexe, porque as semanas elapsadas da
-  // série completa são o próprio Realizado, então herdar o acumulado do
-  // Realizado no ponto de junção soma exatamente a mesma coisa.
-  const semanasRealizado = [10, 20, 0, 0, 0];
+  // linha não pode mexer nisso -- calcularAcumuladoAposElapsadas soma a
+  // série completa inteira (0..N-1), só reorganizando ONDE o acumulado
+  // aparece null (antes do ponto de junção) ou visível.
   const tendenciaCompleta = [10, 20, 25, 25, 25];
   const totalCompleto = tendenciaCompleta.reduce((a, b) => a + b, 0);
 
-  const curva = calcularAcumuladoAposElapsadas(tendenciaCompleta, calcularAcumulado(semanasRealizado), 2);
+  const curva = calcularAcumuladoAposElapsadas(tendenciaCompleta, 2);
 
   assert.strictEqual(curva[curva.length - 1], totalCompleto);
 });
@@ -125,7 +142,7 @@ test('mês sem nenhuma semana elapsada: a Tendência acumula sozinha desde a pri
   // Mês inteiramente futuro -- não há Realizado de onde partir, então a curva
   // é o acumulado usual, sem ponto de junção nenhum.
   assert.deepStrictEqual(
-    calcularAcumuladoAposElapsadas([25, 25, 25, 25], [null, null, null, null], 0),
+    calcularAcumuladoAposElapsadas([25, 25, 25, 25], 0),
     [25, 50, 75, 100],
   );
 });

@@ -341,17 +341,21 @@ function construirPainelGraficoSemanalHtml(registros, indices, dimensao, vigente
   // - Realizado morre na semana em curso. Sem isso ele seguia reto até o fim
   //   do mês, porque semanasRealizado traz 0 (não null) nas semanas futuras --
   //   uma linha horizontal que se lê como "o total parou de crescer".
-  // - Tendência nasce nesse mesmo ponto, no valor acumulado do Realizado, e só
-  //   sobe depois da semana em curso. Antes ela era o acumulado da série
-  //   COMPLETA desde a semana 1, o que a fazia correr sobreposta ao Realizado
-  //   por todo o trecho já realizado -- duas linhas dizendo o mesmo número.
+  // - Tendência nasce nesse mesmo ponto (índice da semana em curso), no valor
+  //   acumulado da própria série COMPLETA até ali -- não necessariamente igual
+  //   ao acumulado do Realizado bruto (achado de 2026-08-03: a semana em
+  //   curso, em render-aba-semanal.js, passou a projetar seu PRÓPRIO total --
+  //   Realizado parcial + ritmo nos dias que faltam dela -- em vez de só o
+  //   Realizado parcial; quando isso acontece, o ponto de junção fica um
+  //   pouco ACIMA de onde o Realizado parou, um pequeno salto visual que
+  //   troca por manter o fim da curva sempre igual ao Fechamento). Antes dessa
+  //   correção, as duas coincidiam sempre -- por isso não desenha marcador
+  //   próprio ali (ver indiceConector): o Realizado já desenhou o dele, e o
+  //   salto (quando existe) é só a própria linha subindo, sem rótulo.
   //
-  // O motivo de a série completa (e não a suprimida) continuar sendo a entrada
-  // é o achado da revisão anterior: acumular a versão suprimida recomeçaria a
-  // soma do zero na primeira semana futura e o ponto final divergiria do
-  // Fechamento da Tabela Semanal. Com o recorte, esse ponto final continua
-  // idêntico -- as semanas elapsadas da série completa SÃO o Realizado, então
-  // herdar o acumulado dele no ponto de junção soma exatamente o mesmo total.
+  // O ponto final continua idêntico ao Fechamento da Tabela Semanal --
+  // calcularAcumuladoAposElapsadas soma a série COMPLETA inteira, que por
+  // construção sempre fecha em previstoMes (ver calcularTendenciaSemanal).
   // O painel Semanal (barras) segue usando a versão suprimida em 'valores',
   // que é o que decide se desenha barra/tooltip.
   var acumuladoRealizado = calcularAcumulado(series.semanasRealizado);
@@ -359,7 +363,7 @@ function construirPainelGraficoSemanalHtml(registros, indices, dimensao, vigente
   var acumuladoPorSerie = {
     previsto: calcularAcumulado(series.semanasPrevisto),
     realizado: cortarAcumuladoNasElapsadas(acumuladoRealizado, elapsadas),
-    tendencia: calcularAcumuladoAposElapsadas(series.semanasTendenciaCompleta, acumuladoRealizado, elapsadas),
+    tendencia: calcularAcumuladoAposElapsadas(series.semanasTendenciaCompleta, elapsadas),
   };
   // Só a Tendência tem ponto de junção, e só quando existe alguma semana
   // elapsada de onde partir (mês inteiramente futuro não tem Realizado, a
