@@ -25,6 +25,56 @@ function calcularAcumulado(valores) {
   });
 }
 
+// --- Recorte das curvas acumuladas (2026-08-03) ----------------------------
+// Porte do par calcularAcumuladoAposRealizado/cortarAcumuladoNoUltimoDado do
+// orçamento (tools/orcamento/render-dashboard.js), com UMA diferença que vale
+// registrar: lá o ponto de corte é DESCOBERTO nos valores (ultimoIndiceComDado
+// mais removerZerosFinaisNaoReportados), porque a MATRIZ escreve 0 em mês não
+// reportado e não existe jeito de distinguir isso de um zero real. Aqui existe
+// calendário -- a semana em curso é a última elapsada, e nenhuma semana depois
+// dela pode ter Realizado -- então o corte vem de `semanasElapsadas`, não de
+// olhar o dado. Isso deixa passar ileso o caso real de uma semana já fechada
+// ter terminado em 0 furos, que a heurística do orçamento cortaria fora.
+
+// O acumulado de Realizado não continua reto até o fim do mês depois da última
+// semana com dado: dali em diante é null. Uma linha horizontal ali diz "o
+// total parou de crescer", quando o que houve foi só o mês ainda não ter
+// chegado lá -- e semanasRealizado traz 0 (não null) nas semanas futuras de
+// propósito, então sem este corte o acumulado ficaria mesmo flat.
+function cortarAcumuladoNasElapsadas(acumulado, semanasElapsadas) {
+  return (acumulado || []).map(function (v, i) { return i < semanasElapsadas ? v : null; });
+}
+
+// Acumulado da Tendência: em vez de correr desde a semana 1 por cima do
+// Realizado (as semanas elapsadas da série completa SÃO o Realizado, ver
+// calcularTendenciaSemanal), a curva nasce no ponto onde o Realizado parou e
+// só sobe a partir da primeira semana ainda não começada. O ponto de junção --
+// índice semanasElapsadas-1, a semana em curso -- recebe o acumulado REAL do
+// Realizado ali, que é o que dá continuidade visual entre as duas linhas.
+//
+// O ponto final não muda com esse recorte: a soma das semanas elapsadas da
+// série completa é, por construção, o próprio acumulado de Realizado no ponto
+// de junção. Ou seja, o fim da curva continua sendo o projetado do mês inteiro
+// -- o mesmo número da coluna Total da Tabela Semanal, invariante travado pela
+// revisão de 2026-08-02 e por teste.
+//
+// Mês inteiramente futuro (semanasElapsadas 0): não há de onde partir, a série
+// acumula sozinha desde a primeira semana, do jeito usual.
+function calcularAcumuladoAposElapsadas(semanasFuturas, acumuladoRealizado, semanasElapsadas) {
+  var valores = semanasFuturas || [];
+  var ancora = semanasElapsadas - 1;
+  if (ancora < 0) return calcularAcumulado(valores);
+
+  var resultado = new Array(valores.length).fill(null);
+  var soma = (acumuladoRealizado || [])[ancora] || 0;
+  resultado[ancora] = soma;
+  for (var i = ancora + 1; i < valores.length; i++) {
+    soma += valores[i] || 0;
+    resultado[i] = soma;
+  }
+  return resultado;
+}
+
 // Arredonda o teto do eixo Y pro próximo degrau "limpo" -- MESMA função do
 // orçamento (tools/orcamento/render-dashboard.js, calcularEscalaEixo),
 // portada sem nenhuma mudança: é matemática pura sobre um valor máximo, não
@@ -43,4 +93,7 @@ function calcularEscalaEixo(valorMax) {
   return { max: passo * GRAFICO_NUM_TICKS, passo: passo };
 }
 
-module.exports = { calcularAcumulado, calcularEscalaEixo, GRAFICO_NUM_TICKS };
+module.exports = {
+  calcularAcumulado, calcularEscalaEixo, GRAFICO_NUM_TICKS,
+  cortarAcumuladoNasElapsadas, calcularAcumuladoAposElapsadas,
+};

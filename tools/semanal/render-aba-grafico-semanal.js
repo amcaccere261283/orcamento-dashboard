@@ -1,7 +1,10 @@
 'use strict';
 const { semanasDoMes, indiceSemanaAtual } = require('./compute-semanal.js');
 const { calcularSeriesSemanaisDimensao, formatarIntervaloSemana } = require('./render-aba-semanal.js');
-const { calcularAcumulado, calcularEscalaEixo, GRAFICO_NUM_TICKS } = require('./compute-grafico-semanal.js');
+const {
+  calcularAcumulado, calcularEscalaEixo, GRAFICO_NUM_TICKS,
+  cortarAcumuladoNasElapsadas, calcularAcumuladoAposElapsadas,
+} = require('./compute-grafico-semanal.js');
 
 // Este módulo roda tanto no Node (testes) quanto embrulhado no navegador via
 // buildBrowserBundle -- por isso 'var'/'function', não 'const'/arrow, e os
@@ -236,6 +239,13 @@ function construirLinhasSvg(dadosPorSerie, campo, escala, alturaPlot, larguraSem
       var x = margem.esquerda + i * larguraSemana + larguraSemana / 2;
       var y = margem.topo + alturaPlot - escalaLinear(valor, escala.max, alturaPlot);
       trecho.push({ x: x, y: y });
+      // No ponto de junção (indiceConector, ver construirPainelGraficoSemanalHtml)
+      // a Tendência divide x,y com o Realizado, que já desenhou marcador,
+      // tooltip e rótulo ali. O vértice entra na polilinha do mesmo jeito --
+      // é dele que a linha parte -- mas nada é redesenhado por cima. Mesmo
+      // tratamento que o Gráfico do orçamento já dá ao mês de conexão.
+      var ehConector = d.indiceConector !== null && d.indiceConector !== undefined && i === d.indiceConector;
+      if (ehConector) return;
       svg += '<circle class="grafico-marcador" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4" fill="' + SERIE_COR[d.serie] + '" stroke="var(--surface-1)" stroke-width="2"/>';
       svg += '<circle class="grafico-hit" data-tooltip="' + rotuloSemanaTooltip(i, semanas) + ' · ' + SERIE_LABELS[d.serie] + ': ' + formatarNumero(valor, casasDecimais) + '" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="10" fill="transparent"/>';
       if (valor) {
@@ -320,18 +330,48 @@ function construirPainelGraficoSemanalHtml(registros, indices, dimensao, vigente
   // sem-dado pros dois nesse caso).
   var seriesVisiveis = dimensao === 'equipes' ? ['previsto'] : ORDEM_SERIES_GRAFICO;
   var valoresPorSerie = { previsto: series.semanasPrevisto, realizado: series.semanasRealizado, tendencia: series.semanasTendencia };
-  // O Acumulado de Tendência usa a versão COMPLETA (semanasTendenciaCompleta,
-  // sem a supressão das semanas elapsadas -- ver render-aba-semanal.js) --
-  // achado da revisão final: calcularAcumulado trata null como "ainda não
-  // começou a acumular" (contrato documentado em compute-grafico-semanal.js),
-  // então acumular a versão SUPRIMIDA faria a curva recomeçar do zero na
-  // primeira semana futura, perdendo o que já foi realizado -- o ponto final
-  // divergiria do Fechamento que a Tabela Semanal mostra (calculado a partir
-  // da versão completa). O painel Semanal (barras) continua usando a versão
-  // suprimida em 'valores', que é o que decide se desenha barra/tooltip.
-  var valoresParaAcumuladoPorSerie = { previsto: series.semanasPrevisto, realizado: series.semanasRealizado, tendencia: series.semanasTendenciaCompleta };
+  // No Acumulado as duas curvas de acompanhamento são RECORTADAS pelo
+  // calendário (pedido do dono do projeto, 2026-08-03):
+  //
+  //   Realizado  ──────●
+  //                    ╰────── Tendência
+  //              S1 S2 S3 S4 S5
+  //                    └── semana em curso: ponto de junção
+  //
+  // - Realizado morre na semana em curso. Sem isso ele seguia reto até o fim
+  //   do mês, porque semanasRealizado traz 0 (não null) nas semanas futuras --
+  //   uma linha horizontal que se lê como "o total parou de crescer".
+  // - Tendência nasce nesse mesmo ponto, no valor acumulado do Realizado, e só
+  //   sobe depois da semana em curso. Antes ela era o acumulado da série
+  //   COMPLETA desde a semana 1, o que a fazia correr sobreposta ao Realizado
+  //   por todo o trecho já realizado -- duas linhas dizendo o mesmo número.
+  //
+  // O motivo de a série completa (e não a suprimida) continuar sendo a entrada
+  // é o achado da revisão anterior: acumular a versão suprimida recomeçaria a
+  // soma do zero na primeira semana futura e o ponto final divergiria do
+  // Fechamento da Tabela Semanal. Com o recorte, esse ponto final continua
+  // idêntico -- as semanas elapsadas da série completa SÃO o Realizado, então
+  // herdar o acumulado dele no ponto de junção soma exatamente o mesmo total.
+  // O painel Semanal (barras) segue usando a versão suprimida em 'valores',
+  // que é o que decide se desenha barra/tooltip.
+  var acumuladoRealizado = calcularAcumulado(series.semanasRealizado);
+  var elapsadas = series.semanasElapsadas || 0;
+  var acumuladoPorSerie = {
+    previsto: calcularAcumulado(series.semanasPrevisto),
+    realizado: cortarAcumuladoNasElapsadas(acumuladoRealizado, elapsadas),
+    tendencia: calcularAcumuladoAposElapsadas(series.semanasTendenciaCompleta, acumuladoRealizado, elapsadas),
+  };
+  // Só a Tendência tem ponto de junção, e só quando existe alguma semana
+  // elapsada de onde partir (mês inteiramente futuro não tem Realizado, a
+  // curva nasce sozinha na semana 1 e nada é compartilhado com ninguém).
+  var indiceConectorTendencia = elapsadas > 0 ? elapsadas - 1 : null;
   var dadosPorSerie = seriesVisiveis.map(function (serie) {
-    return { serie: serie, valores: valoresPorSerie[serie], acumulado: calcularAcumulado(valoresParaAcumuladoPorSerie[serie]) };
+    return {
+      serie: serie,
+      valores: valoresPorSerie[serie],
+      acumulado: acumuladoPorSerie[serie],
+      indiceConector: serie === 'tendencia' ? indiceConectorTendencia : null,
+    };
   });
 
   var rotuloDimensao = DIMENSOES_ROTULO_SEMANAL[dimensao] || '';

@@ -156,15 +156,40 @@ test('construirPainelGraficoSemanalHtml: o ponto final da curva Acumulada de Ten
     [registro(1000)], [0], 'volume', VIGENTE_JULHO, semanas, semanas.length, true, indiceAtual, demandas, HOJE_15_JUL
   );
   const tooltipsAcumuladoTendencia = [...html.matchAll(/data-tooltip="([^"]*Tendência: [^"]*)"/g)].map((m) => m[1]);
-  // O painel Acumulado tem 5 tooltips de Tendência (uma por semana, S1..S5
-  // -- ao contrário do painel de barras, que só teria 2, S4/S5). O último
-  // (S5) precisa bater com fechamentoTendencia formatado sem casas decimais
-  // (mesmo formatarValorGrafico dos outros números do gráfico).
-  const tooltipsPainelAcumulado = tooltipsAcumuladoTendencia.slice(-5); // últimos 5 = os do painel Acumulado (o de barras vem primeiro no HTML)
-  assert.strictEqual(tooltipsPainelAcumulado.length, 5, 'painel Acumulado precisa ter um ponto de Tendência por semana, sem supressão');
-  const valorFinal = tooltipsPainelAcumulado[4].match(/Tendência: ([\d.]+)$/)[1].replace(/\./g, '');
+  // ATUALIZADO em 2026-08-03: a curva Acumulada de Tendência deixou de cobrir
+  // as 5 semanas. Ela nasce no ponto de junção (S3, a semana em curso, que não
+  // ganha marcador nem tooltip próprios -- o Realizado já desenha os dele ali)
+  // e só tem ponto próprio nas semanas futuras, S4 e S5. Antes eram 5 pontos,
+  // e os 3 primeiros corriam por cima do Realizado repetindo os mesmos números.
+  //
+  // O que NÃO mudou, e é o ponto deste teste: S5 continua sendo o projetado do
+  // mês inteiro, igual ao Fechamento da Tabela Semanal. O recorte muda de onde
+  // a linha parte, não quanto ela soma.
+  const tooltipsPainelAcumulado = tooltipsAcumuladoTendencia.slice(-2); // últimos = os do painel Acumulado (o de barras vem primeiro no HTML)
+  assert.strictEqual(tooltipsPainelAcumulado.length, 2, 'só S4/S5 têm ponto próprio de Tendência no Acumulado');
+  assert.match(tooltipsPainelAcumulado[0], /^S4 /, 'o primeiro ponto próprio é a primeira semana FUTURA, não a em curso');
+  const valorFinal = tooltipsPainelAcumulado[1].match(/Tendência: ([\d.]+)$/)[1].replace(/\./g, '');
   assert.strictEqual(Number(valorFinal), Math.round(series.fechamentoTendencia),
     'o ponto final (S5) da curva Acumulada precisa bater com o Fechamento da Tabela Semanal');
+});
+
+test('construirPainelGraficoSemanalHtml: no Acumulado o Realizado morre na semana em curso, não segue reto até o fim do mês', () => {
+  const { semanasDoMes, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_REALIZADO_CONHECIDO } };
+  const semanas = semanasDoMes(ANO, VIGENTE_JULHO);
+  const indiceAtual = indiceSemanaAtual(semanas, HOJE_15_JUL);
+
+  const html = construirPainelGraficoSemanalHtml(
+    [registro(1000)], [0], 'volume', VIGENTE_JULHO, semanas, semanas.length, true, indiceAtual, demandas, HOJE_15_JUL
+  );
+  const semanasComRealizado = [...html.matchAll(/data-tooltip="(S\d)[^"]*Realizado: [^"]*"/g)].map((m) => m[1]);
+  // O painel de barras desenha as 5 (semanasRealizado traz 0 nas futuras, e
+  // uma barra zero ainda é um dado: "nada aconteceu"). Já a CURVA acumulada
+  // não pode seguir reta em S4/S5 -- ali não há nada realizado, e uma linha
+  // horizontal se lê como "o total parou de crescer".
+  const noAcumulado = semanasComRealizado.slice(-3);
+  assert.deepStrictEqual(noAcumulado, ['S1', 'S2', 'S3'],
+    'a curva de Realizado vai até a semana em curso (S3) e para');
 });
 
 test('construirPainelGraficoSemanalHtml: Equipes mostra só Previsto, sem legenda (1 série só) e sem painel Acumulado', () => {
@@ -231,4 +256,29 @@ test('renderAbaGraficoSemanal: soma o Previsto só dos registros em "indices" --
   // dias): S2/S3/S4 (7 dias) = 200x7/31 = 45,16 -> 45 (casasDecimais=0);
   // não deveria ter nenhum traço do registro 0 (previsto 100).
   assert.match(html, />45</);
+});
+
+// --- Ponto de junção Realizado -> Tendência no Acumulado (2026-08-03) -------
+
+test('no ponto de junção do Acumulado só uma série desenha marcador e rótulo -- não dois por cima do outro', () => {
+  // Realizado morre na semana 2 (índice 1) e a Tendência nasce ali, no MESMO
+  // x,y. Sem indiceConector saem dois <circle> marcadores empilhados e dois
+  // rótulos com o mesmo número, um em cima do outro. Quem desenha os dois é o
+  // Realizado; a Tendência só usa o ponto para a linha partir dali.
+  const dados = [
+    { serie: 'realizado', valores: [10, 20, 0, 0], acumulado: [10, 30, null, null] },
+    { serie: 'tendencia', valores: [null, null, 25, 25], acumulado: [null, 30, 55, 80], indiceConector: 1 },
+  ];
+  const { svg } = construirGraficoAcumuladoSemanalSvg(dados, 0, 4, null);
+
+  const marcadores = [...svg.matchAll(/<circle class="grafico-marcador"[^>]*cx="([0-9.]+)" cy="([0-9.]+)"/g)]
+    .map((m) => m[1] + ',' + m[2]);
+  const duplicados = marcadores.filter((p, i) => marcadores.indexOf(p) !== i);
+  assert.deepStrictEqual(duplicados, [], `dois marcadores no mesmo ponto: ${duplicados}`);
+
+  // A linha da Tendência ainda TEM que passar pelo ponto de junção -- é dele
+  // que ela parte. Suprimir o marcador não pode ter suprimido o vértice.
+  const linhas = [...svg.matchAll(/<polyline class="grafico-linha" points="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(linhas.some((pts) => pts.split(' ').length === 3),
+    'a Tendência tem que ser uma polilinha de 3 pontos (junção + 2 semanas futuras)');
 });

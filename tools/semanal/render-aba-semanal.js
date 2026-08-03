@@ -279,6 +279,13 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
   // final da curva Acumulada de Tendência divergia do Fechamento da
   // Tabela Semanal, que É calculado a partir desta versão completa).
   var semanasTendenciaCompleta = semanasSemDado;
+  // Quantas semanas do mês já começaram (fechadas + a em curso). Sai daqui
+  // pra fora porque o painel Acumulado da aba Gráficos recorta as duas curvas
+  // por ELE, e não olhando os valores -- ver cortarAcumuladoNasElapsadas em
+  // compute-grafico-semanal.js. Fica 0 quando não há Realizado nenhum
+  // (dimensão Equipes, mês inválido, sem demandas), que é exatamente o que o
+  // recorte espera nesse caso: nada a mostrar de Realizado.
+  var semanasElapsadas = 0;
 
   // Realizado/Tendência: Volume conta furos reais; Financeiro pega o MESMO
   // furo real e multiplica pelo ticket médio do registro dono daquele furo
@@ -301,7 +308,6 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
     // Mesma contagem direta pelas datas que renderAbaSemanal já usava --
     // ver o comentário original em calcularTendenciaSemanal sobre por que
     // não usar indiceAtual aqui.
-    var semanasElapsadas = 0;
     for (var se = 0; se < semanas.length; se++) {
       if (semanas[se].inicio <= hojeEpoch) semanasElapsadas++;
     }
@@ -326,6 +332,7 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
     semanasRealizado: semanasRealizado, fechamentoRealizado: fechamentoRealizado,
     semanasTendencia: semanasTendencia, fechamentoTendencia: fechamentoTendencia,
     semanasTendenciaCompleta: semanasTendenciaCompleta,
+    semanasElapsadas: semanasElapsadas,
   };
 }
 
