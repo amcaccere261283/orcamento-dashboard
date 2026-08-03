@@ -9,8 +9,12 @@ test('todo destino do mapa é LAB.C ou LAB.E, nunca outra coisa', () => {
   }
 });
 
-test('mapa tem exatamente os 60 tipos de ensaio medidos na planilha real em 2026-07-31', () => {
-  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 60);
+test('mapa tem exatamente os 61 tipos de ensaio medidos na planilha real (60 em 2026-07-31 + TRI.UU acrescentado em 2026-08-02)', () => {
+  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 61);
+});
+
+test('TRI.UU (sem número de estágio) classifica igual à família TRI2.UU/TRI3.UU/TRI4.UU -- LAB.E', () => {
+  assert.strictEqual(classificarEnsaioLab('TRI.UU'), 'LAB.E');
 });
 
 test('amostra de Convencional: caracterização básica', () => {

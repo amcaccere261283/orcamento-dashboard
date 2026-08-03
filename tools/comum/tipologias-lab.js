@@ -42,6 +42,10 @@ const MAPA_TIPO_ENSAIO_LAB = {
   'MR.S': 'LAB.E',
   'MR.A': 'LAB.E',
   'MR.G': 'LAB.E',
+  // TRI.UU (sem número de estágio) -- achado de 2026-08-02, 2 linhas na
+  // planilha real, mesma família de TRI2.UU/TRI3.UU/TRI4.UU abaixo
+  // (triaxial UU), classificado igual por decisão do dono do projeto.
+  'TRI.UU': 'LAB.E',
   'TRI2.UU': 'LAB.E',
   'TRI2.CD': 'LAB.E',
   'TRI3.CU': 'LAB.E',
