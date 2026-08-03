@@ -80,6 +80,34 @@ gráfico Balanço de massa (barras divergentes por tipologia). Build:
 `cp dist/planejamento-semanal.html docs/planejamento-semanal.html` antes de commitar.
 `test/publicacao-docs-sincronizado.test.js` trava essa cópia para as duas páginas.
 
+### Recortes de tempo das abas 2 e 3 (2026-08-03)
+
+**Aba Gráficos, painel Acumulado**: o Realizado morre na semana em curso (antes seguia
+reto até o fim do mês, porque `semanasRealizado` traz 0 — não null — nas semanas futuras)
+e a Tendência nasce nesse ponto, no valor acumulado do Realizado, só subindo depois da
+semana em curso. O ponto de junção não desenha marcador/rótulo da Tendência
+(`indiceConector`, mesmo mecanismo do Gráfico do orçamento). O par
+`cortarAcumuladoNasElapsadas`/`calcularAcumuladoAposElapsadas`
+(`compute-grafico-semanal.js`) é o porte do que o orçamento já fazia por mês, com uma
+diferença: lá o corte é descoberto nos valores, aqui vem de `semanasElapsadas` — há
+calendário, então uma semana fechada que terminou em 0 furos não é confundida com "não
+reportado". **Invariante**: o ponto final da curva continua igual ao Fechamento da Tabela
+Semanal.
+
+**Aba Balanço de massa, recorte por semana**: uma caixa por semana real do mês
+(`semanasDoMes`, 4 a 6), marcáveis independentemente. Realizado é recortado por DATA (os
+furos do Avanço Sond têm data — `realizadoDoAvancos` recebe uma lista de janelas); a base
+mensal é repartida por DIA via `dividirEmSemanas`; Equipes não se reparte (é foto). Nada
+marcado = mês inteiro, e todas marcadas cai no mesmo caminho, então o número fica bit a
+bit igual ao de antes do recurso. Fora de "Mês vigente" o grupo aparece desabilitado e o
+cálculo ignora a seleção.
+
+**A aba Balanço não segue o seletor de mês do topo** — ela usa `window.__VIGENTE_IDX__`,
+enquanto a Tabela Semanal e os Gráficos usam `mesSelecionadoIdx`. É anterior a estas
+mudanças e continua assim de propósito (nenhuma decisão do dono do projeto sobre isso);
+se um dia mudar, `semanas` e `vigenteIdx` em `montarAbaBalanco` têm que mudar JUNTOS, ou
+o recorte S1..Sn descreve as semanas de um mês e recorta o dado de outro.
+
 A casca visual (`tools/comum/render-shell.js`) e os utilitários são compartilhados com o
 orçamento. `cssBase()` **não** é uma base neutra: cerca de 79 das 254 linhas são CSS
 exclusivo do orçamento, que a página semanal herda sem usar. Dividir exigiria regenerar o
