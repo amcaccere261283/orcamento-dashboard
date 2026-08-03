@@ -18,10 +18,24 @@ const { classificarDiaEquipe, contaComoAtiva } = require('./classificar-dia-equi
 // classificar-dia-equipe.js; aqui a questão é OUTRA: a que (SUP, tipologia)
 // aquele equipe-dia pertence.
 
-// Cabeçalho de coluna de dia: "1-Aug", "15-Jul". A planilha mistura português
-// e inglês de um mês para o outro (mesmo achado de tools/matriz/parse-eq.js),
-// por isso o DIA sai do número capturado, nunca da comparação do mês abreviado.
-var RE_COLUNA_DIA = /^\s*(\d{1,2})-[A-Za-zÀ-ÿ]{3,4}\s*$/;
+// Cabeçalho de coluna de dia, em DOIS formatos, e os dois são reais:
+//
+//   "1-Aug", "15-Jul"   -- como está na planilha de equipes. A planilha mistura
+//                          português e inglês de um mês para o outro (mesmo
+//                          achado de tools/matriz/parse-eq.js), por isso o DIA
+//                          sai do número capturado, nunca da comparação do mês.
+//   "01/08/2026"        -- como sai da Sheet ESPELHO publicada. O Apps Script
+//                          copia valores (getValues), então o cabeçalho de data
+//                          chega como data de verdade e o CSV a serializa por
+//                          extenso. Descoberto ao ligar a URL publicada em
+//                          2026-08-03: sem este segundo formato, nenhuma coluna
+//                          de dia era reconhecida no live-refresh e a página
+//                          simplesmente ficaria sem equipes -- silenciosamente,
+//                          porque uma equipe sem dias vira uma equipe sem
+//                          nenhum equipe-dia, não um erro.
+//
+// Em ambos o dia é o PRIMEIRO número, então uma captura só resolve os dois.
+var RE_COLUNA_DIA = /^\s*(\d{1,2})(?:-[A-Za-zÀ-ÿ]{3,4}|\/\d{1,2}\/\d{4})\s*$/;
 
 var COL_ID = 0;
 var COL_NOME = 1;

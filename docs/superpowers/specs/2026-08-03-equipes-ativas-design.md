@@ -104,6 +104,29 @@ só o nome do sondador — o cruzamento por nome é a ponte possível hoje. Se a
 operação passar a registrar o ID da equipe no Avanço Sond, ou o sufixo de
 tipologia na coluna D, a ambiguidade zera.
 
+## Sheet espelho da EQ — publicada em 2026-08-03
+
+```
+https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7SaAZI8VwQaZD0nPxtOyw56b1XmKfqDTC6qSkj-1PAQr4A8ihTY4vZCOhF4PuMNIYm_-hN_CNdNrX/pub?gid=199381651&single=true&output=csv
+```
+
+Aba `EQ ESPELHO`, alimentada por `tools/semanal/apps-script-espelho-eq.gs` a
+cada 30 min. **O gid é fixo para sempre**: o script resolve qual aba mensal
+copiar (`AAAA - MÊS (EQ)`), então em setembro ele passa a copiar setembro sem
+ninguém mexer na URL. Publicar a aba mensal direto teria o efeito oposto —
+a URL continuaria servindo agosto, sem erro e sem aviso.
+
+**O cabeçalho de dia vem diferente do export direto**: o Apps Script copia
+valores, então a data chega como data e o CSV a serializa `01/08/2026`, não
+`1-Aug`. `RE_COLUNA_DIA` aceita os dois. Sem isso nenhuma coluna de dia seria
+reconhecida no live-refresh — e o efeito seria mudo, porque equipe sem dias é
+equipe sem equipe-dia, não um erro.
+
+Conferido no ato de publicar: espelho e export direto dão as MESMAS 117
+equipes, 31 dias e a mesma lista de IDs. As 212 células (5,8%) com texto
+diferente são edição real da planilha entre as duas coletas — a programação
+muda ao longo do dia --, não erro de conversão.
+
 ## O que falta implementar
 
 1. Ler as abas EQ mensais no build (HTTP; o build hoje só lê `.xlsx` do `G:`).

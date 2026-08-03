@@ -111,3 +111,32 @@ test('Lab, TST e SN não entram no Balanço por SUP de sondagem', () => {
   assert.strictEqual(tipologiaDireta('TST'), null);
   assert.strictEqual(tipologiaDireta('SN'), null);
 });
+
+test('parseAbaEq aceita a coluna de dia no formato da Sheet ESPELHO ("01/08/2026")', () => {
+  // O Apps Script copia VALORES, então o cabeçalho de data chega como data de
+  // verdade e o CSV publicado a serializa por extenso -- diferente do export
+  // direto da planilha, que traz "1-Aug". Descoberto ao ligar a URL publicada
+  // em 2026-08-03. Sem isso nenhuma coluna era reconhecida no live-refresh, e
+  // o efeito seria mudo: equipe sem dias é equipe sem equipe-dia, não um erro.
+  const csv = [
+    ' ,,Habilitação,Serviços,Líderes,x,y,z,z,z,z,z,Tomador,3P,01/08/2026,02/08/2026',
+    ',,,,,,,,,,,,,,SÁBADO,DOMINGO',
+    '4,José,D,SM,Amaral,,,,,,,,CCR RioSP,,Férias,OK',
+  ].join('\n');
+  const equipes = parseAbaEq(csv);
+  assert.deepStrictEqual(equipes[0].dias, [
+    { dia: 1, texto: 'Férias' }, { dia: 2, texto: 'OK' },
+  ]);
+});
+
+test('os dois formatos de cabeçalho de dia convivem no mesmo parser', () => {
+  const comHifen = parseAbaEq([' ,,,Serviços,,,,,,,,,,,1-Aug', ',,,,,,,,,,,,,,x', '9,,,SP,,,,,,,,,,,OK'].join('\n'));
+  const comBarra = parseAbaEq([' ,,,Serviços,,,,,,,,,,,01/08/2026', ',,,,,,,,,,,,,,x', '9,,,SP,,,,,,,,,,,OK'].join('\n'));
+  assert.deepStrictEqual(comHifen[0].dias, comBarra[0].dias);
+});
+
+test('cabeçalho que não é dia continua fora -- o \d{4} do ano impede casar "10/2026"', () => {
+  const csv = [' ,,,Serviços,,,,,,,,,,,Tomador,10/2026,1-Aug', ',,,,,,,,,,,,,,x,y,z', '9,,,SP,,,,,,,,,,,a,b,OK'].join('\n');
+  const equipes = parseAbaEq(csv);
+  assert.deepStrictEqual(equipes[0].dias, [{ dia: 1, texto: 'OK' }], 'só a coluna 1-Aug é dia');
+});
