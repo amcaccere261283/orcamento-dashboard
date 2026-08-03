@@ -94,10 +94,10 @@ revisão final pegou.
 ### Aba Demandas (base do Avanço Sond)
 
 Terceira aba da página semanal, alimentada por
-`Dados e extratos\Extratos Sond\Avanço Sond.xlsx`, aba `Avanços` (61.906 linhas úteis, uma
-por furo) — ver `tools/semanal/config-demandas.js`. É a única fonte de EXECUÇÃO do
-repositório; as outras duas são mensais. Cinco séries em quantidade de furos, mensal e
-acumulado.
+`Dados e extratos\Extratos Sond\Avanço Sond.xlsx`, aba `Avanços` (51.819 linhas úteis em
+2026-08-03, uma por furo, já descontados 10.427 deslocamentos) — ver
+`tools/semanal/config-demandas.js`. É a única fonte de EXECUÇÃO do repositório; as outras
+duas são mensais. Cinco séries em quantidade de furos, mensal e acumulado.
 
 Quatro coisas desta planilha que parecem bug e não são:
 
@@ -113,9 +113,10 @@ Quatro coisas desta planilha que parecem bug e não são:
 - **Pendentes é estoque, não fluxo:** no acumulado mostra o saldo do mês, nunca a soma, e
   fecha em "Saldo" nos dois modos. Cancelada sai do saldo pela DATA do cancelamento, não por
   status — um furo cancelado em julho estava aberto em janeiro.
-- **74 furos CONCLUIDO/EXECUTADO não têm data de término** e por isso nunca saem do estoque
-  pela regra de data. É a diferença entre o saldo de dezembro (6.176) e as 6.102 linhas
-  PENDENTE de hoje. O build reporta a contagem.
+- **Furos CONCLUIDO/EXECUTADO sem data de término nunca saem do estoque** pela regra de
+  data, e por isso engordam o saldo de dezembro. Eram 74 em 2026-07-30; na planilha de
+  2026-08-03 são 0 (os que faltavam eram deslocamentos, hoje descartados antes da conta).
+  O build reporta a contagem — se ela voltar a subir, é aqui que a diferença aparece.
 
 `tools/comum/tipologias-avancos.js` mapeia os 20 rótulos crus nos 10 da MATRIZ mais
 `SP.F`/`SM.A` (independentes), `SEG.A`/`SEG.V` (só quando acionadas) e `Especiais`. Rótulo
