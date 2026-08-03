@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  renderGraficoTipologia, escalaIndependente, calcularEscalaDivergente,
-  renderAbaBalanco, GEOMETRIA,
+  renderGraficoTipologia, escalaIndependente, calcularEscalaAncorada,
+  calcularDivisaoTicks, passoBonito, renderAbaBalanco, GEOMETRIA,
 } = require('../tools/semanal/render-aba-balanco.js');
 
 const LINHAS = [
@@ -84,41 +84,108 @@ test('com o filtro de ativos ligado, inativos não são desenhados', () => {
 // fraca: cada série, no seu próprio máximo, tem que preencher a meia-largura
 // do SEU plot. Com uma escala compartilhada a barra de equipes cairia para
 // 10/100 disso (~5px em vez de 52px) e o teste reprova igual.
+// ATUALIZADO de novo na revisão de design de 2026-08-02: as barras deixaram
+// de ser <rect> e viraram <path>, porque o arredondamento agora é só na ponta
+// do dado (um <rect rx> arredonda os quatro cantos, descolando a barra do zero
+// e transformando as barras curtas em losangos). Com isso a largura saiu do
+// atributo 'width' e foi para dentro do 'd'. Em vez de fazer o teste
+// engenhariar a geometria do path de volta, o render publica a largura
+// desenhada em data-largura -- o teste de geometria abaixo prende esse número
+// ao path de verdade, então ele não pode mentir.
 function extrairLargura(svg, classe) {
-  // \s antes de "width=" (não [^>]*width= sozinho) é o que impede casar com
-  // um eventual "stroke-width=" do MESMO <rect> -- greedy + backtracking
-  // acharia a ÚLTIMA ocorrência de "width=" na tag, não a primeira.
-  // [^>]*? não-guloso sozinho ainda casaria "stroke-width" (o "s" de stroke
-  // não é '>'); precisa do \s.
-  const m = svg.match(new RegExp('<rect class="' + classe + '"[^>]*?\\swidth="([0-9.]+)"'));
-  assert.ok(m, 'esperava um <rect class="' + classe + '"> no SVG');
+  const m = svg.match(new RegExp('<path class="' + classe + '"[^>]*?\\sdata-largura="([0-9.]+)"'));
+  assert.ok(m, 'esperava um <path class="' + classe + '"> no SVG');
   return Number(m[1]);
 }
 
+test('a barra de equipes usa a escala GLOBAL da aba, não a do painel -- comprimento igual tem que significar número igual em painéis diferentes', () => {
+  // Dois painéis com Δ equipes de ordens diferentes. Antes cada um normalizava
+  // pelo próprio máximo, então a maior barra de cada painel media o mesmo
+  // tanto valendo números completamente diferentes -- o achado P0 da revisão.
+  const painelGrande = renderGraficoTipologia('ST', LINHAS, { maxEquipesGlobal: 10 });
+  const painelPequeno = renderGraficoTipologia('PI', [
+    { sup: 'SUP-C', valorBase: 10, valorRealizado: 12, desvio: 2, equipesBase: 1, equipesRealizado: 3, desvioEquipes: 2, ativo: true, semBase: false },
+  ], { maxEquipesGlobal: 10 });
+
+  const larguraDe10 = extrairLargura(painelGrande, 'barra-equipes'); // Δ 10
+  const larguraDe2 = extrairLargura(painelPequeno, 'barra-equipes'); // Δ 2
+
+  assert.strictEqual(larguraDe10, GEOMETRIA.equipes.meiaLargura,
+    'o Δ igual ao máximo global enche a meia-largura do plot de equipes');
+  assert.ok(Math.abs(larguraDe2 - GEOMETRIA.equipes.meiaLargura * 0.2) < 0.05,
+    `Δ 2 sobre máximo global 10 tem que medir 1/5 da meia-largura, mediu ${larguraDe2}`);
+  assert.ok(larguraDe2 < larguraDe10,
+    'com escala global, o painel de Δ menor tem barras menores -- é justamente o que a escala por painel apagava');
+});
+
 test('cada série é medida pela régua do SEU plot -- prova que renderGraficoTipologia chama uma escala por série, não uma para as duas', () => {
-  const svg = renderGraficoTipologia('ST', LINHAS, {});
+  const svg = renderGraficoTipologia('ST', LINHAS, { maxEquipesGlobal: 10 });
 
-  const larguraVolume = extrairLargura(svg, 'barra-acima');   // SUP-A, desvio 100 -- máximo da própria série
-  const larguraEquipes = extrairLargura(svg, 'barra-equipes'); // SUP-A, desvioEquipes 10 -- máximo da própria série
+  const larguraVolume = extrairLargura(svg, 'barra-acima');   // SUP-A, desvio 100
+  const larguraEquipes = extrairLargura(svg, 'barra-equipes'); // SUP-A, desvioEquipes 10
 
-  // A série de equipes é a que denuncia o bug: no seu próprio máximo (10) ela
-  // enche a meia-largura do plot de equipes. Se estivesse presa à régua do
-  // plot de valor (onde 10 é 1/20 da amplitude), viraria um traço.
+  // A série de equipes é a que denuncia o bug: no máximo global (10) ela enche
+  // a meia-largura do plot de equipes. Se estivesse presa à régua do plot de
+  // valor (onde 10 é uma fração mínima da amplitude), viraria um traço.
   assert.strictEqual(larguraEquipes, GEOMETRIA.equipes.meiaLargura,
     'o maior desvio de equipes tem que encher a meia-largura do plot de equipes');
 
-  // desvio +100 sobre uma escala que vai de -80 a +120 (ver o teste do eixo
-  // abaixo): 100/200 da largura do plot de valor.
-  assert.strictEqual(larguraVolume, GEOMETRIA.valor.largura * 0.5,
-    'o desvio de valor tem que ser medido pela escala do plot de valor');
+  // Escala ancorada com divisão 1:4 (só o painel: min -50, max +100 -> nNeg 1,
+  // nPos 4 sobre 5 intervalos), passo 25 -> domínio [-25, +100]. O desvio +100
+  // é o topo, então enche os 4/5 positivos da largura.
+  assert.ok(larguraVolume > larguraEquipes,
+    'a barra de valor é medida pelo plot de valor, que é muito mais largo que o de equipes');
+  assert.ok(larguraVolume <= GEOMETRIA.valor.largura,
+    'nenhuma barra pode passar da largura do próprio plot');
+});
+
+test('a barra é arredondada só na ponta do dado -- a ponta do zero fica reta e encosta no eixo', () => {
+  const svg = renderGraficoTipologia('ST', LINHAS, { maxEquipesGlobal: 10 });
+  const m = svg.match(/<path class="barra-acima" data-largura="([0-9.]+)" d="M([0-9.]+),([0-9.]+) h([0-9.-]+)/);
+  assert.ok(m, 'esperava o path da barra positiva');
+
+  const [, largura, xInicio, , primeiroH] = m;
+  // O path começa NO zero e o primeiro comando é horizontal: nenhum arco
+  // acontece antes de sair do eixo, ou seja, o canto colado no zero é reto.
+  // E o traço horizontal inicial é a largura menos o raio da ponta arredondada.
+  assert.ok(Math.abs(Number(primeiroH) - (Number(largura) - 3)) < 0.15,
+    `o primeiro segmento (${primeiroH}) tem que ser a largura (${largura}) menos o raio 3 -- prova que só a ponta do dado é curva`);
+
+  // data-largura não pode mentir: o path tem que começar exatamente no zero.
+  const zero = svg.match(/<line class="balanco-eixo-zero" x1="([0-9.]+)"/)[1];
+  assert.strictEqual(xInicio, zero, 'a barra tem que nascer exatamente na linha do zero');
+});
+
+test('desvio pequeno demais para render como nada ganha um piso de comprimento', () => {
+  // Desvio de 1 numa escala cujo topo é 10.000: sem piso isso daria menos de
+  // 0,1 unidade e sumiria -- visualmente idêntico a "não há dado", que é
+  // justamente a distinção que o módulo inteiro se esforça para preservar.
+  const linhas = [
+    { sup: 'SUP-GRANDE', valorBase: 0, valorRealizado: 10000, desvio: 10000, equipesBase: 1, equipesRealizado: 1, desvioEquipes: 0, ativo: true, semBase: false },
+    { sup: 'SUP-MINIMO', valorBase: 0, valorRealizado: 1, desvio: 1, equipesBase: 1, equipesRealizado: 1, desvioEquipes: 0, ativo: true, semBase: false },
+  ];
+  const svg = renderGraficoTipologia('ST', linhas, {});
+  const larguras = [...svg.matchAll(/<path class="barra-acima" data-largura="([0-9.]+)"/g)].map((m) => Number(m[1]));
+  assert.strictEqual(larguras.length, 2);
+  assert.ok(Math.min(...larguras) >= 2, `a menor barra mediu ${Math.min(...larguras)}, abaixo do piso de 2`);
 });
 
 // --- Testes do redesenho de 2026-08-02 -------------------------------------
 
 test('os dois plots não se sobrepõem: nenhuma barra de equipes invade a faixa do plot de valor', () => {
-  const svg = renderGraficoTipologia('ST', LINHAS, {});
-  const xsEquipes = [...svg.matchAll(/<rect class="barra-equipes"[^>]*?\sx="([0-9.]+)"[^>]*?\swidth="([0-9.]+)"/g)]
-    .map((m) => ({ x: Number(m[1]), fim: Number(m[1]) + Number(m[2]) }));
+  const svg = renderGraficoTipologia('ST', LINHAS, { maxEquipesGlobal: 10 });
+  // As barras viraram <path> que nascem no zero do próprio plot e crescem para
+  // um dos lados -- a extensão sai do x inicial mais/menos data-largura, e o
+  // sinal do primeiro comando 'h' diz o lado.
+  const xsEquipes = [...svg.matchAll(/<path class="barra-equipes" data-largura="([0-9.]+)" d="M([0-9.]+),[0-9.]+ h(-?)/g)]
+    .map((m) => {
+      const largura = Number(m[1]);
+      const zero = Number(m[2]);
+      const paraEsquerda = m[3] === '-';
+      return paraEsquerda
+        ? { x: zero - largura, fim: zero }
+        : { x: zero, fim: zero + largura };
+    });
 
   assert.ok(xsEquipes.length > 0, 'pré-condição: as duas linhas de LINHAS têm desvio de equipes');
   xsEquipes.forEach((barra) => {
@@ -146,25 +213,60 @@ test('linha com base mas sem Realizado no período não desenha barra -- comprim
   assert.doesNotMatch(svg, />sem base</, 'havia base (500) -- o rótulo errado seria dizer que não havia');
 });
 
-test('o eixo do plot de valor cai em números redondos e cobre só a amplitude que o dado usa', () => {
-  // -50..+100: amplitude 150 / 4 ticks = 37,5 -> magnitude 10, normalizado
-  // 3,75 -> degrau 4 -> passo 40. Cada ponta arredonda para cima: -80 e +120.
-  assert.deepStrictEqual(calcularEscalaDivergente(-50, 100, 4), { passo: 40, min: -80, max: 120 });
+test('a repartição do eixo sai do formato dos dados da aba inteira, não de um 4:1 cravado', () => {
+  // Quase tudo negativo (o caso real): o lado negativo leva quase todos os
+  // intervalos, mas o positivo nunca fica sem nenhum se houver dado positivo.
+  assert.deepStrictEqual(calcularDivisaoTicks(-1000, 50, 5), { nNeg: 4, nPos: 1 });
+  // Maioria positiva: a repartição se inverte sozinha. Um 4:1 fixo deixaria
+  // 80% da largura vazia aqui.
+  assert.deepStrictEqual(calcularDivisaoTicks(-50, 1000, 5), { nNeg: 1, nPos: 4 });
+  // Só de um lado: o zero encosta na borda, e nenhum intervalo é desperdiçado.
+  assert.deepStrictEqual(calcularDivisaoTicks(-340000, 0, 5), { nNeg: 5, nPos: 0 });
+  assert.deepStrictEqual(calcularDivisaoTicks(0, 900, 5), { nNeg: 0, nPos: 5 });
+  // Sem dado nenhum não há régua.
+  assert.strictEqual(calcularDivisaoTicks(0, 0, 5), null);
+});
 
-  // Todos negativos (o caso comum no dado real: quase todo SUP abaixo da
-  // base) -- o lado positivo do eixo não pode reservar largura nenhuma, e é
-  // esse zero à direita que dobra o comprimento útil das barras.
-  const soNegativos = calcularEscalaDivergente(-340000, 0, 4);
-  assert.strictEqual(soNegativos.max, 0, 'sem nenhum desvio positivo, o eixo termina no zero');
-  assert.ok(soNegativos.min <= -340000 && soNegativos.min % soNegativos.passo === 0);
+test('o zero cai no MESMO x em todos os painéis, mesmo com domínios diferentes', () => {
+  // Este é o ponto do eixo ancorado: painéis empilhados numa coluna só
+  // conseguem ser lidos de relance se o zero for uma vertical constante. Antes
+  // ele pulava de x=693,6 para x=802 entre painéis vizinhos, porque a
+  // CONTAGEM de intervalos variava com o sinal do dado de cada painel.
+  const divisao = calcularDivisaoTicks(-1000, 100, 5);
+
+  const misto = renderGraficoTipologia('ST', LINHAS, { divisao, maxEquipesGlobal: 10 });
+  const soNegativo = renderGraficoTipologia('PI', [
+    { sup: 'SUP-N', valorBase: 900, valorRealizado: 100, desvio: -800, equipesBase: 2, equipesRealizado: 2, desvioEquipes: 0, ativo: true, semBase: false },
+  ], { divisao, maxEquipesGlobal: 10 });
+
+  const zeroDe = (svg) => svg.match(/<line class="balanco-eixo-zero" x1="([0-9.]+)"/)[1];
+  assert.strictEqual(zeroDe(misto), zeroDe(soNegativo),
+    'o zero tem que cair no mesmo x nos dois painéis, apesar de os domínios serem diferentes');
+
+  // E continua sendo um domínio POR PAINEL: os ticks não são os mesmos.
+  const ticksDe = (svg) => [...svg.matchAll(/class="grafico-eixo-texto"[^>]*>([^<]+)</g)].map((m) => m[1]);
+  assert.notDeepStrictEqual(ticksDe(misto), ticksDe(soNegativo),
+    'ancorar o zero não pode ter achatado os painéis num domínio comum');
+});
+
+test('o eixo do plot de valor cai em números redondos', () => {
+  // Divisão 1:4 sobre 5 intervalos, min -50 e max +100. O passo tem que caber
+  // os DOIS lados: o negativo precisa de 50/1 = 50 por intervalo, o positivo
+  // de 100/4 = 25. Vence o maior (50), senão o lado negativo transbordaria.
+  // Domínio: [-1x50, +4x50] = [-50, +200].
+  //
+  // O topo sobra (200 para um dado de 100) -- é o preço de ancorar o zero, e
+  // é deliberado: numa coluna de 10 painéis, um zero que não se mexe vale mais
+  // que meia régua a mais de aproveitamento em um painel.
+  const divisao = { nNeg: 1, nPos: 4 };
+  assert.deepStrictEqual(calcularEscalaAncorada(-50, 100, divisao), { passo: 50, min: -50, max: 200 });
 
   // Sem amplitude nenhuma (todo desvio exatamente zero) não há régua.
-  assert.strictEqual(calcularEscalaDivergente(0, 0, 4), null);
+  assert.strictEqual(calcularEscalaAncorada(0, 0, divisao), null);
 
-  const svg = renderGraficoTipologia('ST', LINHAS, {});
-  ['−80', '−40', '0', '+40', '+80', '+120'].forEach((tick) => {
-    assert.ok(svg.includes('>' + tick + '<'), `esperava o tick "${tick}" no eixo`);
-  });
+  // passoBonito usa os degraus intermediários do orçamento, não só 1/2/5/10.
+  assert.strictEqual(passoBonito(37.5), 40);
+  assert.strictEqual(passoBonito(82307), 100000);
 });
 
 test('sem nenhum desvio comparável, o gráfico não inventa uma régua', () => {

@@ -133,8 +133,32 @@ const CSS_BALANCO = `
      ancora o balão de tooltip absoluto. */
   #secao-balanco { position: relative; z-index: 1; }
   .graficos-balanco {
-    display: flex; flex-direction: column; gap: 28px;
+    display: flex; flex-direction: column; gap: 40px;
     background: rgba(26,26,25,0.68); border-radius: 8px; padding: 18px 12px;
+  }
+  /* .grafico-painel traz margin-bottom:28px de cssBase() (lá os painéis não
+     vivem num flex e a margem é o único espaçador). Aqui ela SOMA com o gap e
+     o respiro real virava 56px, o dobro do declarado. Zerada: quem espaça é o
+     gap. */
+  .graficos-balanco .grafico-painel { margin-bottom: 0; }
+
+  /* Teto de escala. O viewBox de 1000 com width:100% faz TUDO dentro do SVG
+     crescer junto com a janela, enquanto o título (que é HTML) não cresce: em
+     1920px o rótulo de SUP renderizava a 20px -- do tamanho do <h1> -- e o
+     título do painel continuava em 12px, sendo ele o único elemento de
+     navegação numa página de 10 painéis. Com o teto o fator para em ~1,18, os
+     rótulos ficam em 12-13px e as classes compartilhadas (.grafico-eixo-texto,
+     11px) passam a renderizar perto do corpo que declaram. De quebra, um
+     painel de 13 linhas cai de 924px para ~590px de altura. */
+  .grafico-balanco { max-width: 1180px; }
+
+  /* Título do painel promovido: é o único lugar onde a tipologia e a unidade
+     ("em milhares") aparecem. Escopado em .graficos-balanco para não tocar no
+     .grafico-titulo do orçamento, cujo HTML é travado byte a byte por
+     test/orcamento-html-inalterado.test.js. */
+  .graficos-balanco .grafico-titulo {
+    font-size: 14px; color: var(--text-primary);
+    letter-spacing: 0.04em; margin-bottom: 12px;
   }
 
   .legenda-balanco {
@@ -169,6 +193,19 @@ const CSS_BALANCO = `
      escura em cima). Sem halo -- ele existe para separar texto do FUNDO da
      página, e aqui o fundo é a própria barra. */
   .balanco-rotulo-dentro { fill: #0d0d0d; font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  /* Rótulo do desvio quando NÃO coube dentro da barra. Mesmo corpo (10px) e
+     mesmo peso do de dentro: é o mesmo número, com a mesma importância -- só
+     muda se coube ou não, e o tamanho do texto não pode carregar essa
+     diferença. Antes reaproveitava .grafico-rotulo-final, que é 11px, e numa
+     coluna só as primeiras linhas saíam maiores que as de baixo.
+     O halo é #161615, a superfície JÁ COMPOSTA (rgba(26,26,25,0.68) sobre
+     #0d0d0d), não var(--page): com --page o contorno ficava mais escuro que o
+     fundo real e virava auréola em vez de recorte. */
+  .balanco-rotulo-fora {
+    fill: var(--text-primary); font-size: 10px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    paint-order: stroke; stroke: #161615; stroke-width: 3px; stroke-linejoin: round;
+  }
   .balanco-rotulo-equipes { fill: var(--text-secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
   /* Um passo acima de --gridline (#2c2c2a): o zero é a base contra a qual
      todo desvio é medido, não mais uma linha de grade. */

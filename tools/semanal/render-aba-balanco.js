@@ -118,7 +118,7 @@ function truncar(texto, maxCaracteres) {
 // Uma escala POR SÉRIE, não uma régua comum -- ver a nota sobre a anatomia no
 // topo do arquivo. Continua sendo usada pela série de equipes, que vive no seu
 // próprio plot e não tem eixo numerado (o rótulo em cada barra carrega o
-// valor). O plot de valor usa calcularEscalaDivergente, abaixo, porque ele TEM
+// valor). O plot de valor usa calcularEscalaAncorada, abaixo, porque ele TEM
 // eixo e um eixo precisa cair em números redondos.
 function escalaIndependente(valores, larguraMax) {
   var maximo = 0;
@@ -139,44 +139,73 @@ function escalaIndependente(valores, larguraMax) {
 // junto pra dentro da página semanal.
 var DEGRAUS_ESCALA = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
 
-// Eixo do plot de valor. NÃO é simétrico de propósito: o zero cai onde o dado
-// coloca, e cada lado recebe só os passos que precisa.
-//
-// Um eixo simétrico (o mesmo teto dos dois lados) é o reflexo natural para um
-// gráfico divergente, mas aqui ele desperdiçava metade da largura na maioria
-// dos painéis: no dado real quase todo SUP está ABAIXO da base, então o lado
-// positivo ficava vazio de ponta a ponta e as barras negativas se espremiam na
-// metade que sobrou. Vale lembrar que cada painel já tem escala própria (os
-// números do eixo mudam de tipologia para tipologia), então uma posição fixa
-// do zero não compraria comparação de comprimento entre painéis -- essa
-// comparação se faz pelo eixo, e o eixo é local. Trocar meia largura morta por
-// barras com o dobro do comprimento é ganho líquido.
-//
-// Devolve { passo, min, max } com min <= 0 <= max, os dois múltiplos inteiros
-// de 'passo' (um número redondo, dos mesmos degraus do orçamento). null quando
-// não há nenhum desvio comparável no recorte -- quem chama usa isso para não
-// desenhar régua nenhuma (um eixo "0 / 0,25 / 0,5" sobre um gráfico sem dado
-// nenhum é pior que nenhum eixo).
-function calcularEscalaDivergente(minDesvio, maxDesvio, ticksAlvo) {
-  var min = Math.min(0, minDesvio || 0);
-  var max = Math.max(0, maxDesvio || 0);
-  var amplitude = max - min;
-  if (!(amplitude > 0)) return null;
-
-  var passoBruto = amplitude / ticksAlvo;
+// Arredonda um passo bruto para o próximo degrau "limpo" da lista acima.
+function passoBonito(passoBruto) {
+  if (!(passoBruto > 0)) return 0;
   var magnitude = Math.pow(10, Math.floor(Math.log10(passoBruto)));
   var normalizado = passoBruto / magnitude;
-  var degrau = 10;
   for (var i = 0; i < DEGRAUS_ESCALA.length; i++) {
-    if (normalizado <= DEGRAUS_ESCALA[i]) { degrau = DEGRAUS_ESCALA[i]; break; }
+    if (normalizado <= DEGRAUS_ESCALA[i]) return DEGRAUS_ESCALA[i] * magnitude;
   }
-  var passo = degrau * magnitude;
+  return 10 * magnitude;
+}
 
-  return {
-    passo: passo,
-    min: -Math.ceil(-min / passo) * passo,
-    max: Math.ceil(max / passo) * passo,
-  };
+// Como a largura do plot de valor se reparte entre o lado negativo e o
+// positivo. Decidido UMA vez para a aba inteira, a partir dos extremos de
+// TODOS os painéis -- é isso que faz a linha do zero cair sempre no mesmo x.
+//
+// Por que isso importa: cada painel continua com o seu próprio domínio (o
+// eixo do SP vai a -600 e o do SM a -2.000, e está certo assim), mas antes
+// disso a CONTAGEM de intervalos também variava -- um painel só-negativo
+// tinha 4 intervalos à esquerda e 0 à direita, um misto tinha 4 e 1. Com
+// isso o zero pulava de x=693,6 para x=802 entre painéis vizinhos. Numa
+// coluna de 10 painéis empilhados o zero é a única âncora vertical possível,
+// e ele era justamente o que se mexia. Fixar a contagem (não os valores)
+// resolve sem tirar de nenhum painel o domínio próprio.
+//
+// A repartição sai do formato do dado da VISÃO atual em vez de ser um 4:1
+// fixo: com quase tudo abaixo da base o lado negativo leva quase tudo, mas
+// numa visão majoritariamente positiva (Volumetria com base Previsto Inicial,
+// por exemplo) a proporção se inverte sozinha. Um 4:1 cravado deixaria 80% da
+// largura vazia nesse caso.
+function calcularDivisaoTicks(minGlobal, maxGlobal, nTotal) {
+  var neg = Math.abs(Math.min(0, minGlobal || 0));
+  var pos = Math.max(0, maxGlobal || 0);
+  if (!(neg > 0) && !(pos > 0)) return null;
+  if (!(pos > 0)) return { nNeg: nTotal, nPos: 0 };
+  if (!(neg > 0)) return { nNeg: 0, nPos: nTotal };
+
+  var fracaoNeg = neg / (neg + pos);
+  var nNeg = Math.round(fracaoNeg * nTotal);
+  // Nenhum lado com dado pode ficar sem NENHUM intervalo, senão as barras
+  // daquele lado não teriam para onde crescer.
+  if (nNeg < 1) nNeg = 1;
+  if (nNeg > nTotal - 1) nNeg = nTotal - 1;
+  return { nNeg: nNeg, nPos: nTotal - nNeg };
+}
+
+// Eixo de UM painel, com a contagem de intervalos já fixada por
+// calcularDivisaoTicks. Cada painel escolhe o próprio 'passo' (é o que
+// preserva o domínio local), mas todos usam a mesma repartição, então o zero
+// cai no mesmo x em todos.
+//
+// Devolve { passo, min, max } com min <= 0 <= max. null quando não há nenhum
+// desvio comparável -- quem chama usa isso para não desenhar régua nenhuma
+// (um eixo "0 / 0,25 / 0,5" sobre um gráfico sem dado nenhum é pior que
+// nenhum eixo).
+function calcularEscalaAncorada(minDesvio, maxDesvio, divisao) {
+  if (!divisao) return null;
+  var min = Math.min(0, minDesvio || 0);
+  var max = Math.max(0, maxDesvio || 0);
+  if (!(max - min > 0)) return null;
+
+  var candidatos = [];
+  if (divisao.nNeg > 0) candidatos.push(Math.abs(min) / divisao.nNeg);
+  if (divisao.nPos > 0) candidatos.push(max / divisao.nPos);
+  var passo = passoBonito(Math.max.apply(null, candidatos));
+  if (!(passo > 0)) return null;
+
+  return { passo: passo, min: -divisao.nNeg * passo, max: divisao.nPos * passo };
 }
 
 // 1000 é a MESMA largura de viewBox que GRAFICO_LARGURA usa no orçamento --
@@ -189,12 +218,17 @@ var ALTURA_LINHA = 34;
 var ALTURA_BARRA = 14;          // <= 24px (teto de espessura de barra do sistema)
 var ALTURA_BARRA_EQUIPES = 9;   // série subordinada: mais fina que a principal
 var RAIO_BARRA = 3;
-// Quantos passos o eixo do plot de valor tenta caber na amplitude INTEIRA
-// (do desvio mais negativo ao mais positivo) -- não por lado.
-// calcularEscalaDivergente arredonda cada ponta para cima, então o resultado
-// costuma ficar entre 4 e 6 ticks: denso o bastante para ler, esparso o
-// bastante para os rótulos não colidirem.
-var TICKS_ALVO = 4;
+// Em quantos intervalos o eixo do plot de valor é repartido, somando os dois
+// lados do zero. 5 intervalos = 6 ticks: denso o bastante para ler, esparso o
+// bastante para os rótulos não colidirem. A repartição entre negativo e
+// positivo é decidida por calcularDivisaoTicks, uma vez para a aba inteira.
+var INTERVALOS_EIXO = 5;
+
+// Comprimento mínimo de uma barra com valor diferente de zero. Sem isso um
+// desvio pequeno numa escala grande renderiza com menos de 1 unidade e some --
+// visualmente idêntico a "não há dado", que é justamente a distinção que o
+// resto deste módulo se esforça para preservar.
+var COMPRIMENTO_MINIMO_BARRA = 2;
 
 // Acima desse desvio bruto o plot de valor passa a exibir em milhares (mesmo
 // GRAFICO_LIMIAR_MILHARES do orçamento) -- assim um recorte pequeno não vira
@@ -237,7 +271,7 @@ var GEOMETRIA = {
   larguraSvg: LARGURA_SVG,
   alturaLinha: ALTURA_LINHA,
   margem: MARGEM,
-  ticksAlvo: TICKS_ALVO,
+  intervalosEixo: INTERVALOS_EIXO,
   valor: { inicio: PLOT_VALOR_INI, fim: PLOT_VALOR_FIM, largura: LARGURA_PLOT_VALOR },
   equipes: { inicio: PLOT_EQUIPES_INI, fim: PLOT_EQUIPES_FIM, centro: CENTRO_EQUIPES, meiaLargura: MEIA_LARGURA_EQUIPES },
 };
@@ -257,18 +291,39 @@ function larguraAproximadaTexto(texto, tamanhoFonte) {
   return String(texto).length * tamanhoFonte * 0.62;
 }
 
-// Uma barra divergente. 'x' já é a BORDA ESQUERDA (quem chama resolve o lado:
-// o zero para desvio positivo, zero-comprimento para negativo).
-// <rect> com rx (e não <path>) de propósito: o teste de escala lê a largura
-// desenhada direto do atributo width, e um path a esconderia dentro do 'd'.
-// rx=3 arredonda também o lado colado no zero, o que numa barra de 14px é um
-// chanfro imperceptível. Comprimento zero não desenha nada -- um desvio
-// exatamente zero ("bateu a base") continua sendo dito pelo rótulo "0"
-// encostado no eixo, não por um retângulo invisível.
-function barraDivergente(x, comprimento, yCentro, altura, classe, cor) {
+// Uma barra divergente, arredondada SÓ na ponta do dado -- a ponta ancorada
+// no zero fica reta.
+//
+// Antes isto era um <rect rx="3">, que arredonda os quatro cantos, com dois
+// efeitos ruins: a barra descolava da linha do zero (a referência contra a
+// qual ela está sendo medida) e, em barras curtas, o SVG clampa o raio em
+// width/2 e o retângulo vira um losango -- a barra de 3,4 unidades do painel
+// SM era literalmente um ponto. Um <path> resolve os dois de uma vez.
+//
+// 'xZero' é a borda colada no eixo e 'comprimento' é sempre positivo; o lado
+// sai de 'paraDireita'. data-largura repete o comprimento desenhado porque a
+// largura deixou de ser um atributo legível (está dentro do 'd') e os testes
+// de escala precisam dela -- ver a nota em test/semanal-render-aba-balanco.test.js.
+function barraDivergente(xZero, comprimento, yCentro, altura, classe, cor, paraDireita) {
   if (!(comprimento > 0)) return '';
-  return '<rect class="' + classe + '" x="' + x.toFixed(1) + '" y="' + (yCentro - altura / 2).toFixed(1)
-    + '" width="' + comprimento.toFixed(1) + '" height="' + altura + '" rx="' + RAIO_BARRA + '" fill="' + cor + '"></rect>';
+  var r = Math.min(RAIO_BARRA, comprimento, altura / 2);
+  var y = yCentro - altura / 2;
+  var w = comprimento;
+  var d = paraDireita
+    ? 'M' + xZero.toFixed(1) + ',' + y.toFixed(1)
+      + ' h' + (w - r).toFixed(1)
+      + ' a' + r + ',' + r + ' 0 0 1 ' + r + ',' + r
+      + ' v' + (altura - 2 * r).toFixed(1)
+      + ' a' + r + ',' + r + ' 0 0 1 ' + (-r) + ',' + r
+      + ' h' + (-(w - r)).toFixed(1) + ' z'
+    : 'M' + xZero.toFixed(1) + ',' + y.toFixed(1)
+      + ' h' + (-(w - r)).toFixed(1)
+      + ' a' + r + ',' + r + ' 0 0 0 ' + (-r) + ',' + r
+      + ' v' + (altura - 2 * r).toFixed(1)
+      + ' a' + r + ',' + r + ' 0 0 0 ' + r + ',' + r
+      + ' h' + (w - r).toFixed(1) + ' z';
+  return '<path class="' + classe + '" data-largura="' + comprimento.toFixed(1)
+    + '" d="' + d + '" fill="' + cor + '"></path>';
 }
 
 // tipologia: string (vira o título do painel, FORA do SVG). linhas: array no
@@ -307,15 +362,36 @@ function renderGraficoTipologia(tipologia, linhas, opcoes) {
     if (linha.desvio > maxDesvio) maxDesvio = linha.desvio;
     if (Math.abs(linha.desvio) > maxAbsoluto) maxAbsoluto = Math.abs(linha.desvio);
   });
-  var escala = calcularEscalaDivergente(minDesvio, maxDesvio, TICKS_ALVO);
+  // 'divisao' vem de quem chama (renderAbaBalanco), calculada uma vez para a
+  // aba inteira -- é o que ancora o zero no mesmo x em todos os painéis.
+  var divisao = opts.divisao || calcularDivisaoTicks(minDesvio, maxDesvio, INTERVALOS_EIXO);
+  var escala = calcularEscalaAncorada(minDesvio, maxDesvio, divisao);
   var xDe = escala ? projetorValor(escala) : null;
-  var xZero = escala ? xDe(0) : (PLOT_VALOR_INI + LARGURA_PLOT_VALOR / 2);
+  // Mesmo sem escala o zero precisa cair onde cairia nos outros painéis, senão
+  // os rótulos de "sem base"/"não lançado" desalinham da coluna do zero.
+  var fracaoZero = divisao ? divisao.nNeg / (divisao.nNeg + divisao.nPos) : 0.5;
+  var xZero = escala ? xDe(0) : (PLOT_VALOR_INI + fracaoZero * LARGURA_PLOT_VALOR);
   var usarMilhares = maxAbsoluto >= LIMIAR_MILHARES;
 
   var desviosEquipes = linhasOrdenadas
     .filter(function (l) { return l.desvioEquipes !== null && l.desvioEquipes !== undefined; })
     .map(function (l) { return l.desvioEquipes; });
-  var escalaEquipes = escalaIndependente(desviosEquipes, MEIA_LARGURA_EQUIPES);
+  // A escala de equipes é GLOBAL da aba (maxEquipesGlobal), não do painel.
+  // Antes era por painel, e o efeito era grave: a barra âmbar mais longa media
+  // 40 unidades nos três painéis do recorte, valendo -6 equipes num, -15 no
+  // outro e -3 no terceiro. Mesma cor, mesmo x, mesmo cabeçalho, painéis
+  // empilhados -- e, ao contrário do plot de valor, sem tick nenhum que
+  // denunciasse a troca de régua. Com a escala global, comprimento igual passa
+  // a significar número igual em toda a página.
+  //
+  // Não vira "blocos unitários contáveis" (uma alternativa considerada) porque
+  // Δ equipes NÃO é inteiro: em "Acumulado até o mês" 49 das 340 linhas são
+  // fracionárias (mediaEquipesPonderada é média por dia), e lá o máximo global
+  // é 3,2 -- arredondar para contar blocos apagaria um -0,4 inteiro.
+  var maxEquipes = opts.maxEquipesGlobal;
+  var escalaEquipes = (maxEquipes > 0)
+    ? function (valor) { return Math.abs(valor || 0) / maxEquipes * MEIA_LARGURA_EQUIPES; }
+    : escalaIndependente(desviosEquipes, MEIA_LARGURA_EQUIPES);
   var temAlgumaEquipe = desviosEquipes.length > 0;
 
   var numLinhas = Math.max(linhasOrdenadas.length, 1);
@@ -428,21 +504,24 @@ function renderGraficoTipologia(tipologia, linhas, opcoes) {
         + '" text-anchor="middle">Realizado não lançado</text>';
     } else {
       var desvio = linha.desvio;
-      // Sem escala (calcularEscalaDivergente devolveu null) TODOS os desvios
+      // Sem escala (calcularEscalaAncorada devolveu null) TODOS os desvios
       // comparáveis desta tipologia são exatamente zero -- o caso real de um
       // mês fechado em que a MATRIZ copia Realizado = Previsto linha a linha.
       // Esses zeros continuam sendo linhas legítimas ("bateu a base"), então
       // caem aqui e não no ramo de "não lançado": ficam presos ao eixo, sem
       // barra, com o rótulo "0". Sem esta guarda, xDe é null e a aba inteira
       // quebrava com "xDe is not a function".
-      var xPonta = xDe ? xDe(desvio) : xZero;
-      var comprimento = Math.abs(xPonta - xZero);
       var paraDireita = desvio >= 0;
-      var xBarra = paraDireita ? xZero : xPonta;
+      var comprimentoCru = xDe ? Math.abs(xDe(desvio) - xZero) : 0;
+      // Piso de comprimento: desvio diferente de zero nunca pode renderizar
+      // como nada. Desvio EXATAMENTE zero continua sem barra (o rótulo "0"
+      // encostado no eixo é que diz "bateu a base").
+      var comprimento = desvio === 0 ? 0 : Math.max(COMPRIMENTO_MINIMO_BARRA, comprimentoCru);
+      var xPonta = paraDireita ? (xZero + comprimento) : (xZero - comprimento);
       var classeCor = paraDireita ? 'barra-acima' : 'barra-abaixo';
 
-      marcas += barraDivergente(xBarra, comprimento, y, ALTURA_BARRA, classeCor,
-        paraDireita ? COR_ACIMA : COR_ABAIXO);
+      marcas += barraDivergente(xZero, comprimento, y, ALTURA_BARRA, classeCor,
+        paraDireita ? COR_ACIMA : COR_ABAIXO, paraDireita);
 
       // O rótulo mostra o DESVIO -- que é o que o comprimento da barra
       // codifica. A versão anterior mostrava o Realizado na ponta de uma
@@ -459,7 +538,13 @@ function renderGraficoTipologia(tipologia, linhas, opcoes) {
       } else {
         xRotulo = paraDireita ? (xPonta + 7) : (xPonta - 7);
         ancora = paraDireita ? 'start' : 'end';
-        classeRotulo = 'grafico-rotulo-final';
+        // Classe própria em vez de .grafico-rotulo-final: aquela é 11px e esta
+        // precisa ser 10px, igual à de dentro da barra. É o MESMO número, com
+        // a mesma importância -- só muda se coube ou não na barra, e o corpo
+        // do texto não pode carregar essa diferença (numa coluna só, as
+        // primeiras linhas saíam em 11px e as demais em 10px). O halo também
+        // é diferente: ver .balanco-rotulo-fora no CSS.
+        classeRotulo = 'balanco-rotulo-fora';
       }
       rotulos += '<text class="' + classeRotulo + '" x="' + xRotulo.toFixed(1) + '" y="' + (y + 4)
         + '" text-anchor="' + ancora + '">' + textoDesvio + '</text>';
@@ -486,11 +571,12 @@ function renderGraficoTipologia(tipologia, linhas, opcoes) {
     if (linha.desvioEquipes === null || linha.desvioEquipes === undefined) return;
 
     var desvioEq = linha.desvioEquipes;
-    var comprimentoEq = escalaEquipes(desvioEq);
     var paraDireitaEq = desvioEq >= 0;
-    var xEq = paraDireitaEq ? CENTRO_EQUIPES : CENTRO_EQUIPES - comprimentoEq;
+    var comprimentoEqCru = escalaEquipes(desvioEq);
+    var comprimentoEq = desvioEq === 0 ? 0 : Math.max(COMPRIMENTO_MINIMO_BARRA, comprimentoEqCru);
 
-    marcas += barraDivergente(xEq, comprimentoEq, y, ALTURA_BARRA_EQUIPES, 'barra-equipes', COR_EQUIPES);
+    marcas += barraDivergente(CENTRO_EQUIPES, comprimentoEq, y, ALTURA_BARRA_EQUIPES,
+      'barra-equipes', COR_EQUIPES, paraDireitaEq);
 
     // Rótulo SEMPRE fora da barra (ela é fina demais para conter texto) e em
     // tinta de texto, não em âmbar: quem carrega a identidade da série é a
@@ -593,7 +679,12 @@ function renderLegenda() {
   return '<div class="legenda-balanco">'
     + item(COR_ACIMA, 'Acima da base')
     + item(COR_ABAIXO, 'Abaixo da base')
-    + item(COR_EQUIPES, 'Δ equipes (escala própria)')
+    // "escala própria" sozinho ficou contando a história pela metade depois
+    // que a escala virou global: ela continua sendo própria em relação ao eixo
+    // financeiro (é o que o texto sempre quis dizer), mas agora é a MESMA nos
+    // 10 painéis -- e é essa segunda metade que autoriza comparar o
+    // comprimento de uma barra âmbar com a do painel de cima.
+    + item(COR_EQUIPES, 'Δ equipes (escala própria, igual em todos os painéis)')
     + '<span class="legenda-item legenda-nota">sem base / não lançado: nenhuma barra</span>'
     + '</div>';
 }
@@ -622,26 +713,60 @@ function renderAbaBalanco(registros, indices, opcoes) {
 
   var tipologias = listarTipologias(registros, indices);
 
-  // Quando NENHUMA tipologia tem um único desvio numérico, o problema não é de
-  // desenho: é que o período escolhido ainda não tem Realizado lançado. Sem
-  // este aviso a aba abre com dez painéis de "Realizado não lançado" e a
-  // pessoa fica sem saber se o dashboard quebrou ou se o dado é que não
-  // existe. Um aviso só, acima de tudo -- não um por painel.
-  var algumDesvio = false;
+  // DUAS passadas de propósito. A primeira só calcula as linhas de cada
+  // tipologia; a segunda desenha. No meio ficam as duas grandezas que
+  // precisam valer para a aba INTEIRA e que nenhum painel sozinho conhece:
+  //
+  //   - maxEquipesGlobal: o teto da coluna "Δ equipes", para que comprimento
+  //     igual signifique número igual em todos os painéis;
+  //   - divisao: como o eixo de valor se reparte entre negativo e positivo,
+  //     para que a linha do zero caia sempre no mesmo x.
+  //
+  // Nenhuma das duas pode ser calculada dentro de renderGraficoTipologia, que
+  // só enxerga uma tipologia -- era exatamente essa a origem dos dois
+  // problemas que elas corrigem.
+  var porTipologia = tipologias.map(function (tipologia) {
+    return {
+      tipologia: tipologia,
+      linhas: calcularLinhas({
+        registros: registros, indices: indices, tipologia: tipologia,
+        base: base, dimensao: dimensao, periodo: periodo,
+        vigenteIdx: vigenteIdx, baseline: baseline, demandas: demandas, ano: ano,
+      }),
+    };
+  });
 
-  var graficos = tipologias.map(function (tipologia) {
-    var linhas = calcularLinhas({
-      registros: registros, indices: indices, tipologia: tipologia,
-      base: base, dimensao: dimensao, periodo: periodo,
-      vigenteIdx: vigenteIdx, baseline: baseline, demandas: demandas, ano: ano,
+  // Os globais saem só das linhas que de fato vão aparecer -- o filtro
+  // "somente ativos" é aplicado aqui também, senão uma linha escondida
+  // esticaria a escala de todo mundo sem nunca ser desenhada.
+  function visiveis(linhas) {
+    return linhas.filter(function (l) { return somenteAtivos ? !!l.ativo : true; });
+  }
+
+  var maxEquipesGlobal = 0;
+  var minDesvioGlobal = 0;
+  var maxDesvioGlobal = 0;
+  var algumDesvio = false;
+  porTipologia.forEach(function (item) {
+    visiveis(item.linhas).forEach(function (linha) {
+      if (linha.desvioEquipes !== null && linha.desvioEquipes !== undefined) {
+        var eq = Math.abs(linha.desvioEquipes);
+        if (eq > maxEquipesGlobal) maxEquipesGlobal = eq;
+      }
+      if (linha.semBase || linha.desvio === null || linha.desvio === undefined) return;
+      algumDesvio = true;
+      if (linha.desvio < minDesvioGlobal) minDesvioGlobal = linha.desvio;
+      if (linha.desvio > maxDesvioGlobal) maxDesvioGlobal = linha.desvio;
     });
-    if (!algumDesvio) {
-      algumDesvio = linhas.some(function (linha) {
-        return !linha.semBase && linha.desvio !== null && linha.desvio !== undefined;
-      });
-    }
+  });
+  var divisao = calcularDivisaoTicks(minDesvioGlobal, maxDesvioGlobal, INTERVALOS_EIXO);
+
+  var graficos = porTipologia.map(function (item) {
     return '<div class="grafico-painel">'
-      + renderGraficoTipologia(tipologia, linhas, { somenteAtivos: somenteAtivos, dimensao: dimensao })
+      + renderGraficoTipologia(item.tipologia, item.linhas, {
+        somenteAtivos: somenteAtivos, dimensao: dimensao,
+        maxEquipesGlobal: maxEquipesGlobal, divisao: divisao,
+      })
       + '</div>';
   }).join('');
 
@@ -658,6 +783,6 @@ function renderAbaBalanco(registros, indices, opcoes) {
 }
 
 module.exports = {
-  renderGraficoTipologia, escalaIndependente, calcularEscalaDivergente,
+  renderGraficoTipologia, escalaIndependente, calcularEscalaAncorada, calcularDivisaoTicks, passoBonito,
   renderAbaBalanco, renderControles, renderLegenda, listarTipologias, GEOMETRIA,
 };
