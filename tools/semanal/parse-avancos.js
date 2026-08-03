@@ -45,6 +45,10 @@ const COLUNAS_OBRIGATORIAS = {
   cancelamento: 'Cancelamento',
   atualizado: 'Atualizado',
   observacoesCampo: 'Observações de Campo',
+  // A OS é o que liga o furo ao dia da aba EQ: é o código que aparece entre
+  // parênteses lá ("CCR RioSP (17851-26)"), e é dele que sai o SUP daquele dia
+  // de equipe. Medido em 2026-08-03: 1.960 de 1.960 OS resolvem para UM SUP.
+  os: 'OS',
   // 'Sondador' (coluna Y) é quem executou o furo -- a única pista de EQUIPE
   // que existe numa fonte com data e SUP na mesma linha. Entra como
   // obrigatória, e não opcional, pelo mesmo motivo das outras: se a planilha
@@ -185,6 +189,7 @@ function parseAvancos(grid) {
       // não executado não ocupou equipe. A conta de equipes mobilizadas cobre
       // 100% do que existe para medir.
       sondador: texto(linha[cols.sondador]),
+      os: texto(linha[cols.os]),
     });
   }
 

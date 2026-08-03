@@ -764,6 +764,7 @@ function renderAbaBalanco(registros, indices, opcoes) {
   // equipesPorDia/hojeEpoch (2026-08-03): equipes MOBILIZADAS do Avanço Sond,
   // com a janela truncada em hoje -- ver calcularLinhas em compute-balanco.js.
   var equipesPorDia = opts.equipesPorDia;
+  var equipesAtivasPeriodo = opts.equipesAtivasPeriodo;
   var hojeEpoch = opts.hojeEpoch;
 
   var tipologias = listarTipologias(registros, indices);
@@ -789,6 +790,7 @@ function renderAbaBalanco(registros, indices, opcoes) {
         vigenteIdx: vigenteIdx, baseline: baseline, demandas: demandas, ano: ano,
         semanas: semanas, semanasSelecionadas: semanasSelecionadas,
         equipesPorDia: equipesPorDia, hojeEpoch: hojeEpoch,
+        equipesAtivasPeriodo: equipesAtivasPeriodo,
       }),
     };
   });

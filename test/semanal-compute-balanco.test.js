@@ -456,3 +456,37 @@ test('equipes: mês inteiramente no futuro fica sem dado, não zero', () => {
   assert.strictEqual(calcularLinhas(cfg)[0].equipesRealizado, null,
     'nada aconteceu ainda: sem-dado, não uma medição de zero');
 });
+
+test('equipes: fora do mês coberto pela aba EQ, fica SEM DADO -- nunca zero', () => {
+  // A Sheet espelho carrega UM mês. Escolher outro mês não pode virar "zero
+  // equipes" (indistinguível de "a operação parou"): tem que ser sem-dado,
+  // com aviso na tela. Decisão do dono do projeto em 2026-08-03.
+  const cfg = cenarioSemanas({ semanasSelecionadas: null });
+  cfg.dimensao = 'equipes';
+  cfg.equipesPorDia = { 'SUP-0001-24||ST': {} };
+  cfg.equipesAtivasPeriodo = { ano: ANO_TESTE, mes: 8 }; // espelho traz agosto
+  // ...mas o Balanço está em julho (VIGENTE_JULHO = 6).
+  assert.strictEqual(calcularLinhas(cfg)[0].equipesRealizado, null);
+});
+
+test('equipes: no mês coberto, o dado aparece normalmente', () => {
+  const cfg = cenarioSemanas({ semanasSelecionadas: null });
+  cfg.dimensao = 'equipes';
+  const semanas = semanasDoMes(ANO_TESTE, VIGENTE_JULHO);
+  const porDia = {};
+  for (let d = semanas[0].inicio; d <= semanas[semanas.length - 1].fim; d++) porDia[d] = 2;
+  cfg.equipesPorDia = { 'SUP-0001-24||ST': porDia };
+  cfg.equipesAtivasPeriodo = { ano: ANO_TESTE, mes: 7 }; // julho, o mês do cenário
+  assert.ok(Math.abs(calcularLinhas(cfg)[0].equipesRealizado - 2) < 0.0001);
+});
+
+test('equipes: "Acumulado até o mês" nunca é coberto por um mapa de um mês só', () => {
+  // Somaria janeiro..julho contra um mapa que só tem julho, dando um número
+  // menor sem nenhum aviso.
+  const cfg = cenarioSemanas({ semanasSelecionadas: null });
+  cfg.dimensao = 'equipes';
+  cfg.periodo = 'acumuladoAteMes';
+  cfg.equipesPorDia = { 'SUP-0001-24||ST': {} };
+  cfg.equipesAtivasPeriodo = { ano: ANO_TESTE, mes: 7 };
+  assert.strictEqual(calcularLinhas(cfg)[0].equipesRealizado, null);
+});

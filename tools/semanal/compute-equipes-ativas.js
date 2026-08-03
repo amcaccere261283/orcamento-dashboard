@@ -131,6 +131,25 @@ function tipologiaDireta(servicos) {
   return null;
 }
 
+// Ano e mês da aba, lidos do PRÓPRIO cabeçalho -- { ano, mes } (mes 1..12) ou
+// null quando o formato não permite saber.
+//
+// Só o formato da Sheet espelho ("01/08/2026") carrega o ano e o mês; o export
+// direto ("1-Aug") tem o mês em duas línguas e nenhum ano. Ler do conteúdo, em
+// vez de assumir "o mês de hoje", protege o caso real do build rodando no dia
+// 1º enquanto o espelho ainda carrega o mês anterior -- aí o equipe-dia seria
+// carimbado com o mês errado e apareceria no período errado do Balanço.
+var RE_DIA_COMPLETO = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/;
+function mesDaAbaEq(csvTexto) {
+  var grid = parseCsvGrid(csvTexto || '');
+  var cabecalho = grid[0] || [];
+  for (var i = 0; i < cabecalho.length; i++) {
+    var achou = RE_DIA_COMPLETO.exec(String(cabecalho[i] === null || cabecalho[i] === undefined ? '' : cabecalho[i]).trim());
+    if (achou) return { ano: Number(achou[3]), mes: Number(achou[2]) };
+  }
+  return null;
+}
+
 // Agrega o equipe-dia ATIVO por (SUP, tipologia) e por dia.
 //
 // entradas:
@@ -165,8 +184,21 @@ function agregarEquipesAtivas(opcoes) {
   var diasPorEstado = { mobilizada: 0, campoSemFuro: 0, fora: 0, naoEquipe: 0 };
   var textosNoDefault = {};
 
+  // A tipologia da aba EQ vem CRUA ("SM", "SP") e a chave do Balanço usa o
+  // rótulo da MATRIZ ("SM / SM.F / SR"). Sem traduzir, a chave não casa com
+  // nada e o Realizado de equipes sai 0,0 em TODAS as linhas -- foi exatamente
+  // o que apareceu na primeira verificação no navegador, em 2026-08-03. Quem
+  // chama injeta rotularTipologia (tools/comum/tipologias-avancos.js), o mesmo
+  // mapa que o Avanço Sond já usa, em vez de este módulo carregar um '../comum'
+  // que o bundle removeria.
+  var rotular = o.rotularTipologia || function (t) { return t; };
+  function traduzir(tipologia) {
+    if (!tipologia) return null;
+    try { return rotular(tipologia); } catch (err) { return null; }
+  }
+
   equipes.forEach(function (equipe) {
-    var tipologia = tipologiaDireta(equipe.servicos);
+    var tipologia = traduzir(tipologiaDireta(equipe.servicos));
     if (!tipologia) {
       // Múltipla ("ST | PI | BL"): a tipologia sai dos furos do sondador que
       // lidera a equipe -- ver casarSondador.
@@ -222,6 +254,6 @@ function juntarPorDia(mapas) {
 
 module.exports = {
   parseAbaEq, tokensDoNome, casarSondador, tipologiaDireta,
-  agregarEquipesAtivas, juntarPorDia,
+  agregarEquipesAtivas, juntarPorDia, mesDaAbaEq,
   RE_COLUNA_DIA, TIPOLOGIA_DIRETA,
 };

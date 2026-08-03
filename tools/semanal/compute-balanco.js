@@ -233,7 +233,7 @@ function realizadoDoAvancos(demandas, sup, tipologia, intervalosEpoch, peso) {
 // Diferente do Realizado de volume/financeiro, que só usa o Avanço Sond em
 // mesVigente: ali a coluna da MATRIZ é confiável depois do fechamento, aqui
 // não é.
-function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline, demandas, ano, semanas, semanasSelecionadas, equipesPorDia, hojeEpoch }) {
+function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline, demandas, ano, semanas, semanasSelecionadas, equipesPorDia, hojeEpoch, equipesAtivasPeriodo }) {
   var intervalo = periodoParaIntervalo(periodo, vigenteIdx);
   var intervaloEpoch = periodo === 'mesVigente' && typeof ano === 'number' ? intervaloParaEpoch(ano, intervalo) : null;
   var usarAvancosNoRealizado = periodo === 'mesVigente' && !!demandas && !!intervaloEpoch;
@@ -280,6 +280,27 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
   // virar sem-dado, e não cair no fallback da MATRIZ -- que responderia com o
   // 0 morto da coluna e desenharia déficit num mês que nem começou.
   var usarAvancosNasEquipes = !!equipesPorDia;
+
+  // Cobertura do mapa de equipes ATIVAS (2026-08-03): a Sheet espelho da aba
+  // EQ carrega UM mês, e é preciso saber se o período pedido é esse. Fora
+  // dele, o Δ equipes fica SEM DADO -- decisão do dono do projeto: "ficar sem
+  // dado e avisar", nunca preencher com outra métrica.
+  //
+  // Sem isso o efeito seria pior que errado: equipesEquivalentes devolveria 0
+  // (janela válida, nenhum equipe-dia dentro), e a barra mostraria "zero
+  // equipes" -- indistinguível de "a operação parou" -- num mês em que
+  // simplesmente não temos o dado.
+  //
+  // 'acumuladoAteMes' nunca é coberto: ele soma de janeiro até o mês, e um
+  // mapa de um mês só responderia por uma fatia, dando um número menor sem
+  // nenhum aviso.
+  var equipesForaDaCobertura = false;
+  if (equipesAtivasPeriodo) {
+    equipesForaDaCobertura = periodo !== 'mesVigente'
+      || typeof ano !== 'number'
+      || ano !== equipesAtivasPeriodo.ano
+      || vigenteIdx !== (equipesAtivasPeriodo.mes - 1);
+  }
   var linhas = [];
 
   (indices || []).forEach(function (i) {
@@ -345,7 +366,7 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
     // Equipes MOBILIZADAS do Avanço Sond quando disponível; a coluna da MATRIZ
     // fica como fallback só para quem chama sem equipesPorDia (testes antigos,
     // e a página antes de 2026-08-03).
-    var equipesRealizado = usarAvancosNasEquipes
+    var equipesRealizado = equipesForaDaCobertura ? null : usarAvancosNasEquipes
       ? equipesEquivalentes(equipesPorDia[chaveDemandas(registro.sup, tipologia)], janelasEquipes)
       : equipesNoIntervalo(registro.realizado && registro.realizado.equipes, intervalo);
 

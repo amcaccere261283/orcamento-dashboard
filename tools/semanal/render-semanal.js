@@ -622,6 +622,7 @@ function montarAbaBalanco(registros, indices) {
     // live-refresh. Ausente (HTML de um build anterior), compute-balanco cai
     // sozinho na coluna da MATRIZ.
     equipesPorDia: window.__DEMANDAS__ && window.__DEMANDAS__.equipesPorDia,
+    equipesAtivasPeriodo: window.__DEMANDAS__ && window.__DEMANDAS__.equipesAtivasPeriodo,
     // Trunca a janela de equipes em hoje: sem isso a média do mês corrente sai
     // dividida pelos dias que ainda não aconteceram (ver calcularLinhas).
     // Calculado aqui, e não no build, porque a página fica aberta e o refresh

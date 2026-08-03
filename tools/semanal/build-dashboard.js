@@ -18,6 +18,8 @@ const { parseAvancos } = require('./parse-avancos.js');
 const { parseLab } = require('./parse-lab.js');
 const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos } = require('./compute-demandas.js');
 const { agregarEquipesPorDia } = require('./compute-equipes-mobilizadas.js');
+const { parseAbaEq, agregarEquipesAtivas, mesDaAbaEq } = require('./compute-equipes-ativas.js');
+const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const configDemandas = require('./config-demandas.js');
 const configLab = require('./config-lab.js');
 
@@ -63,7 +65,90 @@ function baselineParaCliente(porChave, registros) {
 // ambiente, lida na hora do build e descartada depois (mesmo raciocínio de
 // tools/orcamento/build-dashboard.js: dist/planejamento-semanal.html também
 // vai pra um GitHub Pages público).
-function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
+// Sheet espelho da aba EQ da planilha de equipes, publicada como CSV em
+// 2026-08-03. O gid é fixo para sempre: quem resolve qual aba mensal copiar é
+// o Apps Script (tools/semanal/apps-script-espelho-eq.gs), a cada 30 min.
+const URL_ESPELHO_EQ = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7SaAZI8VwQaZD0nPxtOyw56b1XmKfqDTC6qSkj-1PAQr4A8ihTY4vZCOhF4PuMNIYm_-hN_CNdNrX/pub?gid=199381651&single=true&output=csv';
+
+// Busca a espelho. NUNCA derruba o build: esta é a única fonte do projeto que
+// vem por rede, e o dashboard inteiro (Tabela, Gráficos, Demandas, e o próprio
+// Balanço em volume/financeiro) continua correto sem ela. Falhou, o Δ equipes
+// fica sem dado e a página avisa -- decisão do dono do projeto: "ficar sem dado
+// e avisar", nunca cair calado numa métrica diferente.
+async function buscarEspelhoEq() {
+  try {
+    const resposta = await fetch(URL_ESPELHO_EQ, { redirect: 'follow' });
+    if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+    return await resposta.text();
+  } catch (err) {
+    console.warn(`Equipes ativas: não consegui ler a Sheet espelho da aba EQ (${err.message}). O Δ equipes vai ficar sem dado, com aviso na página.`);
+    return null;
+  }
+}
+
+// furos (do Avanço Sond) + csv da espelho -> o que o cliente precisa para o
+// Δ equipes ATIVAS. Devolve equipesPorDia (substituindo as mobilizadas) e
+// equipesAtivasPeriodo -- o {ano, mes} que a espelho cobre, que é o que a
+// página usa para saber se pode mostrar a barra no mês escolhido.
+function montarEquipesAtivas(furos, csvEspelho) {
+  if (!csvEspelho) return { equipesAtivasPeriodo: null };
+
+  const periodo = mesDaAbaEq(csvEspelho);
+  if (!periodo) {
+    console.warn('Equipes ativas: a espelho não trouxe cabeçalho de data reconhecível -- Δ equipes fica sem dado.');
+    return { equipesAtivasPeriodo: null };
+  }
+
+  // OS -> SUP, e sondador -> tipologia mais frequente dos furos dele (é o que
+  // desempata as equipes com Serviços múltiplo, tipo "ST | PI | BL").
+  const osParaSup = {};
+  const contagem = {};
+  furos.forEach((f) => {
+    if (f.os && f.sup && !osParaSup[f.os]) osParaSup[f.os] = f.sup;
+    if (f.sondador && f.tipologia) {
+      const chave = `${f.sondador}||${f.tipologia}`;
+      contagem[chave] = (contagem[chave] || 0) + 1;
+    }
+  });
+  const melhor = {};
+  Object.keys(contagem).forEach((chave) => {
+    const [sondador, tipologia] = chave.split('||');
+    if (!melhor[sondador] || contagem[chave] > melhor[sondador].n) {
+      melhor[sondador] = { tipologia, n: contagem[chave] };
+    }
+  });
+  const tipologiaPorSondador = {};
+  Object.keys(melhor).forEach((s) => { tipologiaPorSondador[s] = melhor[s].tipologia; });
+
+  const equipes = parseAbaEq(csvEspelho);
+  const r = agregarEquipesAtivas({
+    equipes, osParaSup, tipologiaPorSondador,
+    nomesSondadores: Object.keys(tipologiaPorSondador),
+    rotularTipologia: rotularTipologia,
+    ano: periodo.ano, mes: periodo.mes,
+  });
+
+  const ativos = r.diasPorEstado.mobilizada + r.diasPorEstado.campoSemFuro;
+  const apropriados = Object.keys(r.porDia)
+    .reduce((total, chave) => total + Object.values(r.porDia[chave]).reduce((a, b) => a + b, 0), 0);
+  console.log(
+    `Equipes ATIVAS (${String(periodo.mes).padStart(2, '0')}/${periodo.ano}): ${ativos} equipe-dia ativos `
+    + `(${r.diasPorEstado.mobilizada} mobilizada + ${r.diasPorEstado.campoSemFuro} em campo sem furo), `
+    + `${apropriados} apropriados a um par (SUP, tipologia); `
+    + `${r.naoApropriadas} sem OS no mês e ${r.semTipologia} sem tipologia ficam fora. `
+    + `Fora da conta: ${r.diasPorEstado.fora} férias/baixada, ${r.diasPorEstado.naoEquipe} não-equipe.`
+  );
+  const textosNovos = Object.keys(r.textosNoDefault);
+  if (textosNovos.length) {
+    const amostra = textosNovos.slice(0, 5).map((t) => JSON.stringify(t.slice(0, 30))).join(', ');
+    console.log(`Equipes ATIVAS: ${textosNovos.length} texto(s) de dia não catalogados entraram como "em campo" pelo default -- revise se algum for ausência: ${amostra}${textosNovos.length > 5 ? ' ...' : ''}`);
+  }
+
+  return { equipesPorDia: r.porDia, equipesAtivasPeriodo: periodo };
+}
+
+async function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
+  const equipesAtivasCsv = await buscarEspelhoEq();
   if (!senha) {
     throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
   }
@@ -125,7 +210,11 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   // mesmos SUPs nos dois lugares. Só de Sondagem: os ensaios de Lab não têm
   // sondador (é outra operação, dentro do laboratório).
   demandas.equipesPorDia = agregarEquipesPorDia(furos);
-  const paresComEquipe = Object.keys(demandas.equipesPorDia).length;
+  // Δ equipes ATIVAS (2026-08-03): substitui as mobilizadas acima quando a
+  // Sheet espelho da aba EQ responde. Assíncrono e tolerante de propósito --
+  // ver buscarEquipesAtivas.
+  Object.assign(demandas, montarEquipesAtivas(furos, equipesAtivasCsv));
+  const paresComEquipe = Object.keys(demandas.equipesPorDia || {}).length;
   // Sondador vazio é esperado, não perda: PENDENTE e CANCELADO não têm quem
   // executou (medido em 2026-08-03: CONCLUIDO/EXECUTADO com ZERO vazios).
   // O que o build vigia é o contrário -- um furo EXECUTADO sem sondador seria
@@ -137,7 +226,11 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
   const aviso = executadosSemSondador
     ? ` ATENÇÃO: ${executadosSemSondador} furo(s) CONCLUIDO/EXECUTADO sem Sondador -- estes ficam fora da conta de equipes.`
     : ' Todo furo executado tem Sondador (os vazios são PENDENTE/CANCELADO, que não ocupam equipe).';
-  console.log(`Equipes: ${paresComEquipe} par(es) (SUP, tipologia) com equipe mobilizada.${aviso}`);
+  // "em uso" e não "mobilizada": desde 2026-08-03 este mapa pode ter vindo das
+  // equipes ATIVAS (aba EQ) em vez das mobilizadas, e o log estava contando um
+  // enquanto dizia o outro.
+  const fonteEquipes = demandas.equipesAtivasPeriodo ? 'ATIVAS (aba EQ)' : 'mobilizadas (Avanço Sond)';
+  console.log(`Equipes: ${paresComEquipe} par(es) (SUP, tipologia) no mapa em uso -- fonte: ${fonteEquipes}.${aviso}`);
   console.log(`Demandas: ${furosLidos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${deslocamentos} linha(s) de "deslocamento" descartada(s) (furo impenetrável reposicionado, não é demanda nova), ${furosRedirecionados} furo(s) redirecionado(s) pra "Diversos" (SUP sem registro na MATRIZ pra aquela tipologia), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
 
   // Relatório dos DOIS lados do desencontro de SUP, com os furos ORIGINAIS
@@ -161,7 +254,7 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
 
 if (require.main === module) {
   try {
-    build();
+    build().catch((err) => { console.error(err); process.exit(1); });
   } catch (err) {
     console.error(err);
     process.exit(1);
