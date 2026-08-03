@@ -127,15 +127,47 @@ equipes, 31 dias e a mesma lista de IDs. As 212 células (5,8%) com texto
 diferente são edição real da planilha entre as duas coletas — a programação
 muda ao longo do dia --, não erro de conversão.
 
-## O que falta implementar
+## Mês sem dado da aba EQ — **[decisão]** fica sem dado e AVISA
 
-1. Ler as abas EQ mensais no build (HTTP; o build hoje só lê `.xlsx` do `G:`).
-2. Apropriação (OS → SUP; última OS; bucket "não apropriadas").
-3. Mapa de tipologia com as regras acima + cruzamento por sondador.
-4. Trocar a fonte de `equipesPorDia` em `compute-balanco.js` (o consumo já
-   existe e não muda).
-5. **Live-refresh**: precisa da aba EQ publicada como CSV (mesmo setup de Apps
-   Script do Avanço Sond). Sem isso, equipes congelam no dado do build.
+A Sheet espelho só carrega o mês corrente, e as abas mensais anteriores podem
+não existir ou não ser alcançáveis. Nesses meses o Δ equipes **não desenha
+barra nenhuma** e a aba **mostra um aviso** dizendo que não há dado de equipes
+para o período — nunca cai calado no Avanço Sond.
 
-Até isso ficar pronto, a barra segue mostrando **mobilizadas** — correto, só
-mais restrito que o alvo.
+O motivo de não usar o Avanço Sond como reserva: ele mede outra coisa (equipes
+mobilizadas com furo em execução, 1.637 equipe-dia em julho, contra 1.845
+ativas). Preencher a barra com ele deixaria a série sempre cheia e misturaria
+duas métricas na mesma linha, sem o usuário ter como perceber — a leitura
+mudaria de significado conforme o mês escolhido. Barra vazia com aviso é
+informação; barra cheia com número de outra métrica é erro silencioso.
+
+Segue o mesmo princípio do banner `aviso-gids-fallback` do dashboard da matriz:
+quando a fonte não é a esperada, a tela diz isso em vez de fingir normalidade.
+
+## Estado
+
+**Pronto e testado** (não ligado na página):
+
+- `classificar-dia-equipe.js` — os 4 estados, lógica por exceção.
+- `compute-equipes-ativas.js` — `parseAbaEq` (aceita os dois formatos de
+  cabeçalho de dia), regras de tipologia, `casarSondador`,
+  `agregarEquipesAtivas` (apropriação por OS/última OS) e `juntarPorDia`.
+- Sheet espelho publicada e conferida.
+
+Validação de ponta a ponta contra a espelho real (agosto/2026): 1.938
+equipe-dia ativos, **1.599 apropriados** a um par (SUP, tipologia) = 82,5%;
+332 não apropriadas, 7 sem tipologia.
+
+**Falta:**
+
+1. Ler a aba EQ no build. Hoje o build é SÍNCRONO e só lê `.xlsx` do `G:`;
+   a EQ vem por HTTP, então `build()` precisa virar assíncrona.
+2. Montar `osParaSup` e `tipologiaPorSondador` no build (o Avanço Sond já é
+   lido ali; falta expor a coluna OS em `parseAvancos`, que hoje não a devolve).
+3. Trocar a fonte de `equipesPorDia` em `compute-balanco.js` — o consumo já
+   existe e não muda.
+4. Live-refresh pela URL do espelho.
+5. Aviso de mês sem dado (ver a decisão acima).
+
+Até isso, a barra segue mostrando **mobilizadas** — correto, só mais restrito
+que o alvo.
