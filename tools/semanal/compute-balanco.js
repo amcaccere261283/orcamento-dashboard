@@ -1,6 +1,6 @@
 'use strict';
 const { mediaEquipesPonderada } = require('../comum/calculo-equipes.js');
-const { diaEpoch } = require('./compute-semanal.js');
+const { diaEpoch, dividirEmSemanas } = require('./compute-semanal.js');
 
 // Este módulo roda tanto no Node (testes) quanto embrulhado no navegador via
 // buildBrowserBundle -- por isso 'var'/'function', não 'const'/arrow (ver o
@@ -30,13 +30,58 @@ const { diaEpoch } = require('./compute-semanal.js');
 // mesVigente: só o mês vigenteIdx. acumuladoAteMes: de janeiro (0) até
 // vigenteIdx, INCLUSIVE -- "acumulado até o mês" inclui o próprio mês
 // corrente, mesma leitura que o resto do projeto já usa pra acumulados.
-// s1..s4 devolvem null: a planilha semanal ainda não existe (mesma situação
-// de Realizado/Tendência em render-aba-semanal.js) -- quando existir, esta
-// função ganha os casos correspondentes.
+//
+// O recorte por SEMANA não passa por aqui: ele não é outro valor de 'periodo',
+// é um filtro que se aplica DENTRO de mesVigente (ver selecaoDeSemanas). Isso
+// porque as duas coisas respondem a perguntas diferentes -- "que meses?" e
+// "que semanas do mês vigente?" -- e o usuário pode querer as duas ao mesmo
+// tempo no futuro.
 function periodoParaIntervalo(periodo, vigenteIdx) {
   if (periodo === 'mesVigente') return { inicio: vigenteIdx, fim: vigenteIdx + 1 };
   if (periodo === 'acumuladoAteMes') return { inicio: 0, fim: vigenteIdx + 1 };
   return null;
+}
+
+// Normaliza a seleção de semanas para o que o resto do módulo consome: uma
+// lista de índices válidos, ou null quando o recorte NÃO se aplica.
+//
+// Cai em null (= mês inteiro, exatamente o caminho de antes, sem nenhuma
+// aritmética a mais) em quatro casos: sem calendário de semanas; seleção
+// ausente; seleção vazia; e seleção com TODAS as semanas. Os dois últimos são
+// o mesmo resultado por caminhos diferentes:
+//
+//   - nenhuma marcada = todas: mesma convenção "nada marcado mostra tudo" que
+//     os filtros da barra compartilhada já usam (ver filtroExclui em
+//     scriptFiltros), em vez de esvaziar a aba e parecer defeito.
+//   - todas marcadas: a união das semanas É o mês (semanasDoMes corta sempre
+//     dentro dele), então devolver null dá o mesmo número sem passar pela
+//     repartição por dias -- bit a bit igual, não "igual com tolerância".
+function selecaoDeSemanas(semanas, selecionadas) {
+  if (!Array.isArray(semanas) || !semanas.length) return null;
+  if (!Array.isArray(selecionadas) || !selecionadas.length) return null;
+  var validos = selecionadas.filter(function (i) { return typeof i === 'number' && i >= 0 && i < semanas.length; });
+  if (!validos.length || validos.length >= semanas.length) return null;
+  return validos;
+}
+
+// A base é um número MENSAL: para recortá-la numa semana é preciso reparti-la.
+// Usa dividirEmSemanas -- a MESMA função que a Tabela Semanal usa, não uma
+// segunda cópia da regra -- e soma só as fatias marcadas. Repartir por dia (e
+// não em fatias iguais por semana) é o que mantém as semanas de borda curtas
+// honestas: julho/2026 tem S1 de 5 dias, agosto tem S6 de 1 dia.
+//
+// Equipes nunca chega aqui: é FOTO, não fluxo (2 equipes no mês são 2 equipes
+// em qualquer semana) -- quem chama trata essa dimensão à parte, igual
+// dividirEmSemanas já faz internamente.
+function baseNasSemanas(valorMensal, semanas, selecao) {
+  if (valorMensal === null || valorMensal === undefined) return null;
+  var fatias = dividirEmSemanas(valorMensal, 'volume', semanas.length, semanas);
+  var soma = null;
+  selecao.forEach(function (i) {
+    if (fatias[i] === null || fatias[i] === undefined) return;
+    soma = (soma === null ? 0 : soma) + fatias[i];
+  });
+  return soma;
 }
 
 // Soma um array mensal (12 posições, null onde a planilha de origem estava
@@ -142,13 +187,20 @@ function intervaloParaEpoch(ano, intervalo) {
 // barra aparecia pra ninguém), então Mês Vigente precisa de uma fonte que
 // já existe em tempo real -- os furos concluídos, que a Tabela Semanal já
 // lê da mesma forma.
-function realizadoDoAvancos(demandas, sup, tipologia, intervaloEpoch, peso) {
+// 'intervalosEpoch' é uma LISTA de janelas [inicio, fim] fechadas: uma só (o
+// mês inteiro) no caso normal, ou uma por semana marcada quando o recorte
+// semanal está ativo. As janelas de semana nunca se sobrepõem (semanasDoMes
+// devolve semana a semana, cortadas dentro do mês), então somar as contagens
+// não conta furo duas vezes.
+function realizadoDoAvancos(demandas, sup, tipologia, intervalosEpoch, peso) {
   var porRegistroEventos = (demandas && demandas.porRegistroEventos) || {};
   var entrada = porRegistroEventos[chaveDemandas(sup, tipologia)];
   var eventos = (entrada && entrada.sondagemRealizada) || [];
   var contagem = 0;
   for (var i = 0; i < eventos.length; i++) {
-    if (eventos[i] >= intervaloEpoch.inicio && eventos[i] <= intervaloEpoch.fim) contagem++;
+    for (var j = 0; j < intervalosEpoch.length; j++) {
+      if (eventos[i] >= intervalosEpoch[j].inicio && eventos[i] <= intervalosEpoch[j].fim) { contagem++; break; }
+    }
   }
   return contagem * peso;
 }
@@ -168,10 +220,24 @@ function realizadoDoAvancos(demandas, sup, tipologia, intervaloEpoch, peso) {
 // sem mudança. Sem 'demandas' (chamador não passou, ou 'ano' ausente),
 // cai no comportamento de sempre (coluna da MATRIZ) -- retrocompatível com
 // quem ainda não tem 'demandas' à mão.
-function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline, demandas, ano }) {
+function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline, demandas, ano, semanas, semanasSelecionadas }) {
   var intervalo = periodoParaIntervalo(periodo, vigenteIdx);
   var intervaloEpoch = periodo === 'mesVigente' && typeof ano === 'number' ? intervaloParaEpoch(ano, intervalo) : null;
   var usarAvancosNoRealizado = periodo === 'mesVigente' && !!demandas && !!intervaloEpoch;
+
+  // Recorte por semana: só dentro de Mês Vigente. Num acumulado de vários
+  // meses as semanas do mês corrente não significam nada, então a seleção é
+  // ignorada (a UI também desabilita o controle -- aqui é a garantia de que o
+  // número não muda nem se alguém chamar direto).
+  //
+  // Equipes fica de fora do recorte da BASE por ser foto e não fluxo; o
+  // realizado de equipes já vem da MATRIZ por outro caminho (equipesNoIntervalo).
+  var selecao = periodo === 'mesVigente' ? selecaoDeSemanas(semanas, semanasSelecionadas) : null;
+  var recortarBase = !!selecao && dimensao !== 'equipes';
+  var intervalosEpoch = !intervaloEpoch ? []
+    : (selecao
+      ? selecao.map(function (i) { return { inicio: semanas[i].inicio, fim: semanas[i].fim }; })
+      : [intervaloEpoch]);
   var linhas = [];
 
   (indices || []).forEach(function (i) {
@@ -182,12 +248,18 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
     var mensalRealizado = registro.realizado && registro.realizado[dimensao];
 
     var previstoPeriodo = somarIntervalo(mensalPrevisto, intervalo);
+    if (recortarBase) previstoPeriodo = baseNasSemanas(previstoPeriodo, semanas, selecao);
     var realizadoPeriodo;
     if (usarAvancosNoRealizado) {
       var peso = dimensao === 'financeiro' ? ticketMedio(registro) : 1;
-      realizadoPeriodo = realizadoDoAvancos(demandas, registro.sup, tipologia, intervaloEpoch, peso);
+      realizadoPeriodo = realizadoDoAvancos(demandas, registro.sup, tipologia, intervalosEpoch, peso);
     } else {
       realizadoPeriodo = somarIntervalo(mensalRealizado, intervalo);
+      // Realizado da MATRIZ é mensal (só existe em Acumulado até o mês, ou
+      // quando não há 'demandas'): recortado pela mesma repartição por dias
+      // que a base, senão o desvio compararia uma semana de base contra o mês
+      // inteiro de realizado.
+      if (recortarBase) realizadoPeriodo = baseNasSemanas(realizadoPeriodo, semanas, selecao);
     }
 
     // Atividade é por (SUP, tipologia) -- sobre Previsto da MATRIZ sempre, e
@@ -217,6 +289,7 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
         semBase = true;
       } else {
         valorBase = somarIntervalo(entradaBaseline[dimensao], intervalo);
+        if (recortarBase) valorBase = baseNasSemanas(valorBase, semanas, selecao);
         equipesBase = equipesNoIntervalo(entradaBaseline.equipes, intervalo);
         if (valorBase === null) semBase = true;
       }

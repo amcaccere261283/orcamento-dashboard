@@ -125,6 +125,26 @@ const CSS_BALANCO = `
   }
   .controle-balanco-check input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; }
 
+  /* Recorte por semana. O rótulo fica em cima (mesma estrutura dos <label>
+     dos selects vizinhos, que já são coluna) e as caixas numa linha só --
+     assim o grupo inteiro alinha pela mesma base dos outros controles em vez
+     de flutuar. */
+  .controle-balanco-caixas {
+    display: flex; align-items: center; gap: 10px;
+    height: 36px;
+  }
+  .caixa-semana {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 13px; color: var(--text-primary); cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .caixa-semana input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; }
+  /* Desabilitado fora de Mês Vigente: continua visível (some e o layout pula
+     a cada troca de período), mas legivelmente inerte. */
+  .controle-balanco-desabilitado { opacity: 0.45; }
+  .controle-balanco-desabilitado .caixa-semana,
+  .controle-balanco-desabilitado .caixa-semana input { cursor: not-allowed; }
+
   /* O painel dos gráficos ganha a MESMA superfície que #secao-grafico tem no
      orçamento (rgba(26,26,25,0.68) + cantos de 8px), mas aplicada em
      .graficos-balanco e não em #secao-balanco: os controles e a legenda ficam
@@ -554,7 +574,11 @@ function inicializarTooltipBalanco() {
 // desligado por padrão, cada gráfico abriria com a maioria das linhas em
 // comprimento zero. Tendência não é opção de base -- descartada
 // explicitamente pelo dono do projeto (ver compute-balanco.js).
-var ESTADO_BALANCO = { periodo: 'mesVigente', base: 'previsto', dimensao: 'financeiro', somenteAtivos: true };
+// semanas: índices das semanas marcadas no recorte semanal. Começa VAZIO --
+// "nada marcado = mês inteiro", mesma convenção dos filtros da barra (ver
+// renderControleSemanas em render-aba-balanco.js). Não é resetado na troca de
+// período: quem volta pra Mês Vigente reencontra o recorte que tinha feito.
+var ESTADO_BALANCO = { periodo: 'mesVigente', base: 'previsto', dimensao: 'financeiro', somenteAtivos: true, semanas: [] };
 
 // Redesenha #secao-balanco inteira (controles + um gráfico por tipologia
 // presente em 'indices') com o estado atual de ESTADO_BALANCO, e religa os 4
@@ -574,6 +598,15 @@ function montarAbaBalanco(registros, indices) {
     baseline: window.__BASELINE__,
     demandas: window.__DEMANDAS__,
     ano: window.__ANO__,
+    // As semanas reais do mês -- o MESMO calendário da Tabela Semanal
+    // (semanasDoMes, cortando sempre dentro do mês), nunca uma segunda
+    // contagem de semanas. Sai de __VIGENTE_IDX__ e não de mesSelecionadoIdx
+    // porque é esse o índice que a própria aba Balanço usa em vigenteIdx logo
+    // acima: o seletor de mês do topo governa a Tabela Semanal e os Gráficos,
+    // mas não esta aba. Usar índices diferentes nas duas linhas faria o
+    // recorte S1..Sn descrever as semanas de um mês e recortar o dado de outro.
+    semanas: ComputeSemanal.semanasDoMes(window.__ANO__, window.__VIGENTE_IDX__),
+    semanasSelecionadas: ESTADO_BALANCO.semanas,
   });
 
   document.getElementById('balanco-periodo').addEventListener('change', function (e) {
@@ -592,6 +625,22 @@ function montarAbaBalanco(registros, indices) {
     ESTADO_BALANCO.somenteAtivos = e.target.checked;
     montarAbaBalanco(registros, indices);
   });
+  // Uma caixa por semana, cada uma independente: o estado é lido das caixas
+  // marcadas no momento do evento, não incrementado a partir do anterior --
+  // assim desmarcar é tão simples quanto marcar, e não existe caminho em que
+  // o array acumule índice repetido.
+  var caixasSemana = document.querySelectorAll('.balanco-semana');
+  for (var cs = 0; cs < caixasSemana.length; cs++) {
+    caixasSemana[cs].addEventListener('change', function () {
+      var marcadas = [];
+      var todas = document.querySelectorAll('.balanco-semana');
+      for (var k = 0; k < todas.length; k++) {
+        if (todas[k].checked) marcadas.push(parseInt(todas[k].value, 10));
+      }
+      ESTADO_BALANCO.semanas = marcadas;
+      montarAbaBalanco(registros, indices);
+    });
+  }
 }
 
 // Redesenha #secao-demandas inteira (controles + tabelas) com o modo atual

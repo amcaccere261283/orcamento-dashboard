@@ -259,3 +259,96 @@ test('Mês Vigente com demandas mas SEM ano cai no comportamento de sempre -- an
   ));
   assert.strictEqual(linhas[0].valorRealizado, 42, 'sem ano não dá pra converter o intervalo de mês em dia-desde-época -- cai no fallback');
 });
+
+// --- Filtro de semanas no Balanço (2026-08-03) -----------------------------
+//
+// Pedido do dono do projeto: poder recortar o Balanço de massa por semana do
+// mês vigente, cada semana marcável de forma independente. Duas grandezas
+// respondem de formas DIFERENTES ao recorte, e é isso que estes testes travam:
+//
+//   - Realizado: os furos têm data, então o recorte é exato -- conta só o que
+//     caiu dentro das semanas marcadas.
+//   - Base (Previsto/Previsto Inicial): é um número MENSAL. Reparte pelos dias
+//     de cada semana, exatamente como dividirEmSemanas já faz na Tabela
+//     Semanal -- nunca em fatias iguais por semana.
+//   - Equipes: é FOTO, não fluxo. Não se reparte: 2 equipes no mês são 2
+//     equipes em qualquer recorte de semana.
+
+const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
+
+function cenarioSemanas({ semanasSelecionadas, previstoVol = 310, eventos = [] }) {
+  const mk = (vol, eq) => { const v = new Array(12).fill(0), e = new Array(12).fill(0);
+    v[6] = vol; e[6] = eq; return { volume: v, equipes: e, financeiro: new Array(12).fill(0) }; };
+  return {
+    registros: [{ sup: 'SUP-0001-24', tipologia: 'ST', tomador: 'T', previsto: mk(previstoVol, 2), realizado: mk(0, 0), total: mk(0, 0) }],
+    indices: [0], tipologia: 'ST', base: 'previsto', dimensao: 'volume', periodo: 'mesVigente',
+    vigenteIdx: VIGENTE_JULHO, baseline: [],
+    demandas: { porRegistroEventos: { 'SUP-0001-24||ST': { sondagemRealizada: eventos } } },
+    ano: ANO_TESTE,
+    semanas: semanasDoMes(ANO_TESTE, VIGENTE_JULHO),
+    semanasSelecionadas: semanasSelecionadas,
+  };
+}
+
+test('semanas: o Realizado conta só os furos que caíram nas semanas marcadas', () => {
+  // Julho/2026: S1 = 01..05, S2 = 06..12 (segunda a domingo, cortadas dentro
+  // do mês -- ver semanasDoMes).
+  const eventos = [diaJul(2), diaJul(3), diaJul(8), diaJul(9), diaJul(10)];
+
+  const soS1 = calcularLinhas(cenarioSemanas({ semanasSelecionadas: [0], eventos }));
+  const soS2 = calcularLinhas(cenarioSemanas({ semanasSelecionadas: [1], eventos }));
+  const ambas = calcularLinhas(cenarioSemanas({ semanasSelecionadas: [0, 1], eventos }));
+
+  assert.strictEqual(soS1[0].valorRealizado, 2, 'S1 tem 2 furos (02 e 03/07)');
+  assert.strictEqual(soS2[0].valorRealizado, 3, 'S2 tem 3 furos (08, 09 e 10/07)');
+  assert.strictEqual(ambas[0].valorRealizado, 5, 'as semanas marcadas somam, não se substituem');
+});
+
+test('semanas: as semanas são independentes -- marcar S1 e S3 pula o meio', () => {
+  const eventos = [diaJul(2), diaJul(8), diaJul(15)]; // S1, S2, S3
+  const linhas = calcularLinhas(cenarioSemanas({ semanasSelecionadas: [0, 2], eventos }));
+  assert.strictEqual(linhas[0].valorRealizado, 2, 'o furo de S2 fica de fora');
+});
+
+test('semanas: a base mensal se reparte pelos DIAS da semana, não em fatias iguais', () => {
+  // Julho/2026 tem 31 dias; S1 (01..05) tem 5. Com base 310 no mês, S1 leva
+  // 310 * 5/31 = 50. Em fatias iguais por semana (5 semanas) daria 62 -- 24%
+  // a mais, o erro que dividirEmSemanas já corrigiu na Tabela Semanal.
+  const linhas = calcularLinhas(cenarioSemanas({ semanasSelecionadas: [0], previstoVol: 310 }));
+  assert.ok(Math.abs(linhas[0].valorBase - 50) < 0.0001, `S1 devia levar 50, levou ${linhas[0].valorBase}`);
+});
+
+test('semanas: marcar todas devolve exatamente o mês inteiro', () => {
+  const semanas = semanasDoMes(ANO_TESTE, VIGENTE_JULHO);
+  const todas = semanas.map((_, i) => i);
+  const comTodas = calcularLinhas(cenarioSemanas({ semanasSelecionadas: todas, previstoVol: 310 }));
+  const semFiltro = calcularLinhas(cenarioSemanas({ semanasSelecionadas: null, previstoVol: 310 }));
+  assert.ok(Math.abs(comTodas[0].valorBase - 310) < 0.0001, 'a repartição por dias tem que somar o mês de volta');
+  assert.strictEqual(semFiltro[0].valorBase, 310);
+});
+
+test('semanas: nenhuma marcada = todas, mesma convenção dos filtros da barra', () => {
+  const eventos = [diaJul(2), diaJul(8)];
+  const vazio = calcularLinhas(cenarioSemanas({ semanasSelecionadas: [], eventos }));
+  const nulo = calcularLinhas(cenarioSemanas({ semanasSelecionadas: null, eventos }));
+  assert.strictEqual(vazio[0].valorRealizado, nulo[0].valorRealizado);
+  assert.strictEqual(vazio[0].valorBase, nulo[0].valorBase);
+});
+
+test('semanas: Equipes é foto -- o recorte por semana não reparte a base de equipes', () => {
+  const cfg = cenarioSemanas({ semanasSelecionadas: [0] });
+  cfg.dimensao = 'equipes';
+  const linhas = calcularLinhas(cfg);
+  // 2 equipes mobilizadas em julho continuam 2 em S1: um sétimo de equipe não
+  // existe. Mesma premissa de dividirEmSemanas/mediaEquipesPonderada.
+  assert.strictEqual(linhas[0].equipesBase, 2);
+});
+
+test('semanas: o recorte só vale para Mês Vigente -- Acumulado até o mês ignora a seleção', () => {
+  // As semanas são do mês vigente; num acumulado de 7 meses elas não têm
+  // significado. A UI desabilita o controle, e o cálculo ignora por garantia.
+  const cfg = cenarioSemanas({ semanasSelecionadas: [0], previstoVol: 310 });
+  cfg.periodo = 'acumuladoAteMes';
+  const linhas = calcularLinhas(cfg);
+  assert.strictEqual(linhas[0].valorBase, 310, 'o acumulado continua somando o mês inteiro');
+});

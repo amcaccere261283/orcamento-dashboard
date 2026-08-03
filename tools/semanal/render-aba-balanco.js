@@ -663,8 +663,39 @@ function renderControles(estado) {
   html += '<label class="controle-balanco controle-balanco-check">'
     + '<input type="checkbox" id="balanco-somente-ativos"' + (somenteAtivos ? ' checked' : '') + '>'
     + ' Somente SUPs ativos no período</label>';
+  html += renderControleSemanas(e.semanas, e.semanasSelecionadas, periodo);
   html += '</div>';
   return html;
+}
+
+// Recorte por semana do mês vigente: uma caixa por semana real do mês (4 a 6,
+// depende do calendário -- ver semanasDoMes), independentes entre si.
+//
+// Caixas e não um <select multiple>: são poucas opções, todas visíveis de uma
+// vez, e o gesto de "ligar/desligar S3" fica a um clique. Nenhuma vem marcada
+// -- pela convenção "nada marcado = tudo" que os filtros da barra já usam, a
+// aba abre no mês inteiro, e marcar é sempre um ato deliberado de recorte.
+//
+// Fora de Mês Vigente o grupo aparece desabilitado em vez de sumir: some e o
+// controle vira um pulo de layout a cada troca de período, e o usuário que
+// marcou semanas perderia de vista por que os números mudaram. O cálculo
+// ignora a seleção nesse caso de qualquer forma (ver calcularLinhas).
+function renderControleSemanas(semanas, selecionadas, periodo) {
+  if (!Array.isArray(semanas) || !semanas.length) return '';
+  var marcadas = Array.isArray(selecionadas) ? selecionadas : [];
+  var desabilitado = periodo !== 'mesVigente';
+
+  var html = '<div class="controle-balanco controle-balanco-semanas'
+    + (desabilitado ? ' controle-balanco-desabilitado' : '') + '">'
+    + '<span class="controle-balanco-rotulo">Semanas</span>'
+    + '<span class="controle-balanco-caixas">';
+  semanas.forEach(function (_, i) {
+    html += '<label class="caixa-semana"><input type="checkbox" class="balanco-semana" value="' + i + '"'
+      + (marcadas.indexOf(i) !== -1 ? ' checked' : '')
+      + (desabilitado ? ' disabled' : '')
+      + '> S' + (i + 1) + '</label>';
+  });
+  return html + '</span></div>';
 }
 
 // Legenda ÚNICA para a aba inteira, não uma por painel: são as mesmas três
@@ -710,6 +741,11 @@ function renderAbaBalanco(registros, indices, opcoes) {
   var baseline = opts.baseline || [];
   var demandas = opts.demandas;
   var ano = opts.ano;
+  // Calendário do mês vigente e as semanas marcadas (índices). Sem 'semanas'
+  // o controle nem é desenhado e o recorte não existe -- retrocompatível com
+  // quem chama sem eles (testes antigos, e a página antes de 2026-08-03).
+  var semanas = opts.semanas;
+  var semanasSelecionadas = opts.semanasSelecionadas;
 
   var tipologias = listarTipologias(registros, indices);
 
@@ -732,6 +768,7 @@ function renderAbaBalanco(registros, indices, opcoes) {
         registros: registros, indices: indices, tipologia: tipologia,
         base: base, dimensao: dimensao, periodo: periodo,
         vigenteIdx: vigenteIdx, baseline: baseline, demandas: demandas, ano: ano,
+        semanas: semanas, semanasSelecionadas: semanasSelecionadas,
       }),
     };
   });
@@ -775,7 +812,10 @@ function renderAbaBalanco(registros, indices, opcoes) {
       + ' <strong>Δ equipes</strong> tem dado. Troque o Período para comparar contra a base.</p>'
     : '';
 
-  return renderControles({ periodo: periodo, base: base, dimensao: dimensao, somenteAtivos: somenteAtivos })
+  return renderControles({
+    periodo: periodo, base: base, dimensao: dimensao, somenteAtivos: somenteAtivos,
+    semanas: semanas, semanasSelecionadas: semanasSelecionadas,
+  })
     + renderLegenda()
     + aviso
     + '<div class="graficos-balanco">' + graficos + '</div>'

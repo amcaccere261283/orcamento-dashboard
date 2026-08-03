@@ -7,6 +7,7 @@ const { calcularLinhas } = require('../tools/semanal/compute-balanco.js');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaBalanco } = require('../tools/semanal/render-aba-balanco.js');
 const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
+const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
 
 // A COSTURA que ninguém atravessava: build-dashboard.js/baselineParaCliente
 // (que serializa a linha de base) -> compute-balanco.js/chaveBaseline (que a
@@ -203,9 +204,14 @@ test('na página gerada, a base "Previsto Inicial" só marca "sem base" no SUP q
   documentoFalso.getElementById('balanco-base').listeners.change({ target: { value: 'previstoInicial' } });
 
   const svg = documentoFalso.getElementById('secao-balanco').innerHTML;
+  // semanas: o calendário que montarAbaBalanco passa sempre (2026-08-03).
+  // Em 'acumuladoAteMes' o recorte semanal fica desabilitado e não muda número
+  // nenhum -- mas o grupo de caixas continua no HTML, então precisa estar aqui
+  // pro comparativo de string bater.
   const esperado = renderAbaBalanco(registros, [0, 1, 2], {
     periodo: 'acumuladoAteMes', base: 'previstoInicial', dimensao: 'financeiro', somenteAtivos: true,
     vigenteIdx: VIGENTE_IDX, baseline,
+    semanas: semanasDoMes(geradoEm.getUTCFullYear(), VIGENTE_IDX), semanasSelecionadas: [],
   });
   assert.equal(svg, esperado, 'a aba redesenhada com base "Previsto Inicial" precisa bater com renderAbaBalanco -- prova que window.__BASELINE__ chegou lá dentro com o conteúdo certo');
 

@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const vm = require('node:vm');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaBalanco } = require('../tools/semanal/render-aba-balanco.js');
+const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
 const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 
 // Task 10 liga a aba Balanço de massa de ponta a ponta. O achado crítico da
@@ -118,9 +119,14 @@ test('depois da senha certa, a aba Balanço de massa desenha SVG de verdade em #
   // da MATRIZ).
   const vigenteIdx = geradoEm.getUTCMonth();
   const indicesTodos = registros.map((_, i) => i);
+  // semanas/semanasSelecionadas: o estado padrão do recorte semanal
+  // (2026-08-03) -- o calendário real do mês vigente, nenhuma semana marcada
+  // ("nada marcado = mês inteiro"). Tem que bater com o que montarAbaBalanco
+  // passa, senão o comparativo abaixo falha só pelo controle a mais/a menos.
   const esperado = renderAbaBalanco(registros, indicesTodos, {
     periodo: 'mesVigente', base: 'previsto', dimensao: 'financeiro', somenteAtivos: true,
     vigenteIdx, baseline: [], demandas: DEMANDAS_VAZIAS, ano: geradoEm.getUTCFullYear(),
+    semanas: semanasDoMes(geradoEm.getUTCFullYear(), vigenteIdx), semanasSelecionadas: [],
   });
 
   const htmlMontado = documentoFalso.getElementById('secao-balanco').innerHTML;
