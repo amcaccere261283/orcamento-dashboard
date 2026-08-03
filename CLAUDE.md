@@ -175,12 +175,29 @@ contrário do orçamento, a semanal mantém a linha de base separada dos
 registros desde sempre, então não precisa do transplante de
 `previstoInicial` que o orçamento precisa.
 
-**Pendência**: as URLs `URL_ESPELHO_AVANCOS_SEMANAL`/`URL_ESPELHO_LAB_SEMANAL`
-em `tools/semanal/render-semanal.js` (dentro de `SCRIPT_CLIENTE_SEMANAL`)
-são placeholder até o dono do projeto terminar o setup manual do Apps
-Script novo (ver o arquivo `.gs`) e publicar as duas abas como CSV. Até lá o
-botão funciona pra MATRIZ mas falha (com mensagem de erro clara no
-`#status-atualizacao`) ao tentar buscar Avanços/Lab.
+**Ligado em 2026-08-03** — o Apps Script do Avanço Sond foi publicado e as três
+fontes funcionam. `tools/semanal/apps-script-espelho-avancos.gs` já carrega o
+`ORIGEM_FILE_ID` real, e as duas URLs estão em `URL_ESPELHO_AVANCOS_SEMANAL`/
+`URL_ESPELHO_LAB_SEMANAL` (`render-semanal.js`, dentro de `SCRIPT_CLIENTE_SEMANAL`).
+
+São a MESMA Sheet publicada, abas diferentes: o que as distingue é só o `gid`
+(`943230110` = Avanços, `213649864` = Lab Concluido). Trocá-las de lugar não daria
+erro nenhum — cada parser leria a planilha errada em silêncio. Se um dia forem
+republicadas, **confira o cabeçalho do CSV** antes de confiar na ordem: Avanços
+começa em `Contrato,Tomador,Objeto,...`; Lab, em `ID Contrato,Tomadora,OS,...`.
+
+O caminho degradado continua existindo e coberto por teste (`RE_URL_PENDENTE`): se
+as URLs voltarem ao literal `PENDENTE-...`, o botão atualiza só a MATRIZ, preserva
+`window.__DEMANDAS__` e diz isso no `#status-atualizacao`.
+
+Verificação de ponta a ponta feita no dia de ligar: as três requisições retornaram
+200 e a aba Demandas fechou em **15.515 chegadas em 2026**, o mesmo número medido
+no `.xlsx` local (ver `test/semanal-demandas-planilha-real.test.js`) — é assim que
+se confirma que a Sheet espelho não está servindo dado velho ou truncado.
+
+**O espelho atrasa até 30 min**: o gatilho do Apps Script (`criarGatilho`) roda
+nesse intervalo. Uma edição no `.xlsx` não aparece no botão antes disso — não é
+defeito do refresh.
 
 ### Pendências conhecidas
 

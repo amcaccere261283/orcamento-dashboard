@@ -749,13 +749,22 @@ function montarDashboard(registros) {
 // URL_ESPELHO_MATRIZ_SEMANAL é a MESMA Sheet publicada que o orçamento já
 // usa (tools/orcamento/render-dashboard.js) -- literal duplicado de
 // propósito, não hà como as duas páginas compartilharem uma constante JS
-// (são dois builds independentes). As outras duas ainda são placeholder:
-// dependem de um Apps Script novo, que o dono do projeto precisa publicar
-// manualmente (ver tools/semanal/apps-script-espelho-avancos.gs) -- troque
-// pelos valores reais assim que ele publicar.
+// (são dois builds independentes). As outras duas saíram do placeholder em
+// 2026-08-03, quando o dono do projeto publicou a Sheet espelho do Avanço
+// Sond (ver tools/semanal/apps-script-espelho-avancos.gs, que já carrega o
+// ORIGEM_FILE_ID real).
+//
+// As duas últimas são a MESMA Sheet publicada, abas diferentes -- o que as
+// distingue é só o gid. Conferido no ato de ligar, baixando as duas: gid
+// 943230110 traz o cabeçalho de Avanços (Contrato, Tomador, ..., Status,
+// Cancelamento) com 62.259 linhas, e gid 213649864 traz o de Lab Concluido
+// (ID Contrato, Tomadora, Tipo de Ensaio) com 100.939 -- batendo com as
+// contagens medidas no .xlsx local. Trocá-las de lugar não daria erro
+// nenhum, só faria cada parser ler a planilha errada, então NÃO confie na
+// ordem: confira o cabeçalho se um dia forem republicadas.
 var URL_ESPELHO_MATRIZ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRaOjGxPYWKj-as9RwErptIND7PE_zxsND19PReV1MdOup1ZY3iAu_DGrQ0gatPyYFEy3hg-LWE2esw/pub?gid=609773455&single=true&output=csv';
-var URL_ESPELHO_AVANCOS_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS';
-var URL_ESPELHO_LAB_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-LAB';
+var URL_ESPELHO_AVANCOS_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_Lmfr3EG4OwDb8xlc7670XrCXd2VL9vAiCjHeh8sxpLGFHNf_WgbXMGFe33XIKTXxTkaFXo8ls2eR/pub?gid=943230110&single=true&output=csv';
+var URL_ESPELHO_LAB_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_Lmfr3EG4OwDb8xlc7670XrCXd2VL9vAiCjHeh8sxpLGFHNf_WgbXMGFe33XIKTXxTkaFXo8ls2eR/pub?gid=213649864&single=true&output=csv';
 
 function definirStatusAtualizacaoSemanal(texto, ehErro) {
   var el = document.getElementById('status-atualizacao');

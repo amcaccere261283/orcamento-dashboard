@@ -22,7 +22,7 @@
 //      e me envie -- é o que eu uso pra terminar de ligar o botão "Atualizar dados" do
 //      Planejamento Semanal.
 
-var ORIGEM_FILE_ID = 'SUBSTITUA_PELO_ID_DO_ARQUIVO_AVANCO_SOND_XLSX'; // "Avanço Sond.xlsx"
+var ORIGEM_FILE_ID = '140spP-9OoA--MVGTPjKVZ3oRnSPamhxA'; // "Avanço Sond.xlsx"
 var ABAS_ORIGEM = ['Avanços', 'Lab Concluido'];
 
 // Mesmo mecanismo de tools/orcamento/apps-script-espelho-matriz.gs

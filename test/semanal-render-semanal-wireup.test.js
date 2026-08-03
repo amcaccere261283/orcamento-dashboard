@@ -381,7 +381,13 @@ function chamarEsperarAtualizacao(sandbox) {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB ainda no placeholder (estado real de produção hoje), atualiza só a MATRIZ e deixa window.__DEMANDAS__ intocado', async () => {
+// ATUALIZADO em 2026-08-03: as duas URLs saíram do placeholder (o Apps
+// Script do Avanço Sond foi publicado), então este teste passou a FORÇAR o
+// estado degradado no sandbox em vez de herdá-lo do código. O caminho
+// continua valendo: se a Sheet espelho for despublicada, ou a publicação de
+// uma das abas for desfeita, é assim que a página tem que se comportar --
+// atualiza o que dá e diz o que ficou de fora, em vez de falhar inteira.
+test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB no placeholder, atualiza só a MATRIZ e deixa window.__DEMANDAS__ intocado', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const geradoEm = new Date('2026-07-01T00:00:00Z');
   const html = renderSemanal({ registros, baseline: [{ chave: 'SUP-0001-24||ST', previstoInicial: {} }], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
@@ -409,6 +415,13 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB ainda no 
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
+
+  // Volta as duas ao placeholder -- mesmo mecanismo (e mesma justificativa)
+  // que o teste do caminho completo usa para o contrário: `var URL_ESPELHO_...`
+  // vira propriedade do global do vm.Context, então sobrescrever aqui é o que
+  // atualizarDadosAoVivoSemanal() lê ao checar RE_URL_PENDENTE.
+  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS';
+  sandbox.URL_ESPELHO_LAB_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-LAB';
 
   const baselineAntes = sandbox.window.__BASELINE__;
   const demandasAntes = sandbox.window.__DEMANDAS__;
@@ -551,6 +564,12 @@ test('atualizarDadosAoVivoSemanal NÃO reseta o mês selecionado pro vigente -- 
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
+
+  // Placeholder forçado: este teste é sobre mesSelecionadoIdx, não sobre as
+  // fontes -- com só a MATRIZ mockada, o caminho degradado mantém o cenário
+  // mínimo (ver o teste do modo degradado acima, mesma técnica).
+  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS';
+  sandbox.URL_ESPELHO_LAB_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-LAB';
 
   // Usuário troca pra março (índice 2) ANTES de clicar em Atualizar dados.
   sandbox.mesSelecionadoIdx = 2;
