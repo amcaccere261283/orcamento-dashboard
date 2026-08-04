@@ -185,6 +185,63 @@ herdada do orçamento: um registro só usa a premissa da planilha; agregado reca
 **Botão "Limpar filtros"**, o mesmo do orçamento. Zera só a barra compartilhada — não
 o mês selecionado (é navegação) nem os controles próprios das abas.
 
+### Tendência por ramo e alertas de tendência (2026-08-04)
+
+Spec: `docs/superpowers/specs/2026-08-04-semanal-tendencia-regras-e-alertas-design.md`.
+
+**A projeção da Tendência saiu de `render-aba-semanal.js` e virou
+`tools/semanal/compute-tendencia-semanal.js`**, com TRÊS ramos em vez de dois. O ramo é
+escolhido comparando `R_ac` (Realizado somado nas semanas **totalmente encerradas**)
+contra `P_ac` (Previsto das mesmas semanas), com tolerância de 1%:
+
+| Ramo | Semana em curso | Semanas futuras |
+|---|---|---|
+| `R ≈ P` | `max(P[vigente], realizado parcial)` | `P[semana]`, a fatia INTEIRA |
+| `R > P` | realizado parcial + ritmo × dias que faltam dela | ritmo × dias da semana |
+| `R < P` | realizado parcial + fatia do saldo | saldo × dias ÷ dias restantes |
+
+**A semana em curso fica FORA da comparação que escolhe o ramo.** Meia semana de
+Realizado contra um Previsto de semana inteira acusaria `R < P` toda segunda-feira. É o
+mesmo erro que este projeto já corrigiu duas vezes (o degrau da semana nova; a janela de
+equipes mobilizadas que precisava parar em hoje).
+
+**Mês inteiramente no passado não tem Tendência nenhuma** — células **e** coluna Total
+vazias, e a curva some dos Gráficos. Antes o Total mostrava um número que era, por
+construção, idêntico ao Total do Realizado. **O invariante continua valendo e é o que
+prende tudo:** no mês corrente, o Total da Tendência = ponto final da curva Acumulada.
+`semanasTendenciaCompleta` alimenta a curva, o semáforo e o Consolidado;
+`semanasTendencia` é só exibição.
+
+**Valores financeiros passaram a inteiros** nesta página (linhas Realizado/Tendência da
+Tabela Semanal e Ticket médio do Consolidado). Equipes segue com 2 casas (é média
+ponderada) e Volume também (a Tendência dele é projeção fracionária).
+
+**Dois alertas novos**, em bloco próprio na aba Alertas, abaixo do semáforo
+(`tools/semanal/compute-alertas-tendencia.js` decide, `render-alertas-tendencia.js`
+desenha). Só na dimensão **Volume**: as duas perguntas são físicas, e em R$ não existe
+estoque de demanda. Disparam só quando a verificação falha — o semáforo já mostra desvio.
+
+- Ramo `R > P` → **"Avaliar equipe e demanda"**, quando o saldo de demandas em aberto do
+  SUP não cobre o excedente projetado.
+- Ramo `R < P` → **"Equipes com pouco recurso ou improdutividade"**, quando a
+  produtividade exigida para zerar o saldo passa a premissa.
+
+**Duas armadilhas que a revisão final pegou, e que voltariam fácil:**
+
+- **Não use `produtividadeEsperada()` do Consolidado como referência do Alerta B.** Para
+  grupo agregado ela recalcula `V/(E×D)` — e como o `saldo` sai do mesmo `V` e a exigida
+  usa o mesmo `E` e `D`, tudo se cancela: `exigida > esperada ⟺ saldo > V×R/C`. Medido:
+  2 equipes previstas e 200.000 equipes previstas disparavam igual, com a evidência
+  virando "exigida 0,00 · esperada 0,00". O alerta prometia medir equipe e media atraso
+  pro-rata. A referência certa é `premissaProdutividadeDoGrupo`
+  (`render-alertas-tendencia.js`): média das premissas `PROD.` da planilha ponderada pelo
+  volume previsto, que não depende de `E`. `produtividadeEsperada()` continua intacta —
+  ela alimenta uma coluna que tem de bater com o dashboard de orçamento.
+- **`previstoAPartirDeHoje`/`tendenciaAPartirDeHoje` recortam em HOJE, não no início da
+  semana em curso.** Somar a semana vigente inteira fazia o Alerta A exigir carteira
+  aberta para furo que já tinha sido entregue (num caso medido: excedente de 140, dos
+  quais 130 já estavam prontos). Os nomes são compridos de propósito.
+
 ### Aba Demandas (base do Avanço Sond)
 
 Terceira aba da página semanal, alimentada por
