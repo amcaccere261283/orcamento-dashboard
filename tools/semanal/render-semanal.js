@@ -15,11 +15,11 @@ const { fonteParaCliente: fonteParaClienteLinhaBase } = require('../comum/linha-
 // Página da spec com as duas abas (Semanal / Balanço de massa), agora com a
 // barra de filtros compartilhada (markupFiltros()/scriptFiltros() da casca,
 // ../comum/render-shell.js): origem/categoria/tipologia/grupo/sup + dimensão
-// governam as DUAS abas ao mesmo tempo, recalculando a que estiver ativa
-// (ver SCRIPT_CLIENTE_SEMANAL, montarDashboard). A aba Balanço de massa
-// também mantém 4 controles próprios (período/base/dimensão/somente ativos),
+// + somente ativos governam as DUAS abas ao mesmo tempo, recalculando a que
+// estiver ativa (ver SCRIPT_CLIENTE_SEMANAL, montarDashboard). A aba Balanço
+// de massa também mantém 3 controles próprios (período/base/dimensão),
 // embutidos no HTML que ela mesma produz (RenderAbaBalanco.renderAbaBalanco,
-// via montarAbaBalanco) -- esses 4 NÃO fazem parte da barra compartilhada.
+// via montarAbaBalanco) -- esses 3 NÃO fazem parte da barra compartilhada.
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -224,11 +224,6 @@ const CSS_ABAS_SEMANAL = `
      quem é cada faixa. Mesmo motivo da regra anterior para não morar em
      cssBase(), onde .filtros-alertas já existe. */
   .filtros-alertas { border-left: 2px solid rgba(246,181,63,0.35); padding-left: 12px; }
-  .controle-balanco-check {
-    flex-direction: row; align-items: center; gap: 8px;
-    height: 36px; font-size: 13px; color: var(--text-primary);
-  }
-  .controle-balanco-check input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; }
 
   /* Recorte por semana. O rótulo fica em cima (mesma estrutura dos <label>
      dos selects vizinhos, que já são coluna) e as caixas numa linha só --
@@ -823,12 +818,12 @@ function inicializarTooltipBalanco() {
 var ESTADO_BALANCO = { periodo: 'mesVigente', base: 'previsto', dimensao: 'financeiro', semanas: [] };
 
 // Redesenha #secao-balanco inteira (controles + um gráfico por tipologia
-// presente em 'indices') com o estado atual de ESTADO_BALANCO, e religa os 4
+// presente em 'indices') com o estado atual de ESTADO_BALANCO, e religa os 3
 // controles -- eles são recriados a cada innerHTML novo (renderControles, em
 // render-aba-balanco.js), então os listeners da renderização anterior
 // morreram junto com os elementos antigos e precisam ser religados toda
 // vez, depois do innerHTML. 'indices' vem da barra de filtros compartilhada
-// (ver recalcularSemanal) -- os 4 controles desta aba filtram ainda mais
+// (ver recalcularSemanal) -- os 3 controles desta aba filtram ainda mais
 // dentro dele, nunca o substituem.
 function montarAbaBalanco(registros, indices) {
   document.getElementById('secao-balanco').innerHTML = RenderAbaBalanco.renderAbaBalanco(registros, indices, {
