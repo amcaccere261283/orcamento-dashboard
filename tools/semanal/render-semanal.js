@@ -89,6 +89,7 @@ function opcoesMesSemanal() {
 
 const MARKUP_ACOES_SEMANAL = `      <div class="filtros-acoes">
         <label class="controle-mes-semanal">Mês<select id="seletor-mes-semanal">${opcoesMesSemanal()}</select></label>
+        <label class="controle-ativos-semanal"><input type="checkbox" id="somente-ativos" checked> Somente SUPs ativos no período</label>
         <button id="limpar-filtros" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>Limpar filtros</button>
         <button id="atualizar-dashboard" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5"/></svg>Atualizar dados</button>
         <span id="status-atualizacao" class="status-atualizacao"></span>
@@ -392,6 +393,7 @@ const CSS_SEMANAL = `
   }
   .controle-mes-semanal select:hover { border-color: rgba(246,181,63,0.5); }
   .controle-mes-semanal select:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
+  .controle-ativos-semanal { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
   /* Bloco "Alertas de tendência" (2026-08-04, render-alertas-tendencia.js).
      --texto-suave não existe neste projeto -- a variável de texto apagado
      chama-se --muted (ver :root em tools/comum/render-shell.js); --border
@@ -510,6 +512,9 @@ const BUNDLE_ARQUIVOS = [
   'parse-matriz-cliente.js',
   'classificar-dia-equipe.js', 'compute-equipes-ativas.js',
   'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js',
+  // filtro-ativos.js (2026-08-04) não consome nenhum módulo same-dir e pode
+  // entrar cedo na lista.
+  'filtro-ativos.js',
   // Os 4 abaixo alimentam o botão "Atualizar dados" (live-refresh) -- ver
   // docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md.
   // parse-matriz-cliente.js não tem require nenhum (auto-suficiente).
@@ -585,8 +590,13 @@ var ParseLab = MODULOS['parse-lab.js'];
 var ComputeDemandas = MODULOS['compute-demandas.js'];
 var ComputeEquipes = MODULOS['compute-equipes-mobilizadas.js'];
 var ComputeEquipesAtivas = MODULOS['compute-equipes-ativas.js'];
+var FiltroAtivos = MODULOS['filtro-ativos.js'];
 
 var MODO_DEMANDAS = 'mensal';
+
+// Ligado por padrão -- era o default do checkbox próprio do Balanço, e a
+// grade de origem é densa o bastante para que "tudo" seja ruído.
+var SOMENTE_ATIVOS = true;
 
 // As 3 dimensões que a aba Semanal expõe -- subconjunto das 5 do orçamento
 // (sem produtividade/ticketMedio, que não fazem sentido pra uma tabela
@@ -802,18 +812,15 @@ function inicializarTooltipBalanco() {
 }
 
 // Estado dos controles PRÓPRIOS da aba Balanço de massa (Período/Base/
-// Dimensão-2/Ativos) -- continuam locais a esta aba, aplicados DEPOIS do
+// Dimensão-2) -- continuam locais a esta aba, aplicados DEPOIS do
 // indices que a barra compartilhada já filtrou (ver "Fluxo de dados" no
-// spec). somenteAtivos começa LIGADO -- a grade de origem é densa (34 SUPs
-// x 10 tipologias, todo SUP presente em toda tipologia, a maioria zerada);
-// desligado por padrão, cada gráfico abriria com a maioria das linhas em
-// comprimento zero. Tendência não é opção de base -- descartada
-// explicitamente pelo dono do projeto (ver compute-balanco.js).
+// spec). Tendência não é opção de base -- descartada explicitamente pelo
+// dono do projeto (ver compute-balanco.js).
 // semanas: índices das semanas marcadas no recorte semanal. Começa VAZIO --
 // "nada marcado = mês inteiro", mesma convenção dos filtros da barra (ver
 // renderControleSemanas em render-aba-balanco.js). Não é resetado na troca de
 // período: quem volta pra Mês Vigente reencontra o recorte que tinha feito.
-var ESTADO_BALANCO = { periodo: 'mesVigente', base: 'previsto', dimensao: 'financeiro', somenteAtivos: true, semanas: [] };
+var ESTADO_BALANCO = { periodo: 'mesVigente', base: 'previsto', dimensao: 'financeiro', semanas: [] };
 
 // Redesenha #secao-balanco inteira (controles + um gráfico por tipologia
 // presente em 'indices') com o estado atual de ESTADO_BALANCO, e religa os 4
@@ -828,7 +835,7 @@ function montarAbaBalanco(registros, indices) {
     periodo: ESTADO_BALANCO.periodo,
     base: ESTADO_BALANCO.base,
     dimensao: ESTADO_BALANCO.dimensao,
-    somenteAtivos: ESTADO_BALANCO.somenteAtivos,
+    somenteAtivos: SOMENTE_ATIVOS,
     // mesSelecionadoIdx, não __VIGENTE_IDX__: desde 2026-08-03 esta aba também
     // segue o seletor de mês do topo, como a Tabela Semanal e os Gráficos já
     // seguiam. Antes ela ficava presa ao mês corrente, então trocar o mês
@@ -871,10 +878,6 @@ function montarAbaBalanco(registros, indices) {
   });
   document.getElementById('balanco-dimensao').addEventListener('change', function (e) {
     ESTADO_BALANCO.dimensao = e.target.value;
-    montarAbaBalanco(registros, indices);
-  });
-  document.getElementById('balanco-somente-ativos').addEventListener('change', function (e) {
-    ESTADO_BALANCO.somenteAtivos = e.target.checked;
     montarAbaBalanco(registros, indices);
   });
   // Uma caixa por semana, cada uma independente: o estado é lido das caixas
@@ -1195,6 +1198,10 @@ function montarDashboard(registros) {
   document.getElementById('aba-consolidado').addEventListener('click', function () { alternarAba('consolidado'); });
   document.getElementById('busca-alertas').addEventListener('input', aplicarBuscaAlertasSemanal);
   document.getElementById('limpar-filtros').addEventListener('click', limparFiltrosSemanal);
+  document.getElementById('somente-ativos').addEventListener('change', function (e) {
+    SOMENTE_ATIVOS = e.target.checked;
+    recalcularSemanal();
+  });
   var seletorMes = document.getElementById('seletor-mes-semanal');
   seletorMes.value = String(mesSelecionadoIdx);
   seletorMes.addEventListener('change', function (e) {

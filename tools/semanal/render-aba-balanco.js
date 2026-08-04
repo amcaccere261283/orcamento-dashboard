@@ -682,9 +682,6 @@ function renderControles(estado) {
     // executado contra o previsto", e sim "quanto CHEGOU contra o previsto".
     + opcao('demandas', 'Demandas', dimensao)
     + '</select></label>';
-  html += '<label class="controle-balanco controle-balanco-check">'
-    + '<input type="checkbox" id="balanco-somente-ativos"' + (somenteAtivos ? ' checked' : '') + '>'
-    + ' Somente SUPs ativos no período</label>';
   html += renderControleSemanas(e.semanas, e.semanasSelecionadas, periodo);
   html += '</div>';
   html += renderAvisoEquipes(e.equipesForaDaCobertura, e.equipesAtivasPeriodo);

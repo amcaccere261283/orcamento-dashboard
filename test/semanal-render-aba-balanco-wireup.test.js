@@ -142,13 +142,14 @@ test('depois da senha certa, a aba Balanço de massa desenha SVG de verdade em #
   assert.match(htmlMontado, /SUP-0001-24/);
   assert.match(htmlMontado, /class="barra-abaixo"/, 'previsto 4000 > realizado 0 (Avanço Sond vazio nesta fixture) -- desvio negativo, barra à esquerda');
 
-  // Os 4 controles (período/base/dimensão/somente ativos) também precisam
-  // ter sido montados -- é o que SCRIPT_CLIENTE_SEMANAL religa a cada
-  // redesenho.
+  // Os 3 controles próprios do Balanço (período/base/dimensão) precisam ter
+  // sido montados -- é o que SCRIPT_CLIENTE_SEMANAL religa a cada redesenho.
+  // O controle "somente ativos" virou um checkbox da barra compartilhada, então
+  // não procuramos por id="balanco-somente-ativos" aqui -- ele é testado na
+  // verificação da barra de filtros da página inteira.
   assert.match(htmlMontado, /id="balanco-periodo"/);
   assert.match(htmlMontado, /id="balanco-base"/);
   assert.match(htmlMontado, /id="balanco-dimensao"/);
-  assert.match(htmlMontado, /id="balanco-somente-ativos"/);
 });
 
 test('SEM a injeção de fonteParaCliente() antes do bundle, a mesma senha certa quebra a aba (ReferenceError engolido pelo catch de tentarDesbloquear) -- prova que a injeção não é decorativa', async () => {
