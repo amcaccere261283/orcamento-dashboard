@@ -201,17 +201,27 @@ const CSS_ABAS_SEMANAL = `
   /* Hover. filter:brightness() só clareia o que TEM fundo próprio, então em
      linha comum ele acendia apenas a primeira coluna (que é sticky e tem fundo
      para não deixar o conteúdo passar por baixo) -- a linha inteira ficava
-     inerte. box-shadow inset pinta a célula toda, com ou sem fundo. */
+     inerte. box-shadow inset pinta a célula toda, com ou sem fundo.
+     #tabela-alertas-tendencia (2026-08-04, bloco "Alertas de tendência" logo
+     abaixo de #tabela-alertas na mesma aba) entra na MESMA regra, e não numa
+     cópia à parte: as duas tabelas são a mesma leitura da aba e têm de
+     acender igual ao passar o mouse -- valor duplicado é o tipo de coisa que
+     diverge em silêncio quando só um lado é ajustado depois. */
   #tabela-consolidado tbody tr:hover td,
-  #tabela-alertas tbody tr:hover td { box-shadow: inset 0 0 0 9999px rgba(255,255,255,0.06); }
+  #tabela-alertas tbody tr:hover td,
+  #tabela-alertas-tendencia tbody tr:hover td { box-shadow: inset 0 0 0 9999px rgba(255,255,255,0.06); }
 
   /* Semáforo: #1414CC (Excelente) fica em ~1,65:1 contra a superfície escura --
      a bolinha some justamente no status que se quer achar varrendo. O anel
      resolve sem tocar em nenhuma das 5 cores, que são copiadas do orçamento de
      propósito e não podem mudar. Fica no <style> desta página, e não em
      cssBase() (onde .status-circulo é definida), porque cssBase é compartilhada
-     e o HTML do orçamento é travado byte a byte. */
-  #tabela-alertas .status-circulo { box-shadow: 0 0 0 1px rgba(255,255,255,0.45); }
+     e o HTML do orçamento é travado byte a byte. Vale também pra
+     #tabela-alertas-tendencia (cores #c0392b/#95a5a6, sem o problema de
+     contraste do azul, mas é o mesmo acabamento de círculo da tabela vizinha
+     -- mesmo motivo do hover acima, mesmo lugar único. */
+  #tabela-alertas .status-circulo,
+  #tabela-alertas-tendencia .status-circulo { box-shadow: 0 0 0 1px rgba(255,255,255,0.45); }
 
   /* Os 5 filtros PRÓPRIOS da aba Alertas eram visualmente idênticos aos 6
      filtros de recorte da barra de cima, logo acima deles. O fio âmbar diz de
@@ -395,20 +405,6 @@ const CSS_SEMANAL = `
   .titulo-alertas-tendencia { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
   #tabela-alertas-tendencia { width: 100%; border-collapse: collapse; }
   .linha-nota-alertas td { color: var(--muted); font-size: 13px; padding: 12px 8px; }
-  /* Passada de design de 2026-08-04 (sem Open Design disponível na sessão):
-     esta tabela é uma segunda leitura da mesma aba Alertas, logo acima -- as
-     duas regras abaixo já existiam para #tabela-alertas (CSS_ABAS_SEMANAL,
-     linhas do bloco "Aba Alertas" mais acima neste arquivo) e não alcançavam
-     esta, então o bloco novo perdia o realce de hover da linha e o anel do
-     círculo de status (o mesmo anel que resolve o contraste baixo de
-     #1414CC ali, embora aqui as cores sejam só #c0392b/#95a5a6). Duplicadas
-     aqui em vez de generalizar o seletor original: CSS_ABAS_SEMANAL nomeia
-     as regras por #tabela-alertas especificamente, e este bloco novo
-     (render-alertas-tendencia.js) já tem sua própria seção de CSS aqui em
-     CSS_SEMANAL -- mexer nas duas ao mesmo tempo por causa de um ajuste só
-     desta seria misturar as duas seções sem necessidade. */
-  #tabela-alertas-tendencia tbody tr:hover td { box-shadow: inset 0 0 0 9999px rgba(255,255,255,0.06); }
-  #tabela-alertas-tendencia .status-circulo { box-shadow: 0 0 0 1px rgba(255,255,255,0.45); }
 `;
 
 // CSS da aba Demandas (Task 5 desta fase). Mesma razão de CSS_SEMANAL/
