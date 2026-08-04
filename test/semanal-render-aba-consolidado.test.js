@@ -6,7 +6,8 @@ const {
   produtividadeEsperada, ticketMedioPrevisto, somarPrevistoMes,
   blocosPorSup, tipologiasPresentes,
 } = require('../tools/semanal/render-aba-consolidado.js');
-const { semanasDoMes, diaEpoch } = require('../tools/semanal/compute-semanal.js');
+const { semanasDoMes, diaEpoch, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
+const { calcularSeriesSemanaisDimensao } = require('../tools/semanal/render-aba-semanal.js');
 const { DIAS_PREMISSA_MES } = require('../tools/comum/calculo-equipes.js');
 
 const ANO = 2026;
@@ -52,6 +53,75 @@ function celulasDe(linha) {
   return (linha.match(/<td[^>]*>([\s\S]*?)<\/td>/g) || []).map((td) => td.replace(/<[^>]*>/g, ''));
 }
 
+// --- Sai o Previsto, entra a Tendência congelada (2026-08-04) --------------
+
+// 6 furos na S1 (02/07) e 20 na S2 (08/07). Com hoje em 15/07 (dentro da S3),
+// a S2 está encerrada e a S3 em curso.
+function demandasEspalhadas() {
+  const dias = [];
+  for (let i = 0; i < 6; i++) dias.push(diaJul(2));
+  for (let i = 0; i < 20; i++) dias.push(diaJul(8));
+  return demandasCom({ 'SUP-A||ST': dias });
+}
+const REGISTROS_A = [registro({ sup: 'SUP-A', tipologia: 'ST', volume: 310 })];
+const inteiro = (v) => Math.round(v).toLocaleString('pt-BR');
+
+test('a coluna Previsto sumiu do Consolidado', () => {
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 1, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15),
+  }));
+  const cabecalho = html.match(/<thead>[\s\S]*?<\/thead>/)[0];
+  assert.strictEqual(cabecalho.indexOf('>Previsto'), -1, 'Previsto nao pode mais ser coluna');
+  assert.ok(cabecalho.indexOf('>Realizado') !== -1);
+  assert.ok(cabecalho.indexOf('Tend') !== -1);
+});
+
+test('semana encerrada: a Tendencia e a CONGELADA no 1o dia dela, nao a projecao de hoje', () => {
+  const demandas = demandasEspalhadas();
+  const hoje = diaJul(15);
+  const inicioS2 = SEMANAS[1].inicio;
+  const serie = (epoch) => calcularSeriesSemanaisDimensao(
+    REGISTROS_A, [0], 'volume', JULHO, SEMANAS, SEMANAS.length, true,
+    indiceSemanaAtual(SEMANAS, epoch), demandas, epoch
+  ).semanasTendenciaCompleta[1];
+  const congelada = serie(inicioS2);
+  const aoVivo = serie(hoje);
+  assert.notStrictEqual(inteiro(congelada), inteiro(aoVivo),
+    'a fixture precisa produzir valores DIFERENTES, senao o teste nao prova nada');
+
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 1, demandas, hojeEpoch: hoje,
+  }));
+  const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
+  assert.strictEqual(celulas[5], inteiro(congelada), 'a celula de Tendencia traz a congelada');
+});
+
+test('o Realizado exibido continua sendo o de HOJE, nao o congelado', () => {
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 1, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15),
+  }));
+  const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
+  assert.strictEqual(celulas[4], '20',
+    'a S2 teve 20 furos; congelar o Realizado no 1o dia dela daria 0');
+});
+
+test('semana futura usa a projecao de hoje, e o cabecalho diz isso', () => {
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 4, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15),
+  }));
+  const cabecalho = html.match(/<thead>[\s\S]*?<\/thead>/)[0];
+  assert.ok(cabecalho.indexOf('projeção de hoje') !== -1);
+  assert.strictEqual(cabecalho.indexOf('congelada'), -1);
+});
+
+test('semana encerrada e semana em curso trazem a data-ancora no cabecalho', () => {
+  const demandas = demandasEspalhadas();
+  const encerrada = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx: 1, demandas, hojeEpoch: diaJul(15) }));
+  assert.ok(encerrada.indexOf('congelada em 06/07') !== -1, 'a S2 comeca em 06/07');
+  const emCurso = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx: 2, demandas, hojeEpoch: diaJul(15) }));
+  assert.ok(emCurso.indexOf('congelada em 13/07') !== -1, 'a S3 comeca em 13/07');
+});
+
 // --- Abertura de linhas: a hierarquia da Tabela do orçamento --------------
 
 test('a tabela abre nas mesmas 4 aberturas do orçamento: TOTAL GERAL, total por tipologia, cada registro do SUP e o TOTAL do SUP', () => {
@@ -91,13 +161,20 @@ test('as linhas de total carregam as MESMAS classes que o CSS compartilhado já 
 
 // --- Só a semana selecionada -----------------------------------------------
 
-test('as colunas Previsto/Realizado/Tendência são da SEMANA escolhida, não do mês', () => {
-  // 310 furos em 31 dias = 10/dia. S1 tem 5 dias -> 50; S2 tem 7 -> 70.
-  const registros = [registro({ sup: 'SUP-A', volume: 310 })];
-  const html = (semanaIdx) => renderAbaConsolidado(registros, [0], opcoes({ semanaIdx }));
-  const previstoDe = (h) => celulasDe(linhasDe(h)[0])[4];
-  assert.strictEqual(previstoDe(html(0)), '50');
-  assert.strictEqual(previstoDe(html(1)), '70');
+// Previsto saiu da tabela (2026-08-04) -- o que restou como colunas de série
+// escaláveis por semana é Realizado/Tendência. Adaptado do teste original
+// (que media o Previsto por semana) para provar o mesmo ponto com a coluna
+// que sobrou: o valor exibido é o da SEMANA escolhida, nunca o do mês
+// inteiro. 3 furos na S1 (02/07), 5 na S2 (08/07) -- semanas distintas dão
+// números distintos.
+test('a coluna Realizado é da SEMANA escolhida, não do mês', () => {
+  const registros = [registro({ sup: 'SUP-A', tipologia: 'ST', volume: 310 })];
+  const eventos = [diaJul(2), diaJul(2), diaJul(2), diaJul(8), diaJul(8), diaJul(8), diaJul(8), diaJul(8)];
+  const demandas = demandasCom({ 'SUP-A||ST': eventos });
+  const html = (semanaIdx) => renderAbaConsolidado(registros, [0], opcoes({ semanaIdx, demandas, hojeEpoch: diaJul(15) }));
+  const realizadoDe = (h) => celulasDe(linhasDe(h)[0])[4];
+  assert.strictEqual(realizadoDe(html(0)), '3');
+  assert.strictEqual(realizadoDe(html(1)), '5');
 });
 
 test('o Realizado da semana conta só os furos concluídos DENTRO dela', () => {
@@ -106,7 +183,8 @@ test('o Realizado da semana conta só os furos concluídos DENTRO dela', () => {
   const html = renderAbaConsolidado(registros, [0], opcoes({
     semanaIdx: 0, demandas: demandasCom({ 'SUP-A||ST': eventos }),
   }));
-  assert.strictEqual(celulasDe(linhasDe(html)[0])[5], '3');
+  // Previsto saiu da tabela: Realizado agora é a 5ª célula ([4], zero-based).
+  assert.strictEqual(celulasDe(linhasDe(html)[0])[4], '3');
 });
 
 test('o seletor de semana lista S1..Sn com as datas reais e marca a escolhida', () => {
@@ -117,9 +195,17 @@ test('o seletor de semana lista S1..Sn com as datas reais e marca a escolhida', 
 });
 
 test('semanaIdx fora da faixa é clampado em vez de produzir coluna vazia', () => {
-  const registros = [registro({ sup: 'SUP-A', volume: 310 })];
-  const html = renderAbaConsolidado(registros, [0], opcoes({ semanaIdx: 99 }));
-  assert.strictEqual(celulasDe(linhasDe(html)[0])[4], '50', 'clampa na última semana (S5, 5 dias)');
+  // Sem Previsto pra ler (saiu da tabela), o clamp é provado pelo Realizado:
+  // 3 furos plantados só na S5 (27/07 a 31/07), com hoje já em agosto (S5
+  // fechada). semanaIdx:99 tem de clampar em 4 (S5) e mostrar os 3 furos --
+  // uma coluna vazia ou outra semana dariam 0 ou outro número.
+  const registros = [registro({ sup: 'SUP-A', tipologia: 'ST', volume: 310 })];
+  const eventos = [diaJul(28), diaJul(29), diaJul(30)];
+  const emAgosto = diaEpoch(new Date(Date.UTC(ANO, 7, 3)));
+  const html = renderAbaConsolidado(registros, [0], opcoes({
+    semanaIdx: 99, demandas: demandasCom({ 'SUP-A||ST': eventos }), hojeEpoch: emAgosto,
+  }));
+  assert.strictEqual(celulasDe(linhasDe(html)[0])[4], '3', 'clampa na última semana (S5) e conta os 3 furos dela');
 });
 
 // --- Volume x Financeiro: nunca misturados ---------------------------------
@@ -140,11 +226,12 @@ test('em Financeiro a única coluna extra é o Ticket médio -- equipes e produt
   assert.doesNotMatch(html, /Produtividade/);
 });
 
-test('o cabeçalho carrega o intervalo de datas da semana nas 3 colunas de série', () => {
+test('o cabeçalho carrega o intervalo de datas da semana nas 2 colunas de série', () => {
+  // Previsto saiu; a Tendência sem congelamento (3º argumento omitido) rende
+  // com o rótulo "(projeção de hoje)" ANTES do intervalo da semana.
   const html = renderCabecalho('volume', SEMANAS[0]);
-  assert.match(html, /Previsto \(01\/07 a 05\/07\)/);
   assert.match(html, /Realizado \(01\/07 a 05\/07\)/);
-  assert.match(html, /Tendência \(01\/07 a 05\/07\)/);
+  assert.match(html, /Tendência \(projeção de hoje\) \(01\/07 a 05\/07\)/);
 });
 
 test('a nota da aba diz, na tela, que as premissas são do mês e as séries são da semana', () => {
@@ -159,7 +246,8 @@ test('equipes previstas somam através dos registros do grupo (times simultâneo
   const registros = [registro({ sup: 'SUP-A', equipes: 2 }), registro({ sup: 'SUP-B', equipes: 3 })];
   assert.strictEqual(somarPrevistoMes(registros, [0, 1], 'equipes', JULHO), 5);
   const html = (semanaIdx) => renderAbaConsolidado(registros, [0, 1], opcoes({ semanaIdx }));
-  const equipesDe = (h) => celulasDe(linhasDe(h)[0])[7];
+  // Previsto saiu da tabela: Equipes previstas passou de [7] pra [6].
+  const equipesDe = (h) => celulasDe(linhasDe(h)[0])[6];
   assert.strictEqual(equipesDe(html(0)), '5,00');
   assert.strictEqual(equipesDe(html(3)), '5,00', 'a foto do mês é a mesma em qualquer semana');
 });
@@ -267,7 +355,8 @@ test('num mês PASSADO, o Realizado da semana não absorve furos dos meses segui
     demandas: demandasCom({ 'SUP-A||ST': eventos }),
     hojeEpoch: emAgosto(3), // olhando JULHO em 03/08
   }));
-  assert.strictEqual(celulasDe(linhasDe(html)[0])[5], '3', 'só os 3 furos da S5 de julho');
+  // Previsto saiu da tabela: Realizado agora é a 5ª célula ([4], zero-based).
+  assert.strictEqual(celulasDe(linhasDe(html)[0])[4], '3', 'só os 3 furos da S5 de julho');
 });
 
 test('as linhas de total NÃO emitem a classe .linha-total -- as regras de fechamento desta aba são próprias, e reusar aquela classe herdaria a cor de série Tendência', () => {

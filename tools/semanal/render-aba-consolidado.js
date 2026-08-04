@@ -17,9 +17,20 @@ const { DIAS_PREMISSA_MES } = require('../comum/calculo-equipes.js');
 //
 // O que NÃO é portado é a forma das colunas: lá, cada série (Previsto/
 // Realizado/Tendência) é uma LINHA e os 12 meses são colunas. Aqui só existe
-// UMA semana, então as três séries cabem como colunas e cada abertura vira uma
+// UMA semana, então as séries cabem como colunas e cada abertura vira uma
 // linha só -- é o que torna a tabela legível como "o consolidado da semana",
 // em vez de triplicar a altura para preencher uma coluna única.
+//
+// 2026-08-04: o Previsto SAIU da tabela (pedido do dono do projeto -- a
+// coluna comparava mal com uma Tendência que às vezes é histórica, ver
+// abaixo) e a Tendência das semanas JÁ COMEÇADAS (encerrada ou em curso)
+// passou a vir CONGELADA no 1º dia delas, em vez da projeção de hoje: é
+// chamar calcularSeriesSemanaisDimensao de novo com hojeEpoch = início
+// daquela semana, fazendo-a virar "a vigente" no recálculo -- o valor
+// devolvido é exatamente o que se projetava para ela quando começou. O
+// Realizado NUNCA congela (continua saindo do hoje real): congelá-lo também
+// zeraria o Realizado de uma semana que de fato produziu, porque a contagem
+// pararia no 1º dia dela. Ver renderLinha/renderCabecalho abaixo.
 //
 // As colunas extras seguem a regra que o dono do projeto deu explicitamente --
 // "não misturar as informações físicas e financeiras":
@@ -166,12 +177,30 @@ function valorExtra(chave, registros, indices, mesIdx) {
   return ticketMedioPrevisto(registros, indices, mesIdx);
 }
 
-function renderCabecalho(dimensao, semana) {
+// '06/07' -- só o 1º dia da semana, sem o intervalo que formatarIntervaloSemana
+// devolve. Mesma reconstrução de Date por multiplicação usada no resto do
+// projeto: diaEpoch nunca ajusta fuso, então o produto cai na meia-noite UTC
+// daquele dia e getUTC* lê o dia civil certo em qualquer fuso.
+function dataCurta(diaEp) {
+  var d = new Date(diaEp * 86400000);
+  var dia = d.getUTCDate();
+  var mes = d.getUTCMonth() + 1;
+  return (dia < 10 ? '0' : '') + dia + '/' + (mes < 10 ? '0' : '') + mes;
+}
+
+// 'congeladaEm' é o diaEpoch do 1º dia da semana quando a Tendência está
+// congelada, ou null quando ela é a projeção de hoje (semana futura). O
+// rótulo TEM de dizer qual das duas está na tela: as duas se chamam
+// "Tendência" e significam coisas opostas -- uma é registro histórico do que
+// se projetava naquele momento, a outra é a projeção corrente.
+function renderCabecalho(dimensao, semana, congeladaEm) {
   var sufixo = semana ? ' (' + formatarIntervaloSemana(semana.inicio, semana.fim) + ')' : '';
+  var rotuloTendencia = congeladaEm === null || congeladaEm === undefined
+    ? 'Tendência (projeção de hoje)'
+    : 'Tendência congelada em ' + dataCurta(congeladaEm);
   var ths = '<th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th>'
-    + '<th class="num">Previsto' + escapeHtml(sufixo) + '</th>'
     + '<th class="num">Realizado' + escapeHtml(sufixo) + '</th>'
-    + '<th class="num">Tendência' + escapeHtml(sufixo) + '</th>';
+    + '<th class="num">' + escapeHtml(rotuloTendencia) + escapeHtml(sufixo) + '</th>';
   // A faixa das colunas de premissa começa no CABEÇALHO, não só no corpo --
   // sem isso o rótulo fica fora da região que o fundo delimita e a fronteira
   // semana/mês parece começar uma linha abaixo de onde começa (achado da
@@ -190,9 +219,19 @@ function renderCabecalho(dimensao, semana) {
 // linha (registro, total do SUP, total geral, total geral por tipologia)
 // diferem -- mesma decomposição de renderBlocosDimensao no orçamento.
 function renderLinha(celulas, classe, registros, indices, ctx) {
-  var series = calcularSeriesSemanaisDimensao(
+  // Realizado sai SEMPRE do hoje real: congelar o Realizado mostraria ~0 numa
+  // semana que de fato produziu, porque a contagem pararia no 1º dia dela.
+  var seriesAoVivo = calcularSeriesSemanaisDimensao(
     registros, indices, ctx.dimensao, ctx.mesIdx, ctx.semanas, ctx.numSemanas,
     ctx.temSemanasReais, ctx.indiceAtual, ctx.demandas, ctx.hojeEpoch
+  );
+  // Tendência sai do hoje EFETIVO: igual ao real na semana futura, e o 1º dia
+  // da semana quando ela está congelada. Nesse recálculo aquela semana É a
+  // vigente, então o valor devolvido é a projeção que se fazia para ela
+  // inteira no momento em que ela começou.
+  var seriesTendencia = ctx.hojeEfetivo === ctx.hojeEpoch ? seriesAoVivo : calcularSeriesSemanaisDimensao(
+    registros, indices, ctx.dimensao, ctx.mesIdx, ctx.semanas, ctx.numSemanas,
+    ctx.temSemanasReais, ctx.indiceAtualEfetivo, ctx.demandas, ctx.hojeEfetivo
   );
   function celulaSemana(fatias) {
     var v = Array.isArray(fatias) ? fatias[ctx.semanaIdx] : null;
@@ -200,9 +239,8 @@ function renderLinha(celulas, classe, registros, indices, ctx) {
     return '<td class="num">' + formatarNumero(v, 0) + '</td>';
   }
   var html = '<tr class="' + classe + '">' + celulas
-    + celulaSemana(series.semanasPrevisto)
-    + celulaSemana(series.semanasRealizado)
-    + celulaSemana(series.semanasTendenciaCompleta);
+    + celulaSemana(seriesAoVivo.semanasRealizado)
+    + celulaSemana(seriesTendencia.semanasTendenciaCompleta);
   colunasExtras(ctx.dimensao).forEach(function (c, i) {
     html += '<td class="num celula-premissa' + (i === 0 ? ' celula-premissa-inicio' : '') + '">'
       + formatarNumero(valorExtra(c.chave, registros, indices, ctx.mesIdx), c.casas) + '</td>';
@@ -275,7 +313,15 @@ function renderNota(dimensao) {
   var premissas = dimensao === 'financeiro'
     ? 'O ticket médio previsto é a premissa TICKET da MATRIZ'
     : 'As equipes previstas são a foto do mês (não se repartem por semana) e a produtividade esperada é a premissa PROD. da MATRIZ, em furos por equipe-dia';
-  return '<p class="nota-consolidado">Previsto, Realizado e Tendência são da SEMANA selecionada. '
+  // A Tendência das semanas já começadas (encerrada ou em curso) é CONGELADA
+  // no 1º dia delas -- um registro histórico do que se projetava naquele
+  // momento, não a projeção de hoje. Ela é recalculada a cada build/refresh a
+  // partir do mesmo Avanço Sond: um lançamento retroativo muda os furos
+  // daquele intervalo e, com isso, muda o que a Tendência congelada mostra.
+  return '<p class="nota-consolidado">Realizado e Tendência são da SEMANA selecionada. '
+    + 'Numa semana já começada, a Tendência exibida é a CONGELADA no 1º dia dela (o que se '
+    + 'projetava então) — e não a projeção de hoje; um lançamento retroativo no Avanço Sond '
+    + 'recalcula esse valor. '
     + escapeHtml(premissas) + ' — valem para o mês inteiro, e por isso repetem em todas as semanas.</p>';
 }
 
@@ -298,6 +344,12 @@ function renderAbaConsolidado(registros, indices, opcoes) {
   for (var i = 0; i < numSemanas; i++) {
     if (typeof o.hojeEpoch === 'number' && semanas[i].inicio <= o.hojeEpoch) elapsadas++;
   }
+  // Congela na semana JÁ COMEÇADA (encerrada ou em curso): inicio <= hoje.
+  // A futura (inicio > hoje) não tem o que congelar -- nunca começou.
+  var semanaEscolhida = semanas[semanaIdx];
+  var congelar = !!semanaEscolhida && typeof o.hojeEpoch === 'number'
+    && semanaEscolhida.inicio <= o.hojeEpoch;
+  var hojeEfetivo = congelar ? semanaEscolhida.inicio : o.hojeEpoch;
   var ctx = {
     dimensao: dimensao, mesIdx: o.mesIdx, semanas: semanas, numSemanas: numSemanas,
     temSemanasReais: temDemandas,
@@ -309,6 +361,8 @@ function renderAbaConsolidado(registros, indices, opcoes) {
     // que a Tabela Semanal usa, para as duas nunca discordarem.
     indiceAtual: typeof o.hojeEpoch === 'number' ? indiceSemanaAtual(semanas, o.hojeEpoch) : -1,
     demandas: o.demandas, hojeEpoch: o.hojeEpoch, semanaIdx: semanaIdx,
+    hojeEfetivo: hojeEfetivo,
+    indiceAtualEfetivo: typeof hojeEfetivo === 'number' ? indiceSemanaAtual(semanas, hojeEfetivo) : -1,
   };
 
   var todos = indices || [];
@@ -344,7 +398,7 @@ function renderAbaConsolidado(registros, indices, opcoes) {
   });
 
   return controles + renderNota(dimensao)
-    + '<table id="tabela-consolidado">' + renderCabecalho(dimensao, semanas[semanaIdx])
+    + '<table id="tabela-consolidado">' + renderCabecalho(dimensao, semanas[semanaIdx], congelar ? hojeEfetivo : null)
     + '<tbody>' + linhas + '</tbody></table>';
 }
 
