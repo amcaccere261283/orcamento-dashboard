@@ -109,11 +109,32 @@ function calcularTendenciaSemanal(entrada) {
     saida.push(diasRestantesMes > 0 ? base + saldo * diasDaFatia / diasRestantesMes : base);
   }
 
-  var previstoRestante = 0;
-  var tendenciaRestante = 0;
-  for (var r = fechadas; r < numSemanas; r++) {
-    previstoRestante += numero(semanasPrevisto[r]);
-    tendenciaRestante += saida[r];
+  // "A partir de HOJE", não "a partir da semana em curso" -- e os nomes dizem
+  // isso porque a diferença é o defeito que a revisão de 2026-08-04 pegou.
+  // Somando desde o índice 'fechadas', a semana vigente entrava INTEIRA nos
+  // dois, e o excedente do Alerta A passava a cobrar carteira aberta para
+  // sustentar furos que JÁ foram entregues nos dias passados dela (medido:
+  // fechadas 130 contra 120, vigente já com 200 contra 70 no último dia dela
+  // -- excedente 140, dos quais 130 eram fato consumado). Um alerta que olha
+  // pra frente não pode ter passado no numerador.
+  var previstoAPartirDeHoje = 0;
+  var tendenciaAPartirDeHoje = 0;
+  if (indiceVigente >= 0) {
+    // Da vigente, só a FATIA proporcional aos dias que ainda faltam dela.
+    var diasVigente = diasNaSemana(semanas[indiceVigente]);
+    if (diasVigente > 0) {
+      previstoAPartirDeHoje += numero(semanasPrevisto[indiceVigente]) * diasRestantesVigente / diasVigente;
+    }
+    // E da Tendência da vigente, só a parte PROJETADA: 'saida' nessa semana é
+    // realizadoVigente (fato) + projeção dos dias que faltam, e o fato não é
+    // projeção. Nos três ramos a projeção é construída assim, então subtrair
+    // o realizado devolve exatamente a parcela futura (no ramo 'igual' a
+    // saida é max(previsto, realizado), então a diferença nunca fica negativa).
+    tendenciaAPartirDeHoje += saida[indiceVigente] - realizadoVigente;
+  }
+  for (var r = primeiraFutura; r < numSemanas; r++) {
+    previstoAPartirDeHoje += numero(semanasPrevisto[r]);
+    tendenciaAPartirDeHoje += saida[r];
   }
 
   return {
@@ -127,8 +148,8 @@ function calcularTendenciaSemanal(entrada) {
       saldo: saldo,
       ritmoPorDia: ritmoPorDia,
       diasRestantesMes: diasRestantesMes,
-      previstoRestante: previstoRestante,
-      tendenciaRestante: tendenciaRestante,
+      previstoAPartirDeHoje: previstoAPartirDeHoje,
+      tendenciaAPartirDeHoje: tendenciaAPartirDeHoje,
     },
   };
 }

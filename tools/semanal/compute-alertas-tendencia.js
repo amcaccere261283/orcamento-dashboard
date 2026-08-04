@@ -46,7 +46,7 @@ function avaliarAlertaTendencia(entrada) {
 
   if (e.ramo === 'acima') {
     // O ritmo acima do plano tem carteira que o sustente?
-    var excedente = d.tendenciaRestante - d.previstoRestante;
+    var excedente = d.tendenciaAPartirDeHoje - d.previstoAPartirDeHoje;
     if (excedente <= 0) return null;
     if (e.saldoDemandas === null || e.saldoDemandas === undefined) return semDado('demanda', d);
     if (e.saldoDemandas >= excedente) return null;
@@ -54,6 +54,9 @@ function avaliarAlertaTendencia(entrada) {
       tipo: 'demanda', status: 'alerta',
       realizadoAcumulado: d.realizadoAcumulado,
       previstoAcumulado: d.previstoAcumulado,
+      // Quanto a projeção do que falta DAQUI PRA FRENTE passa do plano do
+      // mesmo recorte -- a semana em curso entra só na fração posterior a
+      // hoje, nos dois lados (ver compute-tendencia-semanal.js).
       excedenteProjetado: excedente,
       saldoDemandas: e.saldoDemandas,
     };

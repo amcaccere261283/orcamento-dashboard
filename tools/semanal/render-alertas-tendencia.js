@@ -1,7 +1,7 @@
 'use strict';
 const { avaliarAlertaTendencia, ALERTA_ROTULO} = require('./compute-alertas-tendencia.js');
 const { calcularSeriesSemanaisDimensao, pendentesNaData} = require('./render-aba-semanal.js');
-const { produtividadeEsperada, somarPrevistoMes} = require('./render-aba-consolidado.js');
+const { somarPrevistoMes} = require('./render-aba-consolidado.js');
 const { agruparIndicesAlertas, tomadorDoGrupo, normalizarBusca} = require('./render-aba-alertas.js');
 const { diasNaSemana, indiceSemanaAtual} = require('./compute-semanal.js');
 
@@ -47,9 +47,12 @@ function textoEvidencia(alerta) {
     return 'Sem base de demandas carregada -- sem ela não dá pra saber se o ritmo está acima ou abaixo do plano';
   }
   if (alerta.status === 'sem-dado') {
-    return alerta.tipo === 'demanda'
-      ? 'Sem base de demandas carregada'
-      : 'Sem equipes previstas ou sem premissa de produtividade';
+    // Só o Alerta B (produtividade) chega aqui. O 'sem-dado' do Alerta A
+    // exigiria saldoDemandas null, e ele nunca é: sem base de demandas o
+    // bypass de renderLinhaGrupo intercepta antes (tipo 'sem-avaliacao'), e
+    // com base carregada pendentesNaData sempre devolve número. A mensagem
+    // "Sem base de demandas carregada" que existia neste ramo era inalcançável.
+    return 'Sem equipes previstas ou sem premissa de produtividade';
   }
   if (alerta.tipo === 'demanda') {
     return 'Saldo de demandas ' + formatarNumero(alerta.saldoDemandas, 0)
@@ -64,6 +67,46 @@ function diasDoMesNasSemanas(semanas) {
   var total = 0;
   for (var i = 0; i < semanas.length; i++) total += diasNaSemana(semanas[i]);
   return total;
+}
+
+// A referência de produtividade do Alerta B: a premissa PROD. da planilha,
+// média das premissas dos registros do grupo PONDERADA pelo volume previsto de
+// cada um no mês -- Σ(volume_i × prod_i) ÷ Σ(volume_i). Registro sem premissa,
+// ou com volume nulo/zero no mês, fica fora dos dois somatórios; se ninguém
+// contribuir, devolve null e o alerta vira 'sem-dado'. Com UM registro só a
+// fórmula devolve o próprio prod dele, sem precisar de caso especial.
+//
+// POR QUE não usar produtividadeEsperada() do Consolidado, que era o que
+// estava aqui: para um grupo AGREGADO ela RECALCULA V ÷ (E × D), e V, E e D
+// são exatamente os mesmos números que a produtividade exigida usa. Fazendo a
+// álgebra, o teste "exigida > esperada" vira "saldo > V × R/C": E e D se
+// cancelam, e o alerta que prometia responder "as equipes previstas dão conta
+// do saldo?" respondia "o realizado está abaixo do plano pro-rata?". Medido na
+// revisão final de 2026-08-04: com os mesmos furos, 2 equipes previstas e
+// 200.000 equipes previstas disparavam igual. Como a premissa da planilha não
+// depende de E, o E deixa de se cancelar e o alerta volta a medir equipes.
+//
+// produtividadeEsperada() continua intacta em render-aba-consolidado.js de
+// propósito: ela alimenta a coluna "Produtividade média esperada" do
+// Consolidado, cuja regra de dois ramos é copiada do dashboard de orçamento e
+// tem de continuar batendo com ele. São duas perguntas diferentes.
+function premissaProdutividadeDoGrupo(registros, indices, mesIdx) {
+  var somaVolume = 0;
+  var somaPonderada = 0;
+  (indices || []).forEach(function (i) {
+    var registro = registros[i];
+    var previsto = registro && registro.previsto;
+    if (!previsto) return;
+    var prod = previsto.equipesResumo && previsto.equipesResumo.prod;
+    if (prod === null || prod === undefined) return;
+    if (!Array.isArray(previsto.volume)) return;
+    var volume = previsto.volume[mesIdx];
+    if (volume === null || volume === undefined || !volume) return;
+    somaVolume += volume;
+    somaPonderada += volume * prod;
+  });
+  if (!somaVolume) return null;
+  return somaPonderada / somaVolume;
 }
 
 function renderLinhaGrupo(rotuloGrupo, registros, indices, ctx) {
@@ -89,7 +132,7 @@ function renderLinhaGrupo(rotuloGrupo, registros, indices, ctx) {
         diasDoMes: ctx.diasDoMes,
         saldoDemandas: pendentesNaData(registros, indices, ctx.demandas, ctx.hojeEpoch),
         equipesPrevistas: somarPrevistoMes(registros, indices, 'equipes', ctx.mesIdx),
-        produtividadeEsperada: produtividadeEsperada(registros, indices, ctx.mesIdx),
+        produtividadeEsperada: premissaProdutividadeDoGrupo(registros, indices, ctx.mesIdx),
       })
     : { tipo: 'sem-avaliacao', status: 'sem-dado', realizadoAcumulado: null, previstoAcumulado: null };
   if (!alerta) return '';
@@ -127,6 +170,16 @@ function renderCorpoAlertasTendencia(registros, indices, opcoes) {
   }
   if (!semanas.length || typeof o.hojeEpoch !== 'number') return '';
 
+  // Mês inteiramente no passado (não há futuro a projetar) ou inteiramente no
+  // futuro (não há passado a julgar): o design manda não aparecer alerta
+  // nenhum. Com a base de demandas carregada isso já acontecia sozinho -- o
+  // avaliador devolve null nos dois casos --, mas o bypass de "sem base de
+  // demandas" abaixo é anterior a ele e emitia uma linha "Sem dado" por grupo
+  // justamente onde NADA seria avaliado nem com a base presente. A guarda é
+  // de calendário, então vale igual para todos os grupos e cabe aqui.
+  if (semanas[semanas.length - 1].fim < o.hojeEpoch) return '';
+  if (semanas[0].inicio > o.hojeEpoch) return '';
+
   var temDemandas = !!(o.demandas && o.demandas.porRegistroEventos);
   var ctx = {
     mesIdx: o.mesIdx,
@@ -144,4 +197,10 @@ function renderCorpoAlertasTendencia(registros, indices, opcoes) {
   }).join('');
 }
 
-module.exports = { renderCorpoAlertasTendencia, renderCabecalhoAlertasTendencia, ALERTA_ROTULO };
+module.exports = {
+  renderCorpoAlertasTendencia, renderCabecalhoAlertasTendencia,
+  // Exportada só para teste direto da ponderação -- o render é o único
+  // consumidor de produção.
+  premissaProdutividadeDoGrupo,
+  ALERTA_ROTULO,
+};

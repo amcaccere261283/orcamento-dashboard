@@ -5,13 +5,16 @@ const { avaliarAlertaTendencia, diasPremissaRestantes, ALERTA_ROTULO } = require
 const { DIAS_PREMISSA_MES } = require('../tools/comum/calculo-equipes.js');
 
 // Julho (mesIdx 6): 31 dias de calendario, 30 dias de premissa.
+// previstoAPartirDeHoje/tendenciaAPartirDeHoje medem so o que ainda NAO
+// aconteceu (a semana em curso entra pela fatia posterior a hoje) -- ver
+// compute-tendencia-semanal.js.
 const DIAG_ACIMA = {
   realizadoAcumulado: 180, previstoAcumulado: 120, semanasFechadas: 2, indiceVigente: 2,
-  saldo: 130, ritmoPorDia: 15, diasRestantesMes: 18, previstoRestante: 190, tendenciaRestante: 270,
+  saldo: 130, ritmoPorDia: 15, diasRestantesMes: 18, previstoAPartirDeHoje: 190, tendenciaAPartirDeHoje: 270,
 };
 const DIAG_ABAIXO = {
   realizadoAcumulado: 60, previstoAcumulado: 120, semanasFechadas: 2, indiceVigente: 2,
-  saldo: 250, ritmoPorDia: 5, diasRestantesMes: 18, previstoRestante: 190, tendenciaRestante: 250,
+  saldo: 250, ritmoPorDia: 5, diasRestantesMes: 18, previstoAPartirDeHoje: 190, tendenciaAPartirDeHoje: 250,
 };
 const BASE = { mesIdx: 6, diasDoMes: 31 };
 
