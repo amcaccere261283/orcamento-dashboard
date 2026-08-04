@@ -148,10 +148,11 @@ function ticketMedioPrevisto(registros, indices, mesIdx) {
 
 // As colunas extras de CADA dimensão -- a separação física/financeira que o
 // dono do projeto pediu explicitamente. Volume não mostra ticket, Financeiro
-// não mostra equipes nem produtividade.
+// não mostra equipes nem produtividade. Desde 2026-08-04, valores financeiros
+// (ticket) saem sempre inteiros, sem casa decimal.
 function colunasExtras(dimensao) {
   if (dimensao === 'financeiro') {
-    return [{ chave: 'ticket', rotulo: 'Ticket médio previsto (R$/furo)', casas: 2 }];
+    return [{ chave: 'ticket', rotulo: 'Ticket médio previsto (R$/furo)', casas: 0 }];
   }
   return [
     { chave: 'equipes', rotulo: 'Equipes previstas', casas: 2 },

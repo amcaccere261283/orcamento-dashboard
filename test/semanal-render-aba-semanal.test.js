@@ -193,7 +193,8 @@ test('Realizado/Tendência de Financeiro pesa cada furo pelo ticket médio do re
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   const numeros = linhaRealizado.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
   // Furos [2,3,1,0,0] (fechamento 6) x ticket 250 = [500,750,250,0,0], fechamento 1.500.
-  assert.deepStrictEqual(numeros, ['500,00', '750,00', '250,00', '0,00', '0,00', '1.500,00']);
+  // Desde 2026-08-04, financeiro sai inteiro (sem casa decimal).
+  assert.deepStrictEqual(numeros, ['500', '750', '250', '0', '0', '1.500']);
 });
 
 test('Realizado de Financeiro soma por registro (furos daquele registro x SEU ticket), não soma os furos todos e multiplica por uma média geral', () => {
@@ -209,7 +210,8 @@ test('Realizado de Financeiro soma por registro (furos daquele registro x SEU ti
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   // Soma correta por registro: 200 (Alfa) + 1.000 (Beta) = 1.200 na 1ª semana.
   // Se fosse "somar furos (3) x ticket médio ((100+1000)/2=550)" daria 1.650 -- errado.
-  assert.match(linhaRealizado, /<td class="num">1\.200,00<\/td>/);
+  // Desde 2026-08-04, financeiro sai inteiro (sem casa decimal).
+  assert.match(linhaRealizado, /<td class="num">1\.200<\/td>/);
 });
 
 test('registro sem TICKET cadastrado (0 ou ausente) não contribui R$ nenhum em Financeiro, mesmo com furos reais -- mesma regra do orçamento', () => {
@@ -220,7 +222,8 @@ test('registro sem TICKET cadastrado (0 ou ausente) não contribui R$ nenhum em 
   const html = renderAbaSemanal([registroSemTicket], [0], ['financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   assert.doesNotMatch(linhaRealizado, /sem-dado/, 'ainda é dado real (zero R$), não ausência de dado');
-  assert.match(linhaRealizado, /<td class="num">0,00<\/td>/);
+  // Desde 2026-08-04, financeiro sai inteiro (sem casa decimal).
+  assert.match(linhaRealizado, /<td class="num">0<\/td>/);
 });
 
 test('Tendência: só semanas TOTALMENTE fechadas ficam sem-dado (o Realizado já mostra o fato, não precisa duplicar); a semana VIGENTE projeta seu próprio total, e as futuras dividem o saldo restante do Previsto PROPORCIONALMENTE AOS DIAS de cada uma', () => {
@@ -452,6 +455,29 @@ const DEMANDAS_JULHO = {
     'SUP-0001-24||ST': { sondagemRealizada: [diaJul(2), diaJul(8), diaJul(14)], chegada: [], saidaEstoque: [] },
   },
 };
+
+// O registro base do arquivo só carrega volume; para exercitar o financeiro
+// basta preencher o mês vigente dele.
+function registroFinanceiro(financeiroMes) {
+  const r = registro(0);
+  r.previsto.financeiro = new Array(12).fill(0);
+  r.previsto.financeiro[VIGENTE_JULHO] = financeiroMes;
+  r.previsto.volumeResumo = { total: 0, totalInicial: 0, ticket: 250 };
+  return r;
+}
+
+test('financeiro sai inteiro nas tres linhas da Tabela Semanal', () => {
+  const html = renderAbaSemanal([registroFinanceiro(123456)], [0], ['financeiro'], VIGENTE_JULHO, ANO,
+    { demandas: DEMANDAS_JULHO, hojeEpoch: HOJE_15_JUL });
+  const numeros = html.match(/<td class="num[^"]*">[\d.,]+<\/td>/g) || [];
+  assert.ok(numeros.length > 0, 'a fixture precisa produzir celulas numericas');
+  numeros.forEach((td) => assert.ok(!/,\d/.test(td), 'financeiro nao pode ter casa decimal: ' + td));
+});
+
+test('equipes continua com duas casas -- e media ponderada, nao valor financeiro', () => {
+  const html = renderAbaSemanal([registro(1000)], [0], ['equipes'], VIGENTE_JULHO, ANO, {});
+  assert.ok(/,\d\d</.test(html), 'equipes tem de manter as 2 casas');
+});
 
 test('mes inteiramente no passado: Tendencia sem dado ate no fechamento', () => {
   const hojeAgosto = diaEpoch(new Date(Date.UTC(2026, 7, 10)));

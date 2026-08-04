@@ -245,6 +245,13 @@ test('em Financeiro, a única premissa é também o início da faixa', () => {
   assert.strictEqual((html.match(/class="num cabecalho-premissa"/g) || []).length, 0, 'não há segunda premissa em Financeiro');
 });
 
+test('ticket medio previsto sai inteiro', () => {
+  const colunas = colunasExtras('financeiro');
+  assert.strictEqual(colunas.length, 1);
+  assert.strictEqual(colunas[0].chave, 'ticket');
+  assert.strictEqual(colunas[0].casas, 0);
+});
+
 // Mesmo CRITICAL da aba Alertas: a "semana em curso" saía de elapsadas-1 em
 // vez de indiceSemanaAtual, e num mês passado isso fazia a última semana ser
 // contada de seu início até HOJE, absorvendo os meses seguintes.

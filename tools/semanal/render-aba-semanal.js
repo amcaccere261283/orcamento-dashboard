@@ -355,10 +355,13 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
       + renderCabecalho(dimensao, numSemanas, semanas)
       + '<tbody>'
       // Equipes continua com 2 casas: é média ponderada (foto), não passa pelo
-      // arredondamento inteiro -- ver dividirEmSemanasInteiras.
+      // arredondamento inteiro -- ver dividirEmSemanasInteiras. Financeiro é
+      // inteiro desde 2026-08-04 (pedido do dono do projeto: nenhum valor
+      // financeiro com casa decimal). Volume fica no padrão: a Tendência dele
+      // é projeção fracionária, e a casa decimal ali é informação real.
       + renderLinhaSerie('Previsto', 'previsto', series.semanasPrevisto, series.fechamentoPrevisto, dimensao === 'equipes' ? 2 : 0)
-      + renderLinhaSerie('Realizado', 'realizado', series.semanasRealizado, series.fechamentoRealizado)
-      + renderLinhaSerie('Tendência', 'tendencia', series.semanasTendencia, series.fechamentoTendencia)
+      + renderLinhaSerie('Realizado', 'realizado', series.semanasRealizado, series.fechamentoRealizado, dimensao === 'financeiro' ? 0 : undefined)
+      + renderLinhaSerie('Tendência', 'tendencia', series.semanasTendencia, series.fechamentoTendencia, dimensao === 'financeiro' ? 0 : undefined)
       + linhaPendentes
       + '</tbody></table></div>';
   }).join('');
