@@ -471,7 +471,10 @@ const BUNDLE_ARQUIVOS = [
   // de '../comum/calculo-equipes.js', que o bundler REMOVE -- DIAS_PREMISSA_MES
   // chega como global pelo <script> de fonteParaCliente(), igual ao que
   // compute-balanco.js já faz com mediaEquipesPonderada.
-  'compute-semanal.js', 'render-aba-semanal.js', 'render-aba-alertas.js', 'render-aba-consolidado.js',
+  // compute-tendencia-semanal.js (2026-08-04) consome compute-semanal.js
+  // (diasNaSemana) e é consumido por render-aba-semanal.js -- por isso entra
+  // ENTRE os dois. A ordem desta lista é o contrato de dependência.
+  'compute-semanal.js', 'compute-tendencia-semanal.js', 'render-aba-semanal.js', 'render-aba-alertas.js', 'render-aba-consolidado.js',
   'compute-grafico-semanal.js', 'render-aba-grafico-semanal.js',
   // compute-equipes-mobilizadas.js (2026-08-03) vem ANTES de
   // compute-balanco.js, que o consome (equipesEquivalentes) para o Δ equipes

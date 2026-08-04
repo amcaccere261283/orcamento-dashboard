@@ -1,9 +1,9 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { renderAbaSemanal, rotuloColunaFechamento, calcularTendenciaSemanal } = require('../tools/semanal/render-aba-semanal.js');
+const { renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao } = require('../tools/semanal/render-aba-semanal.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
-const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
+const { semanasDoMes, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
 
 const ANO = 2026;
 const VIGENTE_JULHO = 6; // julho tem 5 semanas (S1..S5, corte sempre dentro do mês) -- cenário principal
@@ -259,15 +259,15 @@ test('Tendência nunca fica negativa quando o Realizado já passou o Previsto --
   const html = renderAbaSemanal([registro(5)], [0], ['volume'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
   assert.doesNotMatch(linhaTendencia, />-/, 'nenhum valor negativo -- ">-" isola número negativo dos hífens em nomes de classe');
-  // realizadoAteAgora (S1+S2+S3 até hoje) = 10+10+0 = 20; dias elapsados
-  // clampados em hojeEpoch (15/07, dentro de S3): S1 inteira (5) + S2
-  // inteira (7) + S3 só até hoje (13 a 15/07 = 3 dias, não os 7 inteiros da
-  // semana -- ela ainda está em curso) = 5+7+3 = 15. ritmo por dia = 20/15.
-  // S4 (7 dias) = 20/15*7 = 9,33; S5 (5 dias) = 20/15*5 = 6,67 -- diferentes
-  // entre si, ao contrário da divisão igual antiga (que dava 6,67 pras
-  // duas por acaso, sem relação com o clamp -- aqui é 20/15*5, lá era
-  // 20/3 direto).
-  const ritmoPorDia = 20 / 15;
+  // Ramo R > P (realizadoAcumulado 20 muito acima do previstoAcumulado das
+  // semanas fechadas). Desde a Task 2 (compute-tendencia-semanal.js, ver
+  // Decisão 3/"O que muda em relação a hoje" da spec de 2026-08-04) o ritmo
+  // sai só das semanas TOTALMENTE FECHADAS (S1+S2 = 10+10 = 20 furos, em
+  // 5+7 = 12 dias), não mais incluindo os dias já passados da semana em
+  // curso (S3) -- ritmoPorDia = 20/12, não mais 20/15. S4 (7 dias) =
+  // 20/12*7 = 11,67; S5 (5 dias) = 20/12*5 = 8,33 -- maiores que antes
+  // (9,33/6,67) porque o mesmo Realizado agora se divide por menos dias.
+  const ritmoPorDia = 20 / 12;
   const fmt = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const numeros = linhaTendencia.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
   assert.strictEqual(numeros[3], fmt(ritmoPorDia * 7), 'semana futura S4 (7 dias) continua no ritmo médio já realizado por dia');
@@ -338,7 +338,7 @@ test('Tendência: 1º dia de uma semana nova (Realizado dela ainda zerado) não 
   assert.strictEqual(numerosTendencia[6], '620,00', 'Fechamento continua batendo com o Previsto do mês inteiro');
 });
 
-test('Tendência: indiceAtual === -1 (nenhuma semana do mês começou -- hoje antes do mês inteiro) reparte previstoMes proporcionalmente aos dias, igual ao Previsto', () => {
+test('Tendência: indiceAtual === -1 (nenhuma semana do mês começou -- hoje antes do mês inteiro) cai no ramo "igual" (R_ac = P_ac = 0) e reproduz o Previsto inteiro, semana a semana', () => {
   const registroAgosto = registro(0);
   registroAgosto.previsto.volume[VIGENTE_AGOSTO] = 1200;
   const hojeAntesDeAgosto = diaEpoch(new Date(Date.UTC(2026, 6, 20))); // 20/07 -- antes de agosto começar (01/08)
@@ -346,28 +346,18 @@ test('Tendência: indiceAtual === -1 (nenhuma semana do mês começou -- hoje an
   const html = renderAbaSemanal([registroAgosto], [0], ['volume'], VIGENTE_AGOSTO, ANO, { demandas, hojeEpoch: hojeAntesDeAgosto });
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
   const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
-  // Agosto: 1200 / 31 dias x [2,7,7,7,7,1]. A Tendência NÃO passa pelo
-  // arredondamento inteiro que o Previsto ganhou em 2026-08-03 (ela é
-  // projeção, não uma meta a cumprir) -- por isso a comparação aqui é contra
-  // a repartição crua por dia, e não mais célula a célula contra o Previsto.
-  assert.deepStrictEqual(numerosTendencia, ['77,42', '270,97', '270,97', '270,97', '270,97', '38,71', '1.200,00'],
-    'sem nenhuma semana elapsada, Tendência reparte o mês inteiro proporcionalmente aos dias de cada semana -- mesma repartição do Previsto, antes de arredondar');
-});
-
-test('calcularTendenciaSemanal: sem "semanas" (5º/4º parâmetros omitidos), cai no fallback de divisão igual por semana -- fluxo real sempre passa "semanas", este é só o contrato defensivo', () => {
-  const semanasRealizado = [100, 200, 0, 0, 0];
-  const resultado = calcularTendenciaSemanal(1000, semanasRealizado, 1);
-  // saldoRestante = 1000 - (100+200) = 700; 3 semanas futuras; 700/3 igualmente.
-  const ritmo = 700 / 3;
-  assert.deepStrictEqual(resultado, [100, 200, ritmo, ritmo, ritmo]);
-});
-
-test('calcularTendenciaSemanal: "semanas" com comprimento incompatível cai no mesmo fallback, em vez de dividir por uma contagem de dias que não bate', () => {
-  const semanasRealizado = [100, 200, 0, 0, 0];
-  const semanasCurtas = semanasDoMes(2026, 6).slice(0, 2); // só 2, mas semanasRealizado tem 5
-  const resultado = calcularTendenciaSemanal(1000, semanasRealizado, 1, semanasCurtas, diaEpoch(new Date(Date.UTC(2026, 6, 10))));
-  const ritmo = 700 / 3;
-  assert.deepStrictEqual(resultado, [100, 200, ritmo, ritmo, ritmo]);
+  // Nenhuma semana fechada -> realizadoAcumulado = previstoAcumulado = 0,
+  // que escolherRamo trata como 'igual' de propósito (ver
+  // compute-tendencia-semanal.js e a Decisão 2 da spec de 2026-08-04: "mês
+  // inteiramente no futuro... cai no ramo R = P... é o resultado certo: sem
+  // passado, a melhor projeção é o plano"). No ramo 'igual' a Tendência
+  // reproduz a fatia INTEIRA que a linha Previsto já mostra
+  // (dividirEmSemanasInteiras), não mais a repartição fracionária crua por
+  // dia -- as duas linhas têm de exibir o mesmo número ("mantém o P na T").
+  // Agosto: 1200 repartido em [2,7,7,7,7,1] dias vira [77,271,271,271,271,39]
+  // pelo maior resto (mesma conta que a linha Previsto já faz).
+  assert.deepStrictEqual(numerosTendencia, ['77,00', '271,00', '271,00', '271,00', '271,00', '39,00', '1.200,00'],
+    'sem nenhuma semana fechada, o ramo é "igual" e a Tendência reproduz exatamente a fatia inteira do Previsto em cada semana');
 });
 
 test('Demandas Pendentes: semana fechada mostra o saldo no domingo daquela semana, semana em curso mostra o saldo de hoje, semana futura fica sem-dado', () => {
@@ -430,15 +420,16 @@ test('Tendência não fabrica projeção quando hoje está depois do último dia
   const hojeEmAgosto = diaEpoch(new Date(Date.UTC(2026, 7, 15))); // bem depois do fim de julho (31/07)
 
   const html = renderAbaSemanal([registro(1000)], [0], ['volume'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: hojeEmAgosto });
-  const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
-  const numerosRealizado = linhaRealizado.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
   const numerosTendencia = linhaTendencia.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
-  // Com julho inteiro já no passado, todas as 5 colunas de Tendência ficam
-  // sem-dado (nenhuma semana futura pra projetar -- não fabrica projeção
-  // sobre um mês que já terminou), e o Fechamento continua batendo com o
-  // do Realizado (calculado antes da supressão).
-  assert.deepStrictEqual(numerosTendencia, ['', '', '', '', '', numerosRealizado[5]]);
+  // Com julho inteiro já no passado (regra 2.1/"sem-dado" de
+  // compute-tendencia-semanal.js, Decisão 2 da spec de 2026-08-04), todas as
+  // 5 colunas de Tendência ficam sem-dado -- nenhuma semana futura pra
+  // projetar -- e desde a Task 2 o Fechamento TAMBÉM vira null (antes
+  // repetia o Total do Realizado, que é exatamente a duplicação que o
+  // pedido veio eliminar; ver fechamentoTendencia em
+  // calcularSeriesSemanaisDimensao).
+  assert.deepStrictEqual(numerosTendencia, ['', '', '', '', '', '']);
 });
 
 test('vigenteIdx fora do intervalo do ano (12 ou -1): Realizado/Tendência ficam sem-dado, mas Demandas Pendentes ainda mostra o fechamento -- saldo de hoje independe do mês sendo exibido', () => {
@@ -453,4 +444,37 @@ test('vigenteIdx fora do intervalo do ano (12 ou -1): Realizado/Tendência ficam
   const semDadoNaLinha = (linhaPendentes.match(/class="num sem-dado"/g) || []).length;
   assert.strictEqual(semDadoNaLinha, 4, 'sem mês vigente válido não há semanas reais -- cai no fallback de 4 colunas, todas sem-dado');
   assert.match(linhaPendentes, /celula-total-linha">1,00/, 'fechamento continua mostrando o saldo de hoje: 1 chegada, 0 saídas até 15/07');
+});
+
+const SEMANAS_JULHO = semanasDoMes(ANO, VIGENTE_JULHO);
+const DEMANDAS_JULHO = {
+  porRegistroEventos: {
+    'SUP-0001-24||ST': { sondagemRealizada: [diaJul(2), diaJul(8), diaJul(14)], chegada: [], saidaEstoque: [] },
+  },
+};
+
+test('mes inteiramente no passado: Tendencia sem dado ate no fechamento', () => {
+  const hojeAgosto = diaEpoch(new Date(Date.UTC(2026, 7, 10)));
+  const series = calcularSeriesSemanaisDimensao(
+    [registro(1000)], [0], 'volume', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
+    true, indiceSemanaAtual(SEMANAS_JULHO, hojeAgosto), DEMANDAS_JULHO, hojeAgosto
+  );
+  assert.strictEqual(series.fechamentoTendencia, null, 'o Total nao pode repetir o Realizado');
+  series.semanasTendencia.forEach((v) => assert.strictEqual(v, null));
+  series.semanasTendenciaCompleta.forEach((v) => assert.strictEqual(v, null));
+  assert.strictEqual(series.ramoTendencia, 'sem-dado');
+  assert.strictEqual(series.diagnosticoTendencia, null);
+});
+
+test('mes corrente: o fechamento da Tendencia continua sendo o mes projetado, e o ramo vem junto', () => {
+  const series = calcularSeriesSemanaisDimensao(
+    [registro(1000)], [0], 'volume', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
+    true, indiceSemanaAtual(SEMANAS_JULHO, HOJE_15_JUL), DEMANDAS_JULHO, HOJE_15_JUL
+  );
+  assert.ok(series.fechamentoTendencia !== null, 'mes em curso tem projecao');
+  assert.ok(['igual', 'acima', 'abaixo'].indexOf(series.ramoTendencia) !== -1);
+  assert.ok(series.diagnosticoTendencia !== null);
+  const somaCompleta = series.semanasTendenciaCompleta.reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(somaCompleta - series.fechamentoTendencia) < 1e-9,
+    'o fechamento tem de ser a soma da serie completa -- e o invariante da curva Acumulada');
 });
