@@ -395,6 +395,20 @@ const CSS_SEMANAL = `
   .titulo-alertas-tendencia { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
   #tabela-alertas-tendencia { width: 100%; border-collapse: collapse; }
   .linha-nota-alertas td { color: var(--muted); font-size: 13px; padding: 12px 8px; }
+  /* Passada de design de 2026-08-04 (sem Open Design disponível na sessão):
+     esta tabela é uma segunda leitura da mesma aba Alertas, logo acima -- as
+     duas regras abaixo já existiam para #tabela-alertas (CSS_ABAS_SEMANAL,
+     linhas do bloco "Aba Alertas" mais acima neste arquivo) e não alcançavam
+     esta, então o bloco novo perdia o realce de hover da linha e o anel do
+     círculo de status (o mesmo anel que resolve o contraste baixo de
+     #1414CC ali, embora aqui as cores sejam só #c0392b/#95a5a6). Duplicadas
+     aqui em vez de generalizar o seletor original: CSS_ABAS_SEMANAL nomeia
+     as regras por #tabela-alertas especificamente, e este bloco novo
+     (render-alertas-tendencia.js) já tem sua própria seção de CSS aqui em
+     CSS_SEMANAL -- mexer nas duas ao mesmo tempo por causa de um ajuste só
+     desta seria misturar as duas seções sem necessidade. */
+  #tabela-alertas-tendencia tbody tr:hover td { box-shadow: inset 0 0 0 9999px rgba(255,255,255,0.06); }
+  #tabela-alertas-tendencia .status-circulo { box-shadow: 0 0 0 1px rgba(255,255,255,0.45); }
 `;
 
 // CSS da aba Demandas (Task 5 desta fase). Mesma razão de CSS_SEMANAL/
