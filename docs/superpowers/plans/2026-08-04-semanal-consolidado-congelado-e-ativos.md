@@ -104,32 +104,28 @@ git commit -m "Indicador de status igual ao do orcamento: sai o anel de contrast
 
 - [ ] **Step 1: Escrever os testes que falham**
 
-Em `test/semanal-render-aba-consolidado.test.js` (reaproveitar as fixtures que o arquivo já tem; se não houver uma que sirva, montar registros com `previsto.volume[mesIdx]` e um `demandas.porRegistroEventos` com `sondagemRealizada` em datas de semanas diferentes):
+Em `test/semanal-render-aba-consolidado.test.js`. **Este arquivo já tem os helpers de que você precisa — use os que estão lá, não crie paralelos:** `ANO`, `JULHO` (=6), `SEMANAS` (as 5 semanas de julho/2026, `[5,7,7,7,5]` dias), `diaJul(dia)`, `registro({ sup, tipologia, volume, ... })` (recebe OBJETO), `demandasCom({ 'chave': [dias] })`, `opcoes(extra)` (defaults `semanaIdx:0, dimensao:'volume', mesIdx:JULHO, semanas:SEMANAS, hojeEpoch:diaJul(31)`), `linhasDe(html)` e `celulasDe(linha)` (devolve o TEXTO de cada `<td>`, já sem tags).
+
+Acrescentar ao `require` do topo: `indiceSemanaAtual` (de `compute-semanal.js`) e `calcularSeriesSemanaisDimensao` (de `../tools/semanal/render-aba-semanal.js`).
+
+Com o Previsto fora, a ordem das células passa a ser: `[0]` SUP, `[1]` Grupo, `[2]` Tomador, `[3]` Tipologia, `[4]` **Realizado**, `[5]` **Tendência**, e depois as de premissa. É por índice que os testes leem — comparar texto solto no HTML casaria com qualquer outra célula do mesmo valor.
 
 ```js
-const { semanasDoMes, diaEpoch } = require('../tools/semanal/compute-semanal.js');
-const { calcularSeriesSemanaisDimensao } = require('../tools/semanal/render-aba-semanal.js');
-
-const SEMANAS_JUL = semanasDoMes(2026, 6);
-const diaJ = (d) => diaEpoch(new Date(Date.UTC(2026, 6, d)));
-
-// Furos espalhados: 6 na S1, 20 na S2. Com hoje em 15/07 (S3), a S2 esta
-// encerrada e a S3 em curso.
-function demandasEspalhadas(sup) {
-  const realizada = [];
-  for (let i = 0; i < 6; i++) realizada.push(diaJ(2));
-  for (let i = 0; i < 20; i++) realizada.push(diaJ(8));
-  const eventos = { sondagemRealizada: realizada, chegada: [], saidaEstoque: [] };
-  const porRegistroEventos = {};
-  porRegistroEventos[sup + '||ST'] = eventos;
-  return { porRegistroEventos: porRegistroEventos };
+// 6 furos na S1 (02/07) e 20 na S2 (08/07). Com hoje em 15/07 (dentro da S3),
+// a S2 está encerrada e a S3 em curso.
+function demandasEspalhadas() {
+  const dias = [];
+  for (let i = 0; i < 6; i++) dias.push(diaJul(2));
+  for (let i = 0; i < 20; i++) dias.push(diaJul(8));
+  return demandasCom({ 'SUP-A||ST': dias });
 }
+const REGISTROS_A = [registro({ sup: 'SUP-A', tipologia: 'ST', volume: 310 })];
+const inteiro = (v) => Math.round(v).toLocaleString('pt-BR');
 
 test('a coluna Previsto sumiu do Consolidado', () => {
-  const html = renderAbaConsolidado(REGISTROS, [0], {
-    semanaIdx: 1, dimensao: 'volume', mesIdx: 6, semanas: SEMANAS_JUL,
-    demandas: demandasEspalhadas('SUP-0001-24'), hojeEpoch: diaJ(15),
-  });
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 1, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15),
+  }));
   const cabecalho = html.match(/<thead>[\s\S]*?<\/thead>/)[0];
   assert.strictEqual(cabecalho.indexOf('>Previsto'), -1, 'Previsto nao pode mais ser coluna');
   assert.ok(cabecalho.indexOf('>Realizado') !== -1);
@@ -137,67 +133,51 @@ test('a coluna Previsto sumiu do Consolidado', () => {
 });
 
 test('semana encerrada: a Tendencia e a CONGELADA no 1o dia dela, nao a projecao de hoje', () => {
-  const demandas = demandasEspalhadas('SUP-0001-24');
-  const hoje = diaJ(15);
-  const inicioS2 = SEMANAS_JUL[1].inicio;
-
-  const congelada = calcularSeriesSemanaisDimensao(
-    REGISTROS, [0], 'volume', 6, SEMANAS_JUL, SEMANAS_JUL.length, true,
-    indiceSemanaAtual(SEMANAS_JUL, inicioS2), demandas, inicioS2
+  const demandas = demandasEspalhadas();
+  const hoje = diaJul(15);
+  const inicioS2 = SEMANAS[1].inicio;
+  const serie = (epoch) => calcularSeriesSemanaisDimensao(
+    REGISTROS_A, [0], 'volume', JULHO, SEMANAS, SEMANAS.length, true,
+    indiceSemanaAtual(SEMANAS, epoch), demandas, epoch
   ).semanasTendenciaCompleta[1];
-  const aoVivo = calcularSeriesSemanaisDimensao(
-    REGISTROS, [0], 'volume', 6, SEMANAS_JUL, SEMANAS_JUL.length, true,
-    indiceSemanaAtual(SEMANAS_JUL, hoje), demandas, hoje
-  ).semanasTendenciaCompleta[1];
-  assert.notStrictEqual(Math.round(congelada), Math.round(aoVivo),
+  const congelada = serie(inicioS2);
+  const aoVivo = serie(hoje);
+  assert.notStrictEqual(inteiro(congelada), inteiro(aoVivo),
     'a fixture precisa produzir valores DIFERENTES, senao o teste nao prova nada');
 
-  const html = renderAbaConsolidado(REGISTROS, [0], {
-    semanaIdx: 1, dimensao: 'volume', mesIdx: 6, semanas: SEMANAS_JUL,
-    demandas: demandas, hojeEpoch: hoje,
-  });
-  const linha = html.match(/<tr class="linha-consolidado">[\s\S]*?<\/tr>/)[0];
-  assert.ok(linha.indexOf('>' + formatarNumero(congelada, 0) + '<') !== -1,
-    'a celula tem de trazer a tendencia congelada');
-  assert.strictEqual(linha.indexOf('>' + formatarNumero(aoVivo, 0) + '<'), -1,
-    'e nao a projecao de hoje');
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 1, demandas, hojeEpoch: hoje,
+  }));
+  const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
+  assert.strictEqual(celulas[5], inteiro(congelada), 'a celula de Tendencia traz a congelada');
 });
 
 test('o Realizado exibido continua sendo o de HOJE, nao o congelado', () => {
-  const demandas = demandasEspalhadas('SUP-0001-24');
-  const html = renderAbaConsolidado(REGISTROS, [0], {
-    semanaIdx: 1, dimensao: 'volume', mesIdx: 6, semanas: SEMANAS_JUL,
-    demandas: demandas, hojeEpoch: diaJ(15),
-  });
-  const linha = html.match(/<tr class="linha-consolidado">[\s\S]*?<\/tr>/)[0];
-  assert.ok(linha.indexOf('>20<') !== -1,
-    'S2 teve 20 furos; congelar o Realizado no 1o dia dela daria 0');
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 1, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15),
+  }));
+  const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
+  assert.strictEqual(celulas[4], '20',
+    'a S2 teve 20 furos; congelar o Realizado no 1o dia dela daria 0');
 });
 
 test('semana futura usa a projecao de hoje, e o cabecalho diz isso', () => {
-  const html = renderAbaConsolidado(REGISTROS, [0], {
-    semanaIdx: 4, dimensao: 'volume', mesIdx: 6, semanas: SEMANAS_JUL,
-    demandas: demandasEspalhadas('SUP-0001-24'), hojeEpoch: diaJ(15),
-  });
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 4, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15),
+  }));
   const cabecalho = html.match(/<thead>[\s\S]*?<\/thead>/)[0];
   assert.ok(cabecalho.indexOf('projeção de hoje') !== -1);
   assert.strictEqual(cabecalho.indexOf('congelada'), -1);
 });
 
 test('semana encerrada e semana em curso trazem a data-ancora no cabecalho', () => {
-  const demandas = demandasEspalhadas('SUP-0001-24');
-  const encerrada = renderAbaConsolidado(REGISTROS, [0], {
-    semanaIdx: 1, dimensao: 'volume', mesIdx: 6, semanas: SEMANAS_JUL, demandas, hojeEpoch: diaJ(15),
-  });
-  assert.ok(encerrada.indexOf('congelada em 06/07') !== -1, 'S2 comeca em 06/07');
-  const emCurso = renderAbaConsolidado(REGISTROS, [0], {
-    semanaIdx: 2, dimensao: 'volume', mesIdx: 6, semanas: SEMANAS_JUL, demandas, hojeEpoch: diaJ(15),
-  });
-  assert.ok(emCurso.indexOf('congelada em 13/07') !== -1, 'S3 comeca em 13/07');
+  const demandas = demandasEspalhadas();
+  const encerrada = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx: 1, demandas, hojeEpoch: diaJul(15) }));
+  assert.ok(encerrada.indexOf('congelada em 06/07') !== -1, 'a S2 comeca em 06/07');
+  const emCurso = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx: 2, demandas, hojeEpoch: diaJul(15) }));
+  assert.ok(emCurso.indexOf('congelada em 13/07') !== -1, 'a S3 comeca em 13/07');
 });
 ```
-
-`REGISTROS` é a fixture de registros do arquivo (SUP `SUP-0001-24`, tipologia `ST`, com `previsto.volume[6]` positivo). Se o nome local for outro, usar o que está lá. `formatarNumero` é a função local do próprio módulo de teste ou do render — se não estiver acessível, comparar pelo número formatado à mão em `pt-BR` com 0 casas.
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
@@ -334,22 +314,21 @@ git commit -m "Consolidado: sai o Previsto, a Tendencia das semanas ja comecadas
 
 Em `test/semanal-render-aba-consolidado.test.js`:
 
+Usando os mesmos helpers do arquivo (`registro({...})`, `opcoes(extra)`) — `REGISTROS_A` e `demandasEspalhadas()` já terão sido criados pela Task 2 neste mesmo arquivo:
+
 ```js
 test('o seletor proprio de dimensao nao existe mais nos controles', () => {
-  const html = renderAbaConsolidado(REGISTROS, [0], {
-    semanaIdx: 0, dimensao: 'volume', mesIdx: 6, semanas: SEMANAS_JUL,
-    demandas: demandasEspalhadas('SUP-0001-24'), hojeEpoch: diaJ(15),
-  });
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) }));
   assert.strictEqual(html.indexOf('id="consolidado-dimensao"'), -1);
   assert.ok(html.indexOf('id="consolidado-semana"') !== -1, 'o de semana continua -- e proprio da aba');
 });
 
 test('a dimensao recebida ainda troca as colunas de premissa', () => {
-  const base = { semanaIdx: 0, mesIdx: 6, semanas: SEMANAS_JUL, demandas: demandasEspalhadas('SUP-0001-24'), hojeEpoch: diaJ(15) };
-  const volume = renderAbaConsolidado(REGISTROS, [0], Object.assign({ dimensao: 'volume' }, base));
+  const extra = { demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) };
+  const volume = renderAbaConsolidado(REGISTROS_A, [0], opcoes(Object.assign({ dimensao: 'volume' }, extra)));
   assert.ok(volume.indexOf('Equipes previstas') !== -1);
   assert.strictEqual(volume.indexOf('Ticket médio'), -1);
-  const financeiro = renderAbaConsolidado(REGISTROS, [0], Object.assign({ dimensao: 'financeiro' }, base));
+  const financeiro = renderAbaConsolidado(REGISTROS_A, [0], opcoes(Object.assign({ dimensao: 'financeiro' }, extra)));
   assert.ok(financeiro.indexOf('Ticket médio') !== -1);
   assert.strictEqual(financeiro.indexOf('Equipes previstas'), -1);
 });
