@@ -240,9 +240,12 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
     });
     fechamentoRealizado = fecharMes(semanasRealizado, dimensao);
 
-    // Mesma contagem direta pelas datas que renderAbaSemanal já usava --
-    // ver o comentário original em calcularTendenciaSemanal sobre por que
-    // não usar indiceAtual aqui.
+    // Contagem direta pelas DATAS, e não a partir de indiceAtual: são duas
+    // perguntas diferentes. indiceAtual é a semana EM CURSO (uma só, e -1
+    // quando o mês inteiro está no futuro ou no passado); aqui queremos
+    // quantas semanas já COMEÇARAM, que é fechadas + a em curso -- e no mês
+    // inteiramente passado isso tem de dar o total das semanas, não 0. Somar
+    // 1 a indiceAtual acertaria só o mês corrente e mentiria nos outros dois.
     for (var se = 0; se < semanas.length; se++) {
       if (semanas[se].inicio <= hojeEpoch) semanasElapsadas++;
     }
@@ -267,13 +270,16 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
     // fecharMes ressuscite o número que este pedido veio eliminar.
     fechamentoTendencia = tendencia.ramo === 'sem-dado' ? null : fecharMes(semanasTendenciaCompleta, dimensao);
 
-    var semanasFechadas = 0;
-    for (var sf = 0; sf < semanas.length; sf++) {
-      if (semanas[sf].fim < hojeEpoch) semanasFechadas++;
-    }
+    // A fronteira das semanas fechadas sai do DIAGNÓSTICO, não de um laço
+    // próprio: recalculá-la aqui criaria duas definições da mesma fronteira,
+    // que passariam a divergir em silêncio se a projeção mudasse de critério.
+    // No ramo 'sem-dado' o diagnóstico é null -- e ali não há fronteira a
+    // aplicar, porque a série já vem toda nula.
     semanasTendencia = tendencia.ramo === 'sem-dado'
       ? semanasTendenciaCompleta
-      : semanasTendenciaCompleta.map(function (v, i) { return i < semanasFechadas ? null : v; });
+      : semanasTendenciaCompleta.map(function (v, i) {
+        return i < tendencia.diagnostico.semanasFechadas ? null : v;
+      });
   }
 
   return {

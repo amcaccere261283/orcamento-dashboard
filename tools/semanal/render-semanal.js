@@ -403,7 +403,6 @@ const CSS_SEMANAL = `
      já existe com esse nome mesmo. */
   .bloco-alertas-tendencia { margin-top: 28px; }
   .titulo-alertas-tendencia { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
-  #tabela-alertas-tendencia { width: 100%; border-collapse: collapse; }
   .linha-nota-alertas td { color: var(--muted); font-size: 13px; padding: 12px 8px; }
 `;
 
@@ -1022,8 +1021,11 @@ function recalcularAlertasSemanal(indices, dimensoes) {
     }
   );
   // O bloco de tendência segue o mesmo agrupamento e o mesmo recorte da
-  // tabela de cima, mas ignora o seletor de dimensão dela: é Volume sempre
-  // (ver render-alertas-tendencia.js). A busca da aba varre os dois <tbody>
+  // tabela de cima, e RECEBE a dimensão selecionada -- não porque calcule
+  // nela (os dois alertas só existem em Volume, ver render-alertas-tendencia.js),
+  // mas porque precisa saber que outra dimensão está marcada para trocar a
+  // tabela por uma nota explicando isso. Sumir calado leria como "nenhum
+  // alerta". A busca da aba varre os dois <tbody>
   // pelo data-search, então ele precisa ser preenchido ANTES dela rodar.
   document.getElementById('cabecalho-alertas-tendencia').innerHTML =
     RenderAlertasTendencia.renderCabecalhoAlertasTendencia(

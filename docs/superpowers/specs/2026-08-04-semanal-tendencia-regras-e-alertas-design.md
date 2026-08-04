@@ -173,7 +173,7 @@ calcularTendenciaSemanal({
   diagnostico: {
     realizadoAcumulado, previstoAcumulado, semanasFechadas, indiceVigente,
     saldo, ritmoPorDia, diasRestantesMes,
-    previstoRestante, tendenciaRestante,
+    previstoAPartirDeHoje, tendenciaAPartirDeHoje,
   },
 }
 ```
@@ -215,9 +215,16 @@ Duas funções que hoje são privadas dos seus módulos precisam ser exportadas 
 o módulo de alertas (nenhuma muda de corpo):
 
 - `pendentesNaData` (`render-aba-semanal.js`) — saldo de furos em aberto numa data;
-- `produtividadeEsperada` (`render-aba-consolidado.js`) — furos por equipe-dia,
-  com a regra de dois ramos (premissa da planilha para um registro só, razão
-  recalculada para agregado).
+- `somarPrevistoMes` (`render-aba-consolidado.js`) — soma do Previsto do mês de
+  um campo (usado para `equipesPrevistas`).
+
+> **Correção de 2026-08-04 (revisão final).** A versão original desta lista
+> exportava também `produtividadeEsperada` (`render-aba-consolidado.js`) para
+> servir de referência ao Alerta B. Não serve — ver a correção 1 no fim da
+> Decisão 5. O módulo de alertas passou a calcular a referência por conta
+> própria (`premissaProdutividadeDoGrupo`, em `render-alertas-tendencia.js`), e
+> `produtividadeEsperada` ficou intacta no Consolidado, que é o único lugar
+> onde a regra de dois ramos copiada do orçamento faz sentido.
 
 ## Decisão 5 — os dois alertas
 
@@ -236,8 +243,8 @@ vazia.
 
 Pergunta: o ritmo acima do plano tem demanda que o sustente?
 
-- `excedenteProjetado` = `diagnostico.tendenciaRestante − diagnostico.previstoRestante`
-  (quanto a projeção do que falta do mês passa do plano do que falta);
+- `excedenteProjetado` = `diagnostico.tendenciaAPartirDeHoje − diagnostico.previstoAPartirDeHoje`
+  (quanto a projeção do que falta do mês passa do plano do mesmo recorte);
 - `saldoDemandas` = `pendentesNaData(grupo, hoje)` — furos que chegaram e ainda
   não saíram do estoque;
 - **dispara quando `saldoDemandas < excedenteProjetado`**: o SUP está produzindo
@@ -277,6 +284,95 @@ Pergunta: as equipes previstas, na produtividade prevista, dão conta do saldo?
   sem prova.
 - Financeiro nas colunas numéricas: 0 casas, pela Decisão 1. Produtividade
   continua com 2 casas (é razão, não valor).
+
+### Correções da revisão final (2026-08-04)
+
+As duas mudanças abaixo foram decididas pelo dono do projeto depois que a
+revisão final mediu os defeitos. O texto acima descreve o desenho original; o
+que vale é o desta seção.
+
+#### Correção 1 — a referência do Alerta B é a premissa `PROD.`, não a razão recalculada
+
+**O defeito.** `produtividadeEsperada` (Consolidado), num grupo AGREGADO,
+recalcula `V ÷ (E × D)`. Mas `V` é o mesmo `previstoMes` que gera o `saldo`, `E`
+é o mesmo `equipesPrevistas` que a exigida usa, e `D` é o mesmo
+`DIAS_PREMISSA_MES[mes]`. Fazendo a álgebra:
+
+```
+exigida > esperada
+⟺ saldo/(E·D·R/C) > V/(E·D)
+⟺ saldo > V · R/C
+```
+
+`E` e `D` se cancelam. Medido: com os mesmos furos, **2 equipes previstas e
+200.000 equipes previstas disparam igual**, com a evidência virando
+"exigida 0,00 · esperada 0,00". O alerta prometia responder "as equipes
+previstas dão conta do saldo?" e respondia "o realizado está abaixo do plano
+pro-rata?" — pergunta que a aba do semáforo já responde.
+
+**A correção.** A referência passa a ser a premissa `PROD.` da planilha. Para um
+grupo com vários registros, a média das premissas ponderada pelo volume previsto
+de cada um no mês:
+
+```
+esperadaDoGrupo = Σ(volume_i × prod_i) ÷ Σ(volume_i)
+```
+
+`volume_i` é `registro.previsto.volume[mesIdx]`, `prod_i` é
+`registro.previsto.equipesResumo.prod`. Registro sem `prod`, ou com volume
+nulo/zero, fica fora dos dois somatórios; se ninguém contribuir, a referência é
+`null` e o alerta vira `'sem-dado'` (caminho que já existia). Com um registro só
+a fórmula devolve o próprio `prod` dele, sem caso especial — mesmo resultado de
+antes.
+
+Como `esperadaDoGrupo` não depende de `E`, o `E` deixa de se cancelar e o alerta
+volta a depender de quantas equipes o SUP tem. Isso está preso por teste
+(`semanal-render-alertas-tendencia.test.js`): mudar SÓ o número de equipes
+previstas TEM de mudar o resultado.
+
+Mora em `render-alertas-tendencia.js`, não no Consolidado.
+`produtividadeEsperada` **não foi tocada**: ela alimenta a coluna
+"Produtividade média esperada" da aba Consolidado, cuja regra de dois ramos é
+copiada de propósito do dashboard de orçamento e tem de continuar batendo com
+ele. São duas perguntas diferentes com o mesmo nome.
+
+#### Correção 2 — o excedente do Alerta A mede daqui pra frente
+
+**O defeito.** `previstoRestante` e `tendenciaRestante` somavam a partir do
+índice `semanasFechadas`, isto é, do **início da semana em curso** — não de
+hoje. A semana vigente entrava INTEIRA nos dois. Cenário medido: semanas
+fechadas 130 contra 120 previstos (ramo `acima`), a semana em curso já perfurou
+200 contra 70 de plano, hoje é o último dia dela. O `excedente` dava 140, dos
+quais 130 eram furos **já entregues** — e o alerta exigia 140 de carteira aberta
+para sustentar trabalho que já tinha acabado.
+
+**A correção.** Os campos foram renomeados para `previstoAPartirDeHoje` e
+`tendenciaAPartirDeHoje` (dois nomes parecidos com significados diferentes é
+como isso volta a acontecer) e medem só o que ainda não aconteceu:
+
+- `previstoAPartirDeHoje` = `semanasPrevisto[vigente] × diasRestantesVigente ÷
+  diasNaSemana(vigente)` **mais** o previsto inteiro de cada semana futura. Sem
+  semana vigente (mês todo no futuro), é só a soma das futuras.
+- `tendenciaAPartirDeHoje` = `saida[vigente] − realizadoVigente` (a parte
+  PROJETADA da vigente; o realizado parcial dela não é projeção, é fato)
+  **mais** a projeção inteira de cada semana futura.
+
+No cenário acima o excedente cai de 140 para 60, que é o que de fato ainda vai
+ser produzido além do plano.
+
+`semanas`, `ramo`, `saldo`, `ritmoPorDia` e os demais campos do diagnóstico não
+mudaram, nem o Fechamento da Tendência — o invariante "Total da Tendência na
+Tabela Semanal = ponto final da curva Acumulada dos Gráficos" continua preso por
+teste.
+
+#### Correção 3 — o bypass de "sem base de demandas" respeita os meses sem nada a avaliar
+
+A regra comum "mês totalmente passado ou totalmente futuro → nenhum alerta"
+valia só no caminho com a base carregada. Sem ela, o bypass de
+`renderCorpoAlertasTendencia` emitia uma linha "Sem dado" por grupo justamente
+onde nada seria avaliado nem com a base presente. A guarda é de calendário
+(`semanas[n-1].fim < hoje` ou `semanas[0].inicio > hoje`), vale igual para todos
+os grupos e fica antes do bypass.
 
 ## Testes
 
