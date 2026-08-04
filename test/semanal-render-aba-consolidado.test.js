@@ -368,3 +368,25 @@ test('as linhas de total NÃO emitem a classe .linha-total -- as regras de fecha
   assert.match(html, /<tr class="linha-total-geral">/);
   assert.match(html, /<tr class="linha-total-sup">/);
 });
+
+// --- Seletor de dimensão PRÓPRIO saiu (2026-08-04) --------------------------
+// A aba passou a usar a dimensão da barra compartilhada -- quem chama
+// renderAbaConsolidado (render-semanal.js, montarAbaConsolidado) já resolve
+// dimensoes[0] e passa em opcoes.dimensao, exatamente como antes; o que muda é
+// que renderControles não emite mais um <select> próprio pra escolher isso.
+
+test('o seletor proprio de dimensao nao existe mais nos controles', () => {
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) }));
+  assert.strictEqual(html.indexOf('id="consolidado-dimensao"'), -1);
+  assert.ok(html.indexOf('id="consolidado-semana"') !== -1, 'o de semana continua -- e proprio da aba');
+});
+
+test('a dimensao recebida ainda troca as colunas de premissa', () => {
+  const extra = { demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) };
+  const volume = renderAbaConsolidado(REGISTROS_A, [0], opcoes(Object.assign({ dimensao: 'volume' }, extra)));
+  assert.ok(volume.indexOf('Equipes previstas') !== -1);
+  assert.strictEqual(volume.indexOf('Ticket médio'), -1);
+  const financeiro = renderAbaConsolidado(REGISTROS_A, [0], opcoes(Object.assign({ dimensao: 'financeiro' }, extra)));
+  assert.ok(financeiro.indexOf('Ticket médio') !== -1);
+  assert.strictEqual(financeiro.indexOf('Equipes previstas'), -1);
+});

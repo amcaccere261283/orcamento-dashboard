@@ -864,7 +864,12 @@ test('a busca da aba Alertas esconde as linhas que não combinam, sem refazer o 
 // --- Aba CONSOLIDADO (2026-08-03) ----------------------------------------
 // A abertura de linhas da Tabela do orçamento, mas com os números de UMA
 // semana. A lógica está em test/semanal-render-aba-consolidado.test.js; aqui
-// se prova o wire-up e o estado dos 2 controles próprios da aba.
+// se prova o wire-up e o estado do controle próprio de semana.
+//
+// 2026-08-04: o seletor de dimensão PRÓPRIO saiu -- a aba passou a seguir a
+// PRIMEIRA dimensão marcada na barra compartilhada (igual à aba Alertas), e
+// o default da barra é Financeiro (ver filtrosSelecionadosSemanal.dimensao em
+// SCRIPT_CLIENTE_SEMANAL), não mais Volume.
 
 test('o HTML tem a aba Consolidado e a seção escondida, vazia antes da senha', () => {
   const html = renderSemanal({
@@ -877,7 +882,7 @@ test('o HTML tem a aba Consolidado e a seção escondida, vazia antes da senha',
   assert.match(html, /<div id="secao-consolidado" style="display:none"><\/div>/);
 });
 
-test('depois da senha a aba Consolidado é montada, abre em Volume e esconde as outras cinco seções quando ativada', async () => {
+test('depois da senha a aba Consolidado é montada, abre em Financeiro (a dimensão default da barra) e esconde as outras cinco seções quando ativada', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const html = renderSemanal({
     registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
@@ -891,8 +896,8 @@ test('depois da senha a aba Consolidado é montada, abre em Volume e esconde as 
   assert.notStrictEqual(secao, '', '#secao-consolidado continua vazia depois da senha -- o módulo está no bundle mas nunca é chamado');
   assert.match(secao, /<table id="tabela-consolidado">/);
   assert.match(secao, /TOTAL GERAL/);
-  assert.match(secao, /Equipes previstas/, 'abre em Volume, então as colunas físicas aparecem');
-  assert.doesNotMatch(secao, /Ticket médio/);
+  assert.match(secao, /Ticket médio/, 'a barra abre com Financeiro marcado (filtrosSelecionadosSemanal.dimensao), e o Consolidado segue essa dimensão');
+  assert.doesNotMatch(secao, /Equipes previstas/);
 
   documentoFalso.getElementById('aba-consolidado').listeners.click();
   assert.strictEqual(documentoFalso.getElementById('secao-consolidado').style.display, '');
@@ -901,7 +906,13 @@ test('depois da senha a aba Consolidado é montada, abre em Volume e esconde as 
   });
 });
 
-test('trocar a dimensão do Consolidado pra Financeiro troca as colunas de premissa, sem misturar físico e financeiro', async () => {
+// Substitui o teste antigo que mexia no seletor PRÓPRIO #consolidado-dimensao
+// (removido nesta tarefa -- 2026-08-04). Agora quem decide a dimensão do
+// Consolidado é a barra compartilhada (#seletor-dimensao-painel, multi-select
+// com minimoUm:true -- marcar 'volume' NÃO desmarca 'financeiro'), e este
+// teste prova que a troca de fato redesenha a aba, não só que o estado interno
+// mudou.
+test('marcar Volume na barra compartilhada troca as colunas de premissa do Consolidado, sem misturar físico e financeiro', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const html = renderSemanal({
     registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
@@ -911,13 +922,17 @@ test('trocar a dimensão do Consolidado pra Financeiro troca as colunas de premi
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
 
-  documentoFalso.getElementById('consolidado-dimensao').listeners.change({ target: { value: 'financeiro' } });
+  assert.match(documentoFalso.getElementById('secao-consolidado').innerHTML, /Ticket médio/, 'pré-condição: abre em Financeiro');
+
+  const painelDimensao = documentoFalso.getElementById('seletor-dimensao-painel');
+  const checkboxVolume = painelDimensao.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'volume')[0];
+  assert.ok(checkboxVolume, 'esperava um checkbox "volume" no seletor de dimensão');
+  checkboxVolume.checked = true;
+  checkboxVolume.listeners.change();
 
   const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
-  assert.match(secao, /Ticket médio previsto/);
-  assert.doesNotMatch(secao, /Equipes previstas/);
-  assert.doesNotMatch(secao, /Produtividade/);
-  assert.strictEqual(sandbox.ESTADO_CONSOLIDADO.dimensao, 'financeiro');
+  assert.match(secao, /Equipes previstas/, 'Volume vem ANTES de Financeiro na ordem canônica (DIMENSOES_CONFIG_SEMANAL) -- dimensoes[0] passa a ser volume');
+  assert.doesNotMatch(secao, /Ticket médio/);
 });
 
 test('a aba Consolidado abre na semana EM CURSO do mês selecionado, não em S1', async () => {
@@ -1027,6 +1042,28 @@ test('render-alertas-tendencia.js entra no bundle DEPOIS de tudo que ele consome
 
 test('o recalculo da aba Alertas preenche o bloco novo', () => {
   assert.ok(/getElementById\('corpo-alertas-tendencia'\)\.innerHTML/.test(paginaCrua()));
+});
+
+// Prova estática do wire-up de dimensão do Consolidado (2026-08-04): o
+// comportamento dinâmico (a troca na barra realmente redesenha a aba) já está
+// coberto acima ("marcar Volume na barra compartilhada troca as colunas...");
+// este teste garante que o listener do seletor PRÓPRIO removido não volta e
+// que montarAbaConsolidado lê a dimensão da barra, igual à aba Alertas.
+//
+// A checagem NÃO é pelo texto literal "dimensao: dimensoes[0]": a convenção
+// copiada de recalcularAlertasSemanal (mesmo arquivo) usa uma variável
+// intermediária -- `var dimensao = dimensoes[0];` seguido de `dimensao:
+// dimensao,` na chamada -- e esse texto literal não existe nem lá. O que
+// precisa ficar provado é a ESSÊNCIA: a dimensão nasce de dimensoes[0], e
+// ESTADO_CONSOLIDADO.dimensao (a forma antiga) sumiu de vez.
+test('a aba Consolidado le a dimensao da barra compartilhada, nao de um seletor proprio', () => {
+  const html = paginaCrua();
+  assert.strictEqual(html.indexOf("getElementById('consolidado-dimensao')"), -1,
+    'o listener do seletor proprio nao pode mais existir');
+  assert.strictEqual(html.indexOf('ESTADO_CONSOLIDADO.dimensao'), -1,
+    'a forma antiga de descobrir a dimensao nao pode sobrar em lugar nenhum');
+  assert.ok(/var dimensao = dimensoes\[0\];/.test(html),
+    'montarAbaConsolidado tem de tirar a dimensao da barra, na mesma convencao de recalcularAlertasSemanal');
 });
 
 test('o indicador de status nao tem anel -- e identico ao do dashboard de orcamento', () => {

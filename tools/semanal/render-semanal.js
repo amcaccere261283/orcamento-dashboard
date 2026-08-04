@@ -918,11 +918,12 @@ function montarAbaDemandas() {
 // semanas, quando volta pro automático em vez de apontar pra uma semana que
 // não existe (ver montarAbaConsolidado).
 //
-// 'dimensao' abre em Volume, e não em Financeiro como o resto da página: é a
-// aba onde as colunas de premissa física (equipes previstas, produtividade
-// esperada) só existem nessa dimensão, e abrir sem elas esconderia justamente
-// o que a aba tem de próprio.
-var ESTADO_CONSOLIDADO = { semana: null, dimensao: 'volume' };
+// 'dimensao' saiu daqui em 2026-08-04: a aba passou a usar a PRIMEIRA marcada
+// na barra compartilhada, igual à aba Alertas (a tabela tem um jogo de colunas
+// de valor só, não dá pra empilhar dimensões nela). Consequência assumida: a
+// aba não abre mais em Volume, abre no que a barra tiver -- então as colunas
+// de premissa que aparecem de saída são as de Financeiro (Ticket médio).
+var ESTADO_CONSOLIDADO = { semana: null };
 
 // Índice da semana a exibir: o escolhido, ou o automático quando não há
 // escolha válida. "A semana em curso" é a última que já começou -- mesmo
@@ -942,9 +943,14 @@ function semanaConsolidadoIdx(semanas, hojeEpoch) {
   return elapsadas > 0 ? elapsadas - 1 : 0;
 }
 
-// Redesenha #secao-consolidado inteira e religa os 2 controles, recriados a
-// cada innerHTML -- mesmo motivo já documentado em montarAbaBalanco.
-function montarAbaConsolidado(registros, indices) {
+// Redesenha #secao-consolidado inteira e religa o controle de semana,
+// recriado a cada innerHTML -- mesmo motivo já documentado em
+// montarAbaBalanco. 'dimensoes' é a lista da barra compartilhada, na mesma
+// ordem canônica que dimensoesEmOrdemSemanal devolve -- exatamente como
+// recalcularAlertasSemanal(indices, dimensoes) já recebe; a aba usa só a
+// PRIMEIRA marcada.
+function montarAbaConsolidado(registros, indices, dimensoes) {
+  var dimensao = dimensoes[0];
   var semanas = semanasDoMesSelecionado();
   var hojeEpoch = hojeEpochDoNavegador();
   // Uma escolha que não existe mais no mês novo é DESCARTADA (volta ao
@@ -955,7 +961,7 @@ function montarAbaConsolidado(registros, indices) {
   }
   document.getElementById('secao-consolidado').innerHTML = RenderAbaConsolidado.renderAbaConsolidado(registros, indices, {
     semanaIdx: semanaConsolidadoIdx(semanas, hojeEpoch),
-    dimensao: ESTADO_CONSOLIDADO.dimensao,
+    dimensao: dimensao,
     mesIdx: mesSelecionadoIdx,
     semanas: semanas,
     demandas: window.__DEMANDAS__,
@@ -965,14 +971,7 @@ function montarAbaConsolidado(registros, indices) {
   if (seletorSemana) {
     seletorSemana.addEventListener('change', function (e) {
       ESTADO_CONSOLIDADO.semana = parseInt(e.target.value, 10);
-      montarAbaConsolidado(registros, indices);
-    });
-  }
-  var seletorDimensao = document.getElementById('consolidado-dimensao');
-  if (seletorDimensao) {
-    seletorDimensao.addEventListener('change', function (e) {
-      ESTADO_CONSOLIDADO.dimensao = e.target.value;
-      montarAbaConsolidado(registros, indices);
+      montarAbaConsolidado(registros, indices, dimensoes);
     });
   }
 }
@@ -1141,9 +1140,11 @@ function recalcularSemanal() {
   // cima nunca atualizava os Alertas de lá, porque só os seletores próprios da
   // aba acionavam o recálculo dela.
   recalcularAlertasSemanal(indices, dimensoes);
-  // O Consolidado usa a dimensão PRÓPRIA dele (volume/financeiro), não a da
-  // barra -- mas o RECORTE de registros é o mesmo das outras abas.
-  montarAbaConsolidado(window.__REGISTROS__, indices);
+  // O Consolidado usa a PRIMEIRA dimensão marcada na barra, igual à aba
+  // Alertas (recalcularAlertasSemanal acima) -- o seletor próprio dela saiu
+  // em 2026-08-04. O RECORTE de registros continua sendo o mesmo das outras
+  // abas.
+  montarAbaConsolidado(window.__REGISTROS__, indices, dimensoes);
 }
 
 // Callback de mudança de filtro (aoMudar, ver montarFiltroMulti em

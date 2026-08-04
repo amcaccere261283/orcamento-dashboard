@@ -92,11 +92,6 @@ function tipologiaColor(tipologia) {
   return '#898781';
 }
 
-var DIMENSOES = [
-  { valor: 'volume', rotulo: 'Volume' },
-  { valor: 'financeiro', rotulo: 'Financeiro' },
-];
-
 // Soma um campo mensal do Previsto através dos registros do grupo. null só
 // quando NENHUM registro tem valor naquele mês -- mesma convenção de
 // previstoMesVigente (render-aba-semanal.js), inclusive para 'equipes': somar
@@ -290,6 +285,10 @@ function tipologiasPresentes(registros, indices) {
   return ordem.map(function (t) { return { tipologia: t, indices: porTipologia[t] }; });
 }
 
+// 2026-08-04: o seletor de dimensão PRÓPRIO saiu daqui -- a aba passou a usar
+// a dimensão da barra de filtros compartilhada (ver ESTADO_CONSOLIDADO em
+// render-semanal.js). O de semana continua: não existe equivalente dele na
+// barra de cima.
 function renderControles(estado) {
   var e = estado || {};
   var semanas = e.semanas || [];
@@ -297,12 +296,8 @@ function renderControles(estado) {
     return '<option value="' + i + '"' + (i === e.semanaIdx ? ' selected' : '') + '>'
       + escapeHtml('S' + (i + 1) + ' (' + formatarIntervaloSemana(semana.inicio, semana.fim) + ')') + '</option>';
   }).join('');
-  var opcoesDimensao = DIMENSOES.map(function (d) {
-    return '<option value="' + d.valor + '"' + (d.valor === e.dimensao ? ' selected' : '') + '>' + escapeHtml(d.rotulo) + '</option>';
-  }).join('');
   return '<div class="controles-consolidado">'
     + '<label class="controle-consolidado">Semana<select id="consolidado-semana">' + opcoesSemana + '</select></label>'
-    + '<label class="controle-consolidado">Dimensão<select id="consolidado-dimensao">' + opcoesDimensao + '</select></label>'
     + '</div>';
 }
 
