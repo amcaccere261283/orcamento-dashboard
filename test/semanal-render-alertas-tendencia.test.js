@@ -39,7 +39,9 @@ test('dimensao diferente de volume nao monta tabela, explica por que', () => {
     agruparPor: 'sup', dimensao: 'financeiro', mesIdx: 6, semanas: SEMANAS, demandas: demandasDe('A', [], []), hojeEpoch: HOJE,
   });
   assert.ok(/Volume/.test(html), 'a nota tem de dizer que o bloco so vale em Volume');
-  assert.ok(html.indexOf('<tr') === -1, 'nenhuma linha de alerta fora de Volume');
+  // A nota em si é um <tr> (ver render-alertas-tendencia.js) -- o que não pode
+  // existir aqui é uma LINHA DE ALERTA, que é sempre marcada com data-search.
+  assert.strictEqual(html.indexOf('data-search='), -1, 'nenhuma linha de alerta fora de Volume');
 });
 
 test('grupo sem alerta nenhum nao vira linha', () => {
@@ -62,7 +64,8 @@ test('mes inteiramente no passado nao gera alerta nenhum', () => {
     demandas: demandasDe('A', chegadas, realizadas),
     hojeEpoch: diaEpoch(new Date(Date.UTC(2026, 7, 20))),
   });
-  assert.strictEqual(html.indexOf('<tr'), -1);
+  // Mês todo no passado -> nenhuma linha de alerta, marcada por data-search.
+  assert.strictEqual(html.indexOf('data-search='), -1);
 });
 
 test('deficit grande com uma equipe improdutiva vira a linha de equipes', () => {

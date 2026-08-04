@@ -16,6 +16,13 @@ const { diasNaSemana, indiceSemanaAtual} = require('./compute-semanal.js');
 var COR_ALERTA = '#c0392b';
 var COR_SEM_DADO = '#95a5a6';
 
+// Rótulo do caso "não dá nem pra saber o ramo" (sem base de demandas
+// carregada) -- não é um dos dois alertas de ALERTA_ROTULO (compute-alertas-
+// tendencia.js), então não entra lá: nomear a linha "Avaliar equipe e
+// demanda" ou "Equipes com pouco recurso" seria afirmar qual das duas
+// perguntas ficou pendente quando, na verdade, nenhuma chegou a ser feita.
+var ROTULO_SEM_AVALIACAO = 'Tendência não avaliada';
+
 function escapeHtml(value) {
   return String(value === null || value === undefined ? '' : value)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -36,6 +43,9 @@ function renderCabecalhoAlertasTendencia(agruparPorRotulo) {
 
 // A prova do alerta, em texto: sem ela a linha é uma acusação sem número.
 function textoEvidencia(alerta) {
+  if (alerta.tipo === 'sem-avaliacao') {
+    return 'Sem base de demandas carregada -- sem ela não dá pra saber se o ritmo está acima ou abaixo do plano';
+  }
   if (alerta.status === 'sem-dado') {
     return alerta.tipo === 'demanda'
       ? 'Sem base de demandas carregada'
@@ -68,6 +78,9 @@ function renderLinhaGrupo(rotuloGrupo, registros, indices, ctx) {
   // dado", nunca sumir silenciosamente (isso leria como "tudo certo"). Por
   // isso o bypass aqui, ANTES de perguntar ao avaliador -- sem ele, a linha
   // some pra todo grupo assim que a base de demandas falha em carregar.
+  // tipo 'sem-avaliacao' (não é um dos dois de ALERTA_ROTULO, de propósito:
+  // sem saber o ramo não dá pra afirmar qual das duas perguntas ficou em
+  // aberto -- ver ROTULO_SEM_AVALIACAO acima).
   var alerta = ctx.temDemandas
     ? avaliarAlertaTendencia({
         ramo: series.ramoTendencia,
@@ -78,11 +91,11 @@ function renderLinhaGrupo(rotuloGrupo, registros, indices, ctx) {
         equipesPrevistas: somarPrevistoMes(registros, indices, 'equipes', ctx.mesIdx),
         produtividadeEsperada: produtividadeEsperada(registros, indices, ctx.mesIdx),
       })
-    : { tipo: 'demanda', status: 'sem-dado', realizadoAcumulado: null, previstoAcumulado: null };
+    : { tipo: 'sem-avaliacao', status: 'sem-dado', realizadoAcumulado: null, previstoAcumulado: null };
   if (!alerta) return '';
 
   var tomador = tomadorDoGrupo(registros, indices);
-  var rotulo = ALERTA_ROTULO[alerta.tipo];
+  var rotulo = alerta.tipo === 'sem-avaliacao' ? ROTULO_SEM_AVALIACAO : ALERTA_ROTULO[alerta.tipo];
   var cor = alerta.status === 'alerta' ? COR_ALERTA : COR_SEM_DADO;
   var statusTexto = alerta.status === 'alerta' ? 'Alerta' : 'Sem dado';
   var busca = normalizarBusca(rotuloGrupo + ' ' + tomador + ' ' + rotulo);
@@ -102,15 +115,15 @@ function renderCorpoAlertasTendencia(registros, indices, opcoes) {
   var o = opcoes || {};
   var semanas = o.semanas || [];
   if (o.dimensao !== 'volume') {
-    // Nota fora de <tr>/<td>: o corpo desta função vira <tbody> na aba (o
-    // cabeçalho já é um <tr> à parte), e um <tr> aqui obrigaria o navegador a
-    // "adotar" a nota para fora da tabela (foster parenting do HTML5), lá em
-    // cima do <thead> -- o mesmo padrão de nota (fora de tabela) já usado em
-    // render-aba-demandas.js (`nota-demandas`) para "nada a mostrar aqui".
-    return '<p class="nota-alertas-tendencia">'
+    // O retorno desta função vai direto pro innerHTML de um <tbody> (o
+    // cabeçalho já é um <tr> à parte, ver renderCabecalhoAlertasTendencia) --
+    // por isso a nota também é um <tr>/<td colspan>, não um <p>: um <p> aqui
+    // é que seria içado pra fora da tabela pelo parser HTML5 (foster
+    // parenting), não o contrário.
+    return '<tr class="linha-nota-alertas"><td colspan="7">'
       + 'Os alertas de tendência só existem na dimensão <strong>Volume</strong>: '
       + 'as duas perguntas que eles respondem são físicas (furos em carteira e furos por equipe-dia).'
-      + '</p>';
+      + '</td></tr>';
   }
   if (!semanas.length || typeof o.hojeEpoch !== 'number') return '';
 
