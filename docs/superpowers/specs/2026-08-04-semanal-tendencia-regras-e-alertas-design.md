@@ -171,12 +171,21 @@ calcularTendenciaSemanal({
   semanas: [...],     // a projeção, uma por semana (a versão COMPLETA)
   ramo: 'igual' | 'acima' | 'abaixo',
   diagnostico: {
-    realizadoAcumulado, previstoAcumulado, semanasFechadas,
+    realizadoAcumulado, previstoAcumulado, semanasFechadas, indiceVigente,
     saldo, ritmoPorDia, diasRestantesMes,
     previstoRestante, tendenciaRestante,
   },
 }
 ```
+
+**O fallback de "divisão igual por semana" some.** A função de hoje aceita ser
+chamada sem `semanas` e, nesse caso, reparte o mês em fatias iguais por número de
+semana. Esse caminho é defensivo e inalcançável no fluxo real —
+`calcularSeriesSemanaisDimensao` só chama a projeção quando `temSemanasReais` é
+verdadeiro, o que já exige semanas válidas. O módulo novo devolve `sem-dado` para
+entrada incompleta, que é a resposta honesta: sem calendário não dá para saber
+quanto falta da semana em curso, e uma repartição igual mentiria sobre as semanas
+de borda curtas. Os dois testes que hoje prendem o fallback saem junto.
 
 O `diagnostico` é o ponto do desenho: **o mesmo cálculo que projeta a linha
 decide o ramo e devolve os números que justificam o alerta.** Sem ele, a aba
