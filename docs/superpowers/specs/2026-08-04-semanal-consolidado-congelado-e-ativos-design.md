@@ -169,6 +169,51 @@ página inteira.
 
 O controle de **semana** da aba continua sendo dela (não tem equivalente na barra).
 
+### A coerção de dimensão, e onde ela tem de valer (revisão final, 2026-08-04)
+
+A barra tem **três** dimensões (`DIMENSOES_CONFIG_SEMANAL`: equipes, volume, financeiro,
+nessa ordem canônica) e esta tabela sabe desenhar **duas**. A regra é
+`dimensaoDaTabela()` (`render-aba-consolidado.js`, exportada): `financeiro` fica
+`financeiro`, **todo o resto vira `volume`** — a página não mede equipes por semana em
+lugar nenhum, e Volume é a leitura física disponível.
+
+**A coerção tem de valer também para o recorte de ativos, e é por isso que ela é uma
+função exportada em vez de uma expressão solta.** `indicesDaAba(indices, dimensao)`
+(Decisão 4) recebe a dimensão do recorte; passando a **crua** da barra, marcar "Equipes" —
+sozinha **ou junto com Volume**, já que `equipes` vem primeiro na ordem canônica e
+`dimensoes[0]` é quem manda — fazia `FiltroAtivos` filtrar por `previsto.equipes`
+enquanto a tabela exibia colunas de **Volume**. Um registro com
+`previsto.volume[mês] = 300` e `previsto.equipes[mês] = 0`, sem furo no mês, sumia de uma
+tabela que estava mostrando justamente o volume dele. **Invariante: filtrar e exibir pela
+MESMA dimensão.**
+
+A aba Alertas não tem esse problema — ela filtra e exibe pela mesma dimensão crua (com
+Equipes marcada as células saem "Sem dado", que é a resposta honesta lá) — e por isso
+**não** passa por `dimensaoDaTabela`.
+
+### A nota de tela quando a barra está em Equipes
+
+Consequência direta da coerção: com "Equipes" marcada, a aba mostra números de **Volume**.
+Antes deste branch isso era inalcançável (o seletor próprio da aba só tinha
+volume/financeiro); agora é.
+
+A aba emite, como **primeira linha do `<tbody>`**, uma nota dizendo que Equipes não se
+aplica ao Consolidado e que os números exibidos são de Volume. **Mesma gramática visual da
+nota que `render-alertas-tendencia.js` já usa** para o caso irmão (`<tr
+class="linha-nota-alertas"><td colspan="N">`, com `.linha-nota-alertas td` já estilizada em
+`CSS_SEMANAL`): nenhum componente novo, e `<tr>` e não `<p>` porque um `<p>` dentro de
+tabela é içado para fora pelo parser HTML5 (foster parenting). O `colspan` é calculado
+(4 colunas de texto + Realizado + Tendência + as premissas da dimensão exibida), não fixo.
+
+### Rótulo da coluna congelada
+
+O rótulo é **`Tendência congelada em dd/MM (até dd/MM)`** — âncora e fim da semana. A
+primeira versão era `Tendência congelada em 06/07 (06/07 a 12/07)`: a data-âncora é sempre
+o 1º dia da semana exibida, então ela aparecia duas vezes, e como `#tabela-consolidado th`
+**não** tem `white-space: nowrap` (só `.cabecalho-premissa` e as colunas de texto têm), o
+rótulo quebrava em duas linhas. A informação não saiu — foi reorganizada. A semana futura
+continua `Tendência (projeção de hoje) (dd/MM a dd/MM)`.
+
 ## Testes
 
 - **Congelamento:** a Tendência de uma semana encerrada bate com o que
@@ -184,6 +229,13 @@ O controle de **semana** da aba continua sendo dela (não tem equivalente na bar
   antes desta mudança (era o default dele).
 - **Dimensão:** trocar a dimensão na barra troca as colunas de premissa do Consolidado;
   não existe mais `#consolidado-dimensao` no HTML.
+- **Coerção:** `dimensaoDaTabela` mapeia equipes→volume; e, com Equipes marcada na barra,
+  um registro com volume previsto e equipes zeradas **continua na tabela** (o recorte de
+  ativos usa a dimensão exibida, não a crua) e a nota de tela aparece. Prova por mutação:
+  voltar o recorte para a dimensão crua tem de derrubar o teste.
+- **Congelamento, o índice:** com furos plantados no **1º dia** da semana escolhida, a
+  Tendência congelada muda se `indiceAtualEfetivo` for trocado por `indiceAtual` — é o
+  único fixture que discrimina os dois (97 contra 74).
 - **Anel:** o HTML gerado não contém mais a regra do `box-shadow` do `.status-circulo`.
 - `test/orcamento-html-inalterado.test.js` continua passando — o orçamento não é tocado.
 

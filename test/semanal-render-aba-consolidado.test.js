@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  renderAbaConsolidado, renderControles, renderCabecalho, colunasExtras,
+  renderAbaConsolidado, renderControles, renderCabecalho, colunasExtras, dimensaoDaTabela,
   produtividadeEsperada, ticketMedioPrevisto, somarPrevistoMes,
   blocosPorSup, tipologiasPresentes,
 } = require('../tools/semanal/render-aba-consolidado.js');
@@ -114,12 +114,44 @@ test('semana futura usa a projecao de hoje, e o cabecalho diz isso', () => {
   assert.strictEqual(cabecalho.indexOf('congelada'), -1);
 });
 
-test('semana encerrada e semana em curso trazem a data-ancora no cabecalho', () => {
+// O contrato é que o cabeçalho DIFERENCIE os três estados (encerrada, em curso
+// e futura) -- e a diferença entre as duas congeladas é a data-âncora. O
+// rótulo encurtou em 2026-08-04 (era "Tendência congelada em 06/07 (06/07 a
+// 12/07)", com a âncora repetida no intervalo e quebrando em duas linhas),
+// então a asserção passou a casar o <th> INTEIRO em vez de um pedaço: mais
+// forte que a anterior, e prende também a ausência da duplicação.
+function thTendencia(html) {
+  return html.match(/<th class="num">Tend[\s\S]*?<\/th>/)[0];
+}
+
+test('semana encerrada e semana em curso trazem a data-ancora no cabecalho, sem repeti-la no intervalo', () => {
   const demandas = demandasEspalhadas();
   const encerrada = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx: 1, demandas, hojeEpoch: diaJul(15) }));
-  assert.ok(encerrada.indexOf('congelada em 06/07') !== -1, 'a S2 comeca em 06/07');
+  assert.strictEqual(thTendencia(encerrada),
+    '<th class="num">Tendência congelada em 06/07 (até 12/07)</th>', 'a S2 vai de 06/07 a 12/07');
   const emCurso = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx: 2, demandas, hojeEpoch: diaJul(15) }));
-  assert.ok(emCurso.indexOf('congelada em 13/07') !== -1, 'a S3 comeca em 13/07');
+  assert.strictEqual(thTendencia(emCurso),
+    '<th class="num">Tendência congelada em 13/07 (até 19/07)</th>', 'a S3 vai de 13/07 a 19/07');
+  // A âncora aparece UMA vez dentro do rótulo -- era o que duplicava.
+  assert.strictEqual((thTendencia(encerrada).match(/06\/07/g) || []).length, 1);
+});
+
+// Lacuna achada por mutação na revisão final de 2026-08-04: trocar
+// ctx.indiceAtualEfetivo por ctx.indiceAtual na chamada congelada
+// (render-aba-consolidado.js) deixava a bateria INTEIRA verde. Nenhuma fixture
+// punha furo no 1º DIA da semana escolhida, que é o único dia em que o índice
+// passado ao recálculo muda o resultado -- com hojeEfetivo = início da S2, é
+// esse índice que decide se a S2 é "a vigente" (parcial, até 06/07) ou se a
+// vigente é outra semana.
+test('a Tendência congelada usa o índice de semana do HOJE EFETIVO, não o do hoje real', () => {
+  const eventos = [];
+  for (let i = 0; i < 30; i++) eventos.push(diaJul(6)); // 06/07 = 1º dia da S2
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 1, demandas: demandasCom({ 'SUP-A||ST': eventos }), hojeEpoch: diaJul(15),
+  }));
+  const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
+  assert.strictEqual(celulas[5], '97',
+    'com ctx.indiceAtual (hoje real, S3) no lugar de ctx.indiceAtualEfetivo (S2) esta célula cai pra 74');
 });
 
 // --- Abertura de linhas: a hierarquia da Tabela do orçamento --------------
@@ -188,7 +220,9 @@ test('o Realizado da semana conta só os furos concluídos DENTRO dela', () => {
 });
 
 test('o seletor de semana lista S1..Sn com as datas reais e marca a escolhida', () => {
-  const html = renderControles({ semanas: SEMANAS, semanaIdx: 2, dimensao: 'volume' });
+  // Sem 'dimensao': renderControles nunca leu esse campo, e ele saiu da
+  // chamada de produção junto com o seletor próprio de dimensão.
+  const html = renderControles({ semanas: SEMANAS, semanaIdx: 2 });
   assert.match(html, /<option value="0">S1 \(01\/07 a 05\/07\)<\/option>/);
   assert.match(html, /<option value="2" selected>S3 \(13\/07 a 19\/07\)<\/option>/);
   assert.strictEqual((html.match(/<option value="\d"/g) || []).length, 5);
@@ -379,6 +413,50 @@ test('o seletor proprio de dimensao nao existe mais nos controles', () => {
   const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) }));
   assert.strictEqual(html.indexOf('id="consolidado-dimensao"'), -1);
   assert.ok(html.indexOf('id="consolidado-semana"') !== -1, 'o de semana continua -- e proprio da aba');
+});
+
+// --- Coerção de dimensão e a nota de tela (revisão final, 2026-08-04) -------
+// A barra compartilhada tem TRÊS dimensões e esta tabela só desenha duas.
+// A coerção era uma expressão solta dentro de renderAbaConsolidado, e quem
+// chamava (montarAbaConsolidado) recortava os índices ativos pela dimensão
+// CRUA -- filtrando por equipes uma tabela que exibia Volume. Virou função
+// exportada justamente para não haver duas cópias da regra.
+
+test('dimensaoDaTabela coage: so financeiro fica: equipes (e qualquer outra coisa) cai em volume', () => {
+  assert.strictEqual(dimensaoDaTabela('financeiro'), 'financeiro');
+  assert.strictEqual(dimensaoDaTabela('volume'), 'volume');
+  assert.strictEqual(dimensaoDaTabela('equipes'), 'volume');
+  assert.strictEqual(dimensaoDaTabela(undefined), 'volume');
+});
+
+test('com a barra em Equipes, a aba avisa NA TELA que os numeros exibidos sao de Volume', () => {
+  const registros = [registro({ sup: 'SUP-A', volume: 310, equipes: 2, prod: 5 })];
+  const html = renderAbaConsolidado(registros, [0], opcoes({ dimensao: 'equipes' }));
+  // Mesma gramática visual da nota do bloco de alertas de tendência
+  // (render-alertas-tendencia.js): <tr>/<td colspan> dentro do <tbody>.
+  assert.match(html, /<tr class="linha-nota-alertas"><td colspan="8">/);
+  assert.match(html, /Equipes<\/strong> não se aplica ao Consolidado/);
+  assert.match(html, /são de <strong>Volume<\/strong>/);
+  // E as colunas continuam sendo mesmo as de Volume, não as de Financeiro.
+  assert.ok(html.indexOf('Equipes previstas') !== -1);
+  assert.strictEqual(html.indexOf('Ticket médio'), -1);
+});
+
+test('em Volume e em Financeiro nao ha nota de dimensao -- a barra e a tabela concordam', () => {
+  const registros = [registro({ sup: 'SUP-A', volume: 310, financeiro: 50000, ticket: 500 })];
+  assert.strictEqual(renderAbaConsolidado(registros, [0], opcoes({ dimensao: 'volume' })).indexOf('linha-nota-alertas'), -1);
+  assert.strictEqual(renderAbaConsolidado(registros, [0], opcoes({ dimensao: 'financeiro' })).indexOf('linha-nota-alertas'), -1);
+});
+
+test('o colspan da nota cobre a tabela inteira -- uma nota mais curta que o cabecalho deixaria a linha torta', () => {
+  const registros = [registro({ sup: 'SUP-A', volume: 310 })];
+  // `/<th[ >]/` e não `/<th/`: este último casa também dentro de "<thead>".
+  const contarThs = (h) => (h.match(/<th[ >]/g) || []).length;
+  // Equipes cai em Volume: 4 colunas de texto + Realizado + Tendência + as 2
+  // premissas físicas = 8.
+  const emVolume = renderAbaConsolidado(registros, [0], opcoes({ dimensao: 'equipes' }));
+  assert.strictEqual(contarThs(emVolume), 8);
+  assert.match(emVolume, /<td colspan="8">/);
 });
 
 test('a dimensao recebida ainda troca as colunas de premissa', () => {

@@ -1163,6 +1163,64 @@ test('com o check "somente ativos" ligado, SUP sem movimento no mes some da aba 
   assert.ok(semCheck.indexOf('SUP-0002-24') !== -1, 'desligado, o zerado volta');
 });
 
+// --- O recorte de ativos segue a dimensão EXIBIDA (revisão final, 2026-08-04) ---
+// A tabela do Consolidado só desenha volume/financeiro e cai em Volume quando
+// a barra está em Equipes (dimensaoDaTabela). O recorte de ativos era feito
+// com a dimensão CRUA da barra: marcar "Equipes" -- sozinha ou junto com
+// Volume, que na ordem canônica vem depois -- fazia dimensoes[0] virar
+// 'equipes' e FiltroAtivos filtrar por previsto.equipes uma tabela que estava
+// mostrando colunas de Volume. Um registro com volume previsto e equipes
+// zeradas sumia da tabela que exibia justamente o volume dele.
+function registroSoVolume(sup, tomador, volumeMes) {
+  const zeros = new Array(12).fill(0);
+  const vol = new Array(12).fill(0);
+  vol[6] = volumeMes; // julho
+  const bloco = (equipes, volume) => ({
+    equipes, volume, financeiro: new Array(12).fill(0),
+    equipesResumo: { pico: 0, media: 0, prod: 8, dias: 25 },
+    volumeResumo: { total: 0, totalInicial: 0, ticket: 1 },
+    financeiroResumo: { total: 0, totalInicial: 0 },
+  });
+  return {
+    sup, grupo: 'Grupo-Sintetico-Beta', tomador, tipologia: 'ST',
+    // equipes ZERADAS de propósito: é o registro que o recorte pela dimensão
+    // crua descartava.
+    previsto: bloco(zeros, vol),
+    realizado: bloco(zeros, new Array(12).fill(0)),
+    total: bloco(zeros, new Array(12).fill(0)),
+  };
+}
+
+test('com Equipes marcada na barra, o Consolidado recorta os ativos por VOLUME -- a dimensao que a tabela exibe', async () => {
+  const registros = [registroSoVolume('SUP-0003-24', 'Tomador-Sintetico-Delta', 300)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const painelDimensao = documentoFalso.getElementById('seletor-dimensao-painel');
+  const checkbox = (valor) => painelDimensao.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === valor)[0];
+  // Marca Equipes e desmarca Financeiro (o default): dimensoes[0] = 'equipes'.
+  const equipes = checkbox('equipes');
+  assert.ok(equipes, 'esperava um checkbox "equipes" no seletor de dimensão');
+  equipes.checked = true;
+  equipes.listeners.change();
+  const financeiro = checkbox('financeiro');
+  financeiro.checked = false;
+  financeiro.listeners.change();
+
+  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.ok(secao.indexOf('Equipes previstas') !== -1,
+    'pré-condição: com Equipes na barra a tabela desenha as colunas de Volume');
+  assert.ok(secao.indexOf('SUP-0003-24') !== -1,
+    'o SUP tem 300 de volume previsto no mês e 0 equipes -- recortar por equipes o esconderia de uma tabela que mostra Volume');
+  assert.ok(secao.indexOf('não se aplica ao Consolidado') !== -1,
+    'e a aba precisa dizer na tela que os números são de Volume, não de Equipes');
+});
+
 // --- Bloco "Alertas de tendência" (2026-08-04) ---------------------------
 // Liga render-alertas-tendencia.js (Task 5, já testado sozinho) na aba
 // Alertas: markup, bundle e o recálculo que preenche o bloco. A lógica dos

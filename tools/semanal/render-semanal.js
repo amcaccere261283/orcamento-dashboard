@@ -238,7 +238,12 @@ const CSS_ABAS_SEMANAL = `
     font-size: 13px; color: var(--text-primary); cursor: pointer;
     font-variant-numeric: tabular-nums;
   }
-  .caixa-semana input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; }
+  /* O #somente-ativos da barra de ações entra na MESMA regra, em vez de ganhar
+     uma cópia do âmbar: duplicar valor de cor é como as duas metades da página
+     acabam divergindo. Sem isso ele saía com o azul padrão do navegador ao
+     lado de controles âmbar. */
+  .caixa-semana input[type="checkbox"],
+  .controle-ativos-semanal input[type="checkbox"] { accent-color: #f6b53f; cursor: pointer; }
   /* Desabilitado fora de Mês Vigente: continua visível (some e o layout pula
      a cada troca de período), mas legivelmente inerte. */
   .controle-balanco-desabilitado { opacity: 0.45; }
@@ -388,7 +393,11 @@ const CSS_SEMANAL = `
   }
   .controle-mes-semanal select:hover { border-color: rgba(246,181,63,0.5); }
   .controle-mes-semanal select:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
-  .controle-ativos-semanal { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  /* var(--text-secondary) e não var(--muted): a etiqueta fica COLADA na do
+     seletor de mês (.controle-mes-semanal, logo acima), e duas etiquetas
+     vizinhas em cinzas diferentes leem como uma delas estar desabilitada.
+     cursor: pointer porque o <label> inteiro alterna o checkbox. */
+  .controle-ativos-semanal { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
   /* Bloco "Alertas de tendência" (2026-08-04, render-alertas-tendencia.js).
      --texto-suave não existe neste projeto -- a variável de texto apagado
      chama-se --muted (ver :root em tools/comum/render-shell.js); --border
@@ -928,7 +937,8 @@ function montarAbaDemandas() {
   });
 }
 
-// Estado dos 2 controles próprios da aba CONSOLIDADO. 'semana' começa null =
+// Estado do ÚNICO controle próprio que sobrou na aba CONSOLIDADO (eram 2 até
+// 2026-08-04, quando o de dimensão saiu). 'semana' começa null =
 // AUTOMÁTICO: a aba abre na semana em curso do mês selecionado (a última que
 // já começou; S1 num mês que ainda não começou). Depois que a pessoa escolhe
 // uma, o número escolhido manda -- até trocar de mês para um com menos
@@ -969,8 +979,13 @@ function semanaConsolidadoIdx(semanas, hojeEpoch) {
 function montarAbaConsolidado(registros, indices, dimensoes) {
   var dimensao = dimensoes[0];
   // Consolidado tem linha por SUP/tipologia -- é onde o filtro de ativos
-  // esconde linhas de verdade (ver o comentário de indicesDaAba).
-  var indicesAba = indicesDaAba(indices, dimensao);
+  // esconde linhas de verdade (ver o comentário de indicesDaAba). O recorte
+  // usa a dimensão COERGIDA (dimensaoDaTabela), não a crua da barra: a tabela
+  // só sabe desenhar volume/financeiro e cai em Volume quando a barra está em
+  // Equipes, então filtrar pela crua recortaria por previsto.equipes e
+  // esconderia registros de uma tabela que está mostrando Volume. A crua
+  // continua indo em 'dimensao' -- é dela que sai a nota de tela.
+  var indicesAba = indicesDaAba(indices, RenderAbaConsolidado.dimensaoDaTabela(dimensao));
   var semanas = semanasDoMesSelecionado();
   var hojeEpoch = hojeEpochDoNavegador();
   // Uma escolha que não existe mais no mês novo é DESCARTADA (volta ao

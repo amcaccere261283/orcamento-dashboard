@@ -156,6 +156,20 @@ function ticketMedioPrevisto(registros, indices, mesIdx) {
 // dono do projeto pediu explicitamente. Volume não mostra ticket, Financeiro
 // não mostra equipes nem produtividade. Desde 2026-08-04, valores financeiros
 // (ticket) saem sempre inteiros, sem casa decimal.
+// A dimensão que a TABELA de fato exibe. A barra compartilhada tem três
+// (equipes/volume/financeiro) e esta aba só sabe desenhar duas: 'equipes' cai
+// em Volume, porque a página não mede equipes por semana em lugar nenhum.
+//
+// Exportada de propósito, e não duplicada em quem chama: o recorte de ativos
+// (indicesDaAba, render-semanal.js) tem de usar a MESMA dimensão que a tabela
+// exibe. Com a regra copiada em dois lugares, marcar "Equipes" na barra fazia
+// o recorte filtrar por previsto.equipes enquanto a tabela mostrava colunas de
+// Volume -- um registro com volume previsto e equipes zeradas sumia de uma
+// tabela que estava exibindo justamente o volume dele.
+function dimensaoDaTabela(dimensao) {
+  return dimensao === 'financeiro' ? 'financeiro' : 'volume';
+}
+
 function colunasExtras(dimensao) {
   if (dimensao === 'financeiro') {
     return [{ chave: 'ticket', rotulo: 'Ticket médio previsto (R$/furo)', casas: 0 }];
@@ -190,12 +204,19 @@ function dataCurta(diaEp) {
 // se projetava naquele momento, a outra é a projeção corrente.
 function renderCabecalho(dimensao, semana, congeladaEm) {
   var sufixo = semana ? ' (' + formatarIntervaloSemana(semana.inicio, semana.fim) + ')' : '';
+  // Congelada: a data-âncora É sempre o 1º dia da semana exibida, que já é o
+  // início do intervalo. Repetir os dois dava "Tendência congelada em 06/07
+  // (06/07 a 12/07)" -- e como #tabela-consolidado th não tem white-space:
+  // nowrap (só .cabecalho-premissa e as colunas de texto têm), o rótulo
+  // quebrava em duas linhas. A informação não sai, só deixa de aparecer duas
+  // vezes: a âncora fica no "em dd/MM" e o sufixo fecha o intervalo no "até".
   var rotuloTendencia = congeladaEm === null || congeladaEm === undefined
-    ? 'Tendência (projeção de hoje)'
-    : 'Tendência congelada em ' + dataCurta(congeladaEm);
+    ? 'Tendência (projeção de hoje)' + sufixo
+    : 'Tendência congelada em ' + dataCurta(congeladaEm)
+      + (semana ? ' (até ' + dataCurta(semana.fim) + ')' : '');
   var ths = '<th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th>'
     + '<th class="num">Realizado' + escapeHtml(sufixo) + '</th>'
-    + '<th class="num">' + escapeHtml(rotuloTendencia) + escapeHtml(sufixo) + '</th>';
+    + '<th class="num">' + escapeHtml(rotuloTendencia) + '</th>';
   // A faixa das colunas de premissa começa no CABEÇALHO, não só no corpo --
   // sem isso o rótulo fica fora da região que o fundo delimita e a fronteira
   // semana/mês parece começar uma linha abaixo de onde começa (achado da
@@ -288,7 +309,8 @@ function tipologiasPresentes(registros, indices) {
 // 2026-08-04: o seletor de dimensão PRÓPRIO saiu daqui -- a aba passou a usar
 // a dimensão da barra de filtros compartilhada (ver ESTADO_CONSOLIDADO em
 // render-semanal.js). O de semana continua: não existe equivalente dele na
-// barra de cima.
+// barra de cima -- e por isso 'estado' só carrega semanas/semanaIdx: a
+// dimensão que continuava sendo passada aqui não era lida por ninguém.
 function renderControles(estado) {
   var e = estado || {};
   var semanas = e.semanas || [];
@@ -320,25 +342,38 @@ function renderNota(dimensao) {
     + escapeHtml(premissas) + ' — valem para o mês inteiro, e por isso repetem em todas as semanas.</p>';
 }
 
+// A nota que avisa que a dimensão da barra não é a que está na tela. Mesma
+// gramática visual da nota do bloco de alertas de tendência
+// (render-alertas-tendencia.js): um <tr>/<td colspan> dentro do <tbody>, e não
+// um <p> -- um <p> aqui seria içado para fora da tabela pelo parser HTML5
+// (foster parenting). A classe .linha-nota-alertas já é estilizada em
+// CSS_SEMANAL e vale para a página inteira; não há componente novo.
+function renderNotaDimensao(dimensaoBarra, dimensaoTabela) {
+  if (dimensaoBarra !== 'equipes') return '';
+  var colunas = 4 + 2 + colunasExtras(dimensaoTabela).length;
+  return '<tr class="linha-nota-alertas"><td colspan="' + colunas + '">'
+    + 'A dimensão <strong>Equipes</strong> não se aplica ao Consolidado — a página não mede '
+    + 'equipes por semana em lugar nenhum. Os números abaixo são de <strong>Volume</strong>.'
+    + '</td></tr>';
+}
+
 // registros/indices: mesmo par do resto do projeto. opcoes: { semanaIdx,
-// dimensao, mesIdx, semanas, demandas, hojeEpoch }.
+// dimensao, mesIdx, semanas, demandas, hojeEpoch }. 'dimensao' é a da barra
+// compartilhada, crua: a coerção para o par que a tabela sabe desenhar é
+// dimensaoDaTabela, e quando as duas divergem a nota acima diz isso na tela.
 function renderAbaConsolidado(registros, indices, opcoes) {
   var o = opcoes || {};
   var semanas = o.semanas || [];
   var numSemanas = semanas.length;
-  var dimensao = o.dimensao === 'financeiro' ? 'financeiro' : 'volume';
+  var dimensao = dimensaoDaTabela(o.dimensao);
   var semanaIdx = typeof o.semanaIdx === 'number' ? Math.max(0, Math.min(numSemanas - 1, o.semanaIdx)) : 0;
   var temDemandas = !!(o.demandas && o.demandas.porRegistroEventos && typeof o.hojeEpoch === 'number');
 
-  var controles = renderControles({ semanas: semanas, semanaIdx: semanaIdx, dimensao: dimensao });
+  var controles = renderControles({ semanas: semanas, semanaIdx: semanaIdx });
   if (!numSemanas) {
     return controles + '<p class="nota-consolidado">Sem semanas para o mês selecionado — nada a consolidar.</p>';
   }
 
-  var elapsadas = 0;
-  for (var i = 0; i < numSemanas; i++) {
-    if (typeof o.hojeEpoch === 'number' && semanas[i].inicio <= o.hojeEpoch) elapsadas++;
-  }
   // Congela na semana JÁ COMEÇADA (encerrada ou em curso): inicio <= hoje.
   // A futura (inicio > hoje) não tem o que congelar -- nunca começou.
   var semanaEscolhida = semanas[semanaIdx];
@@ -361,7 +396,7 @@ function renderAbaConsolidado(registros, indices, opcoes) {
   };
 
   var todos = indices || [];
-  var linhas = renderLinha(
+  var linhas = renderNotaDimensao(o.dimensao, dimensao) + renderLinha(
     celula('col-sup', '—') + celula('col-grupo', 'Todos') + celula('col-tomador', 'Todos')
       + celulaChipTotal('TOTAL GERAL', 'chip-total-geral'),
     'linha-total-geral', registros, todos, ctx
@@ -398,7 +433,7 @@ function renderAbaConsolidado(registros, indices, opcoes) {
 }
 
 module.exports = {
-  renderAbaConsolidado, renderControles, renderCabecalho, colunasExtras,
+  renderAbaConsolidado, renderControles, renderCabecalho, colunasExtras, dimensaoDaTabela,
   produtividadeEsperada, ticketMedioPrevisto, somarPrevistoMes,
   blocosPorSup, tipologiasPresentes, tipologiaColor,
 };
