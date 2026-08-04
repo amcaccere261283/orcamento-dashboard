@@ -318,6 +318,74 @@ test('Realizado/Tendência aparecem de ponta a ponta quando a dimensão Volume e
   assert.doesNotMatch(htmlMontado.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0], /sem-dado/, 'Realizado (Volume) precisa vir preenchido, não sem-dado, com demandas.porRegistroEventos real');
 });
 
+// --- Filtro "Somente SUPs ativos" aplicado à Semanal (Task 5, rodada de
+// correção 1, 2026-08-04) -------------------------------------------------
+// A Semanal não tem linha por SUP -- Previsto/Realizado/Tendência são
+// agregados, e um registro inativo já contribui zero neles (não há o que um
+// filtro esconda). O ÚNICO número que muda de fato é "Demandas Pendentes":
+// estoque de furos EM ABERTO (chegou e não saiu), que pode ter saldo mesmo
+// num registro sem NENHUM movimento no mês selecionado -- é exatamente esse
+// caso que discrimina o filtro aqui.
+test('com o check "somente ativos" ligado, o furo pendente de um SUP sem movimento no mes some de "Demandas Pendentes" (Volume); desligado, volta', async () => {
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 0),
+  ];
+  const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
+  const demandas = {
+    tipologias: [], totais: {},
+    porRegistroEventos: {
+      // SUP-0001-24: um furo REALIZADO dentro de julho -- ativo em Volume
+      // via furo (o fixture sintético zera previsto/realizado.volume
+      // sempre, então sem furo não haveria outro jeito de ficar ativo
+      // nessa dimensão). Sem chegada/saída -- não contribui pendente.
+      'SUP-0001-24||ST': {
+        chegada: [], sondagemRealizada: [diaEpoch(new Date(Date.UTC(2026, 6, 5)))], saidaEstoque: [],
+      },
+      // SUP-0002-24: NENHUM furo dentro de julho (nem previsto/realizado de
+      // Volume, que o fixture também zera sempre) -- INATIVO em Volume. Mas
+      // tem uma CHEGADA em junho que nunca saiu do estoque: um furo
+      // pendente de verdade, sem nenhum movimento em julho -- o caso que a
+      // Task 5 original (e o brief) descrevem como "o único número que
+      // muda de fato".
+      'SUP-0002-24||ST': {
+        chegada: [diaEpoch(new Date(Date.UTC(2026, 5, 10)))], sondagemRealizada: [], saidaEstoque: [],
+      },
+    },
+  };
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // Marca Volume (Financeiro continua marcado também -- minimoUm, não
+  // substitui) pra "Demandas Pendentes" aparecer.
+  const painelDimensao = documentoFalso.getElementById('seletor-dimensao-painel');
+  const checkboxVolume = painelDimensao.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'volume')[0];
+  assert.ok(checkboxVolume, 'esperava um checkbox "volume" no seletor de dimensão');
+  checkboxVolume.checked = true;
+  checkboxVolume.listeners.change();
+
+  function linhaPendentes(htmlSemanal) {
+    var m = htmlSemanal.match(/<tr class="linha-serie-semanal linha-pendentes-demandas">[\s\S]*?<\/tr>/);
+    return m ? m[0] : '';
+  }
+
+  const comCheck = linhaPendentes(documentoFalso.getElementById('secao-semanal').innerHTML);
+  assert.ok(comCheck, 'esperava a linha Demandas Pendentes no bloco Volume');
+  // Com o check ligado (padrão), só SUP-0001-24 conta -- e ele não tem
+  // chegada nenhuma, então o saldo fecha em 0 em toda a linha.
+  assert.doesNotMatch(comCheck, />1,00</, 'com o check ligado, o furo pendente de SUP-0002-24 (inativo em Volume) não pode contar');
+
+  const checkboxSomenteAtivos = documentoFalso.getElementById('somente-ativos');
+  assert.ok(checkboxSomenteAtivos, 'checkbox somente-ativos existe no DOM após os scripts rodarem');
+  checkboxSomenteAtivos.checked = false;
+  checkboxSomenteAtivos.listeners.change({ target: checkboxSomenteAtivos });
+
+  const semCheck = linhaPendentes(documentoFalso.getElementById('secao-semanal').innerHTML);
+  assert.match(semCheck, />1,00</, 'desligado, o furo pendente de SUP-0002-24 volta a contar');
+});
+
 test('o HTML da semanal tem o botão "Atualizar dados" e o span de status, com os MESMOS ids que o CSS compartilhado (cssBase) estiliza', () => {
   const html = renderSemanal({ registros: [], baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   assert.match(html, /<button id="atualizar-dashboard" type="button">/);
@@ -841,6 +909,49 @@ test('filtrar por SUP na barra compartilhada TAMBÉM recalcula a aba Alertas -- 
   const corpo = documentoFalso.getElementById('corpo-alertas').innerHTML;
   assert.match(corpo, /SUP-0001-24/);
   assert.doesNotMatch(corpo, /SUP-0002-24/, 'o SUP filtrado fora não pode continuar aparecendo nos Alertas');
+});
+
+// --- Filtro "Somente SUPs ativos" aplicado aos Alertas (Task 5, rodada de
+// correção 1, 2026-08-04) -----------------------------------------------
+// Mesma mecânica do teste equivalente do Consolidado (ver abaixo, seção
+// CONSOLIDADO): a Task 5 original só provava o filtro contra
+// #secao-consolidado, e um revisor mostrou por mutação isolada (trocar
+// indicesAba por indices só dentro de recalcularAlertasSemanal) que a
+// bateria inteira continuava verde -- Alertas ficou sem cobertura dinâmica
+// própria. Este teste fecha essa lacuna.
+test('com o check "somente ativos" ligado, SUP sem movimento no mes some da aba Alertas; desligado, volta', async () => {
+  // Mesmo par de registros do teste do Consolidado: um com previsto no mês
+  // (financeiro > 0, a dimensão default da barra) e outro inteiramente
+  // zerado, sem furo no Avanço Sond -- FiltroAtivos.registroAtivo marca o
+  // primeiro como ativo e o segundo como inativo.
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 0),
+  ];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const comCheck = documentoFalso.getElementById('corpo-alertas').innerHTML;
+  assert.ok(comCheck.indexOf('SUP-0001-24') !== -1, 'o SUP com movimento fica');
+  assert.strictEqual(comCheck.indexOf('SUP-0002-24'), -1, 'o zerado some com o check ligado (SOMENTE_ATIVOS = true por padrão)');
+
+  // Mesmo padrão de disparo já estabelecido (ver Task 4,
+  // test/semanal-render-aba-balanco-wireup.test.js, e o teste equivalente do
+  // Consolidado nesta Task 5): setar .checked e chamar o listener guardado
+  // em .listeners.change direto -- test/helpers/dom-falso-semanal.js não
+  // implementa dispatchEvent.
+  const checkboxSomenteAtivos = documentoFalso.getElementById('somente-ativos');
+  assert.ok(checkboxSomenteAtivos, 'checkbox somente-ativos existe no DOM após os scripts rodarem');
+  checkboxSomenteAtivos.checked = false;
+  checkboxSomenteAtivos.listeners.change({ target: checkboxSomenteAtivos });
+
+  const semCheck = documentoFalso.getElementById('corpo-alertas').innerHTML;
+  assert.ok(semCheck.indexOf('SUP-0002-24') !== -1, 'desligado, o zerado volta');
 });
 
 test('a busca da aba Alertas esconde as linhas que não combinam, sem refazer o cálculo', async () => {
