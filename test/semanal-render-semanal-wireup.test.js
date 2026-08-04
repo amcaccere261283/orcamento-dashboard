@@ -161,9 +161,16 @@ test('a chamada a RenderAbaSemanal.renderAbaSemanal, com injeção em #secao-sem
   const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   const scriptCliente = scripts[5][1]; // 6º <script>: SCRIPT_CLIENTE_SEMANAL
+  // Task 5 (2026-08-04) trocou a chamada única por 'dimensoes.map(...)': o
+  // filtro de ativos depende da dimensão (ver indicesDaAba), então cada
+  // dimensão exibida precisa do seu próprio recorte de índices, o que exige
+  // uma chamada de renderAbaSemanal por dimensão em vez de uma só com o
+  // array inteiro. A atribuição a innerHTML não é mais direta -- passa pelo
+  // .map/.join -- mas RenderAbaSemanal.renderAbaSemanal(window.__REGISTROS__,
+  // ...) dentro dele continua sendo a chamada real.
   assert.match(
     scriptCliente,
-    /document\.getElementById\('secao-semanal'\)\.innerHTML = RenderAbaSemanal\.renderAbaSemanal\(/
+    /document\.getElementById\('secao-semanal'\)\.innerHTML = dimensoes\.map\(function \(dimensao\) \{[\s\S]{0,200}RenderAbaSemanal\.renderAbaSemanal\(/
   );
 });
 
@@ -1004,6 +1011,45 @@ test('filtrar por SUP na barra compartilhada TAMBÉM recalcula o Consolidado', a
   const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
   assert.match(secao, /SUP-0001-24/);
   assert.doesNotMatch(secao, /SUP-0002-24/, 'o SUP filtrado fora não pode continuar aparecendo no Consolidado');
+});
+
+// --- Filtro "Somente SUPs ativos" aplicado ao Consolidado (Task 5, 2026-08-04) ---
+// A Task 4 já provou o checkbox contra o Balanço de massa
+// (test/semanal-render-aba-balanco-wireup.test.js); este teste prova o MESMO
+// checkbox contra o Consolidado, que é onde o filtro de fato esconde LINHAS
+// (Balanço tem lógica própria de agregação, ver a spec da Task 4).
+test('com o check "somente ativos" ligado, SUP sem movimento no mes some da aba Consolidado; desligado, volta', async () => {
+  // Um SUP com previsto no mês (financeiro > 0) e outro inteiramente zerado
+  // (previsto/realizado 0 em todas as dimensões, sem furo no Avanço Sond) --
+  // exatamente o par que FiltroAtivos.registroAtivo distingue.
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 0),
+  ];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const comCheck = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.ok(comCheck.indexOf('SUP-0001-24') !== -1, 'o SUP com movimento fica');
+  assert.strictEqual(comCheck.indexOf('SUP-0002-24'), -1, 'o zerado some com o check ligado (SOMENTE_ATIVOS = true por padrão)');
+
+  // test/helpers/dom-falso-semanal.js não implementa dispatchEvent -- o
+  // padrão já estabelecido no repositório para #somente-ativos (ver
+  // test/semanal-render-aba-balanco-wireup.test.js, Task 4) é setar .checked
+  // e chamar o listener guardado em .listeners.change direto, com um evento
+  // sintético mínimo. Reproduzido aqui, contra a aba Consolidado.
+  const checkboxSomenteAtivos = documentoFalso.getElementById('somente-ativos');
+  assert.ok(checkboxSomenteAtivos, 'checkbox somente-ativos existe no DOM após os scripts rodarem');
+  checkboxSomenteAtivos.checked = false;
+  checkboxSomenteAtivos.listeners.change({ target: checkboxSomenteAtivos });
+
+  const semCheck = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.ok(semCheck.indexOf('SUP-0002-24') !== -1, 'desligado, o zerado volta');
 });
 
 // --- Bloco "Alertas de tendência" (2026-08-04) ---------------------------

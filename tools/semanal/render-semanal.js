@@ -713,6 +713,25 @@ function semanasDoMesSelecionado() {
   return ComputeSemanal.semanasDoMes(window.__ANO__, mesSelecionadoIdx);
 }
 
+// Os índices que uma aba deve mostrar: os já filtrados pela barra, e depois
+// só os ativos, se o check estiver ligado. Fica aqui e não em
+// indicesFiltrados porque "ativo" depende do MÊS que a aba mostra -- ver o
+// comentário no topo de filtro-ativos.js. Consolidado, Alertas e Semanal
+// chamam esta função (cada uma com a dimensão que está mostrando);
+// Gráficos e Demandas ficam de fora de propósito -- ver o comentário no
+// topo do arquivo de spec desta tarefa (Gráficos soma tudo numa série só,
+// onde inativo já contribui zero; Demandas não quebra por registro).
+function indicesDaAba(indices, dimensao) {
+  if (!SOMENTE_ATIVOS) return indices;
+  var semanas = semanasDoMesSelecionado();
+  var intervalo = semanas.length
+    ? { inicio: semanas[0].inicio, fim: semanas[semanas.length - 1].fim }
+    : null;
+  return FiltroAtivos.indicesAtivos(
+    window.__REGISTROS__, indices, dimensao, mesSelecionadoIdx, window.__DEMANDAS__, intervalo
+  );
+}
+
 // dados: o que o gate acabou de JSON.parse -- {registros, baseline} (ver o
 // ACHADO documentado acima desta constante). Guarda baseline à parte
 // (window.__BASELINE__) e devolve só o array de registros, que é o que o
@@ -949,6 +968,9 @@ function semanaConsolidadoIdx(semanas, hojeEpoch) {
 // PRIMEIRA marcada.
 function montarAbaConsolidado(registros, indices, dimensoes) {
   var dimensao = dimensoes[0];
+  // Consolidado tem linha por SUP/tipologia -- é onde o filtro de ativos
+  // esconde linhas de verdade (ver o comentário de indicesDaAba).
+  var indicesAba = indicesDaAba(indices, dimensao);
   var semanas = semanasDoMesSelecionado();
   var hojeEpoch = hojeEpochDoNavegador();
   // Uma escolha que não existe mais no mês novo é DESCARTADA (volta ao
@@ -957,7 +979,7 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
   if (typeof ESTADO_CONSOLIDADO.semana === 'number' && ESTADO_CONSOLIDADO.semana >= semanas.length) {
     ESTADO_CONSOLIDADO.semana = null;
   }
-  document.getElementById('secao-consolidado').innerHTML = RenderAbaConsolidado.renderAbaConsolidado(registros, indices, {
+  document.getElementById('secao-consolidado').innerHTML = RenderAbaConsolidado.renderAbaConsolidado(registros, indicesAba, {
     semanaIdx: semanaConsolidadoIdx(semanas, hojeEpoch),
     dimensao: dimensao,
     mesIdx: mesSelecionadoIdx,
@@ -987,13 +1009,16 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
 // para quem não quiser vê-las.
 function recalcularAlertasSemanal(indices, dimensoes) {
   var dimensao = dimensoes[0];
+  // Alertas tem linha por SUP/tipologia, igual ao Consolidado -- mesmo
+  // recorte de ativos (ver indicesDaAba).
+  var indicesAba = indicesDaAba(indices, dimensao);
   var agruparPor = filtrosAlertasSemanal.agruparPor.values().next().value || 'sup';
   document.getElementById('cabecalho-alertas').innerHTML = RenderAbaAlertas.renderCabecalhoAlertas(
     RenderAbaAlertas.AGRUPAR_POR_ROTULO[agruparPor] || agruparPor,
     RenderAbaAlertas.DIMENSOES_ROTULO[dimensao] || dimensao
   );
   document.getElementById('corpo-alertas').innerHTML = RenderAbaAlertas.renderCorpoAlertas(
-    window.__REGISTROS__, indices, {
+    window.__REGISTROS__, indicesAba, {
       agruparPor: agruparPor,
       dimensao: dimensao,
       numericos: Array.from(filtrosAlertasSemanal.numerico),
@@ -1024,7 +1049,7 @@ function recalcularAlertasSemanal(indices, dimensoes) {
       RenderAbaAlertas.AGRUPAR_POR_ROTULO[agruparPor] || agruparPor
     );
   document.getElementById('corpo-alertas-tendencia').innerHTML =
-    RenderAlertasTendencia.renderCorpoAlertasTendencia(window.__REGISTROS__, indices, {
+    RenderAlertasTendencia.renderCorpoAlertasTendencia(window.__REGISTROS__, indicesAba, {
       agruparPor: agruparPor,
       dimensao: dimensao,
       mesIdx: mesSelecionadoIdx,
@@ -1127,10 +1152,20 @@ function recalcularSemanal() {
   // Brasil), e discorda de vez em fusos à frente de UTC (achado da revisão
   // final da branch).
   var hojeEpoch = hojeEpochDoNavegador();
-  document.getElementById('secao-semanal').innerHTML = RenderAbaSemanal.renderAbaSemanal(
-    window.__REGISTROS__, indices, dimensoes, mesSelecionadoIdx, window.__ANO__,
-    { demandas: window.__DEMANDAS__, hojeEpoch: hojeEpoch }
-  );
+  // A Semanal não tem linha por SUP -- Previsto/Realizado/Tendência são
+  // agregados, e um registro inativo já contribui zero neles. O único número
+  // que o filtro muda de verdade é Demandas Pendentes (estoque em aberto de
+  // um registro sem movimento no mês). Ainda assim aplica-se, pra página
+  // inteira responder ao mesmo recorte -- e como "ativo" depende da
+  // dimensão, chama renderAbaSemanal UMA VEZ POR DIMENSÃO exibida, cada uma
+  // com seu próprio recorte de índices, em vez de uma chamada só com
+  // 'dimensoes' inteiro (que teria de compartilhar um único 'indices').
+  document.getElementById('secao-semanal').innerHTML = dimensoes.map(function (dimensao) {
+    return RenderAbaSemanal.renderAbaSemanal(
+      window.__REGISTROS__, indicesDaAba(indices, dimensao), [dimensao], mesSelecionadoIdx, window.__ANO__,
+      { demandas: window.__DEMANDAS__, hojeEpoch: hojeEpoch }
+    );
+  }).join('');
   montarAbaGraficoSemanal(window.__REGISTROS__, indices, dimensoes, mesSelecionadoIdx, hojeEpoch);
   montarAbaBalanco(window.__REGISTROS__, indices);
   // A aba Alertas entra no MESMO recorte das outras. O orçamento já registrou o
