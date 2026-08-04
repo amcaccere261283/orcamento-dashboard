@@ -990,3 +990,41 @@ test('filtrar por SUP na barra compartilhada TAMBÉM recalcula o Consolidado', a
   assert.match(secao, /SUP-0001-24/);
   assert.doesNotMatch(secao, /SUP-0002-24/, 'o SUP filtrado fora não pode continuar aparecendo no Consolidado');
 });
+
+// --- Bloco "Alertas de tendência" (2026-08-04) ---------------------------
+// Liga render-alertas-tendencia.js (Task 5, já testado sozinho) na aba
+// Alertas: markup, bundle e o recálculo que preenche o bloco. A lógica dos
+// dois diagnósticos está coberta à parte
+// (test/semanal-render-alertas-tendencia.test.js); aqui só o wire-up.
+
+// O HTML cru basta aqui: estes três testes olham markup e ordem de bundle,
+// não precisam do vm.Context que montarSandbox arma para os testes de
+// wire-up.
+function paginaCrua() {
+  return renderSemanal({
+    registros: [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)],
+    baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+}
+
+test('a aba Alertas tem o bloco de tendencia, com cabecalho e corpo proprios', () => {
+  const html = paginaCrua();
+  assert.ok(html.indexOf('id="cabecalho-alertas-tendencia"') !== -1);
+  assert.ok(html.indexOf('id="corpo-alertas-tendencia"') !== -1);
+  assert.ok(html.indexOf('Alertas de tendência') !== -1);
+});
+
+test('render-alertas-tendencia.js entra no bundle DEPOIS de tudo que ele consome', () => {
+  const html = paginaCrua();
+  const pos = (nome) => html.indexOf("MODULOS['" + nome + "']");
+  ['compute-tendencia-semanal.js', 'compute-alertas-tendencia.js', 'render-aba-semanal.js',
+   'render-aba-alertas.js', 'render-aba-consolidado.js', 'compute-semanal.js'].forEach((dep) => {
+    assert.ok(pos(dep) !== -1, dep + ' precisa estar no bundle');
+    assert.ok(pos(dep) < pos('render-alertas-tendencia.js'), dep + ' tem de vir antes de render-alertas-tendencia.js');
+  });
+});
+
+test('o recalculo da aba Alertas preenche o bloco novo', () => {
+  assert.ok(/getElementById\('corpo-alertas-tendencia'\)\.innerHTML/.test(paginaCrua()));
+});

@@ -387,6 +387,14 @@ const CSS_SEMANAL = `
   }
   .controle-mes-semanal select:hover { border-color: rgba(246,181,63,0.5); }
   .controle-mes-semanal select:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
+  /* Bloco "Alertas de tendência" (2026-08-04, render-alertas-tendencia.js).
+     --texto-suave não existe neste projeto -- a variável de texto apagado
+     chama-se --muted (ver :root em tools/comum/render-shell.js); --border
+     já existe com esse nome mesmo. */
+  .bloco-alertas-tendencia { margin-top: 28px; }
+  .titulo-alertas-tendencia { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+  #tabela-alertas-tendencia { width: 100%; border-collapse: collapse; }
+  .linha-nota-alertas td { color: var(--muted); font-size: 13px; padding: 12px 8px; }
 `;
 
 // CSS da aba Demandas (Task 5 desta fase). Mesma razão de CSS_SEMANAL/
@@ -475,6 +483,13 @@ const BUNDLE_ARQUIVOS = [
   // (diasNaSemana) e é consumido por render-aba-semanal.js -- por isso entra
   // ENTRE os dois. A ordem desta lista é o contrato de dependência.
   'compute-semanal.js', 'compute-tendencia-semanal.js', 'render-aba-semanal.js', 'render-aba-alertas.js', 'render-aba-consolidado.js',
+  // Os dois de 2026-08-04. compute-alertas-tendencia.js só tem um
+  // require('../comum/calculo-equipes.js'), que o bundler REMOVE
+  // (DIAS_PREMISSA_MES chega como global). render-alertas-tendencia.js
+  // consome compute-alertas-tendencia.js, render-aba-semanal.js,
+  // render-aba-consolidado.js, render-aba-alertas.js e compute-semanal.js --
+  // todos já registrados acima dele nesta lista.
+  'compute-alertas-tendencia.js', 'render-alertas-tendencia.js',
   'compute-grafico-semanal.js', 'render-aba-grafico-semanal.js',
   // compute-equipes-mobilizadas.js (2026-08-03) vem ANTES de
   // compute-balanco.js, que o consome (equipesEquivalentes) para o Δ equipes
@@ -555,6 +570,7 @@ var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaSemanal = MODULOS['render-aba-semanal.js'];
 var RenderAbaAlertas = MODULOS['render-aba-alertas.js'];
 var RenderAbaConsolidado = MODULOS['render-aba-consolidado.js'];
+var RenderAlertasTendencia = MODULOS['render-alertas-tendencia.js'];
 var RenderAbaGraficoSemanal = MODULOS['render-aba-grafico-semanal.js'];
 var ComputeBalanco = MODULOS['compute-balanco.js'];
 var RenderAbaBalanco = MODULOS['render-aba-balanco.js'];
@@ -995,6 +1011,23 @@ function recalcularAlertasSemanal(indices, dimensoes) {
       baseline: window.__BASELINE__,
     }
   );
+  // O bloco de tendência segue o mesmo agrupamento e o mesmo recorte da
+  // tabela de cima, mas ignora o seletor de dimensão dela: é Volume sempre
+  // (ver render-alertas-tendencia.js). A busca da aba varre os dois <tbody>
+  // pelo data-search, então ele precisa ser preenchido ANTES dela rodar.
+  document.getElementById('cabecalho-alertas-tendencia').innerHTML =
+    RenderAlertasTendencia.renderCabecalhoAlertasTendencia(
+      RenderAbaAlertas.AGRUPAR_POR_ROTULO[agruparPor] || agruparPor
+    );
+  document.getElementById('corpo-alertas-tendencia').innerHTML =
+    RenderAlertasTendencia.renderCorpoAlertasTendencia(window.__REGISTROS__, indices, {
+      agruparPor: agruparPor,
+      dimensao: dimensao,
+      mesIdx: mesSelecionadoIdx,
+      semanas: semanasDoMesSelecionado(),
+      demandas: window.__DEMANDAS__,
+      hojeEpoch: hojeEpochDoNavegador(),
+    });
   aplicarBuscaAlertasSemanal();
 }
 
@@ -1005,10 +1038,24 @@ function aplicarBuscaAlertasSemanal() {
   var campo = document.getElementById('busca-alertas');
   if (!campo) return;
   var termo = RenderAbaAlertas.normalizarBusca(campo.value);
-  document.querySelectorAll('#tabela-alertas tbody tr').forEach(function (tr) {
-    var combina = termo === '' || (tr.dataset.search || '').indexOf(termo) !== -1;
+  function filtrarLinhas(tr) {
+    // A linha de nota do bloco de tendência (dimensão != Volume) não carrega
+    // data-search: ela é uma explicação de por que o bloco está vazio, não
+    // um resultado de busca, então um termo digitado não pode escondê-la.
+    // Pular linhas sem o atributo é o jeito mais simples de blindar isso.
+    if (tr.dataset.search === undefined) return;
+    var combina = termo === '' || tr.dataset.search.indexOf(termo) !== -1;
     tr.style.display = combina ? '' : 'none';
-  });
+  }
+  // Cobre os DOIS <tbody> da aba: o semáforo (#tabela-alertas) e o bloco de
+  // tendência (#tabela-alertas-tendencia, 2026-08-04) -- antes só o primeiro
+  // era varrido, e um termo digitado filtrava uma tabela deixando a outra
+  // intacta. Duas chamadas separadas (em vez de um seletor único com vírgula)
+  // de propósito: test/helpers/dom-falso-semanal.js casa a string do seletor
+  // por igualdade exata, não por CSS de verdade -- combinar as duas num só
+  // faria a chamada inteira devolver [] nesse DOM falso.
+  document.querySelectorAll('#tabela-alertas tbody tr').forEach(filtrarLinhas);
+  document.querySelectorAll('#tabela-alertas-tendencia tbody tr').forEach(filtrarLinhas);
 }
 
 // (Re)monta os 5 seletores da aba. Chamada também na troca de mês, porque as
@@ -1460,6 +1507,13 @@ ${markupFiltros(FILTROS_ALERTAS_SEMANAL, { recuo: '      ', classes: 'filtros-al
         <thead id="cabecalho-alertas"></thead>
         <tbody id="corpo-alertas"></tbody>
       </table>
+      <div class="bloco-alertas-tendencia">
+        <h3 class="titulo-alertas-tendencia">Alertas de tendência</h3>
+        <table id="tabela-alertas-tendencia">
+          <thead id="cabecalho-alertas-tendencia"></thead>
+          <tbody id="corpo-alertas-tendencia"></tbody>
+        </table>
+      </div>
     </div>
     <div id="secao-consolidado" style="display:none"></div>
   </div>
