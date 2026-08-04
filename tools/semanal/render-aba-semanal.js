@@ -368,5 +368,5 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
 }
 
 module.exports = {
-  renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao, formatarIntervaloSemana,
+  renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao, formatarIntervaloSemana, pendentesNaData,
 };
