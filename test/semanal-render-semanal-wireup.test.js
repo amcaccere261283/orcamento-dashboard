@@ -1028,3 +1028,17 @@ test('render-alertas-tendencia.js entra no bundle DEPOIS de tudo que ele consome
 test('o recalculo da aba Alertas preenche o bloco novo', () => {
   assert.ok(/getElementById\('corpo-alertas-tendencia'\)\.innerHTML/.test(paginaCrua()));
 });
+
+test('o indicador de status nao tem anel -- e identico ao do dashboard de orcamento', () => {
+  const html = renderSemanal({
+    registros: [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)],
+    baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  assert.strictEqual(html.indexOf('.status-circulo { box-shadow'), -1,
+    'a regra do anel nao pode existir mais');
+  assert.strictEqual(html.indexOf('rgba(255,255,255,0.45)'), -1,
+    'o valor do anel nao pode sobrar em nenhuma outra regra');
+  assert.ok(html.indexOf('status-circulo') !== -1,
+    'a classe em si continua existindo -- e ela que pinta a bolinha');
+});

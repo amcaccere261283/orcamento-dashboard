@@ -211,17 +211,12 @@ const CSS_ABAS_SEMANAL = `
   #tabela-alertas tbody tr:hover td,
   #tabela-alertas-tendencia tbody tr:hover td { box-shadow: inset 0 0 0 9999px rgba(255,255,255,0.06); }
 
-  /* Semáforo: #1414CC (Excelente) fica em ~1,65:1 contra a superfície escura --
-     a bolinha some justamente no status que se quer achar varrendo. O anel
-     resolve sem tocar em nenhuma das 5 cores, que são copiadas do orçamento de
-     propósito e não podem mudar. Fica no <style> desta página, e não em
-     cssBase() (onde .status-circulo é definida), porque cssBase é compartilhada
-     e o HTML do orçamento é travado byte a byte. Vale também pra
-     #tabela-alertas-tendencia (cores #c0392b/#95a5a6, sem o problema de
-     contraste do azul, mas é o mesmo acabamento de círculo da tabela vizinha
-     -- mesmo motivo do hover acima, mesmo lugar único. */
-  #tabela-alertas .status-circulo,
-  #tabela-alertas-tendencia .status-circulo { box-shadow: 0 0 0 1px rgba(255,255,255,0.45); }
+  /* O anel de contraste do .status-circulo foi REMOVIDO em 2026-08-04 a pedido
+     do dono do projeto: o indicador desta página tem de ficar idêntico ao do
+     dashboard de orçamento, que nunca teve anel. O preço é conhecido e aceito
+     -- o #1414CC ("Excelente") fica em ~1,65:1 contra a superfície escura e
+     quase some, justamente no status que se quer achar varrendo a tela. Não
+     recolocar numa revisão de design sem perguntar a ele. */
 
   /* Os 5 filtros PRÓPRIOS da aba Alertas eram visualmente idênticos aos 6
      filtros de recorte da barra de cima, logo acima deles. O fio âmbar diz de
