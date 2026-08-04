@@ -890,10 +890,13 @@ function registro(sup, volumeMes, equipes, prod) {
   };
 }
 
-// Um SUP produzindo muito acima do plano e com carteira minima -> alerta de demanda.
-// Outro produzindo muito abaixo com 1 equipe e produtividade prevista baixa -> alerta de equipes.
-function demandasCom(chegadas, realizadas) {
-  return { porRegistroEventos: { 'ACIMA||SP.P': { chegada: chegadas, sondagemRealizada: realizadas, saidaEstoque: realizadas } } };
+// A chave de demandas é sempre `<sup>||<tipologia>` (ver chaveDemandas em
+// render-aba-semanal.js) -- com a tipologia 'SP.P' fixada acima, muda só o SUP.
+function demandasDe(sup, chegadas, realizadas) {
+  const eventos = { chegada: chegadas, sondagemRealizada: realizadas, saidaEstoque: realizadas };
+  const porRegistroEventos = {};
+  porRegistroEventos[sup + '||SP.P'] = eventos;
+  return { porRegistroEventos: porRegistroEventos };
 }
 
 test('cabecalho traz as sete colunas do bloco', () => {
@@ -904,7 +907,7 @@ test('cabecalho traz as sete colunas do bloco', () => {
 
 test('dimensao diferente de volume nao monta tabela, explica por que', () => {
   const html = renderCorpoAlertasTendencia([registro('A', 100, 1, 1)], [0], {
-    agruparPor: 'sup', dimensao: 'financeiro', mesIdx: 6, semanas: SEMANAS, demandas: demandasCom([], []), hojeEpoch: HOJE,
+    agruparPor: 'sup', dimensao: 'financeiro', mesIdx: 6, semanas: SEMANAS, demandas: demandasDe('A', [], []), hojeEpoch: HOJE,
   });
   assert.ok(/Volume/.test(html), 'a nota tem de dizer que o bloco so vale em Volume');
   assert.ok(html.indexOf('<tr') === -1, 'nenhuma linha de alerta fora de Volume');
@@ -916,7 +919,7 @@ test('grupo sem alerta nenhum nao vira linha', () => {
   for (let d = 1; d <= 12; d++) { chegadas.push(dia(d)); realizadas.push(dia(d)); }
   const html = renderCorpoAlertasTendencia([registro('A', 31, 1, 1)], [0], {
     agruparPor: 'sup', dimensao: 'volume', mesIdx: 6, semanas: SEMANAS,
-    demandas: { porRegistroEventos: { 'A||SP.P': { chegada: chegadas, sondagemRealizada: realizadas, saidaEstoque: realizadas } } },
+    demandas: demandasDe('A', chegadas, realizadas),
     hojeEpoch: HOJE,
   });
   assert.ok(html.indexOf('Avaliar equipe e demanda') === -1);
@@ -927,7 +930,7 @@ test('mes inteiramente no passado nao gera alerta nenhum', () => {
   const chegadas = [dia(1)]; const realizadas = [dia(1)];
   const html = renderCorpoAlertasTendencia([registro('A', 500, 1, 0.1)], [0], {
     agruparPor: 'sup', dimensao: 'volume', mesIdx: 6, semanas: SEMANAS,
-    demandas: { porRegistroEventos: { 'A||SP.P': { chegada: chegadas, sondagemRealizada: realizadas, saidaEstoque: realizadas } } },
+    demandas: demandasDe('A', chegadas, realizadas),
     hojeEpoch: diaEpoch(new Date(Date.UTC(2026, 7, 20))),
   });
   assert.strictEqual(html.indexOf('<tr'), -1);
@@ -938,7 +941,7 @@ test('deficit grande com uma equipe improdutiva vira a linha de equipes', () => 
   // com produtividade prevista de 0,1 furo/equipe-dia -> exigida >> esperada.
   const html = renderCorpoAlertasTendencia([registro('A', 500, 1, 0.1)], [0], {
     agruparPor: 'sup', dimensao: 'volume', mesIdx: 6, semanas: SEMANAS,
-    demandas: { porRegistroEventos: { 'A||SP.P': { chegada: [dia(1)], sondagemRealizada: [dia(1)], saidaEstoque: [dia(1)] } } },
+    demandas: demandasDe('A', [dia(1)], [dia(1)]),
     hojeEpoch: HOJE,
   });
   assert.ok(html.indexOf('Equipes com pouco recurso ou improdutividade') !== -1);
@@ -1242,7 +1245,7 @@ git commit -m "Aba Alertas: bloco de tendencia ligado na pagina"
 - Consumes: a página construída na Task 6.
 - Produces: nada que tarefas seguintes consumam além do HTML já ajustado.
 
-O `CLAUDE.md` do repositório exige revisão de design do Open Design para trabalho de HTML. As três armadilhas registradas em 2026-08-03 valem inteiras aqui:
+O `CLAUDE.md` do repositório exige revisão de design do Open Design para trabalho de HTML, **e diz explicitamente que, se o OD não estiver disponível na máquina, é para seguir sem ele.** Conferir primeiro se as ferramentas `mcp__open-design__*` respondem. Se não responderem, pular os Steps 1-4, registrar isso no relatório da tarefa e fazer só o Step 5-alternativo abaixo; se responderem, os Steps 1-5 valem inteiros, com as três armadilhas registradas em 2026-08-03:
 
 - [ ] **Step 1: Criar um projeto DEDICADO** via `mcp__open-design__create_project` com `skill: "design-review"`. **NÃO** usar o projeto `3b8ae52a-...` ("Projetos IA"): ele tem `skill: agent-browser` e o plugin `example-web-prototype` aplicados, devolve `succeeded` em ~9s com `artifactCount: 0` e não faz nada.
 
@@ -1253,6 +1256,12 @@ O `CLAUDE.md` do repositório exige revisão de design do Open Design para traba
 - [ ] **Step 4: Conferir o `events.jsonl` do run** antes de concluir que a revisão terminou. O agente interno do OD consome a MESMA cota da conta: um run pode morrer no meio com `failureCategory: rate_limit`, com `status: failed`, e ainda assim ter editado arquivos.
 
 - [ ] **Step 5: Portar à mão** as sugestões que valerem a pena para `render-semanal.js`/`render-alertas-tendencia.js`. Os "fixes" do OD caem numa cópia dele — editar o HTML construído não dura, a próxima reconstrução apaga.
+
+- [ ] **Step 5-alternativo (só se o OD não estiver disponível): passada de design à mão.** Conferir, no markup e no CSS que `render-alertas-tendencia.js` e `CSS_SEMANAL` emitem, quatro coisas concretas:
+  - o bloco novo tem a MESMA gramática visual da tabela do semáforo logo acima (mesma família de `<table>`, mesmo tratamento de `.num`, mesmo `status-circulo`) — ele é uma segunda leitura da mesma aba, não um componente estrangeiro;
+  - o vermelho `#c0392b` e o cinza `#95a5a6` não são a única codificação do status: o texto "Alerta"/"Sem dado" ao lado do círculo tem de carregar a mesma informação, como o semáforo existente já faz;
+  - a coluna "Evidência" é a mais longa e não pode espremer as numéricas — conferir que ela é a que absorve a sobra de largura;
+  - a nota de "só em Volume" ocupa a linha inteira (`colspan="7"`) e não parece uma linha de dado vazia.
 
 - [ ] **Step 6: Rodar os testes e commitar**
 
