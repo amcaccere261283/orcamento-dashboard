@@ -108,9 +108,13 @@ const FILTROS_SEMANAL = [
   { id: 'seletor-dimensao', rotulo: 'Financeiro' },
 ];
 
-// CSS dos 4 controles da aba Balanço de massa (renderControles, em
-// render-aba-balanco.js: período/base/dimensão/somente ativos) e do
-// contêiner dos gráficos. NÃO entra em cssBase() (tools/comum/render-shell.js)
+// CSS das abas PRÓPRIAS desta página: os controles do Balanço de massa
+// (renderControles, em render-aba-balanco.js: período/base/dimensão/somente
+// ativos) e do contêiner dos gráficos, os controles e a tabela do Consolidado,
+// e os dois ajustes que a aba Alertas precisa por cima do que cssBase() já dá.
+// (Chamava-se CSS_BALANCO até 2026-08-03, quando as abas Alertas e Consolidado
+// entraram aqui e o nome virou mentira -- achado da revisão de código.)
+// NÃO entra em cssBase() (tools/comum/render-shell.js)
 // de propósito: aquela folha é compartilhada com o orçamento e
 // test/orcamento-html-inalterado.test.js trava o HTML dele byte a byte --
 // qualquer linha a mais ali reprovaria o golden. Este bloco é só desta
@@ -123,7 +127,7 @@ const FILTROS_SEMANAL = [
 // CSS nunca se importam um do outro, cada `<style>` é independente).
 // .grafico-painel (o invólucro de cada gráfico de tipologia) e .grafico-svg
 // (a tag <svg> em si) já têm regra em cssBase() -- não duplicados aqui.
-const CSS_BALANCO = `
+const CSS_ABAS_SEMANAL = `
   /* Os controles da aba CONSOLIDADO (semana/dimensão) entram nas MESMAS
      regras, com nome próprio: são o mesmo componente visual, e uma segunda
      cópia das regras seria a forma mais fácil das duas abas divergirem de
@@ -160,14 +164,15 @@ const CSS_BALANCO = `
      têm fundo PRÓPRIO vindo de cssBase(), e uma cor de fundo aqui competiria
      com ele -- a faixa quebraria justamente nas linhas TOTAL. Uma imagem
      empilha por cima, então a faixa atravessa a tabela inteira. */
-  .celula-premissa, .cabecalho-premissa {
+  #tabela-consolidado .celula-premissa, #tabela-consolidado .cabecalho-premissa {
     background-image: linear-gradient(rgba(255,255,255,0.04), rgba(255,255,255,0.04));
     white-space: nowrap;
   }
-  .celula-premissa { color: var(--text-secondary); }
+  #tabela-consolidado .celula-premissa { color: var(--text-secondary); }
   /* Só a PRIMEIRA premissa carrega a divisória -- uma por coluna transformaria
      o bloco em compartimentos e desfaria o agrupamento acima. */
-  .celula-premissa-inicio, .cabecalho-premissa-inicio { border-left: 2px solid #4a4a46; }
+  #tabela-consolidado .celula-premissa-inicio,
+  #tabela-consolidado .cabecalho-premissa-inicio { border-left: 2px solid #4a4a46; }
   .nota-consolidado { font-size: 12px; color: var(--text-secondary); margin: 0 0 14px; max-width: 90ch; }
   #tabela-consolidado .col-sup, #tabela-consolidado .col-grupo, #tabela-consolidado .col-tomador { white-space: nowrap; }
 
@@ -347,7 +352,7 @@ const CSS_BALANCO = `
 // de `tr.linha-total td` marca o fim de um bloco de SUP na tabela do
 // orçamento e não faz sentido aqui.
 //
-// Assim como CSS_BALANCO, NÃO entra em cssBase(): aquela folha é
+// Assim como CSS_ABAS_SEMANAL, NÃO entra em cssBase(): aquela folha é
 // compartilhada com o orçamento e test/orcamento-html-inalterado.test.js
 // trava o HTML dele byte a byte. Usar diretamente a classe .linha-total no
 // markup seria a outra saída, mas custaria a legibilidade do nome (a linha é
@@ -385,7 +390,7 @@ const CSS_SEMANAL = `
 `;
 
 // CSS da aba Demandas (Task 5 desta fase). Mesma razão de CSS_SEMANAL/
-// CSS_BALANCO: NÃO entra em cssBase() (tools/comum/render-shell.js), que é
+// CSS_ABAS_SEMANAL: NÃO entra em cssBase() (tools/comum/render-shell.js), que é
 // compartilhada com o orçamento e cujo HTML test/orcamento-html-inalterado.test.js
 // trava byte a byte.
 const CSS_DEMANDAS = `
@@ -1412,7 +1417,7 @@ function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoE
 <style>
 ${cssBase()}
 ${CSS_SEMANAL}
-${CSS_BALANCO}
+${CSS_ABAS_SEMANAL}
 ${CSS_DEMANDAS}
 </style>
 </head>

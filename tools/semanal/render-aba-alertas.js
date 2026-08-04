@@ -1,5 +1,5 @@
 'use strict';
-const { fecharMes, dividirEmSemanasInteiras } = require('./compute-semanal.js');
+const { fecharMes, dividirEmSemanasInteiras, indiceSemanaAtual } = require('./compute-semanal.js');
 const { calcularSeriesSemanaisDimensao, formatarIntervaloSemana } = require('./render-aba-semanal.js');
 
 // Aba Alertas da página semanal -- porte da aba Alertas do orçamento
@@ -110,6 +110,16 @@ var PERIODO_MES = 'mesInteiro';
 // e não lida de calcularSeriesSemanaisDimensao.semanasElapsadas, porque lá ela
 // só é preenchida no ramo de volume/financeiro -- os períodos desta aba
 // precisam do mesmo recorte em QUALQUER dimensão, inclusive Equipes.
+//
+// NÃO confundir com indiceSemanaAtual (compute-semanal.js), que é a semana que
+// CONTÉM hoje. Os dois coincidem no mês vigente e divergem em qualquer outro:
+// num mês passado esta função devolve numSemanas (todas começaram) e aquela
+// devolve -1 (nenhuma contém hoje). Usar `elapsadas - 1` como "semana em curso"
+// para alimentar o cálculo fazia a última semana de um mês PASSADO ser contada
+// de seu início até hoje -- ou seja, engolindo todos os meses seguintes (ver o
+// teste "mês passado" em test/semanal-render-aba-alertas.test.js). Aqui
+// 'elapsadas' serve só para recortar a janela do acumulado; quem diz qual
+// semana está em curso é indiceSemanaAtual.
 function semanasElapsadas(semanas, hojeEpoch) {
   if (!Array.isArray(semanas) || typeof hojeEpoch !== 'number') return 0;
   var n = 0;
@@ -206,10 +216,26 @@ function indexarBaseline(baseline) {
 // regra de "sem dado" do orçamento (calcularCelulaAlerta): denominador 0 ou
 // null, ou numerador null, devolvem desvio null -- e null vira o status cinza,
 // nunca 0%.
-function calcularCelulaAlerta(series, semanasPrevistoInicial, coluna, dimensao, janela) {
+// 'elapsadas' existe aqui por uma razão só: uma janela INTEIRAMENTE no futuro
+// tem de virar "Sem dado", não "Crítico 0%". calcularSeriesSemanaisDimensao
+// devolve 0 (não null) nas semanas futuras -- decisão deliberada dela, que a
+// aba Gráficos depende para desenhar a curva -- e somar zeros aqui produziria
+// um desvio de 0%, ou seja, vermelho crítico numa semana que ainda não
+// aconteceu. É exatamente o "ausência vira zero" que o resto do projeto
+// combate, e também quebra a paridade com o orçamento, onde um período futuro
+// (M+1, M+2) devolve null e aparece cinza.
+//
+// A correção mora AQUI, e não em calcularSeriesSemanaisDimensao: os outros
+// consumidores daquela função precisam do 0.
+//
+// Janela que ATRAVESSA o presente (o caso de "Mês inteiro") continua somando os
+// zeros futuros de propósito -- ali o Realizado parcial contra o Previsto
+// cheio é a leitura pretendida, a mesma que "Total Ano" tem no orçamento.
+function calcularCelulaAlerta(series, semanasPrevistoInicial, coluna, dimensao, janela, elapsadas) {
   var fatiasNumerico = coluna.numerico === 'realizado' ? series.semanasRealizado : series.semanasTendenciaCompleta;
   var fatiasBaseline = coluna.baseline === 'previsto' ? series.semanasPrevisto : semanasPrevistoInicial;
-  var numerador = agregarFatias(fatiasNumerico, dimensao, janela);
+  var inteiramenteNoFuturo = !!janela && janela[1] > janela[0] && janela[0] >= (elapsadas || 0);
+  var numerador = inteiramenteNoFuturo ? null : agregarFatias(fatiasNumerico, dimensao, janela);
   var denominador = agregarFatias(fatiasBaseline, dimensao, janela);
   var desvio = (numerador === null || !denominador) ? null : numerador / denominador;
   return { desvio: desvio, numerador: numerador, denominador: denominador };
@@ -241,8 +267,13 @@ function colunasAlertas(numericos, baselines, periodos, rotulosPeriodo) {
   return colunas;
 }
 
+// O '—' cobre registro sem o campo de agrupamento (grupo/origem em branco na
+// MATRIZ): sem ele o grupo aparecia rotulado "undefined" na tela, que parece
+// defeito de software e não célula vazia da planilha.
 function campoAgrupamento(registro, agruparPor) {
-  return agruparPor === 'categoria' ? categoriaTipologia(registro.tipologia) : registro[agruparPor];
+  if (agruparPor === 'categoria') return categoriaTipologia(registro.tipologia);
+  var valor = registro && registro[agruparPor];
+  return (valor === null || valor === undefined || valor === '') ? '—' : valor;
 }
 
 function agruparIndicesAlertas(registros, indices, agruparPor) {
@@ -283,8 +314,8 @@ function renderCabecalhoAlertas(agruparPorRotulo, dimensaoRotulo) {
 // statusFiltro (array dos rótulos marcados) omite a linha inteira quando o
 // status calculado não bate -- array vazio mostra tudo, mesma convenção dos
 // filtros de recorte da barra de cima.
-function renderLinhaAlerta(rotuloGrupo, tomadorGrupo, series, semanasPrevistoInicial, coluna, dimensao, janela, statusFiltro) {
-  var celula = calcularCelulaAlerta(series, semanasPrevistoInicial, coluna, dimensao, janela);
+function renderLinhaAlerta(rotuloGrupo, tomadorGrupo, series, semanasPrevistoInicial, coluna, dimensao, janela, statusFiltro, elapsadas) {
+  var celula = calcularCelulaAlerta(series, semanasPrevistoInicial, coluna, dimensao, janela, elapsadas);
   var classe = classificarSemaforo(celula.desvio);
   if (statusFiltro && statusFiltro.length > 0 && statusFiltro.indexOf(classe.indicador) === -1) return '';
   var desvioTexto = celula.desvio === null ? '—' : Math.round(celula.desvio * 100) + '%';
@@ -319,7 +350,8 @@ function renderLinhasGrupoAlerta(rotuloGrupo, registros, indices, colunas, ctx) 
   return colunas.map(function (coluna) {
     return renderLinhaAlerta(
       rotuloGrupo, tomadorGrupo, series, semanasPrevistoInicial, coluna,
-      ctx.dimensao, janelaDoPeriodo(coluna.periodo, ctx.numSemanas, ctx.elapsadas), ctx.statusFiltro
+      ctx.dimensao, janelaDoPeriodo(coluna.periodo, ctx.numSemanas, ctx.elapsadas), ctx.statusFiltro,
+      ctx.elapsadas
     );
   }).join('');
 }
@@ -345,9 +377,11 @@ function renderCorpoAlertas(registros, indices, opcoes) {
     semanas: semanas,
     numSemanas: numSemanas,
     temSemanasReais: numSemanas > 0 && temDemandas,
-    // A semana em curso é a última elapsada; -1 quando nenhuma começou, mesmo
-    // contrato de indiceSemanaAtual (compute-semanal.js).
-    indiceAtual: elapsadas > 0 ? elapsadas - 1 : -1,
+    // A MESMA função que a Tabela Semanal usa (renderAbaSemanal) -- é o que
+    // garante que as duas abas nunca discordem sobre o que a semana tal
+    // produziu. Ver o comentário de semanasElapsadas sobre por que
+    // `elapsadas - 1` NÃO serve aqui.
+    indiceAtual: numSemanas > 0 && typeof o.hojeEpoch === 'number' ? indiceSemanaAtual(semanas, o.hojeEpoch) : -1,
     elapsadas: elapsadas,
     demandas: o.demandas,
     hojeEpoch: o.hojeEpoch,

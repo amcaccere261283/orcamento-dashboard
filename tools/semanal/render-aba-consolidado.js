@@ -1,5 +1,5 @@
 'use strict';
-const { diasNaSemana } = require('./compute-semanal.js');
+const { indiceSemanaAtual } = require('./compute-semanal.js');
 const { calcularSeriesSemanaisDimensao, formatarIntervaloSemana } = require('./render-aba-semanal.js');
 const { DIAS_PREMISSA_MES } = require('../comum/calculo-equipes.js');
 
@@ -299,7 +299,14 @@ function renderAbaConsolidado(registros, indices, opcoes) {
   }
   var ctx = {
     dimensao: dimensao, mesIdx: o.mesIdx, semanas: semanas, numSemanas: numSemanas,
-    temSemanasReais: temDemandas, indiceAtual: elapsadas > 0 ? elapsadas - 1 : -1,
+    temSemanasReais: temDemandas,
+    // indiceSemanaAtual (a semana que CONTÉM hoje), e não `elapsadas - 1` (a
+    // última que já começou). Os dois coincidem no mês vigente e divergem em
+    // qualquer outro: num mês passado o segundo aponta para a última semana do
+    // mês, que calcularSeriesSemanaisDimensao então conta de seu início até
+    // HOJE -- somando todos os meses seguintes dentro dela. É a mesma função
+    // que a Tabela Semanal usa, para as duas nunca discordarem.
+    indiceAtual: typeof o.hojeEpoch === 'number' ? indiceSemanaAtual(semanas, o.hojeEpoch) : -1,
     demandas: o.demandas, hojeEpoch: o.hojeEpoch, semanaIdx: semanaIdx,
   };
 

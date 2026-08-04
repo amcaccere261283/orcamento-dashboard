@@ -137,8 +137,18 @@ está na tela. `dividirEmSemanas` (fracionária) continua existindo e é o que
 `baseNasSemanas` (`compute-balanco.js`) e a Tendência usam — **não troque uma pela
 outra sem pensar**: Tendência é projeção, não meta, e arredondá-la não faria sentido.
 Equipes fica fora dos dois arredondamentos (é foto/média ponderada, "2,5 equipes" é
-um número real). Consequência aceita: linhas de registro arredondadas
-independentemente podem somar 1 a menos que a linha de TOTAL do mesmo bloco.
+um número real).
+
+**Consequência, e ela é maior do que parece:** cada linha do Consolidado arredonda
+INDEPENDENTEMENTE, então a linha de TOTAL não é a soma das linhas que estão acima
+dela. Uma versão anterior deste parágrafo dizia "podem somar 1 a menos" — está
+errado, e a revisão de código de 2026-08-03 mediu: com 40 registros em julho/2026 a
+diferença por semana foi de até 14 em ~199 (7%), e é SISTEMÁTICA, não aleatória —
+como todas as linhas compartilham o mesmo perfil de dias, o desempate por menor
+índice (`compute-semanal.js`) despeja o excedente sempre nas mesmas semanas. Efeito
+irmão: registro com previsto mensal pequeno (0,8 furo) zera em todas as semanas.
+Se isso incomodar, a correção é repartir em DOIS níveis (o total do grupo entre as
+linhas, também por maior resto), não afrouxar o arredondamento.
 
 **Balanço de massa tem uma 3ª dimensão, "Demandas".** Compara o que CHEGOU (evento
 `chegada` do Avanço Sond) contra o Previsto de VOLUME da MATRIZ — a MATRIZ não tem

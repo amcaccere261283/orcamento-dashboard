@@ -234,3 +234,84 @@ test('o data-search de cada linha é normalizado (sem acento, minúsculo) -- é 
   });
   assert.match(html, /data-search="[^"]*concessionaria exemplo[^"]*"/);
 });
+
+// --- Achados da revisão de código (2026-08-03) ---------------------------
+
+// CRITICAL: a aba derivava a "semana em curso" de elapsadas-1 (a última que já
+// começou), em vez de indiceSemanaAtual (a que CONTÉM hoje). Os dois coincidem
+// no mês vigente e divergem em todo o resto: num mês PASSADO, elapsadas-1
+// aponta para a última semana do mês, e calcularSeriesSemanaisDimensao conta a
+// semana "em curso" de seu início até HOJE -- engolindo todos os meses
+// seguintes. Medido antes da correção: 8 furos contra os 3 reais de julho.
+test('num mês PASSADO, o Realizado não pode absorver furos dos meses seguintes -- e tem que bater com o da Tabela Semanal', () => {
+  const registros = [registro({ sup: 'SUP-0001-24', previstoVol: 310 })];
+  const emAgosto = (dia) => diaEpoch(new Date(Date.UTC(ANO, 7, dia)));
+  const eventos = [
+    diaJul(28), diaJul(29), diaJul(30),        // 3 furos DENTRO de julho
+    emAgosto(1), emAgosto(1), emAgosto(2), emAgosto(3), // 4 em agosto -- não podem contar
+  ];
+  const html = renderCorpoAlertas(registros, [0], {
+    agruparPor: 'sup', dimensao: 'volume',
+    numericos: ['realizado'], baselines: ['previsto'], periodos: [PERIODO_MES],
+    mesIdx: JULHO, semanas: SEMANAS_JULHO,
+    demandas: demandasCom({ 'SUP-0001-24||ST': eventos }),
+    hojeEpoch: emAgosto(3), // olhando JULHO em 03/08
+    baseline: [],
+  });
+  const linha = html.match(/<tr data-search="[^"]*sup-0001-24[^"]*">[\s\S]*?<\/tr>/)[0];
+  assert.match(linha, /<td class="num">3<\/td>/, 'só os 3 furos de julho; os 4 de agosto ficam fora');
+  assert.doesNotMatch(linha, /<td class="num">7<\/td>/);
+});
+
+test('num mês inteiramente FUTURO o Realizado é sem dado, nunca zero', () => {
+  const registros = [registro({ sup: 'SUP-0001-24', previstoVol: 310 })];
+  const html = renderCorpoAlertas(registros, [0], {
+    agruparPor: 'sup', dimensao: 'volume',
+    numericos: ['realizado'], baselines: ['previsto'], periodos: [PERIODO_MES],
+    mesIdx: JULHO, semanas: SEMANAS_JULHO,
+    demandas: demandasCom({ 'SUP-0001-24||ST': [] }),
+    hojeEpoch: diaEpoch(new Date(Date.UTC(ANO, 0, 15))), // janeiro: julho ainda não começou
+    baseline: [],
+  });
+  assert.match(html, /Sem dado/);
+  assert.doesNotMatch(html, /Crítico/, 'um mês que não começou não pode ser pintado de vermelho');
+});
+
+// IMPORTANTE: semanas futuras vêm com 0 (não null) de
+// calcularSeriesSemanaisDimensao -- somá-las dava desvio 0% e semáforo
+// "Crítico" numa semana que ainda não aconteceu. No orçamento, período futuro
+// (M+1/M+2) devolve null e aparece cinza; a paridade tinha se perdido.
+test('uma SEMANA inteiramente no futuro é "Sem dado", não "Crítico 0%"', () => {
+  const registros = [registro({ sup: 'SUP-0001-24', previstoVol: 310 })];
+  const comum = {
+    agruparPor: 'sup', dimensao: 'volume',
+    numericos: ['realizado'], baselines: ['previsto'],
+    mesIdx: JULHO, semanas: SEMANAS_JULHO,
+    demandas: demandasCom({ 'SUP-0001-24||ST': [diaJul(2)] }),
+    hojeEpoch: diaJul(8), // dentro da S2; S3..S5 ainda não aconteceram
+    baseline: [],
+  };
+  const futura = renderCorpoAlertas(registros, [0], Object.assign({}, comum, { periodos: ['s5'] }));
+  assert.match(futura, /Sem dado/);
+  assert.doesNotMatch(futura, /Crítico/);
+
+  // Controle: a semana JÁ FECHADA continua sendo avaliada normalmente -- a
+  // correção não pode ter apagado o dado real junto.
+  const passada = renderCorpoAlertas(registros, [0], Object.assign({}, comum, { periodos: ['s1'] }));
+  assert.doesNotMatch(passada, /Sem dado/);
+  assert.match(passada, /<td class="num">1<\/td>/, 'o furo de 02/07 continua contando na S1');
+});
+
+test('"Mês inteiro" continua somando as semanas futuras como zero -- ali o Realizado parcial contra o Previsto cheio é a leitura pretendida, igual ao "Total Ano" do orçamento', () => {
+  const registros = [registro({ sup: 'SUP-0001-24', previstoVol: 310 })];
+  const html = renderCorpoAlertas(registros, [0], {
+    agruparPor: 'sup', dimensao: 'volume',
+    numericos: ['realizado'], baselines: ['previsto'], periodos: [PERIODO_MES],
+    mesIdx: JULHO, semanas: SEMANAS_JULHO,
+    demandas: demandasCom({ 'SUP-0001-24||ST': [diaJul(2), diaJul(3)] }),
+    hojeEpoch: diaJul(8),
+    baseline: [],
+  });
+  assert.match(html, /<td class="num">2<\/td>/, 'a janela atravessa o presente: continua avaliada, com os 2 furos já feitos');
+  assert.doesNotMatch(html, /Sem dado/);
+});

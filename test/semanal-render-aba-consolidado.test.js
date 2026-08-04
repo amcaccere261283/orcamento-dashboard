@@ -245,6 +245,24 @@ test('em Financeiro, a única premissa é também o início da faixa', () => {
   assert.strictEqual((html.match(/class="num cabecalho-premissa"/g) || []).length, 0, 'não há segunda premissa em Financeiro');
 });
 
+// Mesmo CRITICAL da aba Alertas: a "semana em curso" saía de elapsadas-1 em
+// vez de indiceSemanaAtual, e num mês passado isso fazia a última semana ser
+// contada de seu início até HOJE, absorvendo os meses seguintes.
+test('num mês PASSADO, o Realizado da semana não absorve furos dos meses seguintes', () => {
+  const registros = [registro({ sup: 'SUP-A', tipologia: 'ST', volume: 310 })];
+  const emAgosto = (dia) => diaEpoch(new Date(Date.UTC(ANO, 7, dia)));
+  const eventos = [
+    diaJul(28), diaJul(29), diaJul(30),                 // 3 na S5 de julho
+    emAgosto(1), emAgosto(2), emAgosto(3),              // 3 em agosto
+  ];
+  const html = renderAbaConsolidado(registros, [0], opcoes({
+    semanaIdx: 4, // S5 de julho (27/07 a 31/07)
+    demandas: demandasCom({ 'SUP-A||ST': eventos }),
+    hojeEpoch: emAgosto(3), // olhando JULHO em 03/08
+  }));
+  assert.strictEqual(celulasDe(linhasDe(html)[0])[5], '3', 'só os 3 furos da S5 de julho');
+});
+
 test('as linhas de total NÃO emitem a classe .linha-total -- as regras de fechamento desta aba são próprias, e reusar aquela classe herdaria a cor de série Tendência', () => {
   const registros = [registro({ sup: 'SUP-A', volume: 310 })];
   const html = renderAbaConsolidado(registros, [0], opcoes());
