@@ -85,6 +85,7 @@ function extrairBlocos(html) {
 test('depois da senha certa, a aba Balanço de massa desenha SVG de verdade em #secao-balanco -- não fica um <div> vazio', async () => {
   const registros = [
     registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Rho', TIPOLOGIA_SINTETICA, 4000, 1000, 2, 5),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Sigma', TIPOLOGIA_SINTETICA, 0, 0, 2, 2), // registro INATIVO -- previsto e realizado zerados
   ];
   const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
   const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
@@ -152,30 +153,29 @@ test('depois da senha certa, a aba Balanço de massa desenha SVG de verdade em #
   // mais um controle próprio do Balanço). Prova de ponta a ponta: (a) ele
   // existe no HTML bruto da página (renderizado por MARKUP_ACOES_SEMANAL),
   // (b) o listener está ligado e recalcula a aba, e (c) desmarcar muda o
-  // resultado do Balanço (menos linhas/gráficos aparecem quando SOMENTE_ATIVOS
-  // vira false e as linhas inativas desaparecem).
+  // resultado do Balanço (o registro inativo aparece).
   const htmlCru = html;
   assert.match(htmlCru, /id="somente-ativos"/, 'checkbox renderizado na barra compartilhada');
 
-  // Estado inicial: SOMENTE_ATIVOS = true (default). Registros com
-  // previsto/realizado zerados não aparecem porque estão inativos.
-  const countGraficosAntes = (documentoFalso.getElementById('secao-balanco').innerHTML.match(/<svg class="grafico-svg grafico-balanco"/g) || []).length;
-  assert.ok(countGraficosAntes > 0, 'com SOMENTE_ATIVOS=true, aparecem gráficos das tipologias que têm registros ativos');
+  // Estado inicial: SOMENTE_ATIVOS = true (default). O fixture tem 2 registros:
+  // SUP-0001-24 ATIVO (previsto 4000)
+  // SUP-0002-24 INATIVO (previsto/realizado 0)
+  // O SUP inativo NÃO aparece quando SOMENTE_ATIVOS=true
+  let htmlComFiltro = documentoFalso.getElementById('secao-balanco').innerHTML;
+  const countSUP0002Antes = (htmlComFiltro.match(/SUP-0002-24/g) || []).length;
+  assert.equal(countSUP0002Antes, 0, 'com SOMENTE_ATIVOS=true, o SUP inativo (0002-24) não aparece no Balanço');
 
-  // Desmarcar o checkbox deve revelar registros inativos -- o fixture tem só 1 registro com previsto 4000 > realizado 0 (ativo),
-  // então o número de gráficos não muda, mas o número de LINHAS dentro deles poderia subir se houvesse registros inativos.
-  // Como o fixture não tem, a melhor prova é desmarcar, recalcular, e confirmar que o comportamento foi acionado sem erro.
+  // Desmarcar o checkbox deve revelar o SUP inativo
   const checkboxSomenteAtivos = documentoFalso.getElementById('somente-ativos');
   assert.ok(checkboxSomenteAtivos, 'checkbox somente-ativos existe no DOM após os scripts rodarem');
   checkboxSomenteAtivos.checked = false;
   checkboxSomenteAtivos.listeners.change({ target: checkboxSomenteAtivos });
 
-  // Depois de desmarcar, o HTML do Balanço é recalculado. Com o fixture atual (1 registro ativo),
-  // o HTML continua tendo 1 gráfico, mas o listener foi acionado e recalcularSemanal() rodou com êxito.
-  // A prova de que o filtro funciona vem do fixture em semanal-render-aba-balanco.test.js (calcularLinhas),
-  // que testa indicesFiltrados e somenteAtivos em condições mais variadas.
+  // Depois de desmarcar, o HTML do Balanço é recalculado e agora MOSTRA o SUP inativo
   const htmlAposDesmarcar = documentoFalso.getElementById('secao-balanco').innerHTML;
   assert.notEqual(htmlAposDesmarcar, '', 'após desmarcar o checkbox, o Balanço continua renderizado (não quebrou)');
+  const countSUP0002Depois = (htmlAposDesmarcar.match(/SUP-0002-24/g) || []).length;
+  assert.ok(countSUP0002Depois > countSUP0002Antes, 'após desmarcar o checkbox, o SUP inativo (0002-24) deve aparecer no Balanço -- prova que o filtro foi aplicado');
 });
 
 test('SEM a injeção de fonteParaCliente() antes do bundle, a mesma senha certa quebra a aba (ReferenceError engolido pelo catch de tentarDesbloquear) -- prova que a injeção não é decorativa', async () => {
