@@ -127,15 +127,15 @@ test('semanaIdx fora da faixa é clampado em vez de produzir coluna vazia', () =
 test('em Volume as colunas extras são Equipes previstas e Produtividade média esperada -- ticket não aparece', () => {
   assert.deepStrictEqual(colunasExtras('volume').map((c) => c.chave), ['equipes', 'produtividade']);
   const html = renderCabecalho('volume', SEMANAS[0]);
-  assert.match(html, /<th class="num">Equipes previstas<\/th>/);
-  assert.match(html, /<th class="num">Produtividade média esperada<\/th>/);
+  assert.match(html, /<th class="num cabecalho-premissa cabecalho-premissa-inicio">Equipes previstas<\/th>/);
+  assert.match(html, /<th class="num cabecalho-premissa">Produtividade média esperada<\/th>/);
   assert.doesNotMatch(html, /Ticket/);
 });
 
 test('em Financeiro a única coluna extra é o Ticket médio -- equipes e produtividade não aparecem', () => {
   assert.deepStrictEqual(colunasExtras('financeiro').map((c) => c.chave), ['ticket']);
   const html = renderCabecalho('financeiro', SEMANAS[0]);
-  assert.match(html, /<th class="num">Ticket médio previsto \(R\$\/furo\)<\/th>/);
+  assert.match(html, /<th class="num cabecalho-premissa cabecalho-premissa-inicio">Ticket médio previsto \(R\$\/furo\)<\/th>/);
   assert.doesNotMatch(html, /Equipes previstas/);
   assert.doesNotMatch(html, /Produtividade/);
 });
@@ -212,4 +212,45 @@ test('recorte vazio (todos os registros filtrados fora) rende só o TOTAL GERAL,
   const html = renderAbaConsolidado([registro({ sup: 'SUP-A', volume: 310 })], [], opcoes());
   assert.strictEqual(linhasDe(html).length, 1);
   assert.match(html, /TOTAL GERAL/);
+});
+
+// --- Achados da revisão de design do Open Design (2026-08-03) --------------
+// A faixa que separa "colunas da semana" de "colunas do mês" é desenhada por
+// CLASSE, não por posição: a versão sugerida na revisão usava
+// :nth-child(n+8), que quebra em silêncio no dia em que uma coluna entrar ou
+// sair. Estes testes prendem as classes que o CSS depende.
+
+test('as colunas de premissa carregam .celula-premissa no corpo e .cabecalho-premissa no cabeçalho -- a faixa começa no rótulo, não uma linha abaixo dele', () => {
+  const registros = [registro({ sup: 'SUP-A', volume: 310, equipes: 2, prod: 5 })];
+  const html = renderAbaConsolidado(registros, [0], opcoes());
+  // Volume tem 2 premissas (equipes + produtividade); o cabeçalho tem uma
+  // marcação por coluna, e o corpo uma por coluna POR LINHA.
+  assert.strictEqual((html.match(/class="num cabecalho-premissa/g) || []).length, 2);
+  assert.ok((html.match(/class="num celula-premissa/g) || []).length >= 2);
+});
+
+test('só a PRIMEIRA coluna de premissa marca o início da faixa -- uma divisória por coluna viraria compartimento, não bloco', () => {
+  const registros = [registro({ sup: 'SUP-A', volume: 310, equipes: 2, prod: 5 })];
+  const html = renderAbaConsolidado(registros, [0], opcoes());
+  assert.strictEqual((html.match(/cabecalho-premissa-inicio/g) || []).length, 1);
+  // Uma linha de corpo por abertura (total geral + tipologia + registro + total do SUP)
+  const linhas = linhasDe(html).length;
+  assert.strictEqual((html.match(/celula-premissa-inicio/g) || []).length, linhas);
+});
+
+test('em Financeiro, a única premissa é também o início da faixa', () => {
+  const registros = [registro({ sup: 'SUP-A', volume: 310, financeiro: 500000, ticket: 1600 })];
+  const html = renderAbaConsolidado(registros, [0], opcoes({ dimensao: 'financeiro' }));
+  assert.strictEqual((html.match(/class="num cabecalho-premissa cabecalho-premissa-inicio"/g) || []).length, 1);
+  assert.strictEqual((html.match(/class="num cabecalho-premissa"/g) || []).length, 0, 'não há segunda premissa em Financeiro');
+});
+
+test('as linhas de total NÃO emitem a classe .linha-total -- as regras de fechamento desta aba são próprias, e reusar aquela classe herdaria a cor de série Tendência', () => {
+  const registros = [registro({ sup: 'SUP-A', volume: 310 })];
+  const html = renderAbaConsolidado(registros, [0], opcoes());
+  // \b não serve aqui: em "linha-total-geral" o hífen é não-palavra, então
+  // \blinha-total\b casaria dentro dela. (?![-\w]) exige que o nome TERMINE.
+  assert.doesNotMatch(html, /class="[^"]*linha-total(?![-\w])/);
+  assert.match(html, /<tr class="linha-total-geral">/);
+  assert.match(html, /<tr class="linha-total-sup">/);
 });

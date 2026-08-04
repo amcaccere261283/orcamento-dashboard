@@ -171,8 +171,15 @@ function renderCabecalho(dimensao, semana) {
     + '<th class="num">Previsto' + escapeHtml(sufixo) + '</th>'
     + '<th class="num">Realizado' + escapeHtml(sufixo) + '</th>'
     + '<th class="num">Tendência' + escapeHtml(sufixo) + '</th>';
-  colunasExtras(dimensao).forEach(function (c) {
-    ths += '<th class="num">' + escapeHtml(c.rotulo) + '</th>';
+  // A faixa das colunas de premissa começa no CABEÇALHO, não só no corpo --
+  // sem isso o rótulo fica fora da região que o fundo delimita e a fronteira
+  // semana/mês parece começar uma linha abaixo de onde começa (achado da
+  // revisão de design de 2026-08-03). '-inicio' marca só a PRIMEIRA delas: é
+  // ela que carrega a linha divisória; as demais só o fundo, senão cada
+  // premissa viraria um compartimento próprio em vez de um bloco só.
+  colunasExtras(dimensao).forEach(function (c, i) {
+    ths += '<th class="num cabecalho-premissa' + (i === 0 ? ' cabecalho-premissa-inicio' : '') + '">'
+      + escapeHtml(c.rotulo) + '</th>';
   });
   return '<thead><tr>' + ths + '</tr></thead>';
 }
@@ -195,8 +202,9 @@ function renderLinha(celulas, classe, registros, indices, ctx) {
     + celulaSemana(series.semanasPrevisto)
     + celulaSemana(series.semanasRealizado)
     + celulaSemana(series.semanasTendenciaCompleta);
-  colunasExtras(ctx.dimensao).forEach(function (c) {
-    html += '<td class="num celula-premissa">' + formatarNumero(valorExtra(c.chave, registros, indices, ctx.mesIdx), c.casas) + '</td>';
+  colunasExtras(ctx.dimensao).forEach(function (c, i) {
+    html += '<td class="num celula-premissa' + (i === 0 ? ' celula-premissa-inicio' : '') + '">'
+      + formatarNumero(valorExtra(c.chave, registros, indices, ctx.mesIdx), c.casas) + '</td>';
   });
   return html + '</tr>';
 }

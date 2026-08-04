@@ -149,13 +149,70 @@ const CSS_BALANCO = `
   .controle-balanco select:focus-visible, .controle-consolidado select:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
 
   /* Aba CONSOLIDADO. As colunas de premissa (equipes previstas/produtividade/
-     ticket) são do MÊS, não da semana -- a borda à esquerda separa
-     visualmente esses dois recortes dentro da mesma linha, e o cinza as
-     rebaixa em relação aos números da semana, que são o assunto da aba. */
-  .celula-premissa { color: var(--text-secondary); border-left: 2px solid var(--border); white-space: nowrap; }
+     ticket) são do MÊS, não da semana -- a faixa de fundo mais clara agrupa as
+     duas coisas como blocos distintos, a divisória marca a fronteira, e o
+     cinza as rebaixa em relação aos números da semana, que são o assunto da
+     aba. Os três juntos, e não só a nota em texto: a revisão de design de
+     2026-08-03 apontou que a nota estava fazendo o trabalho que o layout
+     deveria fazer.
+
+     background-image (e não background-color) de propósito: as linhas de total
+     têm fundo PRÓPRIO vindo de cssBase(), e uma cor de fundo aqui competiria
+     com ele -- a faixa quebraria justamente nas linhas TOTAL. Uma imagem
+     empilha por cima, então a faixa atravessa a tabela inteira. */
+  .celula-premissa, .cabecalho-premissa {
+    background-image: linear-gradient(rgba(255,255,255,0.04), rgba(255,255,255,0.04));
+    white-space: nowrap;
+  }
+  .celula-premissa { color: var(--text-secondary); }
+  /* Só a PRIMEIRA premissa carrega a divisória -- uma por coluna transformaria
+     o bloco em compartimentos e desfaria o agrupamento acima. */
+  .celula-premissa-inicio, .cabecalho-premissa-inicio { border-left: 2px solid #4a4a46; }
   .nota-consolidado { font-size: 12px; color: var(--text-secondary); margin: 0 0 14px; max-width: 90ch; }
   #tabela-consolidado .col-sup, #tabela-consolidado .col-grupo, #tabela-consolidado .col-tomador { white-space: nowrap; }
-  #tabela-consolidado tr:hover { filter: brightness(1.14); }
+
+  /* Número à direita: é o que deixa comparar ordem de grandeza descendo a
+     coluna. th/td em cssBase() são text-align:left para a tabela inteira, e a
+     regra genérica não pode mudar (o HTML do orçamento é travado byte a byte).
+     Escopado no Consolidado de propósito: a aba Alertas é um porte deliberado
+     da aba do orçamento e alinhar só um dos dois quebraria a paridade que o
+     porte existe para manter. */
+  #tabela-consolidado .num { text-align: right; }
+
+  /* Densidade: ~3px a menos por linha, em ~400 linhas. */
+  #tabela-consolidado th, #tabela-consolidado td { padding-top: 6px; padding-bottom: 6px; }
+
+  /* Fechamento de bloco. As regras equivalentes de cssBase() exigem DUAS
+     classes (tr.linha-total.linha-total-geral), e o markup desta aba emite só
+     a segunda -- os fundos pintavam e as bordas de fechamento nunca
+     renderizavam. Achado da revisão de design de 2026-08-03. Não dá para
+     resolver acrescentando .linha-total ao markup: lá aquela classe significa
+     "linha da série Tendência", não "linha de total", e reusá-la aqui herdaria
+     a cor âmbar de série junto. */
+  #tabela-consolidado .linha-total-geral:not(.linha-total-geral-tipologia) td { border-bottom: 2px solid #f6b53f; }
+  #tabela-consolidado .linha-total-geral-tipologia + .linha-consolidado td { border-top: 2px solid var(--gridline); }
+  #tabela-consolidado .linha-total-sup td { border-bottom: 2px solid var(--gridline); }
+
+  /* Hover. filter:brightness() só clareia o que TEM fundo próprio, então em
+     linha comum ele acendia apenas a primeira coluna (que é sticky e tem fundo
+     para não deixar o conteúdo passar por baixo) -- a linha inteira ficava
+     inerte. box-shadow inset pinta a célula toda, com ou sem fundo. */
+  #tabela-consolidado tbody tr:hover td,
+  #tabela-alertas tbody tr:hover td { box-shadow: inset 0 0 0 9999px rgba(255,255,255,0.06); }
+
+  /* Semáforo: #1414CC (Excelente) fica em ~1,65:1 contra a superfície escura --
+     a bolinha some justamente no status que se quer achar varrendo. O anel
+     resolve sem tocar em nenhuma das 5 cores, que são copiadas do orçamento de
+     propósito e não podem mudar. Fica no <style> desta página, e não em
+     cssBase() (onde .status-circulo é definida), porque cssBase é compartilhada
+     e o HTML do orçamento é travado byte a byte. */
+  #tabela-alertas .status-circulo { box-shadow: 0 0 0 1px rgba(255,255,255,0.45); }
+
+  /* Os 5 filtros PRÓPRIOS da aba Alertas eram visualmente idênticos aos 6
+     filtros de recorte da barra de cima, logo acima deles. O fio âmbar diz de
+     quem é cada faixa. Mesmo motivo da regra anterior para não morar em
+     cssBase(), onde .filtros-alertas já existe. */
+  .filtros-alertas { border-left: 2px solid rgba(246,181,63,0.35); padding-left: 12px; }
   .controle-balanco-check {
     flex-direction: row; align-items: center; gap: 8px;
     height: 36px; font-size: 13px; color: var(--text-primary);
