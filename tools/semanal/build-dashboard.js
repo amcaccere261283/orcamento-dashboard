@@ -15,6 +15,7 @@ const { excelSerialParaData } = require('../comum/datas.js');
 const { reconciliarLinhaBase, chaveMatriz } = require('../comum/linha-base.js');
 const config = require('../orcamento/config.js');
 const { parseAvancos } = require('./parse-avancos.js');
+const { parseCsvGrid } = require('./parse-matriz-cliente.js');
 const { parseLab } = require('./parse-lab.js');
 const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos } = require('./compute-demandas.js');
 const { agregarEquipesPorDia } = require('./compute-equipes-mobilizadas.js');
@@ -172,11 +173,26 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // Falha com o caminho na mensagem em vez de deixar vazar um ENOENT cru: um
   // caminho errado em cache já travou uma sessão inteira neste projeto (ver
   // CLAUDE.md, item da aba Gerencial).
+  // Fonte online (2026-08-05): substitui o Avanço Sond.xlsx local por um CSV
+  // combinado dos exports de cada contrato ativo, gerado por
+  // tools/semanal/atualizar-avancos-online.js (roda à parte, não a cada
+  // build -- ver docs/superpowers/specs/2026-08-05-avancos-online-design.md).
+  // O unshift(null) reproduz a mesma diferença de indexação que
+  // gridCsvComoXlsx() já trata no navegador (render-semanal.js): o CSV
+  // combinado tem cabeçalho na linha 0, mas parseAvancos espera cabeçalho em
+  // grid[1] (o formato do .xlsx original, que tem uma linha em branco antes).
+  const CAMINHO_AVANCOS_ONLINE = path.join(__dirname, '..', '..', 'dist', 'avancos-online.csv');
   let gridAvancos;
   try {
-    gridAvancos = readXlsxSheet(configDemandas.caminhoArquivo, configDemandas.nomeAba);
+    const csvTexto = fs.readFileSync(CAMINHO_AVANCOS_ONLINE, 'utf8');
+    gridAvancos = parseCsvGrid(csvTexto);
+    gridAvancos.unshift(null);
   } catch (err) {
-    throw new Error(`Não consegui ler a aba "${configDemandas.nomeAba}" de ${configDemandas.caminhoArquivo} (o Google Drive está montado em G:?). Erro original: ${err.message}`);
+    throw new Error(
+      `Não consegui ler ${CAMINHO_AVANCOS_ONLINE}. Rode ` +
+      `"node tools/semanal/atualizar-avancos-online.js" primeiro (precisa do Chrome ` +
+      `aberto com --remote-debugging-port=9222, logado em sond.com.br). Erro original: ${err.message}`
+    );
   }
   const { furos: furosLidos, descartadas, semDataTermino, cancelamentoIlegivel, deslocamentos } = parseAvancos(gridAvancos);
 
