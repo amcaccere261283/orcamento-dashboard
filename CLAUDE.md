@@ -81,6 +81,58 @@ Consolidado. Build:
 `cp dist/planejamento-semanal.html docs/planejamento-semanal.html` antes de commitar.
 `test/publicacao-docs-sincronizado.test.js` trava essa cópia para as duas páginas.
 
+### Avanços online (2026-08-05)
+
+A fonte de "Realizado" (furos de sondagem, alimenta as abas Semanal, Gráficos,
+Balanço de massa e Demandas) deixou de ser o arquivo local `Avanço Sond.xlsx`
+(G:\...) e passou a ser buscada direto do sond.com.br, só dos contratos
+financeiros **ATIVOS** (confirmado 2026-08-05: entre 83 e 84, o número muda em
+tempo real conforme o portfólio da empresa). Ver
+`docs/superpowers/specs/2026-08-05-avancos-online-design.md` para o desenho
+completo.
+
+**Atualizar os dados:**
+
+```bash
+node tools/semanal/atualizar-avancos-online.js   # gera dist/avancos-online.csv (~alguns minutos, ~83 contratos)
+```
+
+Exige o **Google Chrome** (não Brave) aberto com a porta de depuração remota e
+já logado em sond.com.br:
+
+```
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
+```
+
+Cerca de 40% dos contratos ativos retornam resposta vazia (0 bytes) — são
+contratos sem nenhuma sondagem registrada ainda, o script já trata isso como
+esperado (loga e continua, não é erro). Se a MAIORIA ou TODOS falharem, aí sim
+é sinal de problema real (sessão expirada, endpoint mudou).
+
+Depois de rodar, o build principal (`tools/semanal/build-dashboard.js`) já lê
+esse CSV automaticamente — se o arquivo não existir, o build falha com uma
+mensagem que já diz o comando acima pra rodar. **Sempre**
+`cp dist/avancos-online.csv docs/avancos-online.csv` junto com o
+`cp dist/planejamento-semanal.html docs/planejamento-semanal.html` de sempre
+— o botão "Atualizar dados" da página busca esse CSV publicado (mesmo domínio
+do GitHub Pages, sem CORS), então esquecer essa cópia deixa o botão buscando
+uma versão desatualizada mesmo depois de reconstruir a página.
+
+**O mecanismo antigo foi aposentado**: `tools/semanal/apps-script-espelho-avancos.gs`
+(que espelhava o `.xlsx` do Drive numa Sheet publicada a cada 30 min, alimentando
+tanto o build quanto o botão) foi removido do repositório. O gatilho do Apps
+Script em si, se ainda existir na conta Google dona daquela Sheet, precisa ser
+desligado manualmente por lá — este repositório não tem como alcançá-lo.
+
+**Rodando de outra máquina:** só precisa do Chrome com a porta de depuração e
+login manual em sond.com.br (sessão por cookie, sem senha guardada em lugar
+nenhum) — diferente da MATRIZ/linha de base/Lab, que ainda exigem o G:\ com o
+Google Drive montado, esta fonte específica não depende mais de nenhum
+caminho de Drive.
+
+**Fora de escopo por enquanto**: a aba "Lab Concluido" continua vindo do
+`Avanço Sond.xlsx` local — só "Sondagens"/Demandas migrou.
+
 ### Recortes de tempo das abas 2 e 3 (2026-08-03)
 
 **Aba Gráficos, painel Acumulado**: o Realizado morre na semana em curso (antes seguia
