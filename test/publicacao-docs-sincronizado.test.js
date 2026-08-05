@@ -40,6 +40,12 @@ const PARES = [
     publicado: path.join(RAIZ, 'docs', 'planejamento-semanal.html'),
     comando: 'cp dist/planejamento-semanal.html docs/planejamento-semanal.html',
   },
+  {
+    nome: 'CSV combinado de Avanços',
+    origem: path.join(RAIZ, 'dist', 'avancos-online.csv'),
+    publicado: path.join(RAIZ, 'docs', 'avancos-online.csv'),
+    comando: 'cp dist/avancos-online.csv docs/avancos-online.csv',
+  },
 ];
 
 function relativo(p) {

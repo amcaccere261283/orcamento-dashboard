@@ -31,11 +31,17 @@ test('combinarGradesAvancos usa o cabecalho (grid[1]) do primeiro contrato e jun
   assert.deepEqual(avisos, []);
 });
 
-test('combinarGradesAvancos avisa (sem abortar) quando um contrato tem cabecalho diferente do primeiro', () => {
+test('combinarGradesAvancos avisa E PULA as linhas de um contrato com cabecalho diferente do primeiro', () => {
   const contrato1 = [undefined, ['Contrato', 'Status'], ['SUP-0001-24', 'CONCLUIDO']];
   const contrato2 = [undefined, ['Contrato', 'Situacao'], ['SUP-0002-24', 'EXECUTADO']];
   const { grid, avisos } = combinarGradesAvancos([contrato1, contrato2]);
-  assert.equal(grid.length, 3); // cabecalho + 2 linhas de dado, mesmo com o aviso
+  // Cabeçalho + só a linha de dado do PRIMEIRO contrato -- as linhas do
+  // contrato2 (cabeçalho diferente) ficam de fora, senão seriam lidas sob
+  // colunas erradas e produziriam datas/SUPs errados sem erro nenhum.
+  assert.deepEqual(grid, [
+    ['Contrato', 'Status'],
+    ['SUP-0001-24', 'CONCLUIDO'],
+  ]);
   assert.equal(avisos.length, 1);
   assert.match(avisos[0], /cabeçalho diferente/);
 });

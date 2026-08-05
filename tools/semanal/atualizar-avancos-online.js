@@ -3,10 +3,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { readXlsxSheetFromBuffer } = require('../comum/xlsx-reader.js');
 const { gridParaCsv } = require('./csv-writer-avancos.js');
+const { locateColunasAvancos } = require('./parse-avancos.js');
 const cdp = require('./cdp-client.js');
 
 const SITE_ORIGIN = 'https://sond.com.br';
 const OUT_PATH = path.join(__dirname, '..', '..', 'dist', 'avancos-online.csv');
+
+// Abaixo de 20% de contratos baixados com sucesso não é o padrão normal de
+// "contrato sem sondagem ainda" (já visto entre ~40% e 56% de falha nesse
+// motivo, documentado em falhas esperadas) -- é sinal de sessão/autenticação
+// quebrada no Chrome (cookie expirado, redirecionado pra tela de login etc.),
+// que faria QUASE TODO contrato falhar do mesmo jeito. Gravar o CSV nesse
+// cenário substituiria um dado bom por um quase vazio, silenciosamente.
+const TAXA_SUCESSO_MINIMA = 0.2;
 
 // Junta as grades (uma por contrato) numa só, pronta pra virar CSV.
 //
@@ -26,10 +35,14 @@ const OUT_PATH = path.join(__dirname, '..', '..', 'dist', 'avancos-online.csv');
 // Cabeçalho sai do PRIMEIRO contrato baixado (grid[1] dele), seguido das
 // linhas de dado (grid[2] em diante) de TODOS os contratos, na ordem em que
 // vieram -- o resultado é uma grade NORMAL, 0-indexada (linhas[0] =
-// cabeçalho), pronta pra gridParaCsv. Não aborta se algum contrato tiver
-// cabeçalho diferente (mesmo template de tela pra todos, mas se algum vier
-// diferente é melhor avisar e seguir do que travar a atualização inteira por
-// causa de um contrato só).
+// cabeçalho), pronta pra gridParaCsv. Não aborta a atualização inteira se
+// algum contrato tiver cabeçalho diferente (mesmo template de tela pra
+// todos, mas dado real pode variar) -- mas esse contrato tem suas linhas de
+// dado PULADAS, mesmo tratamento de um download que falhou. Sem isso, as
+// linhas seriam lidas sob os nomes de coluna do primeiro contrato (que não
+// são as delas) e produziriam datas/SUPs errados que ainda assim parseiam
+// sem erro -- exatamente o tipo de "cair calado numa métrica diferente" que
+// este projeto trata como pior que faltar dado (ver CLAUDE.md).
 function combinarGradesAvancos(grades) {
   if (!grades.length) throw new Error('combinarGradesAvancos: nenhum contrato baixado.');
 
@@ -40,7 +53,8 @@ function combinarGradesAvancos(grades) {
   grades.forEach((grade, i) => {
     const cabecalhoAtual = grade[1] || [];
     if (i > 0 && cabecalhoAtual.join('|') !== cabecalho.join('|')) {
-      avisos.push(`Contrato de índice ${i} tem cabeçalho diferente do primeiro contrato -- usando o cabeçalho do primeiro mesmo assim.`);
+      avisos.push(`Contrato de índice ${i} tem cabeçalho diferente do primeiro contrato -- linhas de dado deste contrato PULADAS (não podem ser lidas sob o cabeçalho do primeiro sem risco de coluna errada).`);
+      return;
     }
     for (let r = 2; r < grade.length; r++) {
       if (grade[r]) linhas.push(grade[r]);
@@ -105,8 +119,39 @@ async function main() {
       throw new Error('Nenhum dos contratos foi baixado com sucesso -- abortando sem gravar (ver falhas acima).');
     }
 
+    // Piso de falha parcial: roda ANTES de gravar, pra deixar o CSV bom que
+    // já está em disco intocado se este for um run ruim (ver comentário de
+    // TAXA_SUCESSO_MINIMA acima).
+    const taxaSucesso = grades.length / contratos.length;
+    if (taxaSucesso < TAXA_SUCESSO_MINIMA) {
+      throw new Error(
+        `Só ${grades.length}/${contratos.length} contratos (${(taxaSucesso * 100).toFixed(1)}%) foram baixados com ` +
+        `sucesso -- abaixo do piso de ${(TAXA_SUCESSO_MINIMA * 100).toFixed(0)}%. Isso NÃO é o padrão normal de ` +
+        `contratos sem sondagem ainda (esperado ~40-56% de "falha" por esse motivo) -- parece problema de ` +
+        `sessão/autenticação no Chrome (cookie expirado, redirecionado pra login etc.). Abortando SEM gravar ` +
+        `${OUT_PATH} para não substituir o CSV bom já publicado por um quase vazio. Reabra o Chrome logado em ` +
+        `${SITE_ORIGIN} com --remote-debugging-port=9222 e rode de novo. Falhas: ${falhas.map((f) => `${f.sup}: ${f.erro}`).join('; ')}`
+      );
+    }
+
     const { grid, avisos } = combinarGradesAvancos(grades);
     avisos.forEach((a) => console.warn(`AVISO: ${a}`));
+
+    // Valida que o cabeçalho combinado ainda é utilizável ANTES de gravar --
+    // se uma coluna obrigatória sumiu (layout mudou, ou o único contrato que
+    // sobrou pro cabeçalho tinha algo estranho), o CSV que sairia seria
+    // malformado e parseAvancos() lançaria só depois, no build da página, sem
+    // pista de qual etapa quebrou. Aborta sem gravar: protege o CSV bom que
+    // já está em disco de ser sobrescrito por um que não dá pra ler.
+    try {
+      locateColunasAvancos(grid[0]);
+    } catch (err) {
+      throw new Error(
+        `Cabeçalho combinado ficou inválido -- o CSV que seria gravado em ${OUT_PATH} não teria as colunas que ` +
+        `parseAvancos() exige (ver tools/semanal/parse-avancos.js). Abortando SEM gravar, pra não sobrescrever o ` +
+        `CSV bom já publicado com um malformado. Erro original: ${err.message}`
+      );
+    }
 
     fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
     fs.writeFileSync(OUT_PATH, gridParaCsv(grid), 'utf8');

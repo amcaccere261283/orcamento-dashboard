@@ -26,13 +26,23 @@ function buildTestXlsxBuffer({ sheetNames, activeSheetRows }) {
 }
 
 test('readXlsxSheetFromBuffer reads a sheet directly from an in-memory buffer, no disk', () => {
+  // Excel numbers rows starting at 1, never 0 -- so grid[0] is ALWAYS
+  // undefined for a real .xlsx, and the header (Excel row 1) always lands at
+  // grid[1], data at grid[2] onward. This is the exact invariant
+  // combinarGradesAvancos (tools/semanal/atualizar-avancos-online.js) and
+  // parseAvancos (tools/semanal/parse-avancos.js) depend on -- a fixture
+  // using r="0" would prove the OPPOSITE arrangement (see task-3-report.md
+  // in .superpowers/sdd/2026-08-05-avancos-online/ for how this was found).
   const buffer = buildTestXlsxBuffer({
     sheetNames: ['Worksheet'],
-    activeSheetRows: '<row r="0"><c r="A0" t="s"><v>0</v></c><c r="B0" t="str"><v>SUP-0001-24</v></c></row>',
+    activeSheetRows:
+      '<row r="1"><c r="A1" t="s"><v>0</v></c></row>' +
+      '<row r="2"><c r="A2" t="str"><v>SUP-0001-24</v></c></row>',
   });
   const grid = readXlsxSheetFromBuffer(buffer, 'Worksheet');
-  assert.equal(grid[0][0], 'Contrato');
-  assert.equal(grid[0][1], 'SUP-0001-24');
+  assert.equal(grid[0], undefined);
+  assert.equal(grid[1][0], 'Contrato');
+  assert.equal(grid[2][0], 'SUP-0001-24');
 });
 
 test('readXlsxSheetFromBuffer throws a clear error when the sheet name does not exist', () => {
