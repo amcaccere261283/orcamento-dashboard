@@ -1287,7 +1287,13 @@ function montarDashboard(registros) {
 // nenhum, só faria cada parser ler a planilha errada, então NÃO confie na
 // ordem: confira o cabeçalho se um dia forem republicadas.
 var URL_ESPELHO_MATRIZ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRaOjGxPYWKj-as9RwErptIND7PE_zxsND19PReV1MdOup1ZY3iAu_DGrQ0gatPyYFEy3hg-LWE2esw/pub?gid=609773455&single=true&output=csv';
-var URL_ESPELHO_AVANCOS_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_Lmfr3EG4OwDb8xlc7670XrCXd2VL9vAiCjHeh8sxpLGFHNf_WgbXMGFe33XIKTXxTkaFXo8ls2eR/pub?gid=943230110&single=true&output=csv';
+// 2026-08-05: trocado do espelho da Sheet (Apps Script copiando o .xlsx do
+// Drive) pro CSV combinado publicado junto com a própria página -- gerado
+// por tools/semanal/atualizar-avancos-online.js (roda à parte, não a cada
+// build). Caminho relativo: mesmo domínio do GitHub Pages, sem CORS, e sem
+// depender de um Apps Script rodando em outra conta. Ver
+// docs/superpowers/specs/2026-08-05-avancos-online-design.md.
+var URL_ESPELHO_AVANCOS_SEMANAL = 'avancos-online.csv';
 var URL_ESPELHO_EQ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7SaAZI8VwQaZD0nPxtOyw56b1XmKfqDTC6qSkj-1PAQr4A8ihTY4vZCOhF4PuMNIYm_-hN_CNdNrX/pub?gid=199381651&single=true&output=csv';
 var URL_ESPELHO_LAB_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_Lmfr3EG4OwDb8xlc7670XrCXd2VL9vAiCjHeh8sxpLGFHNf_WgbXMGFe33XIKTXxTkaFXo8ls2eR/pub?gid=213649864&single=true&output=csv';
 
