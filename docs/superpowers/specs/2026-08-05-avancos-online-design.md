@@ -112,6 +112,23 @@ Campos são escapados no padrão CSV (aspas quando o valor tem vírgula/aspas/qu
 linha, aspas internas dobradas) — mesmo formato que `parseCsvGrid` já sabe ler (é o
 mesmo parser usado pra CSV publicado pelo Google Sheets).
 
+**Correção (2026-08-05, achada rodando contra dado real — ver task-3-report.md):** a
+versão original deste documento dizia que o export por contrato tinha o cabeçalho na
+"linha 0" (sem a linha em branco que o `Avanço Sond.xlsx` original supostamente tinha
+na linha 1). **Isso estava errado.** `readXlsxSheetFromBuffer`
+(`tools/comum/xlsx-reader.js`) indexa cada linha pelo número de linha LITERAL do Excel
+(`parseSheetGrid`: `grid[rowNumber] = row`), e o Excel numera a partir de 1, nunca 0 —
+ou seja, `grid[0]` é SEMPRE `undefined` pra qualquer `.xlsx` real, e o cabeçalho (linha
+1 do Excel) sempre cai em `grid[1]`, dado a partir de `grid[2]`. Confirmado baixando um
+contrato real: `grid[0]=undefined`, `grid[1]=["Contrato","Tomador","Objeto",...]`,
+`grid[2]=` primeira linha de furo. **As duas fontes (workbook original e export por
+contrato) se comportam de forma IDÊNTICA nesse aspecto** — não existe a diferença de
+formato que a versão anterior deste documento registrou. O ajuste de indexação
+(`grid.unshift(null)`) que `gridCsvComoXlsx()` já faz continua necessário do mesmo
+jeito, mas pelo motivo já documentado (`parseCsvGrid` produz uma grade 0-indexada
+normal, diferente da indexação-por-linha-do-Excel que `readXlsxSheetFromBuffer`
+produz) — não por causa de nenhuma peculiaridade específica de uma das duas fontes.
+
 ## Erros e resiliência
 
 - Se um contrato falhar ao baixar (timeout, HTTP erro), o script **não aborta o resto**
