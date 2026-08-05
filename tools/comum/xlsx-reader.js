@@ -80,14 +80,10 @@ function readXlsxSheetFromBuffer(buffer, sheetName) {
 
 // Lê uma aba pelo nome de um .xlsx NO DISCO -- wrapper fino sobre
 // readXlsxSheetFromBuffer. Mensagens de erro daqui incluem o caminho (a
-// versão buffer não tem caminho pra incluir).
+// versão buffer não tem caminho pra incluir). Erros de leitura de arquivo
+// propagam sem wrapping (Node já inclui o caminho no ENOENT).
 function readXlsxSheet(filePath, sheetName) {
-  let buffer;
-  try {
-    buffer = fs.readFileSync(filePath);
-  } catch (err) {
-    throw new Error(`${filePath}: ${err.message}`);
-  }
+  const buffer = fs.readFileSync(filePath);
   try {
     return readXlsxSheetFromBuffer(buffer, sheetName);
   } catch (err) {
