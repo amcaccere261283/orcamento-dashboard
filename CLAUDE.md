@@ -172,9 +172,9 @@ honesta.
 **Aba Consolidado** (`tools/semanal/render-aba-consolidado.js`) porta a ABERTURA DE
 LINHAS da Tabela do orçamento (TOTAL GERAL → total por tipologia → registros do SUP →
 TOTAL do SUP), mas não a forma das colunas: como só há UMA semana, as três séries
-viram colunas e cada abertura é uma linha só. Controles próprios: semana (padrão
-automático = a última que já começou) e dimensão (abre em **Volume**, ao contrário do
-resto da página, porque as colunas de premissa física só existem nessa dimensão).
+viram colunas e cada abertura é uma linha só. Controle próprio: só o de semana (padrão
+automático = a última que já começou) — o seletor de dimensão dela saiu em 2026-08-04,
+ver "Consolidado congelado" abaixo.
 Separação pedida explicitamente — **Volume mostra Equipes previstas + Produtividade
 média esperada; Financeiro mostra só o Ticket médio**, nunca os dois juntos. As três
 premissas são do MÊS (equipes é foto; PROD./TICKET valem o ano), ao lado de colunas
@@ -241,6 +241,59 @@ estoque de demanda. Disparam só quando a verificação falha — o semáforo j�
   semana em curso.** Somar a semana vigente inteira fazia o Alerta A exigir carteira
   aberta para furo que já tinha sido entregue (num caso medido: excedente de 140, dos
   quais 130 já estavam prontos). Os nomes são compridos de propósito.
+
+### Consolidado congelado, filtro global de ativos e o anel do status (2026-08-04)
+
+Spec: `docs/superpowers/specs/2026-08-04-semanal-consolidado-congelado-e-ativos-design.md`.
+
+**A aba Consolidado perdeu a coluna Previsto** e mostra só Realizado + Tendência (as
+colunas de premissa ficam). **A Tendência das semanas que já começaram é CONGELADA**: o
+que se projetava para aquela semana no 1º dia dela, como registro histórico.
+
+**Congelar é RECÁLCULO, não snapshot** — `calcularSeriesSemanaisDimensao` chamada com
+`hojeEpoch = semanas[k].inicio`. Nessa recomputação a semana `k` vira a vigente, e o
+valor devolvido é a projeção que se fazia para ela inteira ao começar. Funciona porque
+os eventos do Avanço Sond têm data. **O preço:** um lançamento RETROATIVO muda um número
+já "congelado" — é reprodutível, não imutável. Snapshot de verdade exigiria persistência,
+e este repositório não tem workflow agendado nenhum; se um dia incomodar, a correção é
+persistência, não remendo no recálculo.
+
+**O Realizado exibido NUNCA congela** — sai de uma segunda série, calculada com o hoje
+real. Congelar os dois faria uma semana encerrada mostrar Realizado ≈ 0, porque a
+contagem de furos pararia no 1º dia dela. São duas chamadas por linha quando congela;
+custo medido com 340 registros: 78 ms contra 62 ms (+26%, não +100% — a recomputação só
+varre até a semana `k`).
+
+**A aba é exceção deliberada à regra 2.1** (Tendência nunca sobre período realizado): num
+mês fechado ela MOSTRA Tendência, porque ali é registro histórico, não projeção sobre o
+passado. As duas coisas têm o mesmo nome e sentidos opostos — por isso o cabeçalho diz
+qual está na tela, com a data-âncora.
+
+**A aba usa a primeira dimensão da barra compartilhada**, igual a Alertas; o seletor
+próprio saiu. **Cuidado que a revisão final pegou:** a tabela COAGE a dimensão para
+volume/financeiro (`dimensaoDaTabela`), e `equipes` é a PRIMEIRA na ordem canônica de
+`DIMENSOES_CONFIG_SEMANAL` — então filtrar pela dimensão crua escondia registros por um
+critério diferente do que a tela mostra. Filtrar e exibir têm de usar a MESMA dimensão
+coagida. Com `equipes` marcada a aba emite uma nota dizendo que mostra Volume.
+
+**"Somente SUPs ativos" é filtro da página inteira** (`tools/semanal/filtro-ativos.js`,
+aplicado por `indicesDaAba`), ligado por padrão. O check próprio do Balanço saiu.
+**Ele NÃO cabe em `indicesFiltrados`**: os filtros de lá recortam por propriedade do
+registro e não conhecem período; "ativo" depende do mês que a aba mostra, então é estado
+compartilhado aplicado POR ABA. Aplicado em Semanal, Alertas e Consolidado; **fora de
+Gráficos** (soma tudo numa série só, inativo contribui zero — código sem efeito) e **fora
+de Demandas** (lê agregado por tipologia, não quebra por registro).
+
+**Há DUAS noções de "ativo", e elas não coincidem** — o comentário no topo de
+`filtro-ativos.js` que diz o contrário está errado. O Balanço decide por linha
+(`compute-balanco.js`) com a dimensão e o período PRÓPRIOS dele, e na dimensão Demandas
+usa o evento `chegada`; `filtro-ativos.js` decide por registro, com a dimensão da barra,
+o mês inteiro e o evento `sondagemRealizada`. Um SUP só com chegadas e MATRIZ zerada
+aparece no Balanço e some das outras três com o MESMO check ligado.
+
+**O anel do `.status-circulo` foi removido** para o indicador ficar idêntico ao do
+orçamento. O `#1414CC` ("Excelente") volta a ~1,65:1 e quase some — **preço aceito
+explicitamente pelo dono do projeto; não recolocar numa revisão de design sem perguntar.**
 
 ### Aba Demandas (base do Avanço Sond)
 
@@ -321,9 +374,10 @@ defeito do refresh.
 `scriptFiltros()` (estado, `indicesFiltrados`, `montarFiltroMulti` com
 `aoMudar(cfg)`), consumido pelas duas páginas -- ver `FILTROS_SEMANAL` em
 `tools/semanal/render-semanal.js` (origem/categoria/tipologia/grupo/SUP +
-seletor de dimensão). A aba Balanço de massa ficou com 4 controles PRÓPRIOS
-(período/base/dimensão/somente ativos, em `renderControles`), não com o filtro
-de tipologia da barra como o plano original supunha. Specs de referência:
+seletor de dimensão). A aba Balanço de massa ficou com controles PRÓPRIOS
+(período/base/dimensão, em `renderControles`), não com o filtro de tipologia da
+barra como o plano original supunha. O quarto que ela tinha, "somente ativos",
+virou filtro da página inteira em 2026-08-04 — ver "Consolidado congelado" abaixo. Specs de referência:
 docs/superpowers/specs/2026-07-29-planejamento-semanal-filtros-design.md.
 
 O branch `semanal-filtros-layout-orcamento` ficou ÓRFÃO: ele saiu de um master
