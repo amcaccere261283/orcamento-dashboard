@@ -1268,24 +1268,20 @@ function montarDashboard(registros) {
   montarAbaDemandas();
 }
 
-// ---- Atualização ao vivo (busca as Sheets espelho publicadas, sem tocar
-// nos arquivos originais) -- ver docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md.
+// ---- Atualização ao vivo (busca as fontes publicadas, sem tocar nos
+// arquivos originais) -- ver docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md.
 // URL_ESPELHO_MATRIZ_SEMANAL é a MESMA Sheet publicada que o orçamento já
 // usa (tools/orcamento/render-dashboard.js) -- literal duplicado de
 // propósito, não hà como as duas páginas compartilharem uma constante JS
-// (são dois builds independentes). As outras duas saíram do placeholder em
-// 2026-08-03, quando o dono do projeto publicou a Sheet espelho do Avanço
-// Sond (ver tools/semanal/apps-script-espelho-avancos.gs, que já carrega o
-// ORIGEM_FILE_ID real).
+// (são dois builds independentes).
 //
-// As duas últimas são a MESMA Sheet publicada, abas diferentes -- o que as
-// distingue é só o gid. Conferido no ato de ligar, baixando as duas: gid
-// 943230110 traz o cabeçalho de Avanços (Contrato, Tomador, ..., Status,
-// Cancelamento) com 62.259 linhas, e gid 213649864 traz o de Lab Concluido
-// (ID Contrato, Tomadora, Tipo de Ensaio) com 100.939 -- batendo com as
-// contagens medidas no .xlsx local. Trocá-las de lugar não daria erro
-// nenhum, só faria cada parser ler a planilha errada, então NÃO confie na
-// ordem: confira o cabeçalho se um dia forem republicadas.
+// URL_ESPELHO_LAB_SEMANAL ainda vem da Sheet espelho do Avanço Sond.xlsx
+// (Apps Script copiando o .xlsx do Drive a cada 30 min, publicado como CSV,
+// aba "Lab Concluido" -- gid 213649864). Confira o cabeçalho antes de mexer
+// no gid se um dia essa Sheet for republicada: era a MESMA Sheet que também
+// publicava "Avanços" (gid 943230110), mas esse lado migrou pro CSV online
+// em 2026-08-05 (ver URL_ESPELHO_AVANCOS_SEMANAL abaixo) -- só Lab ainda usa
+// esse mecanismo.
 var URL_ESPELHO_MATRIZ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRaOjGxPYWKj-as9RwErptIND7PE_zxsND19PReV1MdOup1ZY3iAu_DGrQ0gatPyYFEy3hg-LWE2esw/pub?gid=609773455&single=true&output=csv';
 // 2026-08-05: trocado do espelho da Sheet (Apps Script copiando o .xlsx do
 // Drive) pro CSV combinado publicado junto com a própria página -- gerado
@@ -1335,16 +1331,14 @@ function gridCsvComoXlsx(texto) {
   return g;
 }
 
-// URL_ESPELHO_AVANCOS_SEMANAL/URL_ESPELHO_LAB_SEMANAL ainda são o literal
-// placeholder (ver o comentário deles acima) enquanto o dono do projeto não
-// publica o Apps Script novo -- tentar buscá-los dá HTTP 404 (não é uma URL
-// de verdade). RE_URL_PENDENTE reconhece esse estado pra degradar com
-// graça em vez de falhar tudo: enquanto QUALQUER um dos dois continuar
+// RE_URL_PENDENTE reconhece uma URL_ESPELHO_* ainda no literal placeholder
+// "PENDENTE-..." (ver o comentário delas acima) e degrada com graça em vez
+// de falhar tudo: enquanto QUALQUER uma das duas (Avanços/Lab) continuar
 // placeholder, o botão atualiza só a MATRIZ (Previsto/ticket médio) e deixa
-// window.__DEMANDAS__ como estava -- assim que o dono publicar as duas
-// abas e trocar as duas URLs, esta checagem some sozinha (as URLs reais não
-// batem no padrão) e o botão passa a atualizar os três de novo, sem
-// precisar mexer neste trecho de novo.
+// window.__DEMANDAS__ como estava. URL_ESPELHO_AVANCOS_SEMANAL não bate mais
+// nesse padrão desde 2026-08-05 (é sempre um caminho relativo real,
+// 'avancos-online.csv') -- na prática só URL_ESPELHO_LAB_SEMANAL ainda pode
+// estar pendente hoje, mas o mecanismo continua genérico pras duas.
 var RE_URL_PENDENTE = /^PENDENTE-/;
 
 // Tudo-ou-nada, mas só ENTRE as fontes que este refresh de fato tentou
