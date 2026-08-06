@@ -36,9 +36,16 @@ const { dataDeTexto } = require('./parse-avancos.js');
 const SERIAL_MIN = 44927; // 2023-01-01
 const SERIAL_MAX = 46388; // 2027-01-01
 
+// 2026-08-05: a fonte trocou de "Lab Concluido" (arquivo local, coluna
+// "Concluído Dia") para o extrato online "ensaios realizados" (coluna
+// "Ensaiado Dia") -- ver docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
+// O campo interno continua `concluidoDia`/`ensaios[].concluido` (não
+// renomeado) porque quem consome (compute-demandas.js) já trata essa data
+// como "sondagemRealizada", que é exatamente o que "Ensaiado Dia" significa
+// -- a troca de coluna alinha o dado com o nome que o código já usava.
 const COLUNAS_OBRIGATORIAS = {
   sup: 'ID Contrato',
-  concluidoDia: 'Concluído Dia',
+  concluidoDia: 'Ensaiado Dia',
   tipoEnsaio: 'Tipo de Ensaio',
 };
 

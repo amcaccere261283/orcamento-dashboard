@@ -7,7 +7,7 @@ const { parseLab, locateColunasLab, SERIAL_MIN, SERIAL_MAX } = require('../tools
 // (grid[1] é o cabeçalho) e por índice de coluna 0-based.
 const CABECALHO = [];
 CABECALHO[0] = 'ID Contrato';
-CABECALHO[3] = 'Concluído Dia';
+CABECALHO[3] = 'Ensaiado Dia';
 CABECALHO[6] = 'Tipo de Ensaio';
 
 // 2026-03-10 em serial Excel.
@@ -87,7 +87,7 @@ test('as colunas são achadas pelo NOME, não por posição fixa', () => {
   const deslocado = [];
   deslocado[1] = [];
   deslocado[1][2] = 'ID Contrato';
-  deslocado[1][5] = 'Concluído Dia';
+  deslocado[1][5] = 'Ensaiado Dia';
   deslocado[1][9] = 'Tipo de Ensaio';
   deslocado[2] = [];
   deslocado[2][2] = 'SUP-9999-26';
