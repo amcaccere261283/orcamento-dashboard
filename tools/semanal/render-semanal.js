@@ -522,6 +522,8 @@ const BUNDLE_ARQUIVOS = [
   // ordem -- nenhum dos dois consome os dois novos módulos hoje (a ligação é
   // feita em JS solto dentro de SCRIPT_CLIENTE_SEMANAL, não por require).
   'compute-equipes-produtivas.js', 'compute-equipes-nao-produtivas.js',
+  // Equipes ATIVAS via Matriz (2026-08-06): também sem require same-dir.
+  'compute-equipes-ativo-matriz.js',
   'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js',
   // filtro-ativos.js (2026-08-04) não consome nenhum módulo same-dir e pode
   // entrar cedo na lista.
@@ -603,6 +605,7 @@ var ComputeEquipes = MODULOS['compute-equipes-mobilizadas.js'];
 var ComputeEquipesAtivas = MODULOS['compute-equipes-ativas.js'];
 var ComputeEquipesProdutivas = MODULOS['compute-equipes-produtivas.js'];
 var ComputeEquipesNaoProdutivas = MODULOS['compute-equipes-nao-produtivas.js'];
+var ComputeEquipesAtivoMatriz = MODULOS['compute-equipes-ativo-matriz.js'];
 var FiltroAtivos = MODULOS['filtro-ativos.js'];
 
 var MODO_DEMANDAS = 'mensal';
@@ -1307,6 +1310,11 @@ var URL_ESPELHO_EQ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ
 var URL_ESPELHO_LAB_SEMANAL = 'lab-online.csv';
 // 2026-08-05: equipes produtivas, mesmo padrão de publicação relativa.
 var URL_ESPELHO_EQUIPES_PRODUTIVAS_SEMANAL = 'equipes-produtivas-online.csv';
+// 2026-08-06: "Ativas (total)" do dashboard Matriz (outro projeto deste
+// repositório-mãe) -- JSON público, domínio diferente do GitHub Pages desta
+// página (por isso URL absoluta, não relativa como as de cima). Alimenta o
+// Realizado de Equipes da Tabela Semanal -- ver compute-equipes-ativo-matriz.js.
+var URL_ESPELHO_EQUIPES_ATIVO_MATRIZ = 'https://amcaccere261283.github.io/suporte-infra-matriz-dashboard/historico.json';
 
 function definirStatusAtualizacaoSemanal(texto, ehErro) {
   var el = document.getElementById('status-atualizacao');
@@ -1389,11 +1397,28 @@ function atualizarDadosAoVivoSemanal() {
     avancosLabConfigurados
       ? buscarCsvSemanal(URL_ESPELHO_EQUIPES_PRODUTIVAS_SEMANAL).catch(function () { return null; })
       : Promise.resolve(null),
+    // "Ativas (total)" do dashboard Matriz (2026-08-06) -- alimenta o
+    // Realizado de Equipes da Tabela Semanal (ver compute-equipes-ativo-
+    // matriz.js). Fetch INDEPENDENTE de avancosLabConfigurados (não depende
+    // de furos nem de tipologiaPorSondador) e com .catch próprio: é outro
+    // projeto deste repositório-mãe, publicado num domínio diferente -- se o
+    // dele cair, MATRIZ/Avanços/Lab/EQ/produtivas continuam atualizando
+    // normalmente, só o Realizado de Equipes fica com o dado do build.
+    fetch(URL_ESPELHO_EQUIPES_ATIVO_MATRIZ).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).catch(function () { return null; }),
   ]).then(function (textos) {
     var registrosNovos = ParseMatrizCliente.parseMatrizCliente(ParseMatrizCliente.parseCsvGrid(textos[0]));
     if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho da MATRIZ -- confira se o Apps Script já rodou pelo menos uma vez');
 
     var demandasNovas = window.__DEMANDAS__;
+
+    // Realizado de Equipes (2026-08-06): fora do if (avancosLabConfigurados)
+    // de propósito -- é um número da empresa inteira, independente de furos.
+    if (textos[5]) {
+      demandasNovas.equipesAtivoPorDia = ComputeEquipesAtivoMatriz.agregarEquipesAtivoPorDia(textos[5]);
+    }
 
     if (avancosLabConfigurados) {
       var furosLidos = ParseAvancos.parseAvancos(gridCsvComoXlsx(textos[1])).furos;
@@ -1461,15 +1486,9 @@ function atualizarDadosAoVivoSemanal() {
       var tipologiaPorSondador = {};
       Object.keys(melhorTip).forEach(function (s) { tipologiaPorSondador[s] = melhorTip[s].tipologia; });
 
-      // campoSemFuroPorDia: FORA do if (periodoEq) porque o bloco de baixo é
-      // populado só dentro dele mesmo -- mas guardado numa var de escopo de
-      // função (mesmo raciocínio de tipologiaPorSondador acima) pro merge com
-      // produtivas, logo abaixo, sempre enxergar o valor certo.
-      var campoSemFuroPorDia = null;
       if (periodoEq) {
-        var equipesEqParaAtivas = ComputeEquipesAtivas.parseAbaEq(csvEq);
         var agregado = ComputeEquipesAtivas.agregarEquipesAtivas({
-          equipes: equipesEqParaAtivas,
+          equipes: ComputeEquipesAtivas.parseAbaEq(csvEq),
           osParaSup: osParaSup,
           tipologiaPorSondador: tipologiaPorSondador,
           nomesSondadores: Object.keys(tipologiaPorSondador),
@@ -1482,20 +1501,6 @@ function atualizarDadosAoVivoSemanal() {
         });
         demandasNovas.equipesPorDia = agregado.porDia;
         demandasNovas.equipesPeriodo = periodoEq;
-
-        // campoSemFuro alocado no último SUP conhecido -- mesmo gêmeo Node de
-        // build-dashboard.js (montarEquipesAtivas). Alimenta só o Realizado
-        // de equipes da Tabela Semanal, não o Δ equipes do Balanço.
-        var agregadoCampoSemFuro = ComputeEquipesAtivas.agregarEquipesAtivas({
-          equipes: equipesEqParaAtivas,
-          osParaSup: osParaSup,
-          tipologiaPorSondador: tipologiaPorSondador,
-          nomesSondadores: Object.keys(tipologiaPorSondador),
-          rotularTipologia: typeof rotularTipologia === 'function' ? rotularTipologia : null,
-          estadosContados: ['campoSemFuro'],
-          ano: periodoEq.ano, mes: periodoEq.mes,
-        });
-        campoSemFuroPorDia = agregadoCampoSemFuro.porDia;
       }
 
       // Equipes PRODUTIVAS (2026-08-05): mesma prioridade que o build já dá --
@@ -1520,25 +1525,12 @@ function atualizarDadosAoVivoSemanal() {
           // fonte PRIMÁRIA dele. Ver o gêmeo em build-dashboard.js.
           resolverSup: ComputeDemandas.resolverSupConhecido(registrosNovos),
         });
-        var porDiaProdutivasParaRealizado = null;
         if (Object.keys(agregadoProdutivas.porDia).length) {
-          porDiaProdutivasParaRealizado = agregadoProdutivas.porDia;
           demandasNovas.equipesPorDia = agregadoProdutivas.porDia;
           // JUNTO com equipesPorDia, sempre: produtivas cobre UM mês, e sem
           // isto escolher um mês passado desenharia Δ equipes quase zero sem o
           // aviso de "sem dado".
           demandasNovas.equipesPeriodo = agregadoProdutivas.periodo;
-        }
-
-        // Realizado de equipes para a Tabela Semanal (2026-08-06): mesmo
-        // gêmeo Node de build-dashboard.js -- produtivas + campoSemFuro
-        // alocado, independente de quem "ganhou" equipesPorDia acima. Só
-        // populado quando produtivas de fato rendeu algum dia (sem isso,
-        // campoSemFuro sozinho subestimaria o Realizado sem aviso nenhum).
-        if (porDiaProdutivasParaRealizado) {
-          demandasNovas.equipesRealizadoPorDia = campoSemFuroPorDia
-            ? ComputeEquipesAtivas.juntarPorDia([porDiaProdutivasParaRealizado, campoSemFuroPorDia])
-            : porDiaProdutivasParaRealizado;
         }
       }
 

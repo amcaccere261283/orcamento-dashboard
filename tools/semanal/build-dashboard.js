@@ -19,7 +19,8 @@ const { parseCsvGrid } = require('./parse-matriz-cliente.js');
 const { parseLab } = require('./parse-lab.js');
 const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, resolverSupConhecido } = require('./compute-demandas.js');
 const { agregarEquipesPorDia } = require('./compute-equipes-mobilizadas.js');
-const { parseAbaEq, agregarEquipesAtivas, mesDaAbaEq, juntarPorDia } = require('./compute-equipes-ativas.js');
+const { parseAbaEq, agregarEquipesAtivas, mesDaAbaEq } = require('./compute-equipes-ativas.js');
+const { agregarEquipesAtivoPorDia } = require('./compute-equipes-ativo-matriz.js');
 const { agregarEquipesProdutivas } = require('./compute-equipes-produtivas.js');
 const { agregarEquipesNaoProdutivas } = require('./compute-equipes-nao-produtivas.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
@@ -126,12 +127,12 @@ function montarEquipesAtivas(furos, csvEspelho) {
   const tipologiaPorSondador = {};
   Object.keys(melhor).forEach((s) => { tipologiaPorSondador[s] = melhor[s].tipologia; });
 
-  if (!csvEspelho) return { equipesPeriodo: null, tipologiaPorSondador, campoSemFuroPorDia: null };
+  if (!csvEspelho) return { equipesPeriodo: null, tipologiaPorSondador };
 
   const periodo = mesDaAbaEq(csvEspelho);
   if (!periodo) {
     console.warn('Equipes ativas: a espelho não trouxe cabeçalho de data reconhecível -- Δ equipes fica sem dado.');
-    return { equipesPeriodo: null, tipologiaPorSondador, campoSemFuroPorDia: null };
+    return { equipesPeriodo: null, tipologiaPorSondador };
   }
 
   const equipes = parseAbaEq(csvEspelho);
@@ -139,22 +140,6 @@ function montarEquipesAtivas(furos, csvEspelho) {
     equipes, osParaSup, tipologiaPorSondador,
     nomesSondadores: Object.keys(tipologiaPorSondador),
     rotularTipologia: rotularTipologia,
-    ano: periodo.ano, mes: periodo.mes,
-  });
-
-  // campoSemFuroPorDia (2026-08-06): a MESMA aba EQ, mas só o estado
-  // "campoSemFuro" -- equipe em campo, sem furo naquele dia, alocada no
-  // último SUP conhecido (mesma regra de ultimoSup acima). É o componente
-  // que falta pra "Realizado" de equipes na Tabela Semanal: produtivas
-  // (campo/fotos) só vê quem TIROU FOTO; uma equipe parada esperando
-  // material não aparece lá, mas continua alocada num contrato. Férias/
-  // baixada/afastada (estado 'fora') ficam de fora de qualquer SUP --
-  // pedido explícito do dono do projeto, 2026-08-06.
-  const rCampoSemFuro = agregarEquipesAtivas({
-    equipes, osParaSup, tipologiaPorSondador,
-    nomesSondadores: Object.keys(tipologiaPorSondador),
-    rotularTipologia: rotularTipologia,
-    estadosContados: ['campoSemFuro'],
     ano: periodo.ano, mes: periodo.mes,
   });
 
@@ -174,10 +159,7 @@ function montarEquipesAtivas(furos, csvEspelho) {
     console.log(`Equipes ATIVAS: ${textosNovos.length} texto(s) de dia não catalogados entraram como "em campo" pelo default -- revise se algum for ausência: ${amostra}${textosNovos.length > 5 ? ' ...' : ''}`);
   }
 
-  return {
-    equipesPorDia: r.porDia, equipesPeriodo: periodo, tipologiaPorSondador,
-    campoSemFuroPorDia: rCampoSemFuro.porDia,
-  };
+  return { equipesPorDia: r.porDia, equipesPeriodo: periodo, tipologiaPorSondador };
 }
 
 async function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
@@ -291,7 +273,7 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // -- ver renderSemanal() mais abaixo. Anexar essa chave inflaria o payload
   // sem nenhum consumidor no cliente: quem precisa dela é só o bloco de
   // equipes PRODUTIVAS logo abaixo, ainda dentro de build().
-  const { tipologiaPorSondador, campoSemFuroPorDia, ...resultadoEquipesAtivas } = montarEquipesAtivas(furos, equipesAtivasCsv);
+  const { tipologiaPorSondador, ...resultadoEquipesAtivas } = montarEquipesAtivas(furos, equipesAtivasCsv);
   Object.assign(demandas, resultadoEquipesAtivas);
   if (demandas.equipesPeriodo) fonteEquipes = 'ATIVAS (aba EQ)';
 
@@ -301,12 +283,6 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // nenhum dia utilizável. Ver
   // docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
   const CAMINHO_EQUIPES_PRODUTIVAS = path.join(__dirname, '..', '..', 'dist', 'equipes-produtivas-online.csv');
-  // Guardado À PARTE de demandas.equipesPorDia: o Realizado da Tabela Semanal
-  // (mais abaixo) sempre quer produtivas + campoSemFuro juntos, mesmo que
-  // produtivas não tenha "vencido" a disputa por equipesPorDia (ex.: ativas
-  // tinha dado mais recente e ganhou lá, mas produtivas ainda existe e serve
-  // ao Realizado). Os dois usos são perguntas diferentes.
-  let porDiaProdutivasParaRealizado = null;
   if (fs.existsSync(CAMINHO_EQUIPES_PRODUTIVAS)) {
     try {
       const csvProdutivas = fs.readFileSync(CAMINHO_EQUIPES_PRODUTIVAS, 'utf8');
@@ -335,7 +311,6 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
         resolverSup: resolverSupConhecido(registros),
       });
       if (Object.keys(porDiaProdutivas).length) {
-        porDiaProdutivasParaRealizado = porDiaProdutivas;
         demandas.equipesPorDia = porDiaProdutivas;
         // equipesPeriodo JUNTO com equipesPorDia, sempre -- ver o comentário nas
         // mobilizadas acima. periodoProdutivas sai do próprio dado (o mês mais
@@ -366,21 +341,27 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
     console.warn(`Equipes produtivas: ${CAMINHO_EQUIPES_PRODUTIVAS} não existe -- rode "node tools/semanal/atualizar-equipes-produtivas-online.js". Mantendo a fonte de reserva (ativas/mobilizadas).`);
   }
 
-  // Realizado de equipes para a Tabela Semanal (2026-08-06, pedido do dono do
-  // projeto): produtivas (campo/fotos, quem TIROU FOTO naquele dia) + campo
-  // sem furo alocado no último SUP conhecido (quem estava em campo mas não
-  // produziu -- ex.: esperando material). Férias/baixada/afastada ficam de
-  // fora de qualquer SUP, igual à decisão já tomada pra equipesNaoProdutivas.
-  // Campo INDEPENDENTE de demandas.equipesPorDia (que segue a cadeia
-  // produtivas->ativas->mobilizadas do Δ equipes do Balanço): aqui não há
-  // fallback pra mobilizadas, que é fluxo de furo e não tem esse conceito de
-  // "equipe parada, mas alocada". Só populado quando produtivas de fato
-  // rendeu algum dia -- sem produtivas, campoSemFuro sozinho subestimaria o
-  // Realizado sem nenhum aviso, então prefere ficar sem dado.
-  if (porDiaProdutivasParaRealizado) {
-    demandas.equipesRealizadoPorDia = campoSemFuroPorDia
-      ? juntarPorDia([porDiaProdutivasParaRealizado, campoSemFuroPorDia])
-      : porDiaProdutivasParaRealizado;
+  // Realizado de equipes para a Tabela Semanal (2026-08-06, recalibrado no
+  // mesmo dia: a primeira versão usava produtivas+campoSemFuro -- atividade
+  // de campo -- e o dono do projeto pediu que batesse com o "Ativas (total)"
+  // que o dashboard Matriz (tools/matriz/, outro projeto deste repositório-mãe)
+  // já publica -- um headcount de roster, conceito diferente. Em vez de
+  // reproduzir aquele pipeline (datas de admissão/desmobilização, que a aba
+  // EQ deste projeto nem lê), busca DIRETO o retrato diário já publicado --
+  // JSON público, sem CDP nem login. Ver compute-equipes-ativo-matriz.js.
+  try {
+    const respostaAtivo = await fetch('https://amcaccere261283.github.io/suporte-infra-matriz-dashboard/historico.json');
+    if (!respostaAtivo.ok) throw new Error(`HTTP ${respostaAtivo.status}`);
+    const historicoAtivo = await respostaAtivo.json();
+    demandas.equipesAtivoPorDia = agregarEquipesAtivoPorDia(historicoAtivo);
+    const diasComDado = Object.keys(demandas.equipesAtivoPorDia).length;
+    if (diasComDado) {
+      console.log(`Equipes ativas (Matriz): ${diasComDado} dia(s) de retrato lido(s) de historico.json -- alimenta o Realizado de Equipes da Tabela Semanal.`);
+    } else {
+      console.warn('Equipes ativas (Matriz): historico.json respondeu mas não trouxe nenhum ponto com "ativo" numérico -- Realizado de Equipes fica sem dado.');
+    }
+  } catch (err) {
+    console.warn(`Equipes ativas (Matriz): falha ao buscar historico.json (${err.message}) -- Realizado de Equipes fica sem dado.`);
   }
 
   // Equipes NÃO produtivas (2026-08-05): informação separada do Δ equipes,

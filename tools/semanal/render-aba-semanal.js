@@ -126,35 +126,34 @@ function pendentesNaData(registros, indices, demandas, dataEpoch) {
   return total;
 }
 
-// Média diária de equipes, através dos registros em 'indices', num intervalo
-// [inicioEpoch, fimEpoch] (inclusive nos dois extremos) -- pra Realizado da
-// dimensão Equipes na Tabela Semanal (2026-08-06). equipesRealizadoPorDia
-// (demandas.equipesRealizadoPorDia, produtivas + campoSemFuro já somados por
-// build-dashboard.js/render-semanal.js) é keyed igual a porRegistroEventos
-// (chaveDemandas), mas o valor é uma CONTAGEM por dia, não uma lista de
-// eventos -- por isso soma-e-divide em vez de contarEventosNoIntervalo.
+// Média diária de equipes ATIVAS (headcount do roster, não atividade de
+// campo) num intervalo [inicioEpoch, fimEpoch] (inclusive nos dois
+// extremos) -- pra Realizado da dimensão Equipes na Tabela Semanal
+// (2026-08-06). equipesAtivoPorDia (demandas.equipesAtivoPorDia) vem do
+// "Ativas (total)" que o dashboard Matriz já publica (ver
+// compute-equipes-ativo-matriz.js) -- um número da EMPRESA INTEIRA por dia,
+// não por (SUP, tipologia), e por isso esta função NÃO recebe registros/
+// indices: filtrar por SUP na barra de cima não muda esta linha, porque a
+// fonte não é decomponível por contrato (é roster, não produção).
 //
-// Um dia sem entrada no mapa conta 0 (ninguém trabalhou aquele SUP aquele
-// dia -- informação real, não ausência de medição), e por isso o
-// denominador é sempre o número de dias do intervalo, nunca só os dias com
-// alguma contagem: excluir dias-zero infla a média.
+// Um dia SEM retrato (ninguém publicou historico.json aquele dia -- gap,
+// não zero) fica de fora do denominador, ao contrário de outras médias
+// deste arquivo: aqui ausência É ausência de medição, não "zero equipes"
+// (a empresa não zera o quadro de um dia pro outro). Denominador só conta
+// os dias com dado real.
 //
-// null (não 0) quando equipesRealizadoPorDia não existe -- "sem fonte
-// online ainda" é diferente de "zero equipes", e renderLinhaSerie já sabe
-// desenhar null como sem-dado.
-function mediaEquipesNoIntervalo(registros, indices, equipesRealizadoPorDia, inicioEpoch, fimEpoch) {
-  if (!equipesRealizadoPorDia || fimEpoch < inicioEpoch) return null;
-  var numDias = fimEpoch - inicioEpoch + 1;
+// null quando não sobra nenhum dia com dado no intervalo -- "sem fonte
+// ainda" é diferente de "zero equipes", e renderLinhaSerie já sabe desenhar
+// null como sem-dado.
+function mediaEquipesNoIntervalo(equipesAtivoPorDia, inicioEpoch, fimEpoch) {
+  if (!equipesAtivoPorDia || fimEpoch < inicioEpoch) return null;
   var soma = 0;
+  var diasComDado = 0;
   for (var dia = inicioEpoch; dia <= fimEpoch; dia++) {
-    (indices || []).forEach(function (i) {
-      var registro = registros[i];
-      if (!registro) return;
-      var mapa = equipesRealizadoPorDia[chaveDemandas(registro.sup, registro.tipologia)];
-      if (mapa && mapa[dia]) soma += mapa[dia];
-    });
+    if (typeof equipesAtivoPorDia[dia] === 'number') { soma += equipesAtivoPorDia[dia]; diasComDado++; }
   }
-  return soma / numDias;
+  if (!diasComDado) return null;
+  return soma / diasComDado;
 }
 
 // '05' em vez de '5' -- sem toLocaleString/padStart (o resto deste módulo já
@@ -313,10 +312,13 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
       });
   }
 
-  // Realizado de Equipes (2026-08-06, pedido do dono do projeto): média
-  // diária de equipesRealizadoPorDia (produtivas + campoSemFuro, já somados
-  // por quem monta 'demandas') em cada semana -- é FOTO, não fluxo, por
-  // isso média e não soma (mesma convenção de Previsto, dividirEmSemanas).
+  // Realizado de Equipes (2026-08-06, pedido do dono do projeto -- calibrado
+  // contra historico.xlsx do Matriz depois de uma primeira versão errada):
+  // média diária de equipesAtivoPorDia (o "Ativas total" que o dashboard
+  // Matriz já publica, ver compute-equipes-ativo-matriz.js) em cada semana
+  // -- é FOTO de roster, não fluxo, por isso média e não soma (mesma
+  // convenção de Previsto, dividirEmSemanas). Número da EMPRESA INTEIRA,
+  // não decomponível por SUP -- não usa 'registros'/'indices' de propósito.
   // A janela corta em hojeEpoch, igual ao Δ equipes do Balanço (compute-
   // balanco.js): sem isso, a semana em curso diluiria a média com dias que
   // ainda não aconteceram, e uma semana inteiramente futura mostraria uma
@@ -327,7 +329,7 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
     semanasRealizado = semanas.map(function (semana) {
       if (semana.inicio > hojeEpoch) return null; // semana futura -- nada aconteceu ainda
       var fim = Math.min(semana.fim, hojeEpoch);
-      return mediaEquipesNoIntervalo(registros, indices, demandas.equipesRealizadoPorDia, semana.inicio, fim);
+      return mediaEquipesNoIntervalo(demandas.equipesAtivoPorDia, semana.inicio, fim);
     });
     fechamentoRealizado = fecharMes(semanasRealizado, dimensao);
   }
