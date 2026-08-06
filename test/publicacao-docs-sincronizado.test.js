@@ -46,6 +46,18 @@ const PARES = [
     publicado: path.join(RAIZ, 'docs', 'avancos-online.csv'),
     comando: 'cp dist/avancos-online.csv docs/avancos-online.csv',
   },
+  {
+    nome: 'CSV de Lab Realizado',
+    origem: path.join(RAIZ, 'dist', 'lab-online.csv'),
+    publicado: path.join(RAIZ, 'docs', 'lab-online.csv'),
+    comando: 'cp dist/lab-online.csv docs/lab-online.csv',
+  },
+  {
+    nome: 'CSV de Equipes produtivas',
+    origem: path.join(RAIZ, 'dist', 'equipes-produtivas-online.csv'),
+    publicado: path.join(RAIZ, 'docs', 'equipes-produtivas-online.csv'),
+    comando: 'cp dist/equipes-produtivas-online.csv docs/equipes-produtivas-online.csv',
+  },
 ];
 
 function relativo(p) {
