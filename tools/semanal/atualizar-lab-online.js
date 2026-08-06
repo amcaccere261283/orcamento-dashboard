@@ -33,7 +33,9 @@ async function main() {
     // Valida que o cabeçalho ainda tem as colunas obrigatórias ANTES de
     // gravar -- mesmo raciocínio de atualizar-avancos-online.js: protege o
     // CSV bom já publicado de ser sobrescrito por um que não dá pra ler.
-    locateColunasLab([undefined, tabela.headers]);
+    // locateColunasLab espera a LINHA de cabeçalho direto (mesma chamada que
+    // parseLab faz internamente com grid[1]) -- não um grid de 2 posições.
+    locateColunasLab(tabela.headers);
 
     const grid = [tabela.headers, ...tabela.rows];
     fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });

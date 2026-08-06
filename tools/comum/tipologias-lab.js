@@ -80,6 +80,11 @@ const MAPA_TIPO_ENSAIO_LAB = {
   'COMP.S.7D.2': 'LAB.E',
   'COMP.D.7D.2': 'LAB.E',
   'COMP.EM.3': 'LAB.E',
+  // 2026-08-06: apareceu pela primeira vez na planilha real. Mesmo padrão de
+  // COMP.EM.3 acima -- variante ".3" (3 pontos) é Especial neste laboratório,
+  // diferente da variante ".5" (COMP.EI.5/COMP.EN.5/COMP.EM.5, Convencional).
+  // Confirmado com o dono do projeto.
+  'COMP.EN.3': 'LAB.E',
 
   // Sem classificação confiável -- Especial por padrão (ver comentário acima).
   'EQ.A': 'LAB.E',

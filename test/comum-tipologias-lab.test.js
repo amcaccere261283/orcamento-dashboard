@@ -9,8 +9,12 @@ test('todo destino do mapa é LAB.C ou LAB.E, nunca outra coisa', () => {
   }
 });
 
-test('mapa tem exatamente os 61 tipos de ensaio medidos na planilha real (60 em 2026-07-31 + TRI.UU acrescentado em 2026-08-02)', () => {
-  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 61);
+test('mapa tem exatamente os 62 tipos de ensaio medidos na planilha real (60 em 2026-07-31 + TRI.UU em 2026-08-02 + COMP.EN.3 em 2026-08-06)', () => {
+  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 62);
+});
+
+test('COMP.EN.3 (achado na primeira busca online de Lab Realizado) classifica como Especial, mesmo padrão da variante ".3" já mapeada em COMP.EM.3', () => {
+  assert.strictEqual(classificarEnsaioLab('COMP.EN.3'), 'LAB.E');
 });
 
 test('TRI.UU (sem número de estágio) classifica igual à família TRI2.UU/TRI3.UU/TRI4.UU -- LAB.E', () => {
