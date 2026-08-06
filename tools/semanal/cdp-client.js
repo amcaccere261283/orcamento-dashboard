@@ -152,11 +152,15 @@ async function rasparTabelaDataTable(session, selector, { timeoutMs = 30000 } = 
       const api = window.jQuery(sel).DataTable();
       let anterior = -1;
       let estavel = 0;
+      let estabilizou = false;
       while (Date.now() < deadline) {
         const total = api.page.info().recordsTotal;
         if (total === anterior) {
           estavel++;
-          if (estavel >= 2) break;
+          if (estavel >= 2) {
+            estabilizou = true;
+            break;
+          }
         } else {
           estavel = 0;
         }
@@ -164,22 +168,34 @@ async function rasparTabelaDataTable(session, selector, { timeoutMs = 30000 } = 
         await new Promise((r) => setTimeout(r, 200));
       }
 
+      if (!estabilizou) {
+        return JSON.stringify({ __error__: 'DataTable nao estabilizou (recordsTotal nao parou de mudar): ' + sel });
+      }
+
       api.page.len(-1).draw('page');
       await new Promise((r) => setTimeout(r, 500));
 
       const table = document.querySelector(sel);
       const headers = Array.from(table.querySelectorAll('thead th')).map((th) => th.textContent.trim());
+      let descartadas = 0;
       const rows = Array.from(table.querySelectorAll('tbody tr'))
         .map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent.trim()))
-        .filter((cols) => cols.length === headers.length);
+        .filter((cols) => {
+          if (cols.length === headers.length) return true;
+          descartadas++;
+          return false;
+        });
 
-      return JSON.stringify({ headers, rows });
+      return JSON.stringify({ headers, rows, descartadas });
     })()
   `, timeoutMs + 10000);
 
   const parsed = JSON.parse(rawData);
   if (parsed.__error__) throw new Error(parsed.__error__);
-  return parsed;
+  if (parsed.descartadas > 0) {
+    console.warn(`rasparTabelaDataTable: ${parsed.descartadas} linha(s) descartada(s) por numero de colunas diferente do cabecalho em ${selector}`);
+  }
+  return { headers: parsed.headers, rows: parsed.rows };
 }
 
 // Converte {headers, rows} em objetos {header: valor}, ignorando colunas
