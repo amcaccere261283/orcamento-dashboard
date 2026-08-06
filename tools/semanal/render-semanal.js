@@ -1291,7 +1291,10 @@ var URL_ESPELHO_MATRIZ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX
 // docs/superpowers/specs/2026-08-05-avancos-online-design.md.
 var URL_ESPELHO_AVANCOS_SEMANAL = 'avancos-online.csv';
 var URL_ESPELHO_EQ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7SaAZI8VwQaZD0nPxtOyw56b1XmKfqDTC6qSkj-1PAQr4A8ihTY4vZCOhF4PuMNIYm_-hN_CNdNrX/pub?gid=199381651&single=true&output=csv';
-var URL_ESPELHO_LAB_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_Lmfr3EG4OwDb8xlc7670XrCXd2VL9vAiCjHeh8sxpLGFHNf_WgbXMGFe33XIKTXxTkaFXo8ls2eR/pub?gid=213649864&single=true&output=csv';
+// 2026-08-05: trocado do espelho da Sheet (Apps Script) pro CSV publicado
+// junto com a própria página -- mesmo padrão de URL_ESPELHO_AVANCOS_SEMANAL.
+// Ver docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
+var URL_ESPELHO_LAB_SEMANAL = 'lab-online.csv';
 
 function definirStatusAtualizacaoSemanal(texto, ehErro) {
   var el = document.getElementById('status-atualizacao');

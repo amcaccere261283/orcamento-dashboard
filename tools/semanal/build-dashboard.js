@@ -22,7 +22,6 @@ const { agregarEquipesPorDia } = require('./compute-equipes-mobilizadas.js');
 const { parseAbaEq, agregarEquipesAtivas, mesDaAbaEq } = require('./compute-equipes-ativas.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const configDemandas = require('./config-demandas.js');
-const configLab = require('./config-lab.js');
 
 // Mesmo logo/avatar do orçamento (tools/orcamento/build-dashboard.js) --
 // mesmos arquivos em assets/, mesma função de carregar, duplicada aqui de
@@ -202,11 +201,22 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // a aba Demandas nem Demandas Pendentes (ver o comentário em
   // computeDemandas, compute-demandas.js). Mesmo tratamento de erro de
   // caminho que Avanços -- ver o comentário logo acima.
+  // Fonte online (2026-08-05): substitui a aba "Lab Concluido" local por um
+  // CSV de ensaios REALIZADOS, gerado por tools/semanal/atualizar-lab-online.js
+  // (roda à parte, não a cada build). Mesmo unshift(null) de Avanços -- ver
+  // docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
+  const CAMINHO_LAB_ONLINE = path.join(__dirname, '..', '..', 'dist', 'lab-online.csv');
   let gridLab;
   try {
-    gridLab = readXlsxSheet(configLab.caminhoArquivo, configLab.nomeAba);
+    const csvTexto = fs.readFileSync(CAMINHO_LAB_ONLINE, 'utf8');
+    gridLab = parseCsvGrid(csvTexto);
+    gridLab.unshift(null);
   } catch (err) {
-    throw new Error(`Não consegui ler a aba "${configLab.nomeAba}" de ${configLab.caminhoArquivo} (o Google Drive está montado em G:?). Erro original: ${err.message}`);
+    throw new Error(
+      `Não consegui ler ${CAMINHO_LAB_ONLINE}. Rode "node tools/semanal/atualizar-lab-online.js" ` +
+      `primeiro (precisa do Chrome aberto com --remote-debugging-port=9222, logado em sond.com.br). ` +
+      `Erro original: ${err.message}`
+    );
   }
   const { ensaios: ensaiosLidos, descartadas: ensaiosDescartados } = parseLab(gridLab);
   const { itens: ensaios, redirecionados: ensaiosRedirecionados } = redirecionarSupsDesconhecidos(ensaiosLidos, registros);
