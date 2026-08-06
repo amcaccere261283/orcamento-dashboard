@@ -20,6 +20,8 @@ const { parseLab } = require('./parse-lab.js');
 const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos } = require('./compute-demandas.js');
 const { agregarEquipesPorDia } = require('./compute-equipes-mobilizadas.js');
 const { parseAbaEq, agregarEquipesAtivas, mesDaAbaEq } = require('./compute-equipes-ativas.js');
+const { agregarEquipesProdutivas } = require('./compute-equipes-produtivas.js');
+const { agregarEquipesNaoProdutivas } = require('./compute-equipes-nao-produtivas.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const configDemandas = require('./config-demandas.js');
 
@@ -91,14 +93,13 @@ async function buscarEspelhoEq() {
 // equipesAtivasPeriodo -- o {ano, mes} que a espelho cobre, que é o que a
 // página usa para saber se pode mostrar a barra no mês escolhido.
 function montarEquipesAtivas(furos, csvEspelho) {
-  if (!csvEspelho) return { equipesAtivasPeriodo: null };
-
-  const periodo = mesDaAbaEq(csvEspelho);
-  if (!periodo) {
-    console.warn('Equipes ativas: a espelho não trouxe cabeçalho de data reconhecível -- Δ equipes fica sem dado.');
-    return { equipesAtivasPeriodo: null };
-  }
-
+  // tipologiaPorSondador só depende de 'furos' -- por isso é calculada ANTES
+  // das duas saídas antecipadas abaixo (sem csvEspelho/período reconhecível),
+  // e vai em TODA saída desta função. build() precisa dele fora daqui também
+  // (equipes PRODUTIVAS, a fonte online que vira a prioridade #1 do Δ
+  // equipes -- ver o bloco logo depois da chamada a montarEquipesAtivas em
+  // build()), e antes ele era uma variável local presa a este escopo.
+  //
   // OS -> SUP, e sondador -> tipologia mais frequente dos furos dele (é o que
   // desempata as equipes com Serviços múltiplo, tipo "ST | PI | BL").
   const osParaSup = {};
@@ -119,6 +120,14 @@ function montarEquipesAtivas(furos, csvEspelho) {
   });
   const tipologiaPorSondador = {};
   Object.keys(melhor).forEach((s) => { tipologiaPorSondador[s] = melhor[s].tipologia; });
+
+  if (!csvEspelho) return { equipesAtivasPeriodo: null, tipologiaPorSondador };
+
+  const periodo = mesDaAbaEq(csvEspelho);
+  if (!periodo) {
+    console.warn('Equipes ativas: a espelho não trouxe cabeçalho de data reconhecível -- Δ equipes fica sem dado.');
+    return { equipesAtivasPeriodo: null, tipologiaPorSondador };
+  }
 
   const equipes = parseAbaEq(csvEspelho);
   const r = agregarEquipesAtivas({
@@ -144,7 +153,7 @@ function montarEquipesAtivas(furos, csvEspelho) {
     console.log(`Equipes ATIVAS: ${textosNovos.length} texto(s) de dia não catalogados entraram como "em campo" pelo default -- revise se algum for ausência: ${amostra}${textosNovos.length > 5 ? ' ...' : ''}`);
   }
 
-  return { equipesPorDia: r.porDia, equipesAtivasPeriodo: periodo };
+  return { equipesPorDia: r.porDia, equipesAtivasPeriodo: periodo, tipologiaPorSondador };
 }
 
 async function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
@@ -239,7 +248,61 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // Δ equipes ATIVAS (2026-08-03): substitui as mobilizadas acima quando a
   // Sheet espelho da aba EQ responde. Assíncrono e tolerante de propósito --
   // ver buscarEquipesAtivas.
-  Object.assign(demandas, montarEquipesAtivas(furos, equipesAtivasCsv));
+  //
+  // tipologiaPorSondador é desestruturado À PARTE (nunca entra em 'demandas')
+  // porque 'demandas' é JSON.stringify'd por inteiro pro blob cifrado do HTML
+  // -- ver renderSemanal() mais abaixo. Anexar essa chave inflaria o payload
+  // sem nenhum consumidor no cliente: quem precisa dela é só o bloco de
+  // equipes PRODUTIVAS logo abaixo, ainda dentro de build().
+  const { tipologiaPorSondador, ...resultadoEquipesAtivas } = montarEquipesAtivas(furos, equipesAtivasCsv);
+  Object.assign(demandas, resultadoEquipesAtivas);
+
+  // Δ equipes PRODUTIVAS (2026-08-05): fonte online (campo/fotos), vira a
+  // PRIMEIRA prioridade pro Δ equipes -- ativas (aba EQ, acima) e mobilizadas
+  // (furos) continuam como reserva se o CSV novo não existir ou não produzir
+  // nenhum dia utilizável. Ver
+  // docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
+  const CAMINHO_EQUIPES_PRODUTIVAS = path.join(__dirname, '..', '..', 'dist', 'equipes-produtivas-online.csv');
+  if (fs.existsSync(CAMINHO_EQUIPES_PRODUTIVAS)) {
+    try {
+      const csvProdutivas = fs.readFileSync(CAMINHO_EQUIPES_PRODUTIVAS, 'utf8');
+      const gridProdutivas = parseCsvGrid(csvProdutivas);
+      const cabecalho = gridProdutivas[0] || [];
+      const linhasProdutivas = gridProdutivas.slice(1).map((linha) => {
+        const obj = {};
+        cabecalho.forEach((h, i) => { if (h) obj[h] = linha[i]; });
+        return obj;
+      });
+      const { porDia: porDiaProdutivas, semTipologia: semTipologiaProdutivas } = agregarEquipesProdutivas({
+        linhas: linhasProdutivas,
+        tipologiaPorSondador,
+        rotularTipologia,
+      });
+      if (Object.keys(porDiaProdutivas).length) {
+        demandas.equipesPorDia = porDiaProdutivas;
+        console.log(`Equipes produtivas: fonte online em uso (${semTipologiaProdutivas} equipe-dia sem tipologia conhecida, fora da conta).`);
+      } else {
+        console.warn('Equipes produtivas: CSV existe mas não produziu nenhum dia utilizável -- mantendo a fonte de reserva (ativas/mobilizadas).');
+      }
+    } catch (err) {
+      console.warn(`Equipes produtivas: falha ao ler ${CAMINHO_EQUIPES_PRODUTIVAS} (${err.message}) -- mantendo a fonte de reserva.`);
+    }
+  } else {
+    console.warn(`Equipes produtivas: ${CAMINHO_EQUIPES_PRODUTIVAS} não existe -- rode "node tools/semanal/atualizar-equipes-produtivas-online.js". Mantendo a fonte de reserva (ativas/mobilizadas).`);
+  }
+
+  // Equipes NÃO produtivas (2026-08-05): informação separada do Δ equipes,
+  // nunca somada nele -- mesma fonte (aba EQ) que "ativas" já usa acima, sem
+  // busca nova (reaproveita o MESMO equipesAtivasCsv já obtido).
+  demandas.equipesNaoProdutivas = null;
+  if (equipesAtivasCsv) {
+    const periodoEq = mesDaAbaEq(equipesAtivasCsv);
+    if (periodoEq) {
+      const equipesEq = parseAbaEq(equipesAtivasCsv);
+      demandas.equipesNaoProdutivas = agregarEquipesNaoProdutivas({ equipes: equipesEq, ano: periodoEq.ano, mes: periodoEq.mes }).porDiaPorMotivo;
+    }
+  }
+
   const paresComEquipe = Object.keys(demandas.equipesPorDia || {}).length;
   // Sondador vazio é esperado, não perda: PENDENTE e CANCELADO não têm quem
   // executou (medido em 2026-08-03: CONCLUIDO/EXECUTADO com ZERO vazios).

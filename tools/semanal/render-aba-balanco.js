@@ -704,6 +704,23 @@ function renderAvisoEquipes(foraDaCobertura, periodoCoberto) {
     + escapeHtml(rotulo) + '. As barras de desvio de valor não são afetadas.</div>';
 }
 
+// Equipes NÃO produtivas (2026-08-05): informação separada do Δ equipes,
+// nunca somada nele -- mostra só o dia mais recente disponível no mês, por
+// motivo. Reaproveita o estilo .aviso-equipes (mesma linguagem visual
+// "informação, não erro/urgência") em vez de criar uma classe nova.
+function renderEquipesNaoProdutivas(porDiaPorMotivo) {
+  if (!porDiaPorMotivo) return '';
+  var dias = Object.keys(porDiaPorMotivo).map(Number);
+  if (!dias.length) return '';
+  var ultimoDia = Math.max.apply(null, dias);
+  var motivos = porDiaPorMotivo[ultimoDia];
+  var dataRotulo = new Date(ultimoDia * 86400000);
+  var rotulo = String(dataRotulo.getUTCDate()).padStart(2, '0') + '/'
+    + (MESES_CURTOS[dataRotulo.getUTCMonth()] || '?');
+  return '<div class="aviso-equipes">Equipes não produtivas em ' + escapeHtml(rotulo) + ': '
+    + motivos.campoSemFuro + ' em campo sem furo, ' + motivos.fora + ' férias/baixada/afastada/desligada.</div>';
+}
+
 // Recorte por semana do mês vigente: uma caixa por semana real do mês (4 a 6,
 // depende do calendário -- ver semanasDoMes), independentes entre si.
 //
@@ -788,6 +805,9 @@ function renderAbaBalanco(registros, indices, opcoes) {
   var equipesPorDia = opts.equipesPorDia;
   var equipesAtivasPeriodo = opts.equipesAtivasPeriodo;
   var hojeEpoch = opts.hojeEpoch;
+  // Equipes NÃO produtivas (2026-08-05): informação separada do Δ equipes,
+  // nunca somada nele -- ver renderEquipesNaoProdutivas abaixo.
+  var equipesNaoProdutivas = opts.equipesNaoProdutivas;
 
   var tipologias = listarTipologias(registros, indices);
 
@@ -864,6 +884,7 @@ function renderAbaBalanco(registros, indices, opcoes) {
     equipesForaDaCobertura: foraDaCoberturaDeEquipes(periodo, vigenteIdx, ano, equipesAtivasPeriodo),
     equipesAtivasPeriodo: equipesAtivasPeriodo,
   })
+    + renderEquipesNaoProdutivas(equipesNaoProdutivas)
     + renderLegenda()
     + aviso
     + '<div class="graficos-balanco">' + graficos + '</div>'

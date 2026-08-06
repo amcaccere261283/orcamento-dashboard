@@ -515,6 +515,13 @@ const BUNDLE_ARQUIVOS = [
   // ANTES de quem o desestrutura.
   'parse-matriz-cliente.js',
   'classificar-dia-equipe.js', 'compute-equipes-ativas.js',
+  // Equipes PRODUTIVAS/NÃO PRODUTIVAS (2026-08-05): nenhum dos dois tem
+  // require de outro módulo same-dir, exceto compute-equipes-nao-produtivas.js
+  // (classificar-dia-equipe.js, já registrado acima). Precisam vir ANTES de
+  // compute-balanco.js/render-aba-balanco.js só porque este bundle é lido em
+  // ordem -- nenhum dos dois consome os dois novos módulos hoje (a ligação é
+  // feita em JS solto dentro de SCRIPT_CLIENTE_SEMANAL, não por require).
+  'compute-equipes-produtivas.js', 'compute-equipes-nao-produtivas.js',
   'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js',
   // filtro-ativos.js (2026-08-04) não consome nenhum módulo same-dir e pode
   // entrar cedo na lista.
@@ -594,6 +601,8 @@ var ParseLab = MODULOS['parse-lab.js'];
 var ComputeDemandas = MODULOS['compute-demandas.js'];
 var ComputeEquipes = MODULOS['compute-equipes-mobilizadas.js'];
 var ComputeEquipesAtivas = MODULOS['compute-equipes-ativas.js'];
+var ComputeEquipesProdutivas = MODULOS['compute-equipes-produtivas.js'];
+var ComputeEquipesNaoProdutivas = MODULOS['compute-equipes-nao-produtivas.js'];
 var FiltroAtivos = MODULOS['filtro-ativos.js'];
 
 var MODO_DEMANDAS = 'mensal';
@@ -882,6 +891,7 @@ function montarAbaBalanco(registros, indices) {
     // sozinho na coluna da MATRIZ.
     equipesPorDia: window.__DEMANDAS__ && window.__DEMANDAS__.equipesPorDia,
     equipesAtivasPeriodo: window.__DEMANDAS__ && window.__DEMANDAS__.equipesAtivasPeriodo,
+    equipesNaoProdutivas: window.__DEMANDAS__ && window.__DEMANDAS__.equipesNaoProdutivas,
     // Trunca a janela de equipes em hoje: sem isso a média do mês corrente sai
     // dividida pelos dias que ainda não aconteceram (ver calcularLinhas).
     // Calculado aqui, e não no build, porque a página fica aberta e o refresh
@@ -1295,6 +1305,8 @@ var URL_ESPELHO_EQ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ
 // junto com a própria página -- mesmo padrão de URL_ESPELHO_AVANCOS_SEMANAL.
 // Ver docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
 var URL_ESPELHO_LAB_SEMANAL = 'lab-online.csv';
+// 2026-08-05: equipes produtivas, mesmo padrão de publicação relativa.
+var URL_ESPELHO_EQUIPES_PRODUTIVAS_SEMANAL = 'equipes-produtivas-online.csv';
 
 function definirStatusAtualizacaoSemanal(texto, ehErro) {
   var el = document.getElementById('status-atualizacao');
@@ -1364,6 +1376,10 @@ function atualizarDadosAoVivoSemanal() {
     // fica com o dado do build -- em vez de o botão inteiro dar erro por causa
     // da série secundária.
     buscarCsvSemanal(URL_ESPELHO_EQ_SEMANAL).catch(function () { return null; }),
+    // Equipes PRODUTIVAS (2026-08-05). Gated pelo MESMO avancosLabConfigurados
+    // dos dois de cima: sem tipologiaPorSondador (derivado dos furos) esta
+    // fonte não tem como apropriar equipe a (SUP, tipologia).
+    avancosLabConfigurados ? buscarCsvSemanal(URL_ESPELHO_EQUIPES_PRODUTIVAS_SEMANAL) : Promise.resolve(null),
   ]).then(function (textos) {
     var registrosNovos = ParseMatrizCliente.parseMatrizCliente(ParseMatrizCliente.parseCsvGrid(textos[0]));
     if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho da MATRIZ -- confira se o Apps Script já rodou pelo menos uma vez');
@@ -1434,6 +1450,38 @@ function atualizarDadosAoVivoSemanal() {
         });
         demandasNovas.equipesPorDia = agregado.porDia;
         demandasNovas.equipesAtivasPeriodo = periodoEq;
+      }
+
+      // Equipes PRODUTIVAS (2026-08-05): mesma prioridade que o build já dá --
+      // se o CSV respondeu e produz pelo menos um dia utilizável, ela GANHA de
+      // ativas/mobilizadas (setadas acima). Sem require nenhum aqui: as linhas
+      // já chegam como objetos simples via parseCsvGrid + zip contra o próprio
+      // cabeçalho, igual ao bloco Node equivalente em build-dashboard.js.
+      if (textos[4]) {
+        var gridProdutivasCliente = ParseMatrizCliente.parseCsvGrid(textos[4]);
+        var cabecalhoProdutivas = gridProdutivasCliente[0] || [];
+        var linhasProdutivasCliente = gridProdutivasCliente.slice(1).map(function (linha) {
+          var obj = {};
+          cabecalhoProdutivas.forEach(function (h, i) { if (h) obj[h] = linha[i]; });
+          return obj;
+        });
+        var agregadoProdutivas = ComputeEquipesProdutivas.agregarEquipesProdutivas({
+          linhas: linhasProdutivasCliente,
+          tipologiaPorSondador: tipologiaPorSondador,
+          rotularTipologia: typeof rotularTipologia === 'function' ? rotularTipologia : null,
+        });
+        if (Object.keys(agregadoProdutivas.porDia).length) {
+          demandasNovas.equipesPorDia = agregadoProdutivas.porDia;
+        }
+      }
+
+      // Equipes NÃO produtivas (2026-08-05): reusa o MESMO csvEq/periodoEq já
+      // obtidos acima para ativas -- nenhuma busca nova. Informação separada,
+      // nunca somada em equipesPorDia.
+      if (csvEq && periodoEq) {
+        demandasNovas.equipesNaoProdutivas = ComputeEquipesNaoProdutivas.agregarEquipesNaoProdutivas({
+          equipes: ComputeEquipesAtivas.parseAbaEq(csvEq), ano: periodoEq.ano, mes: periodoEq.mes,
+        }).porDiaPorMotivo;
       }
     }
 
