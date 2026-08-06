@@ -452,24 +452,32 @@ test('preencherLinha keeps every OTHER dimension a whole number (0 casas decimai
   assert.equal(linha.celulaTotal.textContent, '12.000');
 });
 
-test('preencherLinha esconde a Tendência (série "total") nos meses ANTES do vigente -- meses passados mostram só Previsto/Realizado na Tabela, mesmo já fechada com o Realizado por baixo (regra confirmada com o usuário: Tendência só existe do mês vigente em diante, seguindo a MATRIZ base)', () => {
-  const registro = registroExemplo();
-  const html = renderComSenha([registro]);
-  const { preencherLinha, window: sandboxWindow } = extrairFuncoesPuras(html);
-  sandboxWindow.__VIGENTE_IDX__ = 6; // Jul/2026, mesmo vigenteIdx do renderComSenha default
-  const linha = criarLinhaFake(12);
-  preencherLinha(linha, [registro.total], 'total', 'financeiro');
-  ['0', '1', '2', '3', '4', '5'].forEach((_, idx) => {
-    assert.equal(linha.celulas[idx].textContent, '—', `mês ${idx} (antes do vigente) deveria estar em branco`);
+test('preencherLinha esconde a Tendência (série "total") em todo mês que a linha Realizado já tenha, mesmo sendo o mês vigente -- mesma regra que o Gráfico já usa (ultimoMesRealizado), dirigida pelo DADO reportado, não pelo calendário (regra confirmada com o usuário em 2026-08-06, substitui o corte por window.__VIGENTE_IDX__: aquele deixava o mês vigente escapar da máscara quando ele já tinha Realizado preenchido -- Julho/2026 real mostrava Tendência igual a Realizado por causa disso)', () => {
+  const registro = registroExemplo({
+    // Realizado preenchido até Jul (idx 6), em branco dali em diante --
+    // mesmo formato da MATRIZ real (medido em 2026-08-06: Jan-Jul com
+    // Realizado, Ago-Dez só com a linha T).
+    realizado: {
+      equipes: Array(12).fill(4), equipesResumo: { pico: 0, media: 0, prod: 0, dias: 0 },
+      volume: Array(12).fill(80), volumeResumo: { total: 0, totalInicial: 0, ticket: 0 },
+      financeiro: Array(12).fill(800).map((v, i) => (i <= 6 ? v : null)), financeiroResumo: { total: 0, totalInicial: 0 },
+    },
   });
-  assert.equal(linha.celulas[6].textContent, '900', 'mês vigente continua mostrando o valor fechado');
+  const html = renderComSenha([registro]);
+  const { preencherLinha } = extrairFuncoesPuras(html);
+  const linha = criarLinhaFake(12);
+  preencherLinha(linha, [registro.total], 'total', 'financeiro', [registro.realizado]);
+  ['0', '1', '2', '3', '4', '5', '6'].forEach((_, idx) => {
+    assert.equal(linha.celulas[idx].textContent, '—', `mês ${idx} (já tem Realizado, inclusive o vigente) deveria estar em branco`);
+  });
+  assert.equal(linha.celulas[7].textContent, '900', 'primeiro mês sem Realizado mostra o valor cru da linha T');
   assert.equal(linha.celulas[11].textContent, '900', 'mês futuro continua mostrando o valor cru da linha T');
   // O Total do ano (coluna da direita) segue o MESMO corte do mensal --
-  // soma só do mês vigente (6) em diante: 6 meses x 900 = 5.400, nunca os
-  // 12 meses inteiros (ver teste de regressão abaixo pro bug real que isso
-  // corrige: somar o ano cheio conta o Realizado fechado nos meses
-  // passados de novo, inflando o Total da Tendência).
-  assert.equal(linha.celulaTotal.textContent, '5.400');
+  // soma só do que ainda não foi realizado (idx 7..11 = 5 meses x 900 =
+  // 4.500), nunca os 12 meses inteiros (ver teste de regressão abaixo pro
+  // bug real que isso corrige: somar o ano cheio conta o Realizado de novo,
+  // inflando o Total da Tendência).
+  assert.equal(linha.celulaTotal.textContent, '4.500');
 });
 
 test('preencherLinha: Total do ano da Tendência soma só do mês vigente em diante -- bug real (SUP-6498-23): a MATRIZ só tem T nos meses 6/7/8 (197.370+548.250+548.250=1.293.870), mas somar os 12 meses do valor já FECHADO com o Realizado (que preenche os meses passados com o fato real, para Alertas/Gráfico) inflava o Total pra 2.570.395', () => {
@@ -495,7 +503,7 @@ test('preencherLinha: Total do ano da Tendência soma só do mês vigente em dia
   sandboxWindow.__VIGENTE_IDX__ = 6;
   const [fechado] = fecharTendenciaVigente([registro], 6);
   const linha = criarLinhaFake(12);
-  preencherLinha(linha, [fechado.total], 'total', 'financeiro');
+  preencherLinha(linha, [fechado.total], 'total', 'financeiro', [registro.realizado]);
   assert.equal(linha.celulaTotal.textContent, '1.293.870');
 });
 

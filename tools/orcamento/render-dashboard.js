@@ -965,7 +965,7 @@ function alternarAba(aba) {
   document.getElementById('aba-alertas').classList.toggle('aba-ativa', aba === 'alertas');
 }
 
-function preencherLinha(linha, valoresLista, serie, dimensao) {
+function preencherLinha(linha, valoresLista, serie, dimensao, valoresListaRealizado) {
   // Toda a tabela principal mostra número inteiro, sem vírgula, em
   // qualquer dimensão -- diferente do gráfico, que continua com 2 casas
   // pra Financeiro/Volume/Produtividade/Ticket médio (só Equipes já tinha 0
@@ -975,31 +975,39 @@ function preencherLinha(linha, valoresLista, serie, dimensao) {
   // número (ver também renderLinhaAlerta).
   var casasDecimais = dimensao === 'produtividade' ? 2 : 0;
   var mensal = calcularMensal(valoresLista, serie, dimensao);
-  var vigenteIdx = window.__VIGENTE_IDX__;
-  var temVigente = typeof vigenteIdx === 'number';
-  // Tendência (série "total") só existe na Tabela a partir do mês vigente
-  // em diante -- meses passados mostram só Previsto/Realizado, seguindo a
-  // MATRIZ base (regra confirmada com o usuário, 2026-07-28). O valor já
-  // FECHADO com o Realizado (fecharTendenciaVigente) continua existindo por
-  // baixo pros cálculos agregados de Alertas e pro conector do Acumulado no
-  // Gráfico -- só a célula mensal (e o Total do ano logo abaixo) escondem
-  // os meses passados aqui, não o dado em si.
-  if (serie === 'total' && mensal && temVigente) {
-    mensal = mensal.map(function (v, idx) { return idx < vigenteIdx ? null : v; });
+  // Tendência (série "total") nunca mostra um mês que a linha Realizado já
+  // tenha -- mesma regra de ultimoMesRealizado que o Gráfico (painel Mensal
+  // em barra, ver construirPainelGraficoHtml) já usa pra não desenhar
+  // projeção em cima de fato. Confirmado com o usuário em 2026-08-06,
+  // substitui a regra antiga (esconder só ANTES de window.__VIGENTE_IDX__):
+  // aquela deixava o próprio mês vigente escapar da máscara quando ele já
+  // tinha Realizado preenchido -- exatamente o caso real que motivou a
+  // troca (Julho/2026 mostrava a Tendência igual ao Realizado por causa
+  // disso). A regra agora é dirigida pelo DADO que a planilha já reportou,
+  // não pelo calendário -- as duas coincidem quando o Realizado está em
+  // dia, mas não quando ele atrasa. O valor já FECHADO com o Realizado
+  // (fecharTendenciaVigente) continua existindo por baixo pros cálculos
+  // agregados de Alertas e pro conector do Acumulado no Gráfico -- só a
+  // célula mensal (e o Total do ano logo abaixo) escondem os meses já
+  // realizados aqui, não o dado em si.
+  var ultimoMesRealizado = -1;
+  if (serie === 'total') {
+    var mensalRealizado = removerZerosFinaisNaoReportados(calcularMensal(valoresListaRealizado || [], 'realizado', dimensao) || new Array(12).fill(null));
+    ultimoMesRealizado = ultimoIndiceComDado(mensalRealizado);
+    if (mensal) mensal = mensal.map(function (v, idx) { return idx <= ultimoMesRealizado ? null : v; });
   }
   var celulasMes = linha.querySelectorAll('.celula-mes');
   celulasMes.forEach(function (celula, idx) {
     celula.textContent = formatarNumero(mensal ? mensal[idx] : null, casasDecimais);
   });
   var celulaTotal = linha.querySelector('.celula-total-linha');
-  // Total do ano da Tendência soma só do mês vigente em diante (mesmo corte
-  // do mensal acima) -- incluir os meses passados fechados com o Realizado
-  // dobraria a contagem desses meses (já aparecem no Total do ano da linha
-  // Realizado) e infla o Total muito além do que ainda falta projetar (bug
-  // real: SUP com T só em 3 meses futuros somando o ano inteiro por causa
-  // do fechamento). Toda outra série continua somando o ano cheio.
-  var totalAno = (serie === 'total' && temVigente)
-    ? bucketIntervalo(valoresLista, serie, dimensao, vigenteIdx, 12)
+  // Total do ano da Tendência soma só do que ainda não foi realizado (mesmo
+  // corte do mensal acima) -- incluir os meses já cobertos pelo Realizado
+  // dobraria a contagem (já aparecem no Total do ano da linha Realizado) e
+  // infla o Total muito além do que ainda falta projetar (bug real:
+  // SUP-6498-23, ver teste de regressão).
+  var totalAno = (serie === 'total')
+    ? bucketIntervalo(valoresLista, serie, dimensao, ultimoMesRealizado + 1, 12)
     : calcularTotalAno(valoresLista, serie, dimensao);
   if (celulaTotal) celulaTotal.textContent = formatarNumero(totalAno, casasDecimais);
 }
@@ -1499,7 +1507,8 @@ function recalcularTabela() {
     linha.style.display = mostra ? '' : 'none';
     if (mostra) {
       var valoresLista = indices.map(function (idx) { return window.__REGISTROS__[idx][linha.dataset.serie]; });
-      preencherLinha(linha, valoresLista, linha.dataset.serie, linha.dataset.dimensao);
+      var valoresListaRealizado = indices.map(function (idx) { return window.__REGISTROS__[idx].realizado; });
+      preencherLinha(linha, valoresLista, linha.dataset.serie, linha.dataset.dimensao, valoresListaRealizado);
     }
   });
   mesclarColunasRepetidas();
