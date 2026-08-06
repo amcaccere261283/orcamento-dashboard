@@ -8,14 +8,16 @@
 // Financeiro. A tabela não tem coluna Tipo -- quem chama injeta
 // tipologiaPorSondador (mesmo mapa que build-dashboard.js já calcula pra
 // equipes ativas, a partir da tipologia mais frequente nos furos do
-// sondador).
+// sondador) -- e esse mapa JÁ VEM ROTULADO (parse-avancos.js chama
+// rotularTipologia() ao montar cada furo), então este módulo usa o valor
+// direto, sem traduzir de novo (ver o comentário no corpo de
+// agregarEquipesProdutivas sobre o bug que essa segunda tradução causava).
 //
 // Mesmo formato de saída (porDia) que compute-equipes-ativas.js já produz,
 // pra plugar no mesmo lugar em build-dashboard.js.
 //
-// TRÊS COISAS INJETADAS, nenhuma resolvida aqui dentro (2026-08-05):
+// DUAS COISAS INJETADAS, nenhuma resolvida aqui dentro (2026-08-05):
 //
-//   - rotularTipologia: traduz a tipologia crua do furo pro rótulo da MATRIZ.
 //   - resolverSup(contrato, tipologia) -> sup: dá a chance de quem chama mandar
 //     um par (contrato, tipologia) que a MATRIZ não conhece pro registro
 //     "Diversos", em vez de o par sumir do Δ equipes em silêncio. Este módulo
@@ -77,7 +79,6 @@ function agregarEquipesProdutivas(opcoes) {
   const o = opcoes || {};
   const linhas = o.linhas || [];
   const tipologiaPorSondador = o.tipologiaPorSondador || {};
-  const rotular = o.rotularTipologia || ((t) => t);
   const resolverSup = o.resolverSup || ((contrato) => contrato);
 
   // contrato||tipologia||diaEpoch -> Set(sondador)
@@ -97,10 +98,19 @@ function agregarEquipesProdutivas(opcoes) {
     const diaEpoch = diaEpochDeTextoBr(linha['Data']);
     if (!contrato || !sondador || diaEpoch === null) continue;
 
-    const tipologiaCrua = tipologiaPorSondador[sondador];
-    if (!tipologiaCrua) { semTipologiaDias.add(`${sondador}||${diaEpoch}`); continue; }
-    let tipologia;
-    try { tipologia = rotular(tipologiaCrua); } catch { tipologia = null; }
+    // tipologiaPorSondador JÁ VEM ROTULADA -- é construída (build-dashboard.js/
+    // render-semanal.js) a partir de furos.tipologia, e parse-avancos.js já
+    // chama rotularTipologia() internamente ao montar cada furo (linha ~153).
+    // Reaplicar rotularTipologia() aqui (bug real, corrigido em 2026-08-06)
+    // recebia um rótulo já traduzido tipo "SM / SM.F / SR" e o tratava como
+    // crua -- rotularTipologia lança em rótulo desconhecido, o catch virava
+    // null, e TODO sondador cuja tipologia mais frequente fosse "SM / SM.F /
+    // SR" ou "Especiais" (os únicos rótulos não-idênticos ao próprio nome)
+    // sumia silenciosamente pra semTipologia. Só não estourou nos testes
+    // porque a fixture usava "SP", que por acaso É idêntico rotulado (SP ->
+    // SP), mascarando o bug. Medido ao vivo: 01/08/2026 tinha 53 sondadores
+    // produtivos e só 33 equipe-dia sobreviviam à segunda rotulação.
+    const tipologia = tipologiaPorSondador[sondador];
     if (!tipologia) { semTipologiaDias.add(`${sondador}||${diaEpoch}`); continue; }
 
     // ANTES do Set: ver "ATENÇÃO À ORDEM" no topo.

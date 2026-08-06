@@ -1514,7 +1514,6 @@ function atualizarDadosAoVivoSemanal() {
         var agregadoProdutivas = ComputeEquipesProdutivas.agregarEquipesProdutivas({
           linhas: linhasProdutivasCliente,
           tipologiaPorSondador: tipologiaPorSondador,
-          rotularTipologia: typeof rotularTipologia === 'function' ? rotularTipologia : null,
           // MESMO redirecionamento que furos/ensaios levam nas duas linhas do
           // topo deste bloco: par (contrato, tipologia) que a MATRIZ não conhece
           // vira "Diversos" em vez de sumir do Δ equipes -- e produtivas é a

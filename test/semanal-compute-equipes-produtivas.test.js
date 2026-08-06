@@ -154,12 +154,31 @@ test('agregarEquipesProdutivas devolve periodo null quando nenhum dia foi contad
   assert.equal(periodo, null);
 });
 
-test('agregarEquipesProdutivas aplica rotularTipologia quando fornecida', () => {
-  const { porDia } = agregarEquipesProdutivas({
+// REGRESSÃO (2026-08-06): tipologiaPorSondador já vem ROTULADA (parse-avancos.js
+// chama rotularTipologia() ao montar cada furo) -- este módulo usa o valor
+// direto, sem traduzir de novo. A versão anterior chamava rotularTipologia()
+// aqui dentro, recebendo um rótulo JÁ traduzido como "SM / SM.F / SR" e
+// tratando como se fosse cru; rotularTipologia lança em rótulo desconhecido,
+// o catch virava null, e o sondador sumia pra semTipologia -- silenciosamente,
+// porque a fixture anterior usava "SM" (cru) em vez do valor real que
+// tipologiaPorSondador contém. Medido ao vivo em 01/08/2026: 53 sondadores
+// produtivos, só 33 sobreviviam à segunda rotulação (a maioria era SM).
+test('agregarEquipesProdutivas usa tipologiaPorSondador DIRETO, sem rotular de novo -- rótulos compostos como "SM / SM.F / SR" não podem sumir', () => {
+  const { porDia, semTipologia } = agregarEquipesProdutivas({
     linhas: [{ 'Contrato Financeiro': 'SUP-1', Data: '01/08/2026', Sondador: 'Alguem' }],
-    tipologiaPorSondador: { Alguem: 'SM' },
-    rotularTipologia: (t) => (t === 'SM' ? 'SM / SM.F / SR' : t),
+    tipologiaPorSondador: { Alguem: 'SM / SM.F / SR' },
   });
   const dia1 = Math.floor(Date.UTC(2026, 7, 1) / 86400000);
   assert.equal(porDia['SUP-1||SM / SM.F / SR'][dia1], 1);
+  assert.equal(semTipologia, 0);
+});
+
+test('agregarEquipesProdutivas: "Especiais" (outro rótulo composto/não-idêntico) também não pode sumir', () => {
+  const { porDia, semTipologia } = agregarEquipesProdutivas({
+    linhas: [{ 'Contrato Financeiro': 'SUP-1', Data: '01/08/2026', Sondador: 'Alguem' }],
+    tipologiaPorSondador: { Alguem: 'Especiais' },
+  });
+  const dia1 = Math.floor(Date.UTC(2026, 7, 1) / 86400000);
+  assert.equal(porDia['SUP-1||Especiais'][dia1], 1);
+  assert.equal(semTipologia, 0);
 });

@@ -332,7 +332,6 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
       } = agregarEquipesProdutivas({
         linhas: linhasProdutivas,
         tipologiaPorSondador,
-        rotularTipologia,
         resolverSup: resolverSupConhecido(registros),
       });
       if (Object.keys(porDiaProdutivas).length) {
