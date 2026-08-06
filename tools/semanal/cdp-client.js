@@ -126,4 +126,72 @@ async function fetchBuffer(session, urlPath) {
   return Buffer.from(base64, 'base64');
 }
 
-module.exports = { abrirSessao, fecharSessao, checarConexao, fetchJson, fetchBuffer };
+// Le uma tabela renderizada por jQuery DataTables, forcando ela a mostrar
+// TODAS as linhas antes de ler -- as tabelas de sond.com.br as vezes paginam
+// so visualmente (dados ja carregados no client, DOM so com a pagina atual
+// ate pedir page.len(-1)). Confirmado ao vivo em campo/fotos: uma leitura
+// sem esperar o DataTable estabilizar acha recordsTotal 0.
+async function rasparTabelaDataTable(session, selector, { timeoutMs = 30000 } = {}) {
+  const rawData = await session.evaluate(`
+    (async () => {
+      const deadline = Date.now() + ${timeoutMs};
+      const sel = ${JSON.stringify(selector)};
+
+      function apiPronta() {
+        return window.jQuery && window.jQuery.fn && window.jQuery.fn.DataTable &&
+          window.jQuery.fn.DataTable.isDataTable(sel);
+      }
+
+      while (!apiPronta() && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      if (!apiPronta()) {
+        return JSON.stringify({ __error__: 'DataTable nao inicializou: ' + sel });
+      }
+
+      const api = window.jQuery(sel).DataTable();
+      let anterior = -1;
+      let estavel = 0;
+      while (Date.now() < deadline) {
+        const total = api.page.info().recordsTotal;
+        if (total === anterior) {
+          estavel++;
+          if (estavel >= 2) break;
+        } else {
+          estavel = 0;
+        }
+        anterior = total;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+
+      api.page.len(-1).draw('page');
+      await new Promise((r) => setTimeout(r, 500));
+
+      const table = document.querySelector(sel);
+      const headers = Array.from(table.querySelectorAll('thead th')).map((th) => th.textContent.trim());
+      const rows = Array.from(table.querySelectorAll('tbody tr'))
+        .map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent.trim()))
+        .filter((cols) => cols.length === headers.length);
+
+      return JSON.stringify({ headers, rows });
+    })()
+  `, timeoutMs + 10000);
+
+  const parsed = JSON.parse(rawData);
+  if (parsed.__error__) throw new Error(parsed.__error__);
+  return parsed;
+}
+
+// Converte {headers, rows} em objetos {header: valor}, ignorando colunas
+// sem nome (ex.: a coluna de icone de "Acoes" no fim de algumas tabelas).
+function linhasComoObjetos({ headers, rows }) {
+  return rows.map((cols) => {
+    const obj = {};
+    headers.forEach((h, i) => {
+      if (h) obj[h] = cols[i];
+    });
+    return obj;
+  });
+}
+
+module.exports = { abrirSessao, fecharSessao, checarConexao, fetchJson, fetchBuffer, rasparTabelaDataTable, linhasComoObjetos };
