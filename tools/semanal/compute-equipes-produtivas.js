@@ -12,6 +12,34 @@
 //
 // Mesmo formato de saída (porDia) que compute-equipes-ativas.js já produz,
 // pra plugar no mesmo lugar em build-dashboard.js.
+//
+// TRÊS COISAS INJETADAS, nenhuma resolvida aqui dentro (2026-08-05):
+//
+//   - rotularTipologia: traduz a tipologia crua do furo pro rótulo da MATRIZ.
+//   - resolverSup(contrato, tipologia) -> sup: dá a chance de quem chama mandar
+//     um par (contrato, tipologia) que a MATRIZ não conhece pro registro
+//     "Diversos", em vez de o par sumir do Δ equipes em silêncio. Este módulo
+//     NÃO conhece a MATRIZ (nem registros, nem chaveMatriz, nem o literal
+//     "Diversos") -- ele só chama o resolvedor e conta quantas vezes a resposta
+//     mudou a chave. A fonte da verdade é redirecionarSupsDesconhecidos
+//     (compute-demandas.js), a MESMA que furos e ensaios já usam. Sem isso,
+//     agora que produtivas é a fonte PRIMÁRIA do Δ equipes, todo contrato fora
+//     da MATRIZ derrubaria o número principal sem nenhum aviso.
+//     ATENÇÃO À ORDEM: o resolvedor roda ANTES do Set de sondadores, para que
+//     dois contratos desconhecidos que caem no mesmo "Diversos" no mesmo dia
+//     contem o mesmo sondador UMA vez -- exatamente como
+//     compute-equipes-mobilizadas.js, que agrega furos JÁ redirecionados.
+//     Redirecionar o porDia depois de agregar não conseguiria isso: os valores
+//     já são contagens, a identidade do sondador se perdeu.
+//   - (nada mais) -- fs, CDP e leitura de CSV ficam em
+//     atualizar-equipes-produtivas-online.js / build-dashboard.js.
+//
+// 'periodo' na saída ({ano, mes} ou null) descreve QUAL MÊS este porDia cobre
+// -- derivado do próprio dado (o mês mais frequente entre os dias contados),
+// não de um relógio. Quem consome é foraDaCoberturaDeEquipes
+// (compute-balanco.js): a busca cobre UM mês (primeiro..último dia), então
+// desenhar essa barra num mês diferente daria a "barra zero enganosa" que este
+// projeto já corrigiu em 2026-08-01/03.
 
 const RE_DATA_BR = /^(\d{2})\/(\d{2})\/(\d{4})$/;
 
@@ -24,15 +52,44 @@ function diaEpochDeTextoBr(texto) {
   return Math.floor(Date.UTC(ano, mes - 1, dia) / 86400000);
 }
 
+// O mês que mais aparece entre os dias contados -- ver o comentário sobre
+// 'periodo' no topo. A busca é sempre de primeiro a último dia de UM mês
+// (atualizar-equipes-produtivas-online.js), então na prática há um só; o
+// "mais frequente" é só o desempate honesto se um dia vizinho escapar.
+function periodoDominante(diasEpoch) {
+  const contagem = new Map();
+  for (const dia of diasEpoch) {
+    const d = new Date(dia * 86400000);
+    const chave = `${d.getUTCFullYear()}||${d.getUTCMonth() + 1}`;
+    contagem.set(chave, (contagem.get(chave) || 0) + 1);
+  }
+  let melhorChave = null;
+  let melhorN = 0;
+  for (const [chave, n] of contagem) {
+    if (n > melhorN) { melhorN = n; melhorChave = chave; }
+  }
+  if (!melhorChave) return null;
+  const partes = melhorChave.split('||');
+  return { ano: Number(partes[0]), mes: Number(partes[1]) };
+}
+
 function agregarEquipesProdutivas(opcoes) {
   const o = opcoes || {};
   const linhas = o.linhas || [];
   const tipologiaPorSondador = o.tipologiaPorSondador || {};
   const rotular = o.rotularTipologia || ((t) => t);
+  const resolverSup = o.resolverSup || ((contrato) => contrato);
 
-  // contrato -> diaEpoch -> Set(sondador)
+  // contrato||tipologia||diaEpoch -> Set(sondador)
   const sondadoresPorContratoDia = new Map();
-  let semTipologia = 0;
+  // semTipologia conta EQUIPE-DIA distinta (sondador, dia), não linha de CSV:
+  // a tabela é uma linha por FOTO (~1.900 fotos/dia), e contar linhas imprimia
+  // um número de 5 dígitos num log que diz "equipe-dia" -- o que parece perda
+  // catastrófica de dado quando é só artefato da contagem de fotos.
+  const semTipologiaDias = new Set();
+  // Pares (contrato, tipologia) DISTINTOS que o resolvedor mandou pra outro
+  // SUP. Distintos, e não linhas, pela mesma razão de semTipologia acima.
+  const paresRedirecionados = new Set();
 
   for (const linha of linhas) {
     const contrato = String(linha['Contrato Financeiro'] || '').trim();
@@ -41,26 +98,41 @@ function agregarEquipesProdutivas(opcoes) {
     if (!contrato || !sondador || diaEpoch === null) continue;
 
     const tipologiaCrua = tipologiaPorSondador[sondador];
-    if (!tipologiaCrua) { semTipologia++; continue; }
+    if (!tipologiaCrua) { semTipologiaDias.add(`${sondador}||${diaEpoch}`); continue; }
     let tipologia;
     try { tipologia = rotular(tipologiaCrua); } catch { tipologia = null; }
-    if (!tipologia) { semTipologia++; continue; }
+    if (!tipologia) { semTipologiaDias.add(`${sondador}||${diaEpoch}`); continue; }
 
-    const chaveContrato = `${contrato}||${tipologia}||${diaEpoch}`;
+    // ANTES do Set: ver "ATENÇÃO À ORDEM" no topo.
+    let sup;
+    try { sup = resolverSup(contrato, tipologia); } catch { sup = contrato; }
+    if (!sup) sup = contrato;
+    if (sup !== contrato) paresRedirecionados.add(`${contrato}||${tipologia}`);
+
+    const chaveContrato = `${sup}||${tipologia}||${diaEpoch}`;
     if (!sondadoresPorContratoDia.has(chaveContrato)) sondadoresPorContratoDia.set(chaveContrato, new Set());
     sondadoresPorContratoDia.get(chaveContrato).add(sondador);
   }
 
   const porDia = {};
+  const diasContados = [];
   for (const [chaveContrato, sondadores] of sondadoresPorContratoDia) {
-    const [contrato, tipologia, diaEpochTexto] = chaveContrato.split('||');
-    const chave = `${contrato}||${tipologia}`;
-    const diaEpoch = Number(diaEpochTexto);
+    // lastIndexOf, não indexOf: a chave é `sup||tipologia||dia` e é o ÚLTIMO
+    // separador que delimita o dia -- um SUP com '||' no nome não desalinharia.
+    const corte = chaveContrato.lastIndexOf('||');
+    const chave = chaveContrato.slice(0, corte);
+    const diaEpoch = Number(chaveContrato.slice(corte + 2));
     if (!porDia[chave]) porDia[chave] = {};
     porDia[chave][diaEpoch] = sondadores.size;
+    diasContados.push(diaEpoch);
   }
 
-  return { porDia, semTipologia };
+  return {
+    porDia,
+    semTipologia: semTipologiaDias.size,
+    redirecionados: paresRedirecionados.size,
+    periodo: periodoDominante(diasContados),
+  };
 }
 
-module.exports = { agregarEquipesProdutivas, diaEpochDeTextoBr };
+module.exports = { agregarEquipesProdutivas, diaEpochDeTextoBr, periodoDominante };

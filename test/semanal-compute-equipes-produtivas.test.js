@@ -54,6 +54,106 @@ test('agregarEquipesProdutivas ignora linhas sem contrato, sem data ou sem sonda
   assert.equal(semTipologia, 0);
 });
 
+// --- semTipologia conta EQUIPE-DIA, não FOTO (correção de 2026-08-05) -------
+// A tabela de campo/fotos tem uma linha por FOTO (~1.900/dia). Contar linhas
+// fazia o log do build imprimir um número de 5 dígitos numa frase que diz
+// "equipe-dia sem tipologia conhecida" -- que se lê como perda catastrófica de
+// dado na primeira execução real, sendo só artefato da contagem de fotos.
+test('agregarEquipesProdutivas deduplica semTipologia por (sondador, dia) -- 3 fotos do mesmo sondador no mesmo dia contam 1', () => {
+  const { porDia, semTipologia } = agregarEquipesProdutivas({
+    linhas: [
+      { 'Contrato Financeiro': 'SUP-1', Data: '01/08/2026', Sondador: 'Alguem Desconhecido' },
+      { 'Contrato Financeiro': 'SUP-1', Data: '01/08/2026', Sondador: 'Alguem Desconhecido' },
+      { 'Contrato Financeiro': 'SUP-2', Data: '01/08/2026', Sondador: 'Alguem Desconhecido' },
+    ],
+    tipologiaPorSondador: {},
+  });
+  assert.deepEqual(porDia, {});
+  assert.equal(semTipologia, 1, '3 fotos, 1 sondador, 1 dia -> 1 equipe-dia sem tipologia (era 3 antes da correção)');
+});
+
+test('agregarEquipesProdutivas conta semTipologia por dia distinto e por sondador distinto', () => {
+  const { semTipologia } = agregarEquipesProdutivas({
+    linhas: [
+      { 'Contrato Financeiro': 'SUP-1', Data: '01/08/2026', Sondador: 'Fulano' },
+      { 'Contrato Financeiro': 'SUP-1', Data: '02/08/2026', Sondador: 'Fulano' },  // outro dia
+      { 'Contrato Financeiro': 'SUP-1', Data: '01/08/2026', Sondador: 'Beltrano' }, // outro sondador
+    ],
+    tipologiaPorSondador: {},
+  });
+  assert.equal(semTipologia, 3);
+});
+
+// --- resolverSup: par desconhecido vai pra "Diversos" (Fix 4, 2026-08-05) ---
+// Produtivas é a fonte PRIMÁRIA do Δ equipes. Sem redirecionar, todo contrato
+// que a MATRIZ não conhece sumia do número principal em silêncio -- enquanto
+// furos e ensaios (as fontes de reserva) já passavam por
+// redirecionarSupsDesconhecidos.
+test('agregarEquipesProdutivas manda par (contrato, tipologia) desconhecido pro SUP que resolverSup devolver', () => {
+  const conhecidos = new Set(['SUP-CONHECIDO||SP']);
+  const resolverSup = (contrato, tipologia) => (conhecidos.has(contrato + '||' + tipologia) ? contrato : 'Diversos');
+  const { porDia, redirecionados } = agregarEquipesProdutivas({
+    linhas: [
+      { 'Contrato Financeiro': 'SUP-CONHECIDO', Data: '01/08/2026', Sondador: 'Fulano' },
+      { 'Contrato Financeiro': 'SUP-FORA-DA-MATRIZ', Data: '01/08/2026', Sondador: 'Beltrano' },
+    ],
+    tipologiaPorSondador: { Fulano: 'SP', Beltrano: 'SP' },
+    resolverSup,
+  });
+  const dia1 = Math.floor(Date.UTC(2026, 7, 1) / 86400000);
+  assert.equal(porDia['SUP-CONHECIDO||SP'][dia1], 1, 'o par conhecido fica onde está');
+  assert.ok(porDia['Diversos||SP'], 'o par desconhecido precisa aparecer em Diversos, nunca desaparecer');
+  assert.equal(porDia['Diversos||SP'][dia1], 1);
+  assert.equal(redirecionados, 1, 'conta PARES distintos redirecionados, não linhas de foto');
+});
+
+// Esta é a razão de o redirecionamento acontecer ANTES do Set de sondadores, e
+// não sobre o porDia já agregado: redirecionar depois somaria contagens
+// fechadas, e o mesmo sondador em dois contratos desconhecidos no mesmo dia
+// viraria 2 equipes. É o mesmo comportamento de compute-equipes-mobilizadas.js,
+// que agrega furos JÁ redirecionados.
+test('agregarEquipesProdutivas não duplica o sondador que trabalhou em DOIS contratos desconhecidos no mesmo dia', () => {
+  const { porDia, redirecionados } = agregarEquipesProdutivas({
+    linhas: [
+      { 'Contrato Financeiro': 'SUP-FORA-A', Data: '01/08/2026', Sondador: 'Fulano' },
+      { 'Contrato Financeiro': 'SUP-FORA-B', Data: '01/08/2026', Sondador: 'Fulano' },
+    ],
+    tipologiaPorSondador: { Fulano: 'SP' },
+    resolverSup: () => 'Diversos',
+  });
+  const dia1 = Math.floor(Date.UTC(2026, 7, 1) / 86400000);
+  assert.equal(
+    porDia['Diversos||SP'][dia1], 1,
+    'um sondador é UMA equipe naquele dia, mesmo caindo em Diversos por dois contratos diferentes'
+  );
+  assert.equal(redirecionados, 2, 'dois pares distintos foram redirecionados');
+});
+
+test('agregarEquipesProdutivas sem resolverSup mantém o contrato cru (retrocompatível) e não reporta redirecionamento', () => {
+  const { porDia, redirecionados } = agregarEquipesProdutivas({
+    linhas: [{ 'Contrato Financeiro': 'SUP-QUALQUER', Data: '01/08/2026', Sondador: 'Fulano' }],
+    tipologiaPorSondador: { Fulano: 'SP' },
+  });
+  assert.ok(porDia['SUP-QUALQUER||SP']);
+  assert.equal(redirecionados, 0);
+});
+
+// --- periodo: qual mês este porDia cobre (Fix 5, 2026-08-05) ----------------
+// Alimenta foraDaCoberturaDeEquipes (compute-balanco.js). Sai do PRÓPRIO DADO,
+// não de um relógio: o build pode rodar num dia diferente do da busca.
+test('agregarEquipesProdutivas devolve o periodo {ano, mes} derivado dos dias contados', () => {
+  const { periodo } = agregarEquipesProdutivas({
+    linhas: LINHAS_FIXTURE,
+    tipologiaPorSondador: TIPOLOGIA_POR_SONDADOR,
+  });
+  assert.deepEqual(periodo, { ano: 2026, mes: 8 }, 'a fixture é toda de agosto/2026');
+});
+
+test('agregarEquipesProdutivas devolve periodo null quando nenhum dia foi contado', () => {
+  const { periodo } = agregarEquipesProdutivas({ linhas: [], tipologiaPorSondador: {} });
+  assert.equal(periodo, null);
+});
+
 test('agregarEquipesProdutivas aplica rotularTipologia quando fornecida', () => {
   const { porDia } = agregarEquipesProdutivas({
     linhas: [{ 'Contrato Financeiro': 'SUP-1', Data: '01/08/2026', Sondador: 'Alguem' }],

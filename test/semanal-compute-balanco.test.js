@@ -464,7 +464,7 @@ test('equipes: fora do mês coberto pela aba EQ, fica SEM DADO -- nunca zero', (
   const cfg = cenarioSemanas({ semanasSelecionadas: null });
   cfg.dimensao = 'equipes';
   cfg.equipesPorDia = { 'SUP-0001-24||ST': {} };
-  cfg.equipesAtivasPeriodo = { ano: ANO_TESTE, mes: 8 }; // espelho traz agosto
+  cfg.equipesPeriodo = { ano: ANO_TESTE, mes: 8 }; // espelho traz agosto
   // ...mas o Balanço está em julho (VIGENTE_JULHO = 6).
   assert.strictEqual(calcularLinhas(cfg)[0].equipesRealizado, null);
 });
@@ -476,8 +476,47 @@ test('equipes: no mês coberto, o dado aparece normalmente', () => {
   const porDia = {};
   for (let d = semanas[0].inicio; d <= semanas[semanas.length - 1].fim; d++) porDia[d] = 2;
   cfg.equipesPorDia = { 'SUP-0001-24||ST': porDia };
-  cfg.equipesAtivasPeriodo = { ano: ANO_TESTE, mes: 7 }; // julho, o mês do cenário
+  cfg.equipesPeriodo = { ano: ANO_TESTE, mes: 7 }; // julho, o mês do cenário
   assert.ok(Math.abs(calcularLinhas(cfg)[0].equipesRealizado - 2) < 0.0001);
+});
+
+// --- O gate é AGNÓSTICO DE FONTE (correção da revisão final, 2026-08-05) ----
+// Antes o campo se chamava equipesAtivasPeriodo, e null significava
+// "mobilizadas, ano inteiro, sem restrição" -- pular a checagem estava certo.
+// Com equipes PRODUTIVAS (campo/fotos) na frente da fila, passou a ser possível
+// ter dado de UM MÊS SÓ com o campo de ativas null (espelho da aba EQ fora do
+// ar): aí escolher um mês passado desenhava um Δ equipes quase zero SEM aviso
+// -- a "barra zero enganosa" que este projeto já corrigiu em 2026-08-01/03.
+// Estes três testes prendem as três fontes possíveis.
+test('equipes: com o mapa vindo de PRODUTIVAS (um mês só), outro mês fica SEM DADO -- o gate não é exclusivo da aba EQ', () => {
+  const cfg = cenarioSemanas({ semanasSelecionadas: null });
+  cfg.dimensao = 'equipes';
+  const semanas = semanasDoMes(ANO_TESTE, VIGENTE_JULHO);
+  // Mapa CHEIO de dado, para o teste falhar por causa do gate e não por falta
+  // de números: sem o gate isto vira uma barra desenhada com dado de agosto
+  // enquanto a tela diz julho.
+  const porDia = {};
+  for (let d = semanas[0].inicio; d <= semanas[semanas.length - 1].fim; d++) porDia[d] = 2;
+  cfg.equipesPorDia = { 'SUP-0001-24||ST': porDia };
+  cfg.equipesPeriodo = { ano: ANO_TESTE, mes: 8 }; // produtivas trouxe AGOSTO
+  assert.strictEqual(
+    calcularLinhas(cfg)[0].equipesRealizado, null,
+    'produtivas cobre o mês que foi buscado; num mês diferente tem de ser sem-dado, com aviso'
+  );
+});
+
+test('equipes: com o mapa vindo de MOBILIZADAS (ano inteiro), nenhum mês é barrado -- equipesPeriodo null segue significando "sem restrição"', () => {
+  const cfg = cenarioSemanas({ semanasSelecionadas: null });
+  cfg.dimensao = 'equipes';
+  const semanas = semanasDoMes(ANO_TESTE, VIGENTE_JULHO);
+  const porDia = {};
+  for (let d = semanas[0].inicio; d <= semanas[semanas.length - 1].fim; d++) porDia[d] = 2;
+  cfg.equipesPorDia = { 'SUP-0001-24||ST': porDia };
+  cfg.equipesPeriodo = null; // mobilizadas: Avanço Sond cobre o ano inteiro
+  assert.ok(
+    Math.abs(calcularLinhas(cfg)[0].equipesRealizado - 2) < 0.0001,
+    'as mobilizadas não têm mês a restringir -- barrar aqui seria regressão do comportamento anterior à branch'
+  );
 });
 
 test('equipes: "Acumulado até o mês" nunca é coberto por um mapa de um mês só', () => {
@@ -487,7 +526,7 @@ test('equipes: "Acumulado até o mês" nunca é coberto por um mapa de um mês s
   cfg.dimensao = 'equipes';
   cfg.periodo = 'acumuladoAteMes';
   cfg.equipesPorDia = { 'SUP-0001-24||ST': {} };
-  cfg.equipesAtivasPeriodo = { ano: ANO_TESTE, mes: 7 };
+  cfg.equipesPeriodo = { ano: ANO_TESTE, mes: 7 };
   assert.strictEqual(calcularLinhas(cfg)[0].equipesRealizado, null);
 });
 

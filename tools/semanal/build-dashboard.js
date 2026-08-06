@@ -17,7 +17,7 @@ const config = require('../orcamento/config.js');
 const { parseAvancos } = require('./parse-avancos.js');
 const { parseCsvGrid } = require('./parse-matriz-cliente.js');
 const { parseLab } = require('./parse-lab.js');
-const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos } = require('./compute-demandas.js');
+const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, resolverSupConhecido } = require('./compute-demandas.js');
 const { agregarEquipesPorDia } = require('./compute-equipes-mobilizadas.js');
 const { parseAbaEq, agregarEquipesAtivas, mesDaAbaEq } = require('./compute-equipes-ativas.js');
 const { agregarEquipesProdutivas } = require('./compute-equipes-produtivas.js');
@@ -90,8 +90,13 @@ async function buscarEspelhoEq() {
 
 // furos (do Avanço Sond) + csv da espelho -> o que o cliente precisa para o
 // Δ equipes ATIVAS. Devolve equipesPorDia (substituindo as mobilizadas) e
-// equipesAtivasPeriodo -- o {ano, mes} que a espelho cobre, que é o que a
-// página usa para saber se pode mostrar a barra no mês escolhido.
+// equipesPeriodo -- o {ano, mes} que a espelho cobre, que é o que a página usa
+// para saber se pode mostrar a barra no mês escolhido.
+//
+// O campo se chama equipesPeriodo (e não equipesAtivasPeriodo) desde 2026-08-05:
+// ele descreve a cobertura de QUALQUER fonte que tenha vencido a disputa por
+// equipesPorDia, e quem o lê (foraDaCoberturaDeEquipes, compute-balanco.js) não
+// pode se importar com qual foi. Ver o comentário longo lá.
 function montarEquipesAtivas(furos, csvEspelho) {
   // tipologiaPorSondador só depende de 'furos' -- por isso é calculada ANTES
   // das duas saídas antecipadas abaixo (sem csvEspelho/período reconhecível),
@@ -121,12 +126,12 @@ function montarEquipesAtivas(furos, csvEspelho) {
   const tipologiaPorSondador = {};
   Object.keys(melhor).forEach((s) => { tipologiaPorSondador[s] = melhor[s].tipologia; });
 
-  if (!csvEspelho) return { equipesAtivasPeriodo: null, tipologiaPorSondador };
+  if (!csvEspelho) return { equipesPeriodo: null, tipologiaPorSondador };
 
   const periodo = mesDaAbaEq(csvEspelho);
   if (!periodo) {
     console.warn('Equipes ativas: a espelho não trouxe cabeçalho de data reconhecível -- Δ equipes fica sem dado.');
-    return { equipesAtivasPeriodo: null, tipologiaPorSondador };
+    return { equipesPeriodo: null, tipologiaPorSondador };
   }
 
   const equipes = parseAbaEq(csvEspelho);
@@ -153,7 +158,7 @@ function montarEquipesAtivas(furos, csvEspelho) {
     console.log(`Equipes ATIVAS: ${textosNovos.length} texto(s) de dia não catalogados entraram como "em campo" pelo default -- revise se algum for ausência: ${amostra}${textosNovos.length > 5 ? ' ...' : ''}`);
   }
 
-  return { equipesPorDia: r.porDia, equipesAtivasPeriodo: periodo, tipologiaPorSondador };
+  return { equipesPorDia: r.porDia, equipesPeriodo: periodo, tipologiaPorSondador };
 }
 
 async function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
@@ -204,15 +209,20 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   }
   const { furos: furosLidos, descartadas, semDataTermino, cancelamentoIlegivel, deslocamentos } = parseAvancos(gridAvancos);
 
-  // Quarta fonte desta página: ensaios de laboratório JÁ CONCLUÍDOS (aba
-  // "Lab Concluido", mesmo workbook de Avanços -- ver config-lab.js).
-  // Alimenta só Realizado/Tendência de LAB.C/LAB.E na Tabela Semanal, nunca
-  // a aba Demandas nem Demandas Pendentes (ver o comentário em
-  // computeDemandas, compute-demandas.js). Mesmo tratamento de erro de
-  // caminho que Avanços -- ver o comentário logo acima.
-  // Fonte online (2026-08-05): substitui a aba "Lab Concluido" local por um
-  // CSV de ensaios REALIZADOS, gerado por tools/semanal/atualizar-lab-online.js
-  // (roda à parte, não a cada build). Mesmo unshift(null) de Avanços -- ver
+  // Quarta fonte desta página: ensaios de laboratório REALIZADOS. Alimenta só
+  // Realizado/Tendência de LAB.C/LAB.E na Tabela Semanal, nunca a aba Demandas
+  // nem Demandas Pendentes (ver o comentário em computeDemandas,
+  // compute-demandas.js). Mesmo tratamento de erro de caminho que Avanços --
+  // ver o comentário logo acima.
+  //
+  // Fonte online (2026-08-05): APOSENTOU a aba "Lab Concluido" do
+  // `Avanço Sond.xlsx` local (coluna "Concluído Dia") em favor de um CSV de
+  // ensaios REALIZADOS (coluna "Ensaiado Dia"), gerado por
+  // tools/semanal/atualizar-lab-online.js -- roda à parte, não a cada build. A
+  // aba local não tem mais NENHUM consumidor no repositório (o config e o teste
+  // de planilha real dela foram removidos em 2026-08-05: parseLab exige
+  // "Ensaiado Dia", que aquela aba nunca teve e nunca vai ter). Mesmo
+  // unshift(null) de Avanços -- ver
   // docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
   const CAMINHO_LAB_ONLINE = path.join(__dirname, '..', '..', 'dist', 'lab-online.csv');
   let gridLab;
@@ -245,6 +255,14 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // mesmos SUPs nos dois lugares. Só de Sondagem: os ensaios de Lab não têm
   // sondador (é outra operação, dentro do laboratório).
   demandas.equipesPorDia = agregarEquipesPorDia(furos);
+  // As mobilizadas cobrem o ANO INTEIRO do Avanço Sond, então não há mês a
+  // restringir: equipesPeriodo null é o que diz "sem restrição" pra
+  // foraDaCoberturaDeEquipes (compute-balanco.js). As duas fontes de maior
+  // prioridade abaixo SOBRESCREVEM os dois campos JUNTOS -- separá-los é o bug
+  // que a revisão final de 2026-08-05 pegou: dado de um mês só com o gate
+  // desligado desenha Δ equipes quase zero, sem aviso, em qualquer mês passado.
+  demandas.equipesPeriodo = null;
+  let fonteEquipes = 'mobilizadas (Avanço Sond)';
   // Δ equipes ATIVAS (2026-08-03): substitui as mobilizadas acima quando a
   // Sheet espelho da aba EQ responde. Assíncrono e tolerante de propósito --
   // ver buscarEquipesAtivas.
@@ -256,6 +274,7 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // equipes PRODUTIVAS logo abaixo, ainda dentro de build().
   const { tipologiaPorSondador, ...resultadoEquipesAtivas } = montarEquipesAtivas(furos, equipesAtivasCsv);
   Object.assign(demandas, resultadoEquipesAtivas);
+  if (demandas.equipesPeriodo) fonteEquipes = 'ATIVAS (aba EQ)';
 
   // Δ equipes PRODUTIVAS (2026-08-05): fonte online (campo/fotos), vira a
   // PRIMEIRA prioridade pro Δ equipes -- ativas (aba EQ, acima) e mobilizadas
@@ -273,14 +292,45 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
         cabecalho.forEach((h, i) => { if (h) obj[h] = linha[i]; });
         return obj;
       });
-      const { porDia: porDiaProdutivas, semTipologia: semTipologiaProdutivas } = agregarEquipesProdutivas({
+      // resolverSup: MESMA regra de redirecionarSupsDesconhecidos que furos e
+      // ensaios já aplicam acima -- par (contrato, tipologia) que a MATRIZ não
+      // conhece vai pra "Diversos" em vez de sumir. Sem isso, agora que
+      // produtivas é a fonte PRIMÁRIA do Δ equipes, todo contrato fora da MATRIZ
+      // baixaria o número principal em silêncio. Injetado (e não resolvido lá
+      // dentro) para compute-equipes-produtivas.js seguir sem conhecer a MATRIZ,
+      // do mesmo jeito que não conhece fs nem CDP.
+      const {
+        porDia: porDiaProdutivas,
+        semTipologia: semTipologiaProdutivas,
+        redirecionados: produtivasRedirecionadas,
+        periodo: periodoProdutivas,
+      } = agregarEquipesProdutivas({
         linhas: linhasProdutivas,
         tipologiaPorSondador,
         rotularTipologia,
+        resolverSup: resolverSupConhecido(registros),
       });
       if (Object.keys(porDiaProdutivas).length) {
         demandas.equipesPorDia = porDiaProdutivas;
-        console.log(`Equipes produtivas: fonte online em uso (${semTipologiaProdutivas} equipe-dia sem tipologia conhecida, fora da conta).`);
+        // equipesPeriodo JUNTO com equipesPorDia, sempre -- ver o comentário nas
+        // mobilizadas acima. periodoProdutivas sai do próprio dado (o mês mais
+        // frequente entre os dias contados), não de um relógio: o build pode
+        // rodar num dia diferente do da busca.
+        demandas.equipesPeriodo = periodoProdutivas;
+        fonteEquipes = 'PRODUTIVAS (campo/fotos online)';
+        const mesProdutivas = periodoProdutivas
+          ? `${String(periodoProdutivas.mes).padStart(2, '0')}/${periodoProdutivas.ano}`
+          : 'mês indeterminado';
+        // "equipe-dia" é literal: semTipologia conta (sondador, dia) DISTINTO, não
+        // linha de CSV. A tabela é uma linha por FOTO (~1.900/dia), e contar
+        // linhas imprimia aqui um número de 5 dígitos que se leria como perda
+        // catastrófica de dado sendo só artefato da contagem de fotos.
+        console.log(
+          `Equipes produtivas (${mesProdutivas}): fonte online em uso -- `
+          + `${semTipologiaProdutivas} equipe-dia sem tipologia conhecida (fora da conta), `
+          + `${produtivasRedirecionadas} par(es) (contrato, tipologia) redirecionado(s) pra "Diversos" `
+          + `(contrato sem registro na MATRIZ pra aquela tipologia).`
+        );
       } else {
         console.warn('Equipes produtivas: CSV existe mas não produziu nenhum dia utilizável -- mantendo a fonte de reserva (ativas/mobilizadas).');
       }
@@ -317,9 +367,13 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
     : ' Todo furo executado tem Sondador (os vazios são PENDENTE/CANCELADO, que não ocupam equipe).';
   // "em uso" e não "mobilizada": desde 2026-08-03 este mapa pode ter vindo das
   // equipes ATIVAS (aba EQ) em vez das mobilizadas, e o log estava contando um
-  // enquanto dizia o outro.
-  const fonteEquipes = demandas.equipesAtivasPeriodo ? 'ATIVAS (aba EQ)' : 'mobilizadas (Avanço Sond)';
-  console.log(`Equipes: ${paresComEquipe} par(es) (SUP, tipologia) no mapa em uso -- fonte: ${fonteEquipes}.${aviso}`);
+  // enquanto dizia o outro. Desde 2026-08-05 há TRÊS fontes possíveis, então
+  // 'fonteEquipes' é atribuída em cada ramo que de fato troca equipesPorDia --
+  // inferir a fonte de um campo aqui embaixo foi o que fez o log errar antes.
+  const coberturaEquipes = demandas.equipesPeriodo
+    ? `${String(demandas.equipesPeriodo.mes).padStart(2, '0')}/${demandas.equipesPeriodo.ano}`
+    : 'ano inteiro (sem restrição de mês)';
+  console.log(`Equipes: ${paresComEquipe} par(es) (SUP, tipologia) no mapa em uso -- fonte: ${fonteEquipes}, cobertura: ${coberturaEquipes}.${aviso}`);
   console.log(`Demandas: ${furosLidos.length} furos lidos, ${descartadas} linha(s) vazia(s) descartada(s), ${deslocamentos} linha(s) de "deslocamento" descartada(s) (furo impenetrável reposicionado, não é demanda nova), ${furosRedirecionados} furo(s) redirecionado(s) pra "Diversos" (SUP sem registro na MATRIZ pra aquela tipologia), ${semDataTermino} furo(s) concluído(s) sem data de término (nunca saem do estoque), ${cancelamentoIlegivel} cancelada(s) sem data legível (ficam no estoque).`);
 
   // Relatório dos DOIS lados do desencontro de SUP, com os furos ORIGINAIS

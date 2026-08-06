@@ -211,4 +211,19 @@ function redirecionarSupsDesconhecidos(itens, registros) {
   return { itens: saida, redirecionados };
 }
 
-module.exports = { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, SERIES, SERIE_ESTOQUE };
+// A MESMA regra de redirecionarSupsDesconhecidos, exposta como consulta por
+// PAR em vez de por lista de itens (2026-08-05). Existe porque equipes
+// produtivas (compute-equipes-produtivas.js) precisa redirecionar ANTES de
+// agregar -- ela conta sondador DISTINTO por dia, e redirecionar depois somaria
+// contagens já fechadas, contando duas vezes o sondador que trabalhou em dois
+// contratos desconhecidos no mesmo dia. Uma só implementação da regra, para os
+// dois caminhos: um par desconhecido vira "Diversos" aqui exatamente como
+// viraria lá.
+function resolverSupConhecido(registros) {
+  const chavesConhecidas = new Set((registros || []).map(r => chaveMatriz(r.sup, r.tipologia)));
+  return function (sup, tipologia) {
+    return chavesConhecidas.has(chaveMatriz(sup, tipologia)) ? sup : 'Diversos';
+  };
+}
+
+module.exports = { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, resolverSupConhecido, SERIES, SERIE_ESTOQUE };

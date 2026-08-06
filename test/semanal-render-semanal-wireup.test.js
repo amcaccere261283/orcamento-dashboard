@@ -1294,3 +1294,191 @@ test('o indicador de status nao tem anel -- e identico ao do dashboard de orcame
   assert.ok(html.indexOf('status-circulo') !== -1,
     'a classe em si continua existindo -- e ela que pinta a bolinha');
 });
+
+// --- Cadeia de prioridade do Δ equipes no live-refresh (rodada de correção da
+// revisão final, 2026-08-05) ------------------------------------------------
+//
+// São TRÊS fontes disputando window.__DEMANDAS__.equipesPorDia, em ordem:
+// produtivas (campo/fotos) > ativas (aba EQ) > mobilizadas (Avanço Sond). Os
+// dois testes abaixo prendem os dois modos de falha que a revisão final achou,
+// e cada um se identifica por um DIA diferente -- é isso que prova QUAL fonte
+// venceu, em vez de só "veio algum dado":
+//
+//   mobilizadas -> 10..12/03/2026 (o intervalo Inicio..Termino do furo)
+//   ativas      -> 15/03/2026     (a única coluna de dia da aba EQ mockada)
+//   produtivas  -> 20/03/2026     (a única Data do CSV de fotos mockado)
+//
+// As CHAVES colidiriam ('Diversos||SP' nas três, porque o par (SUP-0002-25, SP)
+// não existe na MATRIZ mockada e cai no redirecionamento pra "Diversos" -- o
+// que de passagem exercita o Fix 4 no lado cliente); os DIAS não colidem.
+
+const CSV_MATRIZ_PRIORIDADE = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERMINO,SONDAGEM,BASE,'
+  + Array(12).fill('mes').join(',') + ',PICO,MÉDIA,PROD.,DIAS,'
+  + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,TICKET,'
+  + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,OBS\n'
+  + 'Origem-B,Grupo-B,Tomador-Novo,SUP-0002-25,Escopo,Apoio,01/2026,12/2026,ST,P,'
+  + Array(12).fill('0').join(',') + ',2,2,8,25,'
+  + Array(12).fill('0').join(',') + ',100,100,9999,'
+  + Array(12).fill('0').join(',') + ',100,100,\n'
+  + ',,,,,,,,,T,'
+  + Array(12).fill('0').join(',') + ',0,0,0,0,'
+  + Array(12).fill('0').join(',') + ',0,0,0,'
+  + Array(12).fill('0').join(',') + ',0,0,\n';
+
+// 46091 = 2026-03-10, 46093 = 2026-03-12 -- Inicio/Termino Sondagem, o
+// intervalo que compute-equipes-mobilizadas.js ocupa.
+const CSV_AVANCOS_PRIORIDADE = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo,Inicio Sondagem,Sondador,OS\n'
+  + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,,46091,Sondador Sintético,17851-26\n';
+const CSV_LAB_PRIORIDADE = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio\n'
+  + 'SUP-0002-25,46091,LL\n';
+
+// Aba EQ: linha 0 cabeçalho (a coluna de dia em formato completo, que é o que
+// mesDaAbaEq lê pra saber ano/mês), linha 1 sub-cabeçalho, linha 2+ equipes.
+// A célula do dia traz a OS entre parênteses -> 'mobilizada', e a OS resolve o
+// SUP via osParaSup (montado dos furos JÁ redirecionados).
+const CSV_EQ_PRIORIDADE = 'ID,Nome,Extra,Serviços,15/03/2026\n'
+  + '-,do condutor,-,-,-\n'
+  + '1,Sondador Sintético,-,SP,(17851-26)\n';
+
+// Uma foto, num dia que nenhuma das outras duas fontes produz.
+const CSV_PRODUTIVAS_PRIORIDADE = 'Contrato Financeiro,Sondador,Data\n'
+  + 'SUP-0002-25,Sondador Sintético,20/03/2026\n';
+
+const DIA_MOBILIZADAS = Math.floor(Date.UTC(2026, 2, 10) / 86400000);
+const DIA_ATIVAS = Math.floor(Date.UTC(2026, 2, 15) / 86400000);
+const DIA_PRODUTIVAS = Math.floor(Date.UTC(2026, 2, 20) / 86400000);
+
+// Junta todos os dias presentes em equipesPorDia, de todas as chaves -- a
+// impressão digital de qual fonte alimentou o mapa.
+function diasDe(equipesPorDia) {
+  const dias = [];
+  Object.keys(equipesPorDia || {}).forEach(function (chave) {
+    Object.keys(equipesPorDia[chave]).forEach(function (d) { dias.push(Number(d)); });
+  });
+  return dias.sort(function (a, b) { return a - b; });
+}
+
+// Liga as 3 fontes e devolve o sandbox pronto, já desbloqueado, com as URLs de
+// Avanços/Lab fora do padrão RE_URL_PENDENTE (mesma técnica dos testes de
+// refresh acima).
+async function prepararRefreshPrioridade(fetchMock) {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-03-15T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'https://exemplo.com/avancos-configurado-teste.csv';
+  sandbox.URL_ESPELHO_LAB_SEMANAL = 'https://exemplo.com/lab-configurado-teste.csv';
+  return { sandbox, documentoFalso };
+}
+
+// FIX 2: tipologiaPorSondador era declarada com 'var' DENTRO do
+// `if (periodoEq)` de atualizarDadosAoVivoSemanal(). 'var' é escopo de FUNÇÃO,
+// então com a aba EQ fora do ar ela chegava 'undefined' no bloco de produtivas,
+// agregarEquipesProdutivas caía no default {}, toda linha ia pra semTipologia,
+// porDia voltava vazio -- e o Δ equipes degradava pra mobilizadas em silêncio,
+// com o status verde dizendo "Atualizado".
+test('atualizarDadosAoVivoSemanal: com a aba EQ fora do ar mas o CSV de produtivas OK, o Δ equipes vem de PRODUTIVAS -- não degrada pra mobilizadas', async () => {
+  const fetchMock = (url) => {
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
+    if (url.indexOf('avancos-configurado-teste') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_PRIORIDADE) });
+    if (url.indexOf('lab-configurado-teste') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_PRIORIDADE) });
+    // A aba EQ cai -- é o cenário deste teste.
+    if (url.indexOf('pub?gid=199381651') !== -1) return Promise.reject(new Error('espelho da aba EQ fora do ar'));
+    if (url.indexOf('equipes-produtivas-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_PRODUTIVAS_PRIORIDADE) });
+    return Promise.reject(new Error('URL inesperada no mock: ' + url));
+  };
+
+  const { sandbox, documentoFalso } = await prepararRefreshPrioridade(fetchMock);
+  await chamarEsperarAtualizacao(sandbox);
+
+  assert.match(
+    documentoFalso.getElementById('status-atualizacao').textContent, /^Atualizado às \d{2}:\d{2}$/,
+    'a aba EQ cair sozinha não pode derrubar o refresh -- ela já tinha .catch próprio'
+  );
+
+  const equipesPorDia = sandbox.window.__DEMANDAS__.equipesPorDia;
+  const dias = diasDe(equipesPorDia);
+  assert.deepStrictEqual(
+    dias, [DIA_PRODUTIVAS],
+    'com produtivas disponível o mapa tem que ser SÓ o dia dela (20/03); ver os dias de mobilizadas (10..12/03) aqui significa que tipologiaPorSondador voltou a ser undefined e a fonte primária se perdeu'
+  );
+  assert.ok(
+    dias.indexOf(DIA_MOBILIZADAS) === -1,
+    'o dia das mobilizadas não pode aparecer -- seria a degradação silenciosa que o Fix 2 corrige'
+  );
+
+  // Fix 4 no cliente, de passagem: (SUP-0002-25, SP) não existe na MATRIZ
+  // mockada (que só tem a tipologia ST), então o par tem de cair em "Diversos"
+  // em vez de desaparecer do Δ equipes.
+  assert.deepStrictEqual(
+    Object.keys(equipesPorDia), ['Diversos||SP'],
+    'par (contrato, tipologia) que a MATRIZ não conhece tem de ir pra "Diversos", igual furos/ensaios'
+  );
+
+  // Fix 5 no cliente: o período tem de acompanhar a fonte que venceu, senão o
+  // Balanço desenha Δ equipes num mês passado sem o aviso de "sem dado".
+  // Campo a campo, não deepStrictEqual: o objeto nasce DENTRO do vm.Context,
+  // então o prototype dele é o Object.prototype daquele realm e a comparação
+  // estrita falha mesmo com os valores idênticos.
+  const periodoProdutivas = sandbox.window.__DEMANDAS__.equipesPeriodo;
+  assert.ok(periodoProdutivas, 'equipesPeriodo não pode ficar null por a aba EQ ter caído -- produtivas cobre um mês e o gate depende dele');
+  assert.strictEqual(periodoProdutivas.ano, 2026);
+  assert.strictEqual(periodoProdutivas.mes, 3, 'o mês tem de ser o das PRODUTIVAS (03/2026, a Data do CSV de fotos)');
+});
+
+// FIX 3: a entrada de produtivas no Promise.all não tinha .catch, então um 404
+// nela (o modo de falha esperado: esquecer o
+// `cp dist/equipes-produtivas-online.csv docs/`) rejeitava o Promise.all
+// INTEIRO e o botão morria com "Falha ao atualizar: HTTP 404", levando MATRIZ,
+// Avanços, Lab e EQ com ele.
+test('atualizarDadosAoVivoSemanal: se o CSV de equipes produtivas dá 404, o refresh AINDA conclui e as outras 4 fontes atualizam', async () => {
+  const fetchMock = (url) => {
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
+    if (url.indexOf('avancos-configurado-teste') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_PRIORIDADE) });
+    if (url.indexOf('lab-configurado-teste') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_PRIORIDADE) });
+    if (url.indexOf('pub?gid=199381651') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_EQ_PRIORIDADE) });
+    // Publicação esquecida: o arquivo não está em docs/.
+    if (url.indexOf('equipes-produtivas-online.csv') !== -1) return Promise.resolve({ ok: false, status: 404 });
+    return Promise.reject(new Error('URL inesperada no mock: ' + url));
+  };
+
+  const { sandbox, documentoFalso } = await prepararRefreshPrioridade(fetchMock);
+  const baselineAntes = sandbox.window.__BASELINE__;
+  await chamarEsperarAtualizacao(sandbox);
+
+  assert.match(
+    documentoFalso.getElementById('status-atualizacao').textContent, /^Atualizado às \d{2}:\d{2}$/,
+    'um 404 só em produtivas NÃO pode derrubar o botão inteiro -- sem o .catch isto virava "Falha ao atualizar: HTTP 404"'
+  );
+  assert.ok(
+    !documentoFalso.getElementById('status-atualizacao').classList.contains('status-erro'),
+    'e não pode marcar erro'
+  );
+
+  // MATRIZ atualizou.
+  assert.strictEqual(sandbox.window.__REGISTROS__.length, 1);
+  assert.strictEqual(sandbox.window.__REGISTROS__[0].sup, 'SUP-0002-25');
+  assert.strictEqual(sandbox.window.__REGISTROS__[0].previsto.volumeResumo.ticket, 9999);
+  assert.strictEqual(sandbox.window.__BASELINE__, baselineAntes, 'baseline nunca é tocado pelo refresh');
+
+  // Avanços/Lab atualizaram.
+  const demandas = sandbox.window.__DEMANDAS__;
+  assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 1, 'a linha de Avanços tem de virar 1 chegada');
+  assert.ok(Object.keys(demandas.porRegistroEventos).length > 0, 'porRegistroEventos alimentado por furos + ensaios de Lab');
+
+  // E a aba EQ também: sem produtivas, o Δ equipes cai na RESERVA imediata
+  // (ativas), não nas mobilizadas nem no dado velho do build.
+  assert.deepStrictEqual(
+    diasDe(demandas.equipesPorDia), [DIA_ATIVAS],
+    'com produtivas fora, quem manda é a aba EQ (15/03) -- exatamente a reserva que existia antes desta branch'
+  );
+  // Campo a campo -- ver o comentário sobre realm no teste acima.
+  const periodoAtivas = demandas.equipesPeriodo;
+  assert.ok(periodoAtivas, 'equipesPeriodo tem de descrever a fonte que venceu (aba EQ), não ficar null');
+  assert.strictEqual(periodoAtivas.ano, 2026);
+  assert.strictEqual(periodoAtivas.mes, 3, 'o mês tem de ser o da aba EQ (03/2026)');
+});

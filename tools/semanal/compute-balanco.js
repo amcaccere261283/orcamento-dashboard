@@ -37,20 +37,36 @@ const { equipesEquivalentes } = require('./compute-equipes-mobilizadas.js');
 // porque as duas coisas respondem a perguntas diferentes -- "que meses?" e
 // "que semanas do mês vigente?" -- e o usuário pode querer as duas ao mesmo
 // tempo no futuro.
-// O mapa de equipes ATIVAS cobre UM mês (o da Sheet espelho da aba EQ). Esta
-// função responde se o período pedido está fora dele -- e é a MESMA usada pelo
-// cálculo (para devolver sem-dado) e pelo desenho (para mostrar o aviso), de
-// propósito: duas cópias da regra acabariam discordando, e a tela mostraria
-// barra sem aviso ou aviso sem barra.
+// equipesPeriodo descreve QUAL MÊS o equipesPorDia em uso cobre, ou null quando
+// ele não tem restrição de período. Esta função responde se o período pedido
+// está fora dele -- e é a MESMA usada pelo cálculo (para devolver sem-dado) e
+// pelo desenho (para mostrar o aviso), de propósito: duas cópias da regra
+// acabariam discordando, e a tela mostraria barra sem aviso ou aviso sem barra.
+//
+// O PARÂMETRO É AGNÓSTICO DE FONTE desde 2026-08-05, e o nome antigo
+// (equipesAtivasPeriodo) era a causa de um bug: hoje são TRÊS fontes possíveis
+// pra equipesPorDia, em ordem de prioridade, e só a última não tem período.
+//
+//   1. produtivas (campo/fotos online) -- cobre UM mês, o que foi buscado.
+//   2. ativas (aba EQ)                 -- cobre UM mês, o da espelho.
+//   3. mobilizadas (Avanço Sond)       -- ano inteiro, período null.
+//
+// Enquanto o campo se chamava "ativas", null significava "mobilizadas, sem
+// restrição" e pular a checagem estava certo. Com produtivas na frente, dava
+// para ter dado de UM mês com o campo de ativas null (espelho da aba EQ fora do
+// ar) -- e aí escolher um mês passado desenhava um Δ equipes quase zero SEM
+// aviso: exatamente a "barra zero enganosa" corrigida em 2026-08-01/03. Quem
+// decide o valor é quem escolhe a fonte (build-dashboard.js e o live-refresh de
+// render-semanal.js), e ele tem de mudar JUNTO com equipesPorDia.
 //
 // 'acumuladoAteMes' nunca é coberto: ele soma de janeiro até o mês, e um mapa
 // de um mês só responderia por uma fatia, dando um número menor sem aviso.
-function foraDaCoberturaDeEquipes(periodo, vigenteIdx, ano, equipesAtivasPeriodo) {
-  if (!equipesAtivasPeriodo) return false;
+function foraDaCoberturaDeEquipes(periodo, vigenteIdx, ano, equipesPeriodo) {
+  if (!equipesPeriodo) return false;
   return periodo !== 'mesVigente'
     || typeof ano !== 'number'
-    || ano !== equipesAtivasPeriodo.ano
-    || vigenteIdx !== (equipesAtivasPeriodo.mes - 1);
+    || ano !== equipesPeriodo.ano
+    || vigenteIdx !== (equipesPeriodo.mes - 1);
 }
 
 function periodoParaIntervalo(periodo, vigenteIdx) {
@@ -255,7 +271,7 @@ function realizadoDoAvancos(demandas, sup, tipologia, intervalosEpoch, peso, ser
 // Diferente do Realizado de volume/financeiro, que só usa o Avanço Sond em
 // mesVigente: ali a coluna da MATRIZ é confiável depois do fechamento, aqui
 // não é.
-function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline, demandas, ano, semanas, semanasSelecionadas, equipesPorDia, hojeEpoch, equipesAtivasPeriodo }) {
+function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo, vigenteIdx, baseline, demandas, ano, semanas, semanasSelecionadas, equipesPorDia, hojeEpoch, equipesPeriodo }) {
   // Dimensão "Demandas" (2026-08-03): o que CHEGOU no período (evento
   // 'chegada' do Avanço Sond) contra o mesmo Previsto de VOLUME da MATRIZ.
   // Duas diferenças de comportamento, ambas deliberadas:
@@ -339,7 +355,7 @@ function calcularLinhas({ registros, indices, tipologia, base, dimensao, periodo
   // 'acumuladoAteMes' nunca é coberto: ele soma de janeiro até o mês, e um
   // mapa de um mês só responderia por uma fatia, dando um número menor sem
   // nenhum aviso.
-  var equipesForaDaCobertura = foraDaCoberturaDeEquipes(periodo, vigenteIdx, ano, equipesAtivasPeriodo);
+  var equipesForaDaCobertura = foraDaCoberturaDeEquipes(periodo, vigenteIdx, ano, equipesPeriodo);
   var linhas = [];
 
   (indices || []).forEach(function (i) {

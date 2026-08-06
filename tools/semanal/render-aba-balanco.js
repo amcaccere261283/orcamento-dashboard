@@ -684,7 +684,7 @@ function renderControles(estado) {
     + '</select></label>';
   html += renderControleSemanas(e.semanas, e.semanasSelecionadas, periodo);
   html += '</div>';
-  html += renderAvisoEquipes(e.equipesForaDaCobertura, e.equipesAtivasPeriodo);
+  html += renderAvisoEquipes(e.equipesForaDaCobertura, e.equipesPeriodo);
   return html;
 }
 
@@ -697,10 +697,16 @@ var MESES_CURTOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set
 // havia equipe" de "não temos o dado deste mês" -- que é justamente a
 // ambiguidade que trocar a fonte veio eliminar. Diz também QUAL mês tem dado,
 // para a saída ser óbvia (voltar o seletor para ele).
+//
+// O texto NÃO nomeia mais a aba EQ (2026-08-05). São três fontes possíveis pro
+// Δ equipes -- produtivas (campo/fotos), ativas (aba EQ) e mobilizadas -- e
+// dizer "a aba EQ" quando quem venceu foi produtivas é a mesma classe de erro
+// que este aviso existe pra evitar: afirmar na tela algo que o número não é. O
+// que o usuário precisa pra agir é o MÊS coberto, e esse continua aqui.
 function renderAvisoEquipes(foraDaCobertura, periodoCoberto) {
   if (!foraDaCobertura || !periodoCoberto) return '';
   var rotulo = (MESES_CURTOS[periodoCoberto.mes - 1] || '?') + '/' + periodoCoberto.ano;
-  return '<div class="aviso-equipes">Δ equipes sem dado neste período — a aba EQ da planilha de equipes cobre '
+  return '<div class="aviso-equipes">Δ equipes sem dado neste período — a fonte de equipes em uso cobre '
     + escapeHtml(rotulo) + '. As barras de desvio de valor não são afetadas.</div>';
 }
 
@@ -803,7 +809,7 @@ function renderAbaBalanco(registros, indices, opcoes) {
   // equipesPorDia/hojeEpoch (2026-08-03): equipes MOBILIZADAS do Avanço Sond,
   // com a janela truncada em hoje -- ver calcularLinhas em compute-balanco.js.
   var equipesPorDia = opts.equipesPorDia;
-  var equipesAtivasPeriodo = opts.equipesAtivasPeriodo;
+  var equipesPeriodo = opts.equipesPeriodo;
   var hojeEpoch = opts.hojeEpoch;
   // Equipes NÃO produtivas (2026-08-05): informação separada do Δ equipes,
   // nunca somada nele -- ver renderEquipesNaoProdutivas abaixo.
@@ -832,7 +838,7 @@ function renderAbaBalanco(registros, indices, opcoes) {
         vigenteIdx: vigenteIdx, baseline: baseline, demandas: demandas, ano: ano,
         semanas: semanas, semanasSelecionadas: semanasSelecionadas,
         equipesPorDia: equipesPorDia, hojeEpoch: hojeEpoch,
-        equipesAtivasPeriodo: equipesAtivasPeriodo,
+        equipesPeriodo: equipesPeriodo,
       }),
     };
   });
@@ -881,8 +887,8 @@ function renderAbaBalanco(registros, indices, opcoes) {
     semanas: semanas, semanasSelecionadas: semanasSelecionadas,
     // A MESMA função que o cálculo usa para devolver sem-dado -- ver
     // foraDaCoberturaDeEquipes em compute-balanco.js.
-    equipesForaDaCobertura: foraDaCoberturaDeEquipes(periodo, vigenteIdx, ano, equipesAtivasPeriodo),
-    equipesAtivasPeriodo: equipesAtivasPeriodo,
+    equipesForaDaCobertura: foraDaCoberturaDeEquipes(periodo, vigenteIdx, ano, equipesPeriodo),
+    equipesPeriodo: equipesPeriodo,
   })
     + renderEquipesNaoProdutivas(equipesNaoProdutivas)
     + renderLegenda()

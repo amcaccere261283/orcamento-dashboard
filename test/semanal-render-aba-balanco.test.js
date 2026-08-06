@@ -358,7 +358,7 @@ test('a aba traz legenda única e o balão de tooltip, não uma legenda por pain
 test('mês fora da cobertura da aba EQ mostra o aviso, e diz QUAL mês tem dado', () => {
   const html = renderAbaBalanco([], [], {
     periodo: 'mesVigente', vigenteIdx: 6, ano: 2026, // julho na tela
-    equipesAtivasPeriodo: { ano: 2026, mes: 8 },      // espelho traz agosto
+    equipesPeriodo: { ano: 2026, mes: 8 },      // espelho traz agosto
   });
   assert.match(html, /aviso-equipes/);
   assert.match(html, /Ago\/2026/, 'o aviso precisa dizer qual mês tem dado -- é a saída do problema');
@@ -368,7 +368,7 @@ test('mês fora da cobertura da aba EQ mostra o aviso, e diz QUAL mês tem dado'
 test('no mês coberto, nenhum aviso aparece', () => {
   const html = renderAbaBalanco([], [], {
     periodo: 'mesVigente', vigenteIdx: 7, ano: 2026,
-    equipesAtivasPeriodo: { ano: 2026, mes: 8 },
+    equipesPeriodo: { ano: 2026, mes: 8 },
   });
   assert.doesNotMatch(html, /aviso-equipes/);
 });
@@ -376,7 +376,7 @@ test('no mês coberto, nenhum aviso aparece', () => {
 test('"Acumulado até o mês" sempre avisa -- um mapa de um mês não responde pelo acumulado', () => {
   const html = renderAbaBalanco([], [], {
     periodo: 'acumuladoAteMes', vigenteIdx: 7, ano: 2026,
-    equipesAtivasPeriodo: { ano: 2026, mes: 8 },
+    equipesPeriodo: { ano: 2026, mes: 8 },
   });
   assert.match(html, /aviso-equipes/);
 });

@@ -890,7 +890,7 @@ function montarAbaBalanco(registros, indices) {
     // live-refresh. Ausente (HTML de um build anterior), compute-balanco cai
     // sozinho na coluna da MATRIZ.
     equipesPorDia: window.__DEMANDAS__ && window.__DEMANDAS__.equipesPorDia,
-    equipesAtivasPeriodo: window.__DEMANDAS__ && window.__DEMANDAS__.equipesAtivasPeriodo,
+    equipesPeriodo: window.__DEMANDAS__ && window.__DEMANDAS__.equipesPeriodo,
     equipesNaoProdutivas: window.__DEMANDAS__ && window.__DEMANDAS__.equipesNaoProdutivas,
     // Trunca a janela de equipes em hoje: sem isso a média do mês corrente sai
     // dividida pelos dias que ainda não aconteceram (ver calcularLinhas).
@@ -1379,7 +1379,16 @@ function atualizarDadosAoVivoSemanal() {
     // Equipes PRODUTIVAS (2026-08-05). Gated pelo MESMO avancosLabConfigurados
     // dos dois de cima: sem tipologiaPorSondador (derivado dos furos) esta
     // fonte não tem como apropriar equipe a (SUP, tipologia).
-    avancosLabConfigurados ? buscarCsvSemanal(URL_ESPELHO_EQUIPES_PRODUTIVAS_SEMANAL) : Promise.resolve(null),
+    //
+    // Falha sozinha, igual à aba EQ acima: este CSV é publicado à parte
+    // (cp dist/equipes-produtivas-online.csv docs/), então um 404 por cópia
+    // esquecida é o modo de falha ESPERADO -- e sem o .catch ele derrubava o
+    // botão INTEIRO ("Falha ao atualizar: HTTP 404"), levando MATRIZ e Avanços
+    // com ele. Sem produtivas o Δ equipes só volta pra reserva
+    // (ativas/mobilizadas), que é como era antes desta branch.
+    avancosLabConfigurados
+      ? buscarCsvSemanal(URL_ESPELHO_EQUIPES_PRODUTIVAS_SEMANAL).catch(function () { return null; })
+      : Promise.resolve(null),
   ]).then(function (textos) {
     var registrosNovos = ParseMatrizCliente.parseMatrizCliente(ParseMatrizCliente.parseCsvGrid(textos[0]));
     if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho da MATRIZ -- confira se o Apps Script já rodou pelo menos uma vez');
@@ -1409,6 +1418,10 @@ function atualizarDadosAoVivoSemanal() {
       // furos já redirecionados -- sem isso o refresh atualizaria volume e
       // financeiro do Balanço e deixaria o Δ equipes preso ao dado do build.
       demandasNovas.equipesPorDia = ComputeEquipes.agregarEquipesPorDia(furos);
+      // Mobilizadas cobrem o ano inteiro: null = "sem restrição de mês" pra
+      // foraDaCoberturaDeEquipes. equipesPeriodo anda SEMPRE junto de
+      // equipesPorDia -- ver o comentário equivalente em build-dashboard.js.
+      demandasNovas.equipesPeriodo = null;
 
       // Equipes ATIVAS: mesma montagem que o build faz (build-dashboard.js,
       // montarEquipesAtivas), sobre os MESMOS furos já redirecionados. Sem
@@ -1416,26 +1429,39 @@ function atualizarDadosAoVivoSemanal() {
       // preso ao build.
       var csvEq = textos[3];
       var periodoEq = csvEq ? ComputeEquipesAtivas.mesDaAbaEq(csvEq) : null;
-      if (periodoEq) {
-        var osParaSup = {};
-        var contagemTip = {};
-        furos.forEach(function (f) {
-          if (f.os && f.sup && !osParaSup[f.os]) osParaSup[f.os] = f.sup;
-          if (f.sondador && f.tipologia) {
-            var k = f.sondador + '||' + f.tipologia;
-            contagemTip[k] = (contagemTip[k] || 0) + 1;
-          }
-        });
-        var melhorTip = {};
-        Object.keys(contagemTip).forEach(function (k) {
-          var partes = k.split('||');
-          if (!melhorTip[partes[0]] || contagemTip[k] > melhorTip[partes[0]].n) {
-            melhorTip[partes[0]] = { tipologia: partes[1], n: contagemTip[k] };
-          }
-        });
-        var tipologiaPorSondador = {};
-        Object.keys(melhorTip).forEach(function (s) { tipologiaPorSondador[s] = melhorTip[s].tipologia; });
 
+      // FORA do if (periodoEq): só dependem de 'furos'. Mesmo tratamento que
+      // montarEquipesAtivas recebeu no lado Node (build-dashboard.js), e pela
+      // mesma razão -- equipes PRODUTIVAS, mais abaixo, precisa de
+      // tipologiaPorSondador MESMO quando o espelho da aba EQ está fora do ar.
+      //
+      // Estava declarado com 'var' DENTRO do if, e 'var' é escopo de FUNÇÃO:
+      // com periodoEq falso, o bloco de produtivas lia 'undefined',
+      // agregarEquipesProdutivas caía no default {}, toda linha ia pra
+      // semTipologia, porDia voltava vazio -- e o botão degradava o Δ equipes
+      // de produtivas pra mobilizadas em silêncio, com status verde
+      // "Atualizado". Exatamente a classe de bug "um caminho se comporta
+      // diferente do outro" que esta branch precisa evitar.
+      var osParaSup = {};
+      var contagemTip = {};
+      furos.forEach(function (f) {
+        if (f.os && f.sup && !osParaSup[f.os]) osParaSup[f.os] = f.sup;
+        if (f.sondador && f.tipologia) {
+          var k = f.sondador + '||' + f.tipologia;
+          contagemTip[k] = (contagemTip[k] || 0) + 1;
+        }
+      });
+      var melhorTip = {};
+      Object.keys(contagemTip).forEach(function (k) {
+        var partes = k.split('||');
+        if (!melhorTip[partes[0]] || contagemTip[k] > melhorTip[partes[0]].n) {
+          melhorTip[partes[0]] = { tipologia: partes[1], n: contagemTip[k] };
+        }
+      });
+      var tipologiaPorSondador = {};
+      Object.keys(melhorTip).forEach(function (s) { tipologiaPorSondador[s] = melhorTip[s].tipologia; });
+
+      if (periodoEq) {
         var agregado = ComputeEquipesAtivas.agregarEquipesAtivas({
           equipes: ComputeEquipesAtivas.parseAbaEq(csvEq),
           osParaSup: osParaSup,
@@ -1449,7 +1475,7 @@ function atualizarDadosAoVivoSemanal() {
           ano: periodoEq.ano, mes: periodoEq.mes,
         });
         demandasNovas.equipesPorDia = agregado.porDia;
-        demandasNovas.equipesAtivasPeriodo = periodoEq;
+        demandasNovas.equipesPeriodo = periodoEq;
       }
 
       // Equipes PRODUTIVAS (2026-08-05): mesma prioridade que o build já dá --
@@ -1469,9 +1495,18 @@ function atualizarDadosAoVivoSemanal() {
           linhas: linhasProdutivasCliente,
           tipologiaPorSondador: tipologiaPorSondador,
           rotularTipologia: typeof rotularTipologia === 'function' ? rotularTipologia : null,
+          // MESMO redirecionamento que furos/ensaios levam nas duas linhas do
+          // topo deste bloco: par (contrato, tipologia) que a MATRIZ não conhece
+          // vira "Diversos" em vez de sumir do Δ equipes -- e produtivas é a
+          // fonte PRIMÁRIA dele. Ver o gêmeo em build-dashboard.js.
+          resolverSup: ComputeDemandas.resolverSupConhecido(registrosNovos),
         });
         if (Object.keys(agregadoProdutivas.porDia).length) {
           demandasNovas.equipesPorDia = agregadoProdutivas.porDia;
+          // JUNTO com equipesPorDia, sempre: produtivas cobre UM mês, e sem
+          // isto escolher um mês passado desenharia Δ equipes quase zero sem o
+          // aviso de "sem dado".
+          demandasNovas.equipesPeriodo = agregadoProdutivas.periodo;
         }
       }
 
