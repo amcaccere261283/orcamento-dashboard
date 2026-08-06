@@ -1461,9 +1461,15 @@ function atualizarDadosAoVivoSemanal() {
       var tipologiaPorSondador = {};
       Object.keys(melhorTip).forEach(function (s) { tipologiaPorSondador[s] = melhorTip[s].tipologia; });
 
+      // campoSemFuroPorDia: FORA do if (periodoEq) porque o bloco de baixo é
+      // populado só dentro dele mesmo -- mas guardado numa var de escopo de
+      // função (mesmo raciocínio de tipologiaPorSondador acima) pro merge com
+      // produtivas, logo abaixo, sempre enxergar o valor certo.
+      var campoSemFuroPorDia = null;
       if (periodoEq) {
+        var equipesEqParaAtivas = ComputeEquipesAtivas.parseAbaEq(csvEq);
         var agregado = ComputeEquipesAtivas.agregarEquipesAtivas({
-          equipes: ComputeEquipesAtivas.parseAbaEq(csvEq),
+          equipes: equipesEqParaAtivas,
           osParaSup: osParaSup,
           tipologiaPorSondador: tipologiaPorSondador,
           nomesSondadores: Object.keys(tipologiaPorSondador),
@@ -1476,6 +1482,20 @@ function atualizarDadosAoVivoSemanal() {
         });
         demandasNovas.equipesPorDia = agregado.porDia;
         demandasNovas.equipesPeriodo = periodoEq;
+
+        // campoSemFuro alocado no último SUP conhecido -- mesmo gêmeo Node de
+        // build-dashboard.js (montarEquipesAtivas). Alimenta só o Realizado
+        // de equipes da Tabela Semanal, não o Δ equipes do Balanço.
+        var agregadoCampoSemFuro = ComputeEquipesAtivas.agregarEquipesAtivas({
+          equipes: equipesEqParaAtivas,
+          osParaSup: osParaSup,
+          tipologiaPorSondador: tipologiaPorSondador,
+          nomesSondadores: Object.keys(tipologiaPorSondador),
+          rotularTipologia: typeof rotularTipologia === 'function' ? rotularTipologia : null,
+          estadosContados: ['campoSemFuro'],
+          ano: periodoEq.ano, mes: periodoEq.mes,
+        });
+        campoSemFuroPorDia = agregadoCampoSemFuro.porDia;
       }
 
       // Equipes PRODUTIVAS (2026-08-05): mesma prioridade que o build já dá --
@@ -1501,12 +1521,25 @@ function atualizarDadosAoVivoSemanal() {
           // fonte PRIMÁRIA dele. Ver o gêmeo em build-dashboard.js.
           resolverSup: ComputeDemandas.resolverSupConhecido(registrosNovos),
         });
+        var porDiaProdutivasParaRealizado = null;
         if (Object.keys(agregadoProdutivas.porDia).length) {
+          porDiaProdutivasParaRealizado = agregadoProdutivas.porDia;
           demandasNovas.equipesPorDia = agregadoProdutivas.porDia;
           // JUNTO com equipesPorDia, sempre: produtivas cobre UM mês, e sem
           // isto escolher um mês passado desenharia Δ equipes quase zero sem o
           // aviso de "sem dado".
           demandasNovas.equipesPeriodo = agregadoProdutivas.periodo;
+        }
+
+        // Realizado de equipes para a Tabela Semanal (2026-08-06): mesmo
+        // gêmeo Node de build-dashboard.js -- produtivas + campoSemFuro
+        // alocado, independente de quem "ganhou" equipesPorDia acima. Só
+        // populado quando produtivas de fato rendeu algum dia (sem isso,
+        // campoSemFuro sozinho subestimaria o Realizado sem aviso nenhum).
+        if (porDiaProdutivasParaRealizado) {
+          demandasNovas.equipesRealizadoPorDia = campoSemFuroPorDia
+            ? ComputeEquipesAtivas.juntarPorDia([porDiaProdutivasParaRealizado, campoSemFuroPorDia])
+            : porDiaProdutivasParaRealizado;
         }
       }
 

@@ -223,6 +223,32 @@ test('duas equipes no mesmo SUP, tipologia e dia contam 2', () => {
   assert.strictEqual(r.porDia['SUP-X||SM'][diaEp(1)], 2);
 });
 
+test('estadosContados restringe o que entra em porDia, mas mobilizada continua atualizando ultimoSup', () => {
+  // Dia 1 mobilizada (fixa o SUP), dia 2 campoSemFuro (herda o SUP, sem OS
+  // própria) -- com estadosContados:['campoSemFuro'], só o dia 2 deve
+  // aparecer em porDia, mas SÓ porque o dia 1 (não contado) ainda assim
+  // atualizou ultimoSup. Sem essa separação, campoSemFuroPorDia nunca
+  // acharia SUP nenhum (é justamente a mobilizada que o estabelece).
+  const r = agregarEquipesAtivas({
+    equipes: [equipe('1', 'SP', ['EPR (17739-26)', 'Mobilização'])],
+    osParaSup: { '17739-26': 'SUP-7128-24' },
+    estadosContados: ['campoSemFuro'],
+    ano: 2026, mes: 8,
+  });
+  assert.deepStrictEqual(r.porDia, { 'SUP-7128-24||SP': { [diaEp(2)]: 1 } });
+  assert.strictEqual(r.diasPorEstado.mobilizada, 1, 'diasPorEstado continua contando os dois estados, não só o filtrado');
+  assert.strictEqual(r.diasPorEstado.campoSemFuro, 1);
+});
+
+test('estadosContados ausente mantém o comportamento de sempre (mobilizada + campoSemFuro)', () => {
+  const r = agregarEquipesAtivas({
+    equipes: [equipe('1', 'SP', ['EPR (17739-26)', 'Mobilização'])],
+    osParaSup: { '17739-26': 'SUP-7128-24' },
+    ano: 2026, mes: 8,
+  });
+  assert.deepStrictEqual(r.porDia['SUP-7128-24||SP'], { [diaEp(1)]: 1, [diaEp(2)]: 1 });
+});
+
 test('juntarPorDia soma vários meses sem perder dia nenhum', () => {
   const a = { 'SUP-X||SM': { 100: 2 } };
   const b = { 'SUP-X||SM': { 100: 1, 131: 3 }, 'SUP-Y||SP': { 131: 1 } };

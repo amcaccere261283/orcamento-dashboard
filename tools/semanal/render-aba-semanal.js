@@ -126,6 +126,37 @@ function pendentesNaData(registros, indices, demandas, dataEpoch) {
   return total;
 }
 
+// Média diária de equipes, através dos registros em 'indices', num intervalo
+// [inicioEpoch, fimEpoch] (inclusive nos dois extremos) -- pra Realizado da
+// dimensão Equipes na Tabela Semanal (2026-08-06). equipesRealizadoPorDia
+// (demandas.equipesRealizadoPorDia, produtivas + campoSemFuro já somados por
+// build-dashboard.js/render-semanal.js) é keyed igual a porRegistroEventos
+// (chaveDemandas), mas o valor é uma CONTAGEM por dia, não uma lista de
+// eventos -- por isso soma-e-divide em vez de contarEventosNoIntervalo.
+//
+// Um dia sem entrada no mapa conta 0 (ninguém trabalhou aquele SUP aquele
+// dia -- informação real, não ausência de medição), e por isso o
+// denominador é sempre o número de dias do intervalo, nunca só os dias com
+// alguma contagem: excluir dias-zero infla a média.
+//
+// null (não 0) quando equipesRealizadoPorDia não existe -- "sem fonte
+// online ainda" é diferente de "zero equipes", e renderLinhaSerie já sabe
+// desenhar null como sem-dado.
+function mediaEquipesNoIntervalo(registros, indices, equipesRealizadoPorDia, inicioEpoch, fimEpoch) {
+  if (!equipesRealizadoPorDia || fimEpoch < inicioEpoch) return null;
+  var numDias = fimEpoch - inicioEpoch + 1;
+  var soma = 0;
+  for (var dia = inicioEpoch; dia <= fimEpoch; dia++) {
+    (indices || []).forEach(function (i) {
+      var registro = registros[i];
+      if (!registro) return;
+      var mapa = equipesRealizadoPorDia[chaveDemandas(registro.sup, registro.tipologia)];
+      if (mapa && mapa[dia]) soma += mapa[dia];
+    });
+  }
+  return soma / numDias;
+}
+
 // '05' em vez de '5' -- sem toLocaleString/padStart (o resto deste módulo já
 // evita depender deles fora do formatador de número principal), só divisão
 // inteira manual.
@@ -227,9 +258,9 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
   // antes de somar (pesoPorRegistro) -- é o "acompanhamento do produzido"
   // em R$, na mesma lógica semanal do Volume, sem precisar de outra fonte
   // de dado (o ticket já vem na MATRIZ, junto do resto do registro).
-  // Equipes nunca entra aqui (não é fluxo de furo, é foto -- ver
-  // compute-semanal.js): fica só com o Previsto acima, repetido igual em
-  // cada semana.
+  // Equipes NUNCA tem Tendência (não é fluxo de furo pra projetar -- ver
+  // compute-semanal.js), mas ganhou Realizado em 2026-08-06 -- ver o bloco
+  // dedicado logo abaixo, fora deste if (a fonte e o cálculo são outros).
   if ((dimensao === 'volume' || dimensao === 'financeiro') && temSemanasReais) {
     var pesoPorRegistro = dimensao === 'financeiro' ? ticketMedio : null;
 
@@ -280,6 +311,25 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
       : semanasTendenciaCompleta.map(function (v, i) {
         return i < tendencia.diagnostico.semanasFechadas ? null : v;
       });
+  }
+
+  // Realizado de Equipes (2026-08-06, pedido do dono do projeto): média
+  // diária de equipesRealizadoPorDia (produtivas + campoSemFuro, já somados
+  // por quem monta 'demandas') em cada semana -- é FOTO, não fluxo, por
+  // isso média e não soma (mesma convenção de Previsto, dividirEmSemanas).
+  // A janela corta em hojeEpoch, igual ao Δ equipes do Balanço (compute-
+  // balanco.js): sem isso, a semana em curso diluiria a média com dias que
+  // ainda não aconteceram, e uma semana inteiramente futura mostraria uma
+  // "média" de puro zero em vez de sem-dado. Fechamento usa fecharMes, que
+  // já sabe fazer MÉDIA das semanas (não soma) quando dimensao === 'equipes'
+  // -- mesmo tratamento que a linha Previsto já recebe.
+  if (dimensao === 'equipes' && temSemanasReais) {
+    semanasRealizado = semanas.map(function (semana) {
+      if (semana.inicio > hojeEpoch) return null; // semana futura -- nada aconteceu ainda
+      var fim = Math.min(semana.fim, hojeEpoch);
+      return mediaEquipesNoIntervalo(registros, indices, demandas.equipesRealizadoPorDia, semana.inicio, fim);
+    });
+    fechamentoRealizado = fecharMes(semanasRealizado, dimensao);
   }
 
   return {

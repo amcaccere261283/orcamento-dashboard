@@ -168,6 +168,16 @@ function mesDaAbaEq(csvTexto) {
 // equipe que nunca teve OS no mês entra em naoApropriadas, visível, nunca
 // rateada em silêncio entre contratos.
 //
+// estadosContados (opcional, 2026-08-06): restringe QUAIS estados entram em
+// porDia, sem mudar o que atualiza ultimoSup -- isso continua sempre
+// contaComoAtiva (mobilizada OU campoSemFuro), porque um dia "campoSemFuro"
+// sem OS só sabe a que contrato pertence por causa de uma mobilizada
+// ANTERIOR ter fixado o vínculo. Sem essa separação, chamar só com
+// estadosContados:['campoSemFuro'] (ver Realizado de equipes na Tabela
+// Semanal, render-aba-semanal.js) nunca acharia ultimoSup nenhum -- é
+// justamente a mobilizada, não contada aqui, que estabelece o vínculo.
+// Ausente (undefined/null): comportamento de sempre, os dois estados contam.
+//
 // Devolve { porDia, naoApropriadas, semTipologia, diasPorEstado }.
 function agregarEquipesAtivas(opcoes) {
   var o = opcoes || {};
@@ -175,6 +185,7 @@ function agregarEquipesAtivas(opcoes) {
   var osParaSup = o.osParaSup || {};
   var tipologiaPorSondador = o.tipologiaPorSondador || {};
   var nomesSondadores = o.nomesSondadores || [];
+  var estadosContados = o.estadosContados || null;
   var ano = o.ano;
   var mes = o.mes;
 
@@ -217,6 +228,8 @@ function agregarEquipesAtivas(opcoes) {
       // A OS atualiza o vínculo mesmo quando a tipologia é desconhecida: se a
       // equipe voltar a ser identificável depois, o SUP já está em mãos.
       if (classe.os && osParaSup[classe.os]) ultimoSup = osParaSup[classe.os];
+
+      if (estadosContados && estadosContados.indexOf(classe.estado) === -1) return;
 
       if (!tipologia) { semTipologia += 1; return; }
       if (!ultimoSup) { naoApropriadas += 1; return; }
