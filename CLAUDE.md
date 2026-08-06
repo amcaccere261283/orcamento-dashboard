@@ -130,8 +130,40 @@ nenhum) — diferente da MATRIZ/linha de base/Lab, que ainda exigem o G:\ com o
 Google Drive montado, esta fonte específica não depende mais de nenhum
 caminho de Drive.
 
-**Fora de escopo por enquanto**: a aba "Lab Concluido" continua vindo do
-`Avanço Sond.xlsx` local — só "Sondagens"/Demandas migrou.
+**Atualização em 2026-08-05**: a aba "Lab Concluido" também migrou pro online —
+ver "Lab Realizado + Equipes online" logo abaixo. A frase acima ("só
+Sondagens/Demandas migrou") descrevia o estado antes dessa migração.
+
+### Lab Realizado + Equipes online (2026-08-05)
+
+Duas fontes a mais migraram do arquivo/Sheet local pro sond.com.br direto, mesmo
+padrão de Avanços. Ver
+`docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md`.
+
+- **Lab Realizado** substitui a aba "Lab Concluido" -- conta agora por "Ensaiado Dia",
+  não "Concluído Dia" (mudança de semântica deliberada, ver o spec).
+- **Equipes produtivas** (Sondador distinto por dia, via `campo/fotos`) virou a fonte
+  PRINCIPAL do Δ equipes do Balanço de massa -- ativas (aba EQ)/mobilizadas (furos)
+  continuam de reserva se o CSV novo faltar.
+- **Equipes não produtivas** é informação nova e separada (aba Balanço de massa,
+  perto do Δ equipes) -- não some com produtivas. Não precisa de busca nova: usa os
+  mesmos dados da aba EQ que "ativas" já buscava.
+
+**Atualizar:**
+
+```bash
+node tools/semanal/atualizar-lab-online.js
+node tools/semanal/atualizar-equipes-produtivas-online.js
+```
+
+Mesmo requisito de Chrome com `--remote-debugging-port=9222` logado em sond.com.br
+que Avanços já documenta acima. **Sempre** `cp` os dois CSVs novos pra `docs/` junto
+com o HTML, mesma regra de sempre.
+
+**Limpeza pendente no Google (fora deste repositório):** com Lab também migrado, o
+gatilho do Apps Script que ainda espelhava "Avanços" + "Lab Concluido" fica **sem
+nenhum consumidor neste projeto**. Se ainda estiver rodando na conta Google dona da
+Sheet, pode ser desligado de vez.
 
 ### Recortes de tempo das abas 2 e 3 (2026-08-03)
 
