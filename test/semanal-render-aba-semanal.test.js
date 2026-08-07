@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao } = require('../tools/semanal/render-aba-semanal.js');
+const { renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao, formatarFinanceiroMilhoes } = require('../tools/semanal/render-aba-semanal.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
 const { semanasDoMes, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
 
@@ -193,8 +193,9 @@ test('Realizado/Tendência de Financeiro pesa cada furo pelo ticket médio do re
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   const numeros = linhaRealizado.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
   // Furos [2,3,1,0,0] (fechamento 6) x ticket 250 = [500,750,250,0,0], fechamento 1.500.
-  // Desde 2026-08-04, financeiro sai inteiro (sem casa decimal).
-  assert.deepStrictEqual(numeros, ['500', '750', '250', '0', '0', '1.500']);
+  // Desde 2026-08-06, financeiro sai em milhões via formatarFinanceiroMilhoes
+  // (3 casas abaixo de R$100 mil -- todos estes valores estão nessa faixa).
+  assert.deepStrictEqual(numeros, ['0,001 M', '0,001 M', '0,000 M', '0,000 M', '0,000 M', '0,002 M']);
 });
 
 test('Realizado de Financeiro soma por registro (furos daquele registro x SEU ticket), não soma os furos todos e multiplica por uma média geral', () => {
@@ -210,8 +211,8 @@ test('Realizado de Financeiro soma por registro (furos daquele registro x SEU ti
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   // Soma correta por registro: 200 (Alfa) + 1.000 (Beta) = 1.200 na 1ª semana.
   // Se fosse "somar furos (3) x ticket médio ((100+1000)/2=550)" daria 1.650 -- errado.
-  // Desde 2026-08-04, financeiro sai inteiro (sem casa decimal).
-  assert.match(linhaRealizado, /<td class="num">1\.200<\/td>/);
+  // Desde 2026-08-06, financeiro sai em milhões: 1.200/1.000.000 -> 0,001 M.
+  assert.match(linhaRealizado, /<td class="num">0,001 M<\/td>/);
 });
 
 test('registro sem TICKET cadastrado (0 ou ausente) não contribui R$ nenhum em Financeiro, mesmo com furos reais -- mesma regra do orçamento', () => {
@@ -222,8 +223,8 @@ test('registro sem TICKET cadastrado (0 ou ausente) não contribui R$ nenhum em 
   const html = renderAbaSemanal([registroSemTicket], [0], ['financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   assert.doesNotMatch(linhaRealizado, /sem-dado/, 'ainda é dado real (zero R$), não ausência de dado');
-  // Desde 2026-08-04, financeiro sai inteiro (sem casa decimal).
-  assert.match(linhaRealizado, /<td class="num">0<\/td>/);
+  // Desde 2026-08-06, financeiro sai em milhões: R$0 -> "0,000 M".
+  assert.match(linhaRealizado, /<td class="num">0,000 M<\/td>/);
 });
 
 test('Tendência: só semanas TOTALMENTE fechadas ficam sem-dado (o Realizado já mostra o fato, não precisa duplicar); a semana VIGENTE projeta seu próprio total, e as futuras dividem o saldo restante do Previsto PROPORCIONALMENTE AOS DIAS de cada uma', () => {
@@ -575,15 +576,30 @@ function registroFinanceiro(financeiroMes) {
   return r;
 }
 
-test('financeiro sai inteiro nas tres linhas da Tabela Semanal', () => {
-  const html = renderAbaSemanal([registroFinanceiro(123456)], [0], ['financeiro'], VIGENTE_JULHO, ANO,
-    { demandas: DEMANDAS_JULHO, hojeEpoch: HOJE_15_JUL });
-  const numeros = html.match(/<td class="num[^"]*">[\d.,]+<\/td>/g) || [];
-  assert.ok(numeros.length > 0, 'a fixture precisa produzir celulas numericas');
-  numeros.forEach((td) => assert.ok(!/,\d/.test(td), 'financeiro nao pode ter casa decimal: ' + td));
+// Substituído em 2026-08-06 (mesmo dia, pedido separado do dono do
+// projeto): financeiro deixou de ser inteiro puro e passou a milhões com
+// "M" -- ver formatarFinanceiroMilhoes. Exemplos confirmados com ele antes
+// de implementar (preview da pergunta de esclarecimento):
+// R$ 5.000 -> "0,005 M" · R$ 45.000 -> "0,045 M" · R$ 100.000 -> "0,10 M" ·
+// R$ 1.250.000 -> "1,25 M" · R$ 33.000.884 -> "33,00 M".
+test('formatarFinanceiroMilhoes: 3 casas abaixo de R$100 mil, 2 casas a partir daí, sempre com sufixo "M"', () => {
+  assert.strictEqual(formatarFinanceiroMilhoes(5000), '0,005 M');
+  assert.strictEqual(formatarFinanceiroMilhoes(45000), '0,045 M');
+  assert.strictEqual(formatarFinanceiroMilhoes(99999), '0,100 M');
+  assert.strictEqual(formatarFinanceiroMilhoes(100000), '0,10 M', 'R$100 mil exato já usa 2 casas (limiar é >=)');
+  assert.strictEqual(formatarFinanceiroMilhoes(1250000), '1,25 M');
+  assert.strictEqual(formatarFinanceiroMilhoes(33000884), '33,00 M');
+  assert.strictEqual(formatarFinanceiroMilhoes(null), '—');
 });
 
-test('equipes sem casa decimal, igual a volume e financeiro (2026-08-06: nenhuma dimensao mostra decimal na Tabela Semanal)', () => {
+test('financeiro na Tabela Semanal usa o formato em milhões, não mais inteiro puro', () => {
+  const html = renderAbaSemanal([registroFinanceiro(1250000)], [0], ['financeiro'], VIGENTE_JULHO, ANO,
+    { demandas: DEMANDAS_JULHO, hojeEpoch: HOJE_15_JUL });
+  assert.match(html, /1,25 M/, 'R$1.250.000 no mês precisa aparecer como "1,25 M" em pelo menos uma célula (Previsto)');
+  assert.doesNotMatch(html, /<td class="num[^"]*">1\.250\.000<\/td>/, 'não pode sobrar o valor cru sem conversão pra milhões');
+});
+
+test('equipes sem casa decimal, igual a volume (financeiro agora usa o formato em milhões, testado à parte)', () => {
   const html = renderAbaSemanal([registro(1000)], [0], ['equipes'], VIGENTE_JULHO, ANO, {});
   const numeros = [...html.matchAll(/<td class="num[^"]*"[^>]*>([^<]*)<\/td>/g)].map((m) => m[1]).filter(Boolean);
   assert.ok(numeros.length > 0, 'a fixture precisa produzir celulas numericas');
