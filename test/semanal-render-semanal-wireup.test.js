@@ -7,6 +7,7 @@ const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
 const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
+const { agregarEquipesAtivoPorDia } = require('../tools/semanal/compute-equipes-ativo-matriz.js');
 
 // Task 8 originalmente deixou o módulo pronto no bundle mas NUNCA chamado --
 // a aba Semanal abria vazia no navegador (achado do coordenador). Este
@@ -587,6 +588,82 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
   assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 1, 'a única linha de Avanços tem que virar 1 chegada no ano');
   assert.strictEqual(demandas.totais.sondagemRealizada.reduce((a, b) => a + b, 0), 1, 'a linha CONCLUIDO com Termino Sondagem tem que virar 1 sondagem realizada');
   assert.ok(Object.keys(demandas.porRegistroEventos).length > 0, 'porRegistroEventos precisa ter entrada -- é o que alimenta Realizado/Tendência da Tabela Semanal (furos + ensaios de Lab)');
+});
+
+// Regressão: com avancosLabConfigurados=true (o caso normal desde
+// 2026-08-03), atualizarDadosAoVivoSemanal() reatribui `demandasNovas` pra um
+// objeto NOVO vindo de ComputeDemandas.computeDemandas() (linha ~1441) DEPOIS
+// de já ter escrito equipesAtivoPorDia no objeto ANTIGO (linha ~1420) -- o
+// campo fica órfão no objeto descartado e nunca é escrito de novo antes do
+// commit final em window.__DEMANDAS__. Resultado ao vivo: a linha Realizado
+// de Equipes da Tabela Semanal, calibrada em 85/83,75 (ver
+// tools/semanal/compute-equipes-ativo-matriz.js), fica em branco depois de
+// qualquer clique em "Atualizar dados" -- exatamente o sintoma relatado pelo
+// dono do projeto em 2026-08-06. Os testes de sucesso acima (linha ~506) não
+// pegam isso porque o fetch mockado ali não responde .json() pra
+// URL_ESPELHO_EQUIPES_ATIVO_MATRIZ -- o .catch(() => null) do próprio código
+// engole o TypeError e o campo nunca chega a ser setado, mascarando o bug.
+test('atualizarDadosAoVivoSemanal: equipesAtivoPorDia (Realizado de Equipes) sobrevive à atualização, não fica órfão quando Avanços/Lab também atualizam', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-08-06T00:00:00Z');
+  const demandasComEquipesAntigas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesAtivoPorDia: { [diaEpoch(new Date('2026-08-01T00:00:00Z'))]: 99 }, // valor velho, tem que sumir
+  });
+  const html = renderSemanal({
+    registros, baseline: [], demandas: demandasComEquipesAntigas,
+    periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm,
+  });
+
+  const csvMatriz = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERMINO,SONDAGEM,BASE,'
+    + Array(12).fill('mes').join(',') + ',PICO,MÉDIA,PROD.,DIAS,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,TICKET,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,OBS\n'
+    + 'Origem-B,Grupo-B,Tomador-Novo,SUP-0002-25,Escopo,Apoio,01/2026,12/2026,ST,P,'
+    + Array(12).fill('0').join(',') + ',2,2,8,25,'
+    + Array(12).fill('0').join(',') + ',100,100,9999,'
+    + Array(12).fill('0').join(',') + ',100,100,\n'
+    + ',,,,,,,,,T,'
+    + Array(12).fill('0').join(',') + ',0,0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,\n';
+  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo,Inicio Sondagem,Sondador,OS\n'
+    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,,46091,Sondador Sintético,17851-26\n';
+  const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio\n'
+    + 'SUP-0002-25,46091,LL\n';
+  const historicoMatrizFresco = [
+    { data: '2026-08-05T23:00:00Z', ativo: 80 },
+    { data: '2026-08-06T23:00:00Z', ativo: 82 },
+  ];
+
+  const fetchMock = (url) => {
+    if (url.indexOf('historico.json') !== -1) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(historicoMatrizFresco) });
+    }
+    const texto = url.indexOf('pub?gid=609773455') !== -1 ? csvMatriz
+      : url.indexOf('avancos-configurado-teste') !== -1 ? csvAvancos
+      : csvLab;
+    return Promise.resolve({ ok: true, text: () => Promise.resolve(texto) });
+  };
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'https://exemplo.com/avancos-configurado-teste.csv';
+  sandbox.URL_ESPELHO_LAB_SEMANAL = 'https://exemplo.com/lab-configurado-teste.csv';
+
+  await chamarEsperarAtualizacao(sandbox);
+
+  const esperado = agregarEquipesAtivoPorDia(historicoMatrizFresco);
+  // JSON.parse(JSON.stringify(...)) normaliza o objeto que saiu do vm.Context
+  // (protótipo diferente do realm do teste, deepStrictEqual comparando com um
+  // objeto criado aqui fora falharia por protótipo mesmo com conteúdo igual
+  // -- mesmo idioma de test/semanal-compute-demandas.test.js, "a saída
+  // sobrevive a JSON.stringify").
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(sandbox.window.__DEMANDAS__.equipesAtivoPorDia)), esperado,
+    'equipesAtivoPorDia precisa vir do historico.json fresco buscado nesta atualização, não ficar undefined nem preso ao valor antigo (99)'
+  );
 });
 
 test('atualizarDadosAoVivoSemanal: se qualquer um dos 3 fetches falhar, window.__REGISTROS__ NÃO muda e o status mostra o erro', async () => {

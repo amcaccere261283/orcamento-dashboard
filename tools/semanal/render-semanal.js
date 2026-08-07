@@ -1414,11 +1414,19 @@ function atualizarDadosAoVivoSemanal() {
 
     var demandasNovas = window.__DEMANDAS__;
 
-    // Realizado de Equipes (2026-08-06): fora do if (avancosLabConfigurados)
-    // de propósito -- é um número da empresa inteira, independente de furos.
-    if (textos[5]) {
-      demandasNovas.equipesAtivoPorDia = ComputeEquipesAtivoMatriz.agregarEquipesAtivoPorDia(textos[5]);
-    }
+    // Realizado de Equipes (2026-08-06): calculado numa variável PRÓPRIA, não
+    // escrito direto em demandasNovas. Se avancosLabConfigurados for true (o
+    // caso normal), a linha "demandasNovas = ComputeDemandas.computeDemandas(...)"
+    // logo abaixo REATRIBUI demandasNovas pra um objeto novo -- gravar aqui
+    // ficaria órfão no objeto antigo e nunca chegaria ao window.__DEMANDAS__
+    // final (bug real, 2026-08-06: a linha Realizado de Equipes da Tabela
+    // Semanal ficava em branco depois de qualquer "Atualizar dados", porque
+    // é isso que sempre acontecia). Sem fetch novo (fetch falhou ou textos[5]
+    // veio vazio), preserva o que já estava em window.__DEMANDAS__ antes
+    // desta atualização -- não apaga o dado do build à toa.
+    var equipesAtivoPorDiaAtualizado = textos[5]
+      ? ComputeEquipesAtivoMatriz.agregarEquipesAtivoPorDia(textos[5])
+      : window.__DEMANDAS__.equipesAtivoPorDia;
 
     if (avancosLabConfigurados) {
       var furosLidos = ParseAvancos.parseAvancos(gridCsvComoXlsx(textos[1])).furos;
@@ -1543,6 +1551,11 @@ function atualizarDadosAoVivoSemanal() {
         }).porDiaPorMotivo;
       }
     }
+
+    // Aplicado por ÚLTIMO, depois de qualquer reatribuição de demandasNovas
+    // acima (avancosLabConfigurados=true troca o objeto inteiro) -- é o que
+    // garante que o valor sobrevive aos dois caminhos.
+    demandasNovas.equipesAtivoPorDia = equipesAtivoPorDiaAtualizado;
 
     window.__REGISTROS__ = registrosNovos;
     window.__DEMANDAS__ = demandasNovas;
