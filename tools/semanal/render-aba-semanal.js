@@ -36,7 +36,7 @@ function rotuloColunaFechamento(dimensao) {
   return dimensao === 'equipes' ? 'Média' : 'Total';
 }
 
-// Soma, através dos registros em 'indices', o Previsto do mês vigente numa
+// Soma, através dos registros em 'indices', um campo do mês vigente numa
 // dimensão -- mesma soma-através-de-registros que somarArraysMensais faz no
 // orçamento (tools/orcamento/render-dashboard.js), inclusive pra 'equipes':
 // somar equipes de CONTRATOS DIFERENTES no mesmo mês é válido (times
@@ -44,11 +44,14 @@ function rotuloColunaFechamento(dimensao) {
 // (semanas), que é o que dividirEmSemanas/fecharMes tratam à parte. null só
 // quando NENHUM registro contribuinte tem valor no mês vigente -- inclusive
 // quando vigenteIdx está fora de [0,11] (mensal[vigenteIdx] é undefined).
-function previstoMesVigente(registros, indices, dimensao, vigenteIdx) {
+// 'campo' ('previsto' ou 'total') escolhe QUAL linha física da MATRIZ somar
+// -- 'total' é a linha BASE=T ("Total"), a mesma que o dashboard de
+// Orçamento já lê como Tendência (SERIE_LABELS, render-dashboard.js).
+function somaMesVigente(registros, indices, campo, dimensao, vigenteIdx) {
   var soma = null;
   (indices || []).forEach(function (i) {
     var registro = registros[i];
-    var serie = registro && registro.previsto;
+    var serie = registro && registro[campo];
     var mensal = serie && serie[dimensao];
     if (!Array.isArray(mensal)) return;
     var v = mensal[vigenteIdx];
@@ -56,6 +59,9 @@ function previstoMesVigente(registros, indices, dimensao, vigenteIdx) {
     soma = (soma === null ? 0 : soma) + v;
   });
   return soma;
+}
+function previstoMesVigente(registros, indices, dimensao, vigenteIdx) {
+  return somaMesVigente(registros, indices, 'previsto', dimensao, vigenteIdx);
 }
 
 // Mesma expressão de chaveMatriz (tools/comum/linha-base.js) -- duplicada de
@@ -350,6 +356,20 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
       return mediaEquipesNoIntervalo(demandas.equipesAtivoPorDia, semana.inicio, fim);
     });
     fechamentoRealizado = fecharMes(semanasRealizado, dimensao);
+
+    // Tendência de Equipes (2026-08-07, pedido do dono do projeto): não vem
+    // de ritmo de furos como Volume/Financeiro (Equipes é foto, não fluxo --
+    // não há ritmo pra projetar). Vem direto da própria MATRIZ, linha
+    // BASE=T ("Total") -- a MESMA fonte que o dashboard de Orçamento já usa
+    // como Tendência de Equipes (SERIE_LABELS: total -> 'Tendência',
+    // tools/orcamento/render-dashboard.js). dividirEmSemanasInteiras com
+    // dimensao='equipes' só REPETE o valor do mês em cada semana (é foto,
+    // não se reparte por dia) -- mesmo tratamento que a linha Previsto já
+    // recebe duas linhas acima.
+    var tendenciaMesVigente = somaMesVigente(registros, indices, 'total', dimensao, vigenteIdx);
+    semanasTendencia = dividirEmSemanasInteiras(tendenciaMesVigente, dimensao, numSemanas, semanas);
+    semanasTendenciaCompleta = semanasTendencia;
+    fechamentoTendencia = fecharMes(semanasTendencia, dimensao);
   }
 
   return {

@@ -373,6 +373,32 @@ const CSS_SEMANAL = `
      execução (estoque de furos), nunca previsão. #9700DA é a cor padrão
      de Demandas no dashboard inteiro. */
   .linha-pendentes-demandas .serie-label, .linha-pendentes-demandas .celula-total-linha { color: #9700DA; }
+  /* Pedido do dono do projeto (2026-08-07): as CÉLULAS de cada linha (não só
+     o rótulo à esquerda e o Total à direita, que cssBase()/as duas regras
+     acima já colorem) ganham a mesma cor da série -- mesmas 4 cores já
+     estabelecidas no resto do dashboard (.linha-previsto/.linha-realizado em
+     cssBase(), .linha-tendencia/.linha-pendentes-demandas acima). Time
+     "sem-dado" fica sem texto (célula vazia), então colorir não muda nada
+     visualmente nelas -- o seletor não precisa excluí-las. */
+  .linha-previsto td.num { color: #2f6ad0; }
+  .linha-realizado td.num { color: #7fd858; }
+  .linha-tendencia td.num { color: #f6b53f; }
+  .linha-pendentes-demandas td.num { color: #9700DA; }
+  /* Alinhar as colunas ENTRE tabelas empilhadas (Equipes + Financeiro, ou
+     qualquer combinação de dimensões marcadas): cada <table> é um elemento
+     HTML separado (um bloco por dimensão) e por padrão calcula a largura de
+     cada coluna sozinha, a partir do próprio conteúdo -- "2" (Equipes) e
+     "12.345" (Financeiro) davam colunas de largura diferente, e a mesma
+     semana (S1, por exemplo) não ficava embaixo uma da outra ao rolar a
+     vista. table-layout:fixed tira essa auto-medição: com a 1ª coluna
+     (rótulo) numa largura FIXA e igual em toda tabela da página, o espaço
+     restante se reparte igualmente entre as colunas de semana + Total -- e
+     como todas as tabelas exibidas mostram o MESMO mês (mesmo número de
+     semanas), o resultado é a mesma largura de coluna em toda tabela.
+     170px cobre o rótulo mais comprido, "Demandas Pendentes" (19
+     caracteres), com folga. */
+  .tabela-semanal { table-layout: fixed; }
+  .tabela-semanal .serie-label { width: 170px; }
   .linha-pendentes-demandas .serie-label { border-left-color: #9700DA; }
   /* Mesmo tratamento visual de .nota-demandas (CSS_DEMANDAS abaixo) --
      mensagem de estado vazio (aba Gráficos, render-aba-grafico-semanal.js,

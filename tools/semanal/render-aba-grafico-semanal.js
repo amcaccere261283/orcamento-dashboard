@@ -142,8 +142,9 @@ function construirEixoYSvg(escala, alturaPlot, margem, usarMilhares, casasDecima
   return svg;
 }
 
-// Legenda só entra com 2+ séries -- com Equipes (só Previsto) o título do
-// painel já diz o que é.
+// Legenda só entra com 2+ séries -- guarda defensiva (hoje toda dimensão
+// desenha as 3 séries, ver seriesVisiveis acima); com 1 série só, o título
+// do painel já diz o que é.
 function construirLegendaSvg(dadosPorSerie, margem) {
   if (dadosPorSerie.length < 2) return '';
   var svg = '';
@@ -332,11 +333,16 @@ function construirPainelGraficoSemanalHtml(registros, indices, dimensao, vigente
     registros, indices, dimensao, vigenteIdx, semanas, numSemanas, temSemanasReais, indiceAtual, demandas, hojeEpoch
   );
 
-  // Equipes é uma FOTO (ver compute-semanal.js): só o Previsto entra --
-  // Realizado/Tendência semanais não existem pra Equipes (mesma regra que
-  // a Tabela Semanal já segue, calcularSeriesSemanaisDimensao devolve
-  // sem-dado pros dois nesse caso).
-  var seriesVisiveis = dimensao === 'equipes' ? ['previsto'] : ORDEM_SERIES_GRAFICO;
+  // Equipes é uma FOTO (ver compute-semanal.js), mas desde 2026-08-06/07
+  // tem as 3 séries igual Volume/Financeiro: Realizado vem de
+  // demandas.equipesAtivoPorDia (roster do Matriz) e Tendência vem da
+  // própria MATRIZ (linha BASE=T) -- ver os dois blocos dedicados em
+  // calcularSeriesSemanaisDimensao (render-aba-semanal.js). Até 2026-08-07
+  // este painel só desenhava Previsto pra Equipes porque Realizado/
+  // Tendência ainda não existiam quando o Gráfico foi escrito; a Tabela
+  // Semanal ganhou Realizado antes do Gráfico ser atualizado pra usá-lo --
+  // o gap que este ajuste fecha.
+  var seriesVisiveis = ORDEM_SERIES_GRAFICO;
   var valoresPorSerie = { previsto: series.semanasPrevisto, realizado: series.semanasRealizado, tendencia: series.semanasTendencia };
   // No Acumulado as duas curvas de acompanhamento são RECORTADAS pelo
   // calendário (pedido do dono do projeto, 2026-08-03):

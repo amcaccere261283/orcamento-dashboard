@@ -409,14 +409,20 @@ test('registro cuja combinação (sup, tipologia) não existe em demandas.porReg
   assert.match(linhaRealizado, /<td class="num">0<\/td>/);
 });
 
-test('Realizado/Tendência aparecem em Volume E Financeiro (Financeiro pesado pelo ticket médio); Equipes sem equipesRealizadoPorDia fica sem-dado nas duas; Demandas Pendentes continua exclusivo do Volume', () => {
+test('Realizado/Tendência aparecem em Volume E Financeiro (Financeiro pesado pelo ticket médio); Equipes sem equipesAtivoPorDia fica sem-dado só no Realizado (Tendência vem de registro.total.equipes, independente de demandas); Demandas Pendentes continua exclusivo do Volume', () => {
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': { sondagemRealizada: [diaJul(1)], saidaEstoque: [], chegada: [] } } };
   const html = renderAbaSemanal([registro(1000)], [0], ['equipes', 'financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   assert.doesNotMatch(html, /Demandas Pendentes/, 'Pendentes é estoque de furos, sem análogo em R$ -- exclusivo do Volume');
   const blocoEquipes = html.split('<div class="bloco-dimensao-semanal">')[1];
   const blocoFinanceiro = html.split('<div class="bloco-dimensao-semanal">')[2];
   const semDadoEquipes = (blocoEquipes.match(/class="num sem-dado"/g) || []).length;
-  assert.strictEqual(semDadoEquipes, 10, 'Equipes: 5 semanas x 2 linhas (Realizado + Tendência) -- sem equipesRealizadoPorDia, Realizado fica sem-dado; Tendência nunca ativa (não é furo, não tem ticket)');
+  // Só o Realizado (5 semanas): sem demandas.equipesAtivoPorDia, fica sem-dado.
+  // Tendência (2026-08-07) não depende de demandas -- vem de
+  // registro.total.equipes (fixture registro() usa 2 nos três blocos), e
+  // Previsto sempre tem dado real -- nenhum dos dois entra nesta contagem.
+  assert.strictEqual(semDadoEquipes, 5, 'Equipes: só as 5 semanas do Realizado ficam sem-dado (sem equipesAtivoPorDia); Tendência já mostra o Total da MATRIZ');
+  const linhaTendenciaEquipes = blocoEquipes.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
+  assert.doesNotMatch(linhaTendenciaEquipes, /sem-dado/, 'Tendência de Equipes não depende de demandas, só da MATRIZ');
   const linhaRealizadoFinanceiro = blocoFinanceiro.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   const linhaTendenciaFinanceiro = blocoFinanceiro.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
   assert.doesNotMatch(linhaRealizadoFinanceiro, /sem-dado/, 'Realizado ativo em todas as semanas (ticket médio 1 na fixture registro(), mesmos números de furos que Volume mostraria)');
@@ -436,7 +442,7 @@ test('Realizado/Tendência aparecem em Volume E Financeiro (Financeiro pesado pe
 // Por isso estes testes não variam 'registros'/'indices' -- a função nem os
 // usa mais para esta dimensão.
 
-test('Realizado de Equipes: média diária por semana, cortada em hoje -- S1 fechada (2,00), S2 fechada (7,00), S3 vigente truncada em 3 dias (3,00), S4/S5 futuras sem-dado; fechamento é a MÉDIA das semanas com dado (4,00)', () => {
+test('Realizado de Equipes: média diária por semana, cortada em hoje -- S1 fechada (2,00), S2 fechada (7,00), S3 vigente truncada em 3 dias (3,00), S4/S5 futuras sem-dado; fechamento é a MÉDIA das semanas com dado (4,00). Tendência (2026-08-07) vem de registro.total.equipes, repetida em TODAS as semanas -- inclusive futuras, é foto/premissa, não fluxo truncado em hoje como o Realizado', () => {
   const equipesAtivoPorDia = {
     [diaJul(1)]: 3, [diaJul(3)]: 1,    // S1 (5 dias, só 2 com retrato): soma 4 / 2 dias com dado = 2,00 (dias sem retrato ficam de fora, não contam 0)
     [diaJul(8)]: 7,                     // S2 (7 dias, só 1 com retrato): 7 / 1 = 7,00
@@ -444,15 +450,20 @@ test('Realizado de Equipes: média diária por semana, cortada em hoje -- S1 fec
     [diaJul(22)]: 99,                   // S4 é futura (hoje=15) -- não deve entrar em nada
   };
   const demandas = { porRegistroEventos: {}, equipesAtivoPorDia };
+  // total.equipes DIFERENTE de previsto.equipes (5, não 2 -- ambos vêm de
+  // registro(0), que usa o mesmo array [2]*12 pros três blocos por padrão):
+  // prova que a Tendência lê o campo certo (BASE=T), não aliasa o Previsto.
+  const registroComTendencia = registro(0);
+  registroComTendencia.total.equipes = new Array(12).fill(0);
+  registroComTendencia.total.equipes[VIGENTE_JULHO] = 5;
   const series = calcularSeriesSemanaisDimensao(
-    [registro(0)], [0], 'equipes', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
+    [registroComTendencia], [0], 'equipes', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
     true, indiceSemanaAtual(SEMANAS_JULHO, HOJE_15_JUL), demandas, HOJE_15_JUL
   );
   assert.deepStrictEqual(series.semanasRealizado, [2, 7, 3, null, null]);
   assert.ok(Math.abs(series.fechamentoRealizado - 4) < 1e-9, 'fechamento é a MÉDIA de [2,7,3] = 4, não a soma');
-  // Tendência de Equipes continua sem-dado -- não é fluxo de furo pra projetar.
-  assert.strictEqual(series.fechamentoTendencia, null);
-  series.semanasTendencia.forEach((v) => assert.strictEqual(v, null));
+  assert.deepStrictEqual(series.semanasTendencia, [5, 5, 5, 5, 5], 'repete o Total do mês (5) em toda semana, igual ao Previsto');
+  assert.strictEqual(series.fechamentoTendencia, 5, 'fechamento é a MÉDIA das semanas (foto) -- aqui o próprio valor repetido');
 });
 
 test('Realizado de Equipes: dia SEM retrato fica FORA do denominador (não conta zero) -- semana de 5 dias com só 1 dia de dado dá 4,00, não 0,80', () => {

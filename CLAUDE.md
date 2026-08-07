@@ -555,6 +555,46 @@ rótulo o número sozinho é ambíguo. Consolidado e Alertas usam `calcularSerie
 mas NÃO passam pelo formatador de milhares (chamam `formatarNumero` direto sobre o valor
 cheio) -- só a Tabela Semanal trunca pra milhares, então só ela precisava do indicador.
 
+### Tendência de Equipes: da linha BASE=T da MATRIZ, não de furos (2026-08-07)
+
+A aba Gráficos, dimensão Equipes, só desenhava Previsto -- comentário no código dizia
+"Realizado/Tendência não existem pra Equipes", mas isso ficou desatualizado: a Tabela
+Semanal já tinha ganhado Realizado de Equipes em 2026-08-06 (via `demandas.equipesAtivoPorDia`,
+ver seção acima) e ninguém atualizou o Gráfico pra usar o mesmo dado. **Corrigido**:
+`seriesVisiveis` em `construirPainelGraficoSemanalHtml` (`render-aba-grafico-semanal.js`)
+não faz mais exceção pra Equipes -- as 3 dimensões desenham as mesmas 3 séries agora. O
+painel Acumulado continua excluído pra Equipes (é foto, não flui ao longo do mês -- isso
+não mudou).
+
+**Tendência de Equipes é conceito novo, adicionado no mesmo pedido.** Diferente de
+Volume/Financeiro (que projetam a partir do RITMO de furos concluídos -- não existe
+"ritmo" pra um headcount), a Tendência de Equipes vem direto da própria MATRIZ: cada
+(contrato, tipologia) tem 3 linhas físicas na planilha por `BASE` (P/R/T -- ver
+`tools/orcamento/parse-matriz.js:123-129`), e a linha `T` ("Total") é exatamente a mesma
+fonte que o dashboard de Orçamento já usa como "Tendência" pra TODAS as dimensões
+(`SERIE_LABELS: { total: 'Tendência', ... }`, `tools/orcamento/render-dashboard.js:1109`).
+O semanal simplesmente nunca tinha lido `registro.total` pra Equipes -- confirmado com o
+dono do projeto antes de implementar ("está na planilha MATRIZ, na mesma fonte do valor
+das equipes previstas").
+
+**Implementação** (`calcularSeriesSemanaisDimensao`, `render-aba-semanal.js`):
+`previstoMesVigente` virou `somaMesVigente(registros, indices, campo, dimensao, vigenteIdx)`
+com um parâmetro `campo` novo (`'previsto'` ou `'total'`) -- mesma soma-através-de-registros
+de sempre, só trocando qual bloco do registro é somado. A Tendência de Equipes soma
+`registro.total.equipes[vigenteIdx]` e repete o resultado em TODAS as semanas via
+`dividirEmSemanasInteiras` (que, pra `dimensao='equipes'`, só repete o valor mensal -- é
+foto, não se reparte por dia, mesmo tratamento que o Previsto já recebe). **Diferente do
+Realizado de Equipes, a Tendência NÃO trunca em hoje** -- é premissa/plano do mês inteiro,
+não uma medição, então semanas futuras mostram o mesmo valor das passadas (exatamente como
+o Previsto já fazia). Fechamento usa `fecharMes`, que já faz MÉDIA (não soma) quando
+`dimensao === 'equipes'`.
+
+**A aba Consolidado continua coagindo Equipes pra Volume** (`dimensaoDaTabela`,
+`render-aba-consolidado.js`) com uma nota na tela dizendo "a página não mede equipes por
+semana em lugar nenhum" -- essa frase ficou desatualizada por este mesmo pedido (a página
+JÁ mede, na Tabela e no Gráfico), mas mexer no Consolidado não foi pedido nesta rodada;
+fica como pendência se um dia isso incomodar.
+
 ### Pendências conhecidas
 
 **RESOLVIDO em 2026-08-06 (commit `88f137b`) — saída do estoque de "Demandas Pendentes"

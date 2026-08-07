@@ -197,15 +197,39 @@ test('construirPainelGraficoSemanalHtml: no Acumulado o Realizado morre na seman
     'a curva de Realizado vai até a semana em curso (S3) e para');
 });
 
-test('construirPainelGraficoSemanalHtml: Equipes mostra só Previsto, sem legenda (1 série só) e sem painel Acumulado', () => {
+test('construirPainelGraficoSemanalHtml: Equipes sem demandas/mês-vigente-real mostra as 3 séries na legenda (mesmo padrão de Volume/Financeiro, 2026-08-07), mas sem barra nem tooltip de Realizado/Tendência -- e continua sem painel Acumulado', () => {
   const html = construirPainelGraficoSemanalHtml(
     [registro(100)], [0], 'equipes', VIGENTE_JULHO,
     require('../tools/semanal/compute-semanal.js').semanasDoMes(ANO, VIGENTE_JULHO), 5, false, -1, undefined, undefined
   );
-  assert.doesNotMatch(html, /Acumulado no mês/);
-  assert.doesNotMatch(html, />Realizado</);
-  assert.doesNotMatch(html, />Tendência</);
+  assert.doesNotMatch(html, /Acumulado no mês/, 'Equipes é foto, não fluxo -- sem painel Acumulado, mesmo com as 3 séries na Semanal');
+  assert.match(html, />Realizado</, 'legenda lista as 3 séries -- mesmo padrão de Volume/Financeiro desde 2026-08-07');
+  assert.match(html, />Tendência</);
+  assert.doesNotMatch(html, /Realizado: /, 'sem temSemanasReais nenhuma barra/tooltip de Realizado é desenhada -- só a legenda existe');
+  assert.doesNotMatch(html, /Tendência: /, 'idem para Tendência');
   assert.match(html, /Semanal — Equipes/);
+});
+
+test('construirPainelGraficoSemanalHtml: com mês vigente real, Equipes desenha barras de Realizado (de demandas.equipesAtivoPorDia) e Tendência (de registro.total.equipes)', () => {
+  const semanas = require('../tools/semanal/compute-semanal.js').semanasDoMes(ANO, VIGENTE_JULHO);
+  // Só o dia 1 (dentro de S1, 01/07 a 05/07) tem retrato: S1 fecha em 3
+  // (único dia com dado, sem diluir pelos outros 4 -- ver mediaEquipesNoIntervalo
+  // em render-aba-semanal.js). S2..S5 ficam sem-dado (nenhum dia com retrato),
+  // inclusive S3 (a semana vigente, hoje=15/07) -- valor exato já travado no
+  // teste de compute-level em semanal-render-aba-semanal.test.js; aqui só
+  // prova que o Gráfico desenha a barra/tooltip com o mesmo número.
+  const equipesAtivoPorDia = { [diaJul(1)]: 3 };
+  const demandas = { porRegistroEventos: {}, equipesAtivoPorDia };
+  const registroComTendencia = registro(100);
+  registroComTendencia.total.equipes = new Array(12).fill(0);
+  registroComTendencia.total.equipes[VIGENTE_JULHO] = 5;
+  const html = construirPainelGraficoSemanalHtml(
+    [registroComTendencia], [0], 'equipes', VIGENTE_JULHO, semanas, 5, true,
+    require('../tools/semanal/compute-semanal.js').indiceSemanaAtual(semanas, HOJE_15_JUL), demandas, HOJE_15_JUL
+  );
+  assert.match(html, /Realizado: 3/, 'S1 fecha em 3 (único dia com retrato)');
+  assert.match(html, /Tendência: 5/, 'repete o Total do mês (5) em cada semana, igual ao Previsto');
+  assert.doesNotMatch(html, /Acumulado no mês/, 'continua sem painel Acumulado pra Equipes');
 });
 
 test('construirPainelGraficoSemanalHtml: sem demandas, Volume ainda mostra o painel Semanal (só Previsto tem barra, Realizado/Tendência ficam sem dado)', () => {
