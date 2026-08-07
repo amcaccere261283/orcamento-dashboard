@@ -153,7 +153,11 @@ function mediaEquipesNoIntervalo(equipesAtivoPorDia, inicioEpoch, fimEpoch) {
     if (typeof equipesAtivoPorDia[dia] === 'number') { soma += equipesAtivoPorDia[dia]; diasComDado++; }
   }
   if (!diasComDado) return null;
-  return soma / diasComDado;
+  // Arredonda pra CIMA, nunca pro mais próximo (pedido do dono do projeto,
+  // 2026-08-06): a média diária quase sempre sai quebrada (85+85+83+.../N), e
+  // pra "quantas equipes trabalharam" a leitura conservadora é a de cima --
+  // 83,75 nunca é lido como "83 equipes e um pouco", é "84 no pior dia".
+  return Math.ceil(soma / diasComDado);
 }
 
 // '05' em vez de '5' -- sem toLocaleString/padStart (o resto deste módulo já
@@ -411,7 +415,10 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
       // válida nenhuma. Diferente das células por semana (instantâneo fixo
       // no início): o fechamento é sempre o saldo AO VIVO.
       var fechamentoPendentes = pendentesNaData(registros, indices, opts.demandas, opts.hojeEpoch);
-      linhaPendentes = renderLinhaSerie('Demandas Pendentes', 'pendentes-demandas', semanasPendentes, fechamentoPendentes);
+      // Estoque de FUROS -- já é inteiro por natureza (não existe 0,5 furo);
+      // 0 casas aqui só remove o ",00" decorativo que formatarNumero adiciona
+      // por padrão.
+      linhaPendentes = renderLinhaSerie('Demandas Pendentes', 'pendentes-demandas', semanasPendentes, fechamentoPendentes, 0);
     }
 
     return '<div class="bloco-dimensao-semanal">'
@@ -419,14 +426,17 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
       + '<table class="tabela-semanal">'
       + renderCabecalho(dimensao, numSemanas, semanas)
       + '<tbody>'
-      // Equipes continua com 2 casas: é média ponderada (foto), não passa pelo
-      // arredondamento inteiro -- ver dividirEmSemanasInteiras. Financeiro é
-      // inteiro desde 2026-08-04 (pedido do dono do projeto: nenhum valor
-      // financeiro com casa decimal). Volume fica no padrão: a Tendência dele
-      // é projeção fracionária, e a casa decimal ali é informação real.
-      + renderLinhaSerie('Previsto', 'previsto', series.semanasPrevisto, series.fechamentoPrevisto, dimensao === 'equipes' ? 2 : 0)
-      + renderLinhaSerie('Realizado', 'realizado', series.semanasRealizado, series.fechamentoRealizado, dimensao === 'financeiro' ? 0 : undefined)
-      + renderLinhaSerie('Tendência', 'tendencia', series.semanasTendencia, series.fechamentoTendencia, dimensao === 'financeiro' ? 0 : undefined)
+      // Sem casa decimal em NENHUMA dimensão (pedido do dono do projeto,
+      // 2026-08-06, substitui a regra anterior que mantinha Equipes/Volume
+      // com 2 casas). formatarNumero(v, 0) já agrupa milhar em pt-BR via
+      // toLocaleString ("4.415"), então isso cobre display inteiro E
+      // agrupamento no mesmo lugar. Equipes Realizado chega já inteiro de
+      // mediaEquipesNoIntervalo (Math.ceil embutido ali); os outros valores
+      // fracionários (Tendência de Volume, médias) são só arredondados pro
+      // inteiro mais próximo aqui, não pra cima.
+      + renderLinhaSerie('Previsto', 'previsto', series.semanasPrevisto, series.fechamentoPrevisto, 0)
+      + renderLinhaSerie('Realizado', 'realizado', series.semanasRealizado, series.fechamentoRealizado, 0)
+      + renderLinhaSerie('Tendência', 'tendencia', series.semanasTendencia, series.fechamentoTendencia, 0)
       + linhaPendentes
       + '</tbody></table></div>';
   }).join('');

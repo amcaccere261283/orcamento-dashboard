@@ -376,7 +376,7 @@ test('com o check "somente ativos" ligado, o furo pendente de um SUP sem movimen
   assert.ok(comCheck, 'esperava a linha Demandas Pendentes no bloco Volume');
   // Com o check ligado (padrão), só SUP-0001-24 conta -- e ele não tem
   // chegada nenhuma, então o saldo fecha em 0 em toda a linha.
-  assert.doesNotMatch(comCheck, />1,00</, 'com o check ligado, o furo pendente de SUP-0002-24 (inativo em Volume) não pode contar');
+  assert.doesNotMatch(comCheck, />1</, 'com o check ligado, o furo pendente de SUP-0002-24 (inativo em Volume) não pode contar');
 
   const checkboxSomenteAtivos = documentoFalso.getElementById('somente-ativos');
   assert.ok(checkboxSomenteAtivos, 'checkbox somente-ativos existe no DOM após os scripts rodarem');
@@ -384,7 +384,7 @@ test('com o check "somente ativos" ligado, o furo pendente de um SUP sem movimen
   checkboxSomenteAtivos.listeners.change({ target: checkboxSomenteAtivos });
 
   const semCheck = linhaPendentes(documentoFalso.getElementById('secao-semanal').innerHTML);
-  assert.match(semCheck, />1,00</, 'desligado, o furo pendente de SUP-0002-24 volta a contar');
+  assert.match(semCheck, />1</, 'desligado, o furo pendente de SUP-0002-24 volta a contar');
 });
 
 test('o HTML da semanal tem o botão "Atualizar dados" e o span de status, com os MESMOS ids que o CSS compartilhado (cssBase) estiliza', () => {
