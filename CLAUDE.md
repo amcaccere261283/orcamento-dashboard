@@ -452,23 +452,63 @@ se confirma que a Sheet espelho não está servindo dado velho ou truncado.
 nesse intervalo. Uma edição no `.xlsx` não aparece no botão antes disso — não é
 defeito do refresh.
 
+### Formato numérico da Tabela Semanal e Gráficos, bug do Realizado de Equipes (2026-08-06/07)
+
+**Nenhum número na Tabela Semanal mostra mais casa decimal** (Previsto/Realizado/
+Tendência em Equipes/Volume, Demandas Pendentes) — pedido do dono do projeto,
+substitui a regra de 2026-08-03/04 que mantinha Equipes/Volume com 2 casas.
+`formatarNumero(v, 0)` (`render-aba-semanal.js:25-30`) já agrupa milhar em pt-BR via
+`toLocaleString` ("4.415"), cobrindo os dois pedidos (inteiro + agrupamento) no mesmo
+lugar. **Realizado de Equipes especificamente arredonda pra CIMA**
+(`Math.ceil` em `mediaEquipesNoIntervalo`, `render-aba-semanal.js:148-157`), não pro
+mais próximo — a média diária de equipes ativas quase sempre sai quebrada, e a leitura
+conservadora pedida foi a de cima.
+
+**Financeiro (Previsto/Realizado/Tendência) mudou pra milhões com sufixo "M"**
+(`formatarFinanceiroMilhoes`, `render-aba-semanal.js:195-206`), substituindo a regra
+de inteiro puro de 2026-08-04: 3 casas quando o valor original é menor que R$100 mil
+(um valor pequeno como R$5.000 sumiria em "0,00 M" com 2 casas), 2 casas a partir daí.
+`renderLinhaSerie` agora aceita tanto um número de casas quanto uma função formatadora
+no último parâmetro — é assim que o Financeiro pluga essa regra sem a linha genérica
+precisar conhecer a lógica de milhões.
+
+**Aba Gráficos não divide mais por mil.** `GRAFICO_LIMIAR_MILHARES`
+(`render-aba-grafico-semanal.js`) e a lógica de divisão em `formatarValorGrafico`
+continuam no arquivo, mas as duas atribuições `usarMilhares = max... >= LIMIAR` viram
+sempre `false` -- reverter é só trocar essas duas linhas de volta. Título "(em
+milhares)" nunca mais aparece (consequência direta, não precisou tocar nele).
+
+**Bug corrigido (commit `88f137b`): "Realizado de Equipes" ficava em branco depois de
+qualquer clique em "Atualizar dados".** Causa raiz: `atualizarDadosAoVivoSemanal()`
+escrevia `demandasNovas.equipesAtivoPorDia` logo após buscar `historico.json`, mas
+`demandasNovas` era REATRIBUÍDA ~20 linhas depois (`= ComputeDemandas.computeDemandas(...)`)
+sempre que `avancosLabConfigurados` é true (o caso normal) -- o valor buscado ficava
+órfão no objeto descartado. Fix: captura o valor numa variável própria
+(`equipesAtivoPorDiaAtualizado`) e aplica em `demandasNovas.equipesAtivoPorDia` só no
+final da função, depois de qualquer reatribuição possível -- mesmo padrão que
+`equipesPorDia`/`equipesPeriodo` já usavam pra sobreviver a essa troca de objeto. **Ao
+adicionar qualquer campo novo em `demandasNovas` dentro dessa função, escrever por
+ÚLTIMO, nunca logo após o fetch** -- é a segunda vez que esse padrão de reatribuição no
+meio da função pega um campo desprevenido.
+
 ### Pendências conhecidas
 
-**Em discussão (2026-08-06) — saída do estoque de "Demandas Pendentes" pode estar usando o
-campo errado.** Hoje `pendentesNaData`/`saidaEstoque` (`compute-demandas.js:91-99`,
-`render-aba-semanal.js:111-127`) tiram um furo do saldo pendente pela data de **Término
-Sondagem** (mais Cancelamento, o menor dos dois). O dono do projeto revisou essa conta com
-o Claude e afirmou que a regra de negócio real é **Início Sondagem**: uma demanda deixa de
-estar "disponível para execução" quando a sondagem COMEÇA, não quando termina. Ele vai
-confirmar com o AmCaccere antes de mudar — **por ora o código continua como está,
-propositalmente, não mexer sem essa confirmação.**
+**RESOLVIDO em 2026-08-06 (commit `88f137b`) — saída do estoque de "Demandas Pendentes"
+passou a usar Início Sondagem, não Término.** `pendentesNaData`/`saidaEstoque`
+(`compute-demandas.js:91-99`, `render-aba-semanal.js:111-127`) agora tiram um furo do
+saldo pendente pela data de **Início Sondagem** (mais Cancelamento, o menor dos dois) —
+confirmado pelo dono do projeto contra o extrato Avanço Sondagens: uma demanda deixa de
+estar "disponível para execução" quando a sondagem COMEÇA, não quando termina.
 
-Isso esbarra num problema já documentado em `parse-avancos.js:22-33`: a coluna **Inicio
-Sondagem tem 3.929 de 61.927 linhas (≈6,3%) com data fora da janela plausível 2023-2027**
-(de 1901 a 2078) — é por isso que nenhuma série hoje ancora nela. Se a resposta do
-AmCaccere confirmar Início Sondagem, a migração precisa decidir o que fazer com essas
-linhas fora da janela (hoje tratadas como "sem data", o que faria o furo nunca sair do
-estoque) antes de trocar `terminoSondagem` por `inicioSondagem` em `saidaEstoque`.
+A ressalva de qualidade de dado (`parse-avancos.js:22-33`: **3.929 de 61.927 linhas
+(≈6,3%) de Início Sondagem com data fora da janela 2023-2027**) não precisou de
+tratamento novo — `dataSaneada` já descarta essas datas como ausentes, e o furo
+correspondente simplesmente não sai do estoque (mesmo tratamento conservador que já
+existia para furo sem data de término, antes desta troca).
+
+**Mesmo dia, pedido separado:** Tabela Semanal também mudou pra mostrar, em cada semana,
+o saldo pendente FIXO do seu primeiro dia (não mais o saldo de hoje na semana em curso
+nem o saldo do domingo nas semanas fechadas) — ver `render-aba-semanal.js:394-407`.
 
 **Fase 2 — os filtros: FEITA em 6ff1bfc.** `tools/comum/render-shell.js` exporta
 `scriptFiltros()` (estado, `indicesFiltrados`, `montarFiltroMulti` com
