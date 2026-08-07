@@ -86,10 +86,11 @@ function montarSandbox(html, fetchMock) {
 }
 
 test('depois da senha certa, a aba Semanal é montada de verdade em #secao-semanal -- não fica um <div> vazio', async () => {
-  // Valores em escala de contrato real (milhões), não os 4000/2000 de antes
-  // de 2026-08-06: no formato em milhões (formatarFinanceiroMilhoes, 2 casas
-  // a partir de R$100 mil) valores na casa dos milhares colapsavam todos no
-  // mesmo "0,001 M", perdendo a distinção entre semanas que este teste prova.
+  // Valores em escala de contrato real (milhões): o formato de 2026-08-06/07
+  // (milhares truncados, formatarFinanceiroMilhares) não precisa mais disso
+  // pra evitar colapso -- mesmo diferenças pequenas sobrevivem ao /1000 --
+  // mas os fixtures ficaram deste tamanho de quando o formato em "M"
+  // (2026-08-06) exigia escala de milhão, e não há motivo pra encolher.
   const registros = [
     registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000000),
     registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 2000000),
@@ -142,11 +143,12 @@ test('depois da senha certa, a aba Semanal é montada de verdade em #secao-seman
   // proporcionalmente aos DIAS de cada semana de julho de 2026 (5 semanas
   // reais: 5+7+7+7+5=31 dias -- S2/S3/S4 são semana cheia, 6.000.000x7/31=
   // 1.354.838,7, que o arredondamento inteiro de 2026-08-03 fecha em
-  // 1.354.839 -> em milhões, 2 casas (>=R$100 mil): "1,35 M") -- formatada em
-  // pt-BR -- os mesmos números que um humano abrindo a página veria na tela.
+  // 1.354.839 -> em milhares truncados (2026-08-07): floor(1354839/1000) =
+  // "1.354") -- formatada em pt-BR -- os mesmos números que um humano abrindo
+  // a página veria na tela.
   assert.match(htmlMontado, /S1/);
-  assert.match(htmlMontado, />1,35 M</, 'S2/S3/S4 (semana cheia de 7 dias) fecham em 1,35 M previstos');
-  assert.match(htmlMontado, />6,00 M</, 'a coluna Total fecha exatamente nos 6.000.000 (6,00 M) do mês vigente');
+  assert.match(htmlMontado, />1\.354</, 'S2/S3/S4 (semana cheia de 7 dias) fecham em 1.354 (milhares) previstos');
+  assert.match(htmlMontado, />6\.000</, 'a coluna Total fecha exatamente nos 6.000.000 (6.000 milhares) do mês vigente');
 });
 
 test('com a senha errada, a aba Semanal continua vazia -- nunca monta antes de decifrar de verdade', async () => {
@@ -208,8 +210,7 @@ test('com três abas, abrir Demandas esconde as outras duas seções -- alternar
 });
 
 test('filtrar por SUP na barra compartilhada recalcula a aba Semanal só com os registros daquele SUP', async () => {
-  // Escala de milhões -- ver comentário no teste anterior (evita colapso de
-  // precisão no formato "M").
+  // Escala de milhões -- ver comentário no teste anterior.
   const registros = [
     registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000000),
     registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 2000000),
@@ -245,10 +246,11 @@ test('filtrar por SUP na barra compartilhada recalcula a aba Semanal só com os 
   // Prova de conteúdo: 4.000.000 repartido proporcionalmente aos dias de
   // cada semana de julho (só o SUP-0001-24, 5 semanas reais, 31 dias) --
   // 4.000.000x7/31 = 903.225,8 -> 903.226 nas semanas cheias (S3/S4, depois
-  // do arredondamento inteiro de 2026-08-03) -> em milhões, 2 casas: "0,90 M"
-  // -- não "1,35 M" (que seria a soma dos 2 registros sem filtro).
-  assert.match(htmlMontado, />0,90 M</);
-  assert.doesNotMatch(htmlMontado, />1,35 M</, 'o registro filtrado fora não pode continuar somando na tabela');
+  // do arredondamento inteiro de 2026-08-03) -> em milhares truncados
+  // (2026-08-07): floor(903226/1000) = "903" -- não "1.354" (que seria a
+  // soma dos 2 registros sem filtro, ver teste anterior).
+  assert.match(htmlMontado, />903</);
+  assert.doesNotMatch(htmlMontado, />1\.354</, 'o registro filtrado fora não pode continuar somando na tabela');
 });
 
 test('a soma de todas as semanas do Previsto continua batendo com o mês vigente mesmo com um filtro de recorte ativo, não só sem filtro', async () => {
@@ -270,28 +272,27 @@ test('a soma de todas as semanas do Previsto continua batendo com o mês vigente
   checkboxAlfa.listeners.change();
 
   const htmlMontado = documentoFalso.getElementById('secao-semanal').innerHTML;
-  // As 5 células da linha Previsto vêm como "0,65 M"/"0,90 M" (formatarFinanceiroMilhoes,
-  // 2 casas nesta faixa). Reconstruir em reais a partir do texto exibido é
-  // uma APROXIMAÇÃO (645.161 exibe "0,65 M", que reconstrói pra 650.000) --
-  // diferente do formato inteiro puro de antes, que espelhava o valor exato.
-  // A soma exata por construção (maior resto, dividirEmSemanasInteiras) já é
+  // As 5 células da linha Previsto vêm como "645"/"903" (formatarFinanceiroMilhares,
+  // milhares TRUNCADOS -- 2026-08-07). Reconstruir em reais a partir do texto
+  // exibido é uma APROXIMAÇÃO só pra baixo (truncar nunca supera o valor real):
+  // "903" pode ser qualquer coisa de 903.000 a 903.999 antes de truncar. A
+  // soma exata por construção (maior resto, dividirEmSemanasInteiras) já é
   // travada em compute-semanal.test.js; o que este teste prova é que o
   // FILTRO por SUP chegou até o cálculo -- soma perto de 4.000.000 (só
   // SUP-0001-24), não perto de 6.000.000 (os dois registros). Tolerância:
-  // 2 casas num valor na casa do milhão erra no máximo R$5.000 por célula
-  // (metade do "degrau" de R$10.000 que 2 casas resolve nessa escala) --
-  // 5 células, no pior caso R$25.000 de folga.
+  // truncar 5 células perde no máximo R$999 cada, nunca mais -- até R$4.995
+  // de folga, sempre PRA BAIXO (a soma reconstruída nunca passa de 4.000.000).
   const linhaPrevisto = htmlMontado.match(/<tr class="linha-serie-semanal linha-previsto">[\s\S]*?<\/tr>/)[0];
   // [^"]* na classe casa TANTO as 5 células por semana quanto a 6ª, de
   // fechamento (class="num celula-total-linha") -- slice(0,5) fica só com
   // as semanas, igual ao regex mais específico que os outros testes usam.
-  const celulas = [...linhaPrevisto.matchAll(/<td class="num[^"]*">([\d,]+) M<\/td>/g)].map((m) => m[1]).slice(0, 5);
-  assert.strictEqual(celulas.length, 5, 'as 5 semanas do Previsto precisam estar no formato "X,XX M"');
-  const valoresReconstruidos = celulas.map((c) => Math.round(Number(c.replace(',', '.')) * 1000000));
+  const celulas = [...linhaPrevisto.matchAll(/<td class="num[^"]*">([\d.]+)<\/td>/g)].map((m) => m[1]).slice(0, 5);
+  assert.strictEqual(celulas.length, 5, 'as 5 semanas do Previsto precisam estar no formato "X.XXX" (milhares, agrupados)');
+  const valoresReconstruidos = celulas.map((c) => Number(c.replace(/\./g, '')) * 1000);
   const soma = valoresReconstruidos.reduce((a, b) => a + b, 0);
   assert.ok(
-    Math.abs(soma - 4000000) < 25000,
-    `soma reconstruída (${soma}) precisa ficar perto dos 4.000.000 do mês vigente filtrado, não perto dos 6.000.000 de antes do filtro`
+    soma <= 4000000 && soma >= 4000000 - 5000,
+    `soma reconstruída (${soma}) precisa ficar até R$5.000 abaixo dos 4.000.000 do mês vigente filtrado (truncamento), não perto dos 6.000.000 de antes do filtro`
   );
 });
 

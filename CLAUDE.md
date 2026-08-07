@@ -465,12 +465,11 @@ mais próximo — a média diária de equipes ativas quase sempre sai quebrada, 
 conservadora pedida foi a de cima.
 
 **Financeiro (Previsto/Realizado/Tendência) mudou pra milhões com sufixo "M"**
-(`formatarFinanceiroMilhoes`, `render-aba-semanal.js:195-206`), substituindo a regra
-de inteiro puro de 2026-08-04: 3 casas quando o valor original é menor que R$100 mil
-(um valor pequeno como R$5.000 sumiria em "0,00 M" com 2 casas), 2 casas a partir daí.
-`renderLinhaSerie` agora aceita tanto um número de casas quanto uma função formatadora
-no último parâmetro — é assim que o Financeiro pluga essa regra sem a linha genérica
-precisar conhecer a lógica de milhões.
+(substituindo a regra de inteiro puro de 2026-08-04), e depois **essa regra foi
+substituída de novo em 2026-08-07** -- ver a seção própria mais abaixo. `renderLinhaSerie`
+aceita tanto um número de casas quanto uma função formatadora no último parâmetro — é
+assim que o Financeiro pluga a regra da vez sem a linha genérica precisar conhecer o
+formato exato.
 
 **Aba Gráficos não divide mais por mil.** `GRAFICO_LIMIAR_MILHARES`
 (`render-aba-grafico-semanal.js`) e a lógica de divisão em `formatarValorGrafico`
@@ -490,6 +489,71 @@ final da função, depois de qualquer reatribuição possível -- mesmo padrão 
 adicionar qualquer campo novo em `demandasNovas` dentro dessa função, escrever por
 ÚLTIMO, nunca logo após o fetch** -- é a segunda vez que esse padrão de reatribuição no
 meio da função pega um campo desprevenido.
+
+### `tools/semanal/atualizar-arquivos.js` -- atalho local pras 3 buscas + build + publish (2026-08-07)
+
+Pedido original do dono do projeto: um botão "Atualizar arquivos" na própria página
+publicada, perto de "Atualizar dados", que buscasse dado novo de verdade. **Não dá pra
+existir como botão** -- `planejamento-semanal.html` é HTML estático servido pelo Pages, e
+as três buscas (`atualizar-avancos-online.js`, `atualizar-lab-online.js`,
+`atualizar-equipes-produtivas-online.js`) são processos Node que precisam do Chrome local
+aberto com `--remote-debugging-port=9222` já logado em sond.com.br -- JS de página nenhuma
+aciona isso na máquina de quem só está vendo o site. "Atualizar dados" (acima) só troca
+dados JÁ publicados; ele nunca busca nada sozinho, e não tem como passar a buscar sem virar
+esse mesmo processo Node.
+
+Diagnóstico que levou a isto: em 2026-08-07 o dono do projeto reportou "o Realizado não
+atualiza pelo botão". Não era bug no refresh (que já recalcula as 6 abas a partir de
+`window.__DEMANDAS__`/`window.__REGISTROS__` corretamente) -- era que `docs/avancos-online.csv`
+e `docs/lab-online.csv`/`docs/equipes-produtivas-online.csv` estavam publicados de
+2026-08-05/06: o botão buscava, de novo, os mesmos arquivos de 1-2 dias atrás. "Atualizar
+dados" só é tão fresco quanto o último `atualizar-arquivos.js` (ou os 3 comandos manuais)
++ publish.
+
+O script substitui a sequência manual documentada em "Atualizar os dados"/"Lab Realizado +
+Equipes online" acima (3 buscas + `build-dashboard.js` + `cp` dos 4 arquivos pra `docs/` +
+commit + push) por uma chamada só:
+
+```bash
+ORCAMENTO_SENHA='...' node tools/semanal/atualizar-arquivos.js
+```
+
+Cada busca já se protege sozinha contra gravar um CSV vazio/malformado por cima do bom (ver
+`TAXA_SUCESSO_MINIMA` em `atualizar-avancos-online.js`) -- por isso uma busca falhando
+**não aborta as outras nem o build**: `build-dashboard.js` sempre lê o que já estiver em
+`dist/`, seja do run de agora ou de um anterior. Só aborta ANTES de tentar qualquer coisa
+se `ORCAMENTO_SENHA` não estiver definida. O commit final lista no corpo da mensagem quais
+das 3 buscas falharam, se alguma falhou. `git push origin master` roda automático no final
+-- mesma regra permanente de "sempre publicar depois de reconstruir, sem perguntar de
+novo" do `CLAUDE.md` do `matriz-equipes-source` (ver "Estilo de trabalho" no fim deste
+arquivo).
+
+### Financeiro na Tabela Semanal: de milhões ("M") pra milhares truncados (2026-08-07)
+
+**Financeiro (Previsto/Realizado/Tendência) passou a mostrar em milhares, sem sufixo**
+(`formatarFinanceiroMilhares`, `render-aba-semanal.js:195-201`), substituindo o "M" de
+milhões de 2026-08-06 no mesmo dia em que esse formato foi criado -- pedido do dono do
+projeto. Exemplo confirmado com ele antes de implementar (a mensagem original cortou no
+meio, então a confirmação foi por exemplo concreto, mesmo padrão de todas as mudanças de
+formatação deste projeto): **R$ 12.345.648 vira "12.345"**.
+
+**`Math.floor`, não `Math.round`** -- é o que faz o exemplo acima bater: 12.345.648 em
+milhares é 12345,648, e o pedido trunca pra "12.345", não arredonda pra "12.346" (que
+`Math.round` daria). Zero casas decimais, agrupamento de milhar em pt-BR via
+`formatarNumero` (mesmo mecanismo que Equipes/Volume já usam) — sem sufixo nenhum, ao
+contrário do "M" que durou um dia só.
+
+**Indicador de unidade no título do bloco:** como Volume/Equipes mostram o valor cheio e
+Financeiro mostra em MILHARES, uma célula de Financeiro e uma de Volume podiam ter o mesmo
+número (`123`) significando coisas de escala bem diferente -- sinalizado ao dono do
+projeto, que pediu o indicador de volta no mesmo dia. O título do bloco (`.tabela-semanal-
+titulo`, só em `dimensao === 'financeiro'`) passou a ser **"Financeiro (mil R$)"**, não só
+"Financeiro" -- ver `render-aba-semanal.js` logo antes do `return` de `renderAbaSemanal`.
+Diferente do título "(em milhares)" da aba Gráficos (removido em 2026-08-06, sem
+substituto): aqui o indicador ficou porque a divisão em si (milhares) também ficou, e sem
+rótulo o número sozinho é ambíguo. Consolidado e Alertas usam `calcularSeriesSemanaisDimensao`
+mas NÃO passam pelo formatador de milhares (chamam `formatarNumero` direto sobre o valor
+cheio) -- só a Tabela Semanal trunca pra milhares, então só ela precisava do indicador.
 
 ### Pendências conhecidas
 

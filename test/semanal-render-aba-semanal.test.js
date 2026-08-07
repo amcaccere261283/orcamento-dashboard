@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao, formatarFinanceiroMilhoes } = require('../tools/semanal/render-aba-semanal.js');
+const { renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao, formatarFinanceiroMilhares } = require('../tools/semanal/render-aba-semanal.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
 const { semanasDoMes, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
 
@@ -115,7 +115,7 @@ test('com várias dimensões marcadas, renderiza um bloco por dimensão, na orde
   assert.equal(blocos.length, 3);
   assert.match(blocos[0], /<div class="tabela-semanal-titulo">Equipes<\/div>/);
   assert.match(blocos[1], /<div class="tabela-semanal-titulo">Volume<\/div>/);
-  assert.match(blocos[2], /<div class="tabela-semanal-titulo">Financeiro<\/div>/);
+  assert.match(blocos[2], /<div class="tabela-semanal-titulo">Financeiro \(mil R\$\)<\/div>/);
   assert.match(blocos[0], />Média<\/th>/);
   assert.match(blocos[1], />Total<\/th>/);
   assert.match(blocos[2], />Total<\/th>/);
@@ -187,15 +187,20 @@ test('Realizado/Tendência de Financeiro pesa cada furo pelo ticket médio do re
     saidaEstoque: [], chegada: [],
   };
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': eventos } };
-  const registroTicket250 = registro(0);
-  registroTicket250.previsto.volumeResumo.ticket = 250;
-  const html = renderAbaSemanal([registroTicket250], [0], ['financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
+  const registroTicket250Mil = registro(0);
+  // Ticket 250.000 (não 250): desde 2026-08-07 financeiro sai em milhares
+  // truncados (formatarFinanceiroMilhares), e um ticket pequeno faria as 5
+  // semanas colapsarem todas em "0" -- indistinguível umas das outras. Um
+  // ticket maior preserva a resolução que este teste precisa pra provar a
+  // distribuição por semana, sem mudar o que está sendo testado.
+  registroTicket250Mil.previsto.volumeResumo.ticket = 250000;
+  const html = renderAbaSemanal([registroTicket250Mil], [0], ['financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   const numeros = linhaRealizado.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
-  // Furos [2,3,1,0,0] (fechamento 6) x ticket 250 = [500,750,250,0,0], fechamento 1.500.
-  // Desde 2026-08-06, financeiro sai em milhões via formatarFinanceiroMilhoes
-  // (3 casas abaixo de R$100 mil -- todos estes valores estão nessa faixa).
-  assert.deepStrictEqual(numeros, ['0,001 M', '0,001 M', '0,000 M', '0,000 M', '0,000 M', '0,002 M']);
+  // Furos [2,3,1,0,0] (fechamento 6) x ticket 250.000 = [500000,750000,250000,0,0],
+  // fechamento 1.500.000. Desde 2026-08-07, financeiro sai em milhares truncados,
+  // sem sufixo: /1000 -> [500,750,250,0,0], fechamento 1.500.
+  assert.deepStrictEqual(numeros, ['500', '750', '250', '0', '0', '1.500']);
 });
 
 test('Realizado de Financeiro soma por registro (furos daquele registro x SEU ticket), não soma os furos todos e multiplica por uma média geral', () => {
@@ -203,16 +208,21 @@ test('Realizado de Financeiro soma por registro (furos daquele registro x SEU ti
   const eventosBeta = { sondagemRealizada: [diaJul(1)], saidaEstoque: [], chegada: [] }; // 1 furo
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': eventosAlfa, 'SUP-0002-24||SP': eventosBeta } };
   const registroAlfa = registro(0);
-  registroAlfa.previsto.volumeResumo.ticket = 100; // 2 furos x 100 = 200
+  // Tickets x1000 em relação à versão original do teste (100/1.000): desde
+  // 2026-08-07 financeiro trunca em milhares (formatarFinanceiroMilhares), e
+  // R$1.200 colapsaria em "0" -- indistinguível de errado. Mantém a mesma
+  // proporção 200/1.000 que o teste precisa provar, só numa faixa que sobra
+  // dado depois de dividir por 1.000.
+  registroAlfa.previsto.volumeResumo.ticket = 100000; // 2 furos x 100.000 = 200.000
   const registroBeta = registro(0);
   registroBeta.sup = 'SUP-0002-24'; registroBeta.tipologia = 'SP';
-  registroBeta.previsto.volumeResumo.ticket = 1000; // 1 furo x 1000 = 1.000
+  registroBeta.previsto.volumeResumo.ticket = 1000000; // 1 furo x 1.000.000 = 1.000.000
   const html = renderAbaSemanal([registroAlfa, registroBeta], [0, 1], ['financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
-  // Soma correta por registro: 200 (Alfa) + 1.000 (Beta) = 1.200 na 1ª semana.
-  // Se fosse "somar furos (3) x ticket médio ((100+1000)/2=550)" daria 1.650 -- errado.
-  // Desde 2026-08-06, financeiro sai em milhões: 1.200/1.000.000 -> 0,001 M.
-  assert.match(linhaRealizado, /<td class="num">0,001 M<\/td>/);
+  // Soma correta por registro: 200.000 (Alfa) + 1.000.000 (Beta) = 1.200.000 na 1ª semana.
+  // Se fosse "somar furos (3) x ticket médio ((100.000+1.000.000)/2=550.000)" daria
+  // 1.650.000 -- errado. Desde 2026-08-07: 1.200.000 / 1.000 -> "1.200".
+  assert.match(linhaRealizado, /<td class="num">1\.200<\/td>/);
 });
 
 test('registro sem TICKET cadastrado (0 ou ausente) não contribui R$ nenhum em Financeiro, mesmo com furos reais -- mesma regra do orçamento', () => {
@@ -223,8 +233,8 @@ test('registro sem TICKET cadastrado (0 ou ausente) não contribui R$ nenhum em 
   const html = renderAbaSemanal([registroSemTicket], [0], ['financeiro'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   const linhaRealizado = html.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   assert.doesNotMatch(linhaRealizado, /sem-dado/, 'ainda é dado real (zero R$), não ausência de dado');
-  // Desde 2026-08-06, financeiro sai em milhões: R$0 -> "0,000 M".
-  assert.match(linhaRealizado, /<td class="num">0,000 M<\/td>/);
+  // Desde 2026-08-07, financeiro sai em milhares truncados, sem sufixo: R$0 -> "0".
+  assert.match(linhaRealizado, /<td class="num">0<\/td>/);
 });
 
 test('Tendência: só semanas TOTALMENTE fechadas ficam sem-dado (o Realizado já mostra o fato, não precisa duplicar); a semana VIGENTE projeta seu próprio total, e as futuras dividem o saldo restante do Previsto PROPORCIONALMENTE AOS DIAS de cada uma', () => {
@@ -576,27 +586,31 @@ function registroFinanceiro(financeiroMes) {
   return r;
 }
 
-// Substituído em 2026-08-06 (mesmo dia, pedido separado do dono do
-// projeto): financeiro deixou de ser inteiro puro e passou a milhões com
-// "M" -- ver formatarFinanceiroMilhoes. Exemplos confirmados com ele antes
-// de implementar (preview da pergunta de esclarecimento):
-// R$ 5.000 -> "0,005 M" · R$ 45.000 -> "0,045 M" · R$ 100.000 -> "0,10 M" ·
-// R$ 1.250.000 -> "1,25 M" · R$ 33.000.884 -> "33,00 M".
-test('formatarFinanceiroMilhoes: 3 casas abaixo de R$100 mil, 2 casas a partir daí, sempre com sufixo "M"', () => {
-  assert.strictEqual(formatarFinanceiroMilhoes(5000), '0,005 M');
-  assert.strictEqual(formatarFinanceiroMilhoes(45000), '0,045 M');
-  assert.strictEqual(formatarFinanceiroMilhoes(99999), '0,100 M');
-  assert.strictEqual(formatarFinanceiroMilhoes(100000), '0,10 M', 'R$100 mil exato já usa 2 casas (limiar é >=)');
-  assert.strictEqual(formatarFinanceiroMilhoes(1250000), '1,25 M');
-  assert.strictEqual(formatarFinanceiroMilhoes(33000884), '33,00 M');
-  assert.strictEqual(formatarFinanceiroMilhoes(null), '—');
+// Substituído em 2026-08-07 (pedido do dono do projeto): financeiro deixou
+// de ser milhões com "M" (2026-08-06) e passou a milhares TRUNCADOS, sem
+// sufixo -- ver formatarFinanceiroMilhares. Exemplo confirmado com ele antes
+// de implementar (preview da pergunta de esclarecimento): R$ 12.345.648 ->
+// "12.345" (truncado, não arredondado -- ,648 não vira ,346).
+// R$ 5.000 -> "5" · R$ 45.000 -> "45" · R$ 99.999 -> "99" (trunca, não
+// arredonda pra 100) · R$ 100.000 -> "100" · R$ 1.250.000 -> "1.250" ·
+// R$ 33.000.884 -> "33.000".
+test('formatarFinanceiroMilhares: milhares truncados (Math.floor), sem sufixo, agrupados em pt-BR', () => {
+  assert.strictEqual(formatarFinanceiroMilhares(5000), '5');
+  assert.strictEqual(formatarFinanceiroMilhares(45000), '45');
+  assert.strictEqual(formatarFinanceiroMilhares(99999), '99', 'trunca, não arredonda pra 100');
+  assert.strictEqual(formatarFinanceiroMilhares(100000), '100');
+  assert.strictEqual(formatarFinanceiroMilhares(1250000), '1.250');
+  assert.strictEqual(formatarFinanceiroMilhares(33000884), '33.000');
+  assert.strictEqual(formatarFinanceiroMilhares(12345648), '12.345', 'exemplo confirmado com o dono do projeto');
+  assert.strictEqual(formatarFinanceiroMilhares(null), '—');
 });
 
-test('financeiro na Tabela Semanal usa o formato em milhões, não mais inteiro puro', () => {
+test('financeiro na Tabela Semanal usa o formato em milhares truncados, não mais inteiro puro nem milhões', () => {
   const html = renderAbaSemanal([registroFinanceiro(1250000)], [0], ['financeiro'], VIGENTE_JULHO, ANO,
     { demandas: DEMANDAS_JULHO, hojeEpoch: HOJE_15_JUL });
-  assert.match(html, /1,25 M/, 'R$1.250.000 no mês precisa aparecer como "1,25 M" em pelo menos uma célula (Previsto)');
-  assert.doesNotMatch(html, /<td class="num[^"]*">1\.250\.000<\/td>/, 'não pode sobrar o valor cru sem conversão pra milhões');
+  assert.match(html, /<td class="num celula-total-linha">1\.250<\/td>/, 'R$1.250.000 no mês precisa fechar como "1.250" (milhares) na coluna Total do Previsto');
+  assert.doesNotMatch(html, /<td class="num[^"]*">1\.250\.000<\/td>/, 'não pode sobrar o valor cru sem conversão pra milhares');
+  assert.doesNotMatch(html, / M</, 'o sufixo "M" (formato em milhões, substituído em 2026-08-07) não pode mais aparecer');
 });
 
 test('equipes sem casa decimal, igual a volume (financeiro agora usa o formato em milhões, testado à parte)', () => {

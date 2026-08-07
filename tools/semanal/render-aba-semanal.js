@@ -192,26 +192,22 @@ function renderCabecalho(dimensao, numSemanas, semanas) {
   return '<thead><tr><th></th>' + colunasSemana + '<th>' + escapeHtml(rotuloColunaFechamento(dimensao)) + '</th></tr></thead>';
 }
 
-// Financeiro em milhões, "M" (pedido do dono do projeto, 2026-08-06):
-// 3 casas quando o valor ORIGINAL (não o dividido) é menor que R$100 mil --
-// sem isso um valor pequeno (R$5.000 = 0,005 M) sumiria em "0,00 M", zero
-// enganoso. R$100 mil ou mais usa 2 casas, igual ao resto da tela. O limiar
-// é sobre o valor em reais, não em milhões, de propósito -- comparar 0,1 M
-// direto teria o mesmo efeito, mas o valor em reais é o que aparece em toda
-// a documentação/pedido original.
-var FINANCEIRO_LIMIAR_TRES_CASAS = 100000;
-function formatarFinanceiroMilhoes(v) {
+// Financeiro em milhares, sem sufixo (pedido do dono do projeto, 2026-08-07,
+// substitui os milhões com "M" de 2026-08-06 -- exemplo confirmado antes de
+// implementar: R$ 12.345.648 -> "12.345"). Math.floor, não Math.round: é o
+// que faz R$ 12.345.648 (12345,648 milhares) virar "12.345" e não "12.346" --
+// o exemplo dado pelo dono do projeto só bate com truncamento.
+function formatarFinanceiroMilhares(v) {
   if (v === null || v === undefined) return '—';
-  var casas = Math.abs(v) < FINANCEIRO_LIMIAR_TRES_CASAS ? 3 : 2;
-  return formatarNumero(v / 1000000, casas) + ' M';
+  return formatarNumero(Math.floor(v / 1000), 0);
 }
 
 // 'semanas' são os N valores por semana (ou null); 'fechamento' é o valor já
 // fechado (fecharMes) pra a coluna final. null em qualquer um vira a classe
 // sem-dado. 'casasOuFormatador' (opcional, padrão 2 casas) aceita ou um
 // número de casas decimais (via formatarNumero) ou uma função v => string
-// pronta -- usada pelo Financeiro pra plugar formatarFinanceiroMilhoes sem
-// essa linha genérica precisar conhecer a regra dos milhões.
+// pronta -- usada pelo Financeiro pra plugar formatarFinanceiroMilhares sem
+// essa linha genérica precisar conhecer a regra dos milhares.
 function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento, casasOuFormatador) {
   var formatar = typeof casasOuFormatador === 'function'
     ? casasOuFormatador
@@ -439,8 +435,14 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
       linhaPendentes = renderLinhaSerie('Demandas Pendentes', 'pendentes-demandas', semanasPendentes, fechamentoPendentes, 0);
     }
 
+    // Sufixo "(mil R$)" só em Financeiro (2026-08-07, pedido do dono do
+    // projeto): sem ele, uma célula de Financeiro ("123") e uma de Volume
+    // ("123") pareceriam a mesma grandeza -- Financeiro é a única dimensão
+    // em escala diferente da exibida (ver formatarFinanceiroMilhares).
+    var tituloDimensao = DIMENSOES_ROTULO_SEMANAL[dimensao] || dimensao;
+    if (dimensao === 'financeiro') tituloDimensao += ' (mil R$)';
     return '<div class="bloco-dimensao-semanal">'
-      + '<div class="tabela-semanal-titulo">' + escapeHtml(DIMENSOES_ROTULO_SEMANAL[dimensao] || dimensao) + '</div>'
+      + '<div class="tabela-semanal-titulo">' + escapeHtml(tituloDimensao) + '</div>'
       + '<table class="tabela-semanal">'
       + renderCabecalho(dimensao, numSemanas, semanas)
       + '<tbody>'
@@ -451,11 +453,11 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
       // mediaEquipesNoIntervalo (Math.ceil embutido ali); os outros valores
       // fracionários (Tendência de Volume, médias) são só arredondados pro
       // inteiro mais próximo aqui, não pra cima.
-      // Financeiro usa formatarFinanceiroMilhoes em vez de casas fixas --
-      // mesmo pedido, mas em milhões ("1,25 M"), 3 casas abaixo de R$100 mil.
-      + renderLinhaSerie('Previsto', 'previsto', series.semanasPrevisto, series.fechamentoPrevisto, dimensao === 'financeiro' ? formatarFinanceiroMilhoes : 0)
-      + renderLinhaSerie('Realizado', 'realizado', series.semanasRealizado, series.fechamentoRealizado, dimensao === 'financeiro' ? formatarFinanceiroMilhoes : 0)
-      + renderLinhaSerie('Tendência', 'tendencia', series.semanasTendencia, series.fechamentoTendencia, dimensao === 'financeiro' ? formatarFinanceiroMilhoes : 0)
+      // Financeiro usa formatarFinanceiroMilhares em vez de casas fixas --
+      // mesmo pedido, mas em milhares ("12.345"), sem sufixo, truncado.
+      + renderLinhaSerie('Previsto', 'previsto', series.semanasPrevisto, series.fechamentoPrevisto, dimensao === 'financeiro' ? formatarFinanceiroMilhares : 0)
+      + renderLinhaSerie('Realizado', 'realizado', series.semanasRealizado, series.fechamentoRealizado, dimensao === 'financeiro' ? formatarFinanceiroMilhares : 0)
+      + renderLinhaSerie('Tendência', 'tendencia', series.semanasTendencia, series.fechamentoTendencia, dimensao === 'financeiro' ? formatarFinanceiroMilhares : 0)
       + linhaPendentes
       + '</tbody></table></div>';
   }).join('');
@@ -463,5 +465,5 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
 
 module.exports = {
   renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao, formatarIntervaloSemana, pendentesNaData,
-  formatarFinanceiroMilhoes,
+  formatarFinanceiroMilhares,
 };
