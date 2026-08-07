@@ -217,6 +217,38 @@ test('construirPainelGraficoSemanalHtml: sem demandas, Volume ainda mostra o pai
   assert.match(html, /fill="#2f6ad0"/, 'Previsto sempre aparece -- não depende de demandas');
 });
 
+// Regressão (2026-08-06, pedido do dono do projeto): o gráfico dividia por
+// mil e escrevia "(em milhares)" no título assim que o maior valor da série
+// batia 1000 -- comportamento removido de propósito (GRAFICO_LIMIAR_MILHARES
+// continua no arquivo, só nunca mais é atingido). Agora mostra sempre o
+// número cheio, agrupado por milhar via toLocaleString('pt-BR') ("4.415"),
+// mesmo padrão que a Tabela Semanal já usa.
+test('construirGraficoSemanalSvg: valor >= 1000 não divide mais por mil -- mostra o número cheio agrupado, milhares sempre false', () => {
+  const svg = construirGraficoSemanalSvg([{ serie: 'previsto', valores: [4415, 2000, 0, 0, 0] }], 0, 5, null);
+  assert.strictEqual(svg.milhares, false);
+  assert.match(svg.svg, />4\.415</, 'rótulo da coluna precisa mostrar o valor cheio agrupado, não "4" ou "4,4"');
+  assert.doesNotMatch(svg.svg, />4</, 'não pode sobrar um rótulo dividido por mil (ex.: "4" de 4415/1000)');
+});
+
+test('construirGraficoAcumuladoSemanalSvg: valor acumulado >= 1000 não divide mais por mil', () => {
+  const svg = construirGraficoAcumuladoSemanalSvg(
+    [{ serie: 'previsto', valores: [4415], acumulado: [4415] }], 0, 1, null
+  );
+  assert.strictEqual(svg.milhares, false);
+  assert.match(svg.svg, />4\.415</);
+});
+
+test('construirPainelGraficoSemanalHtml: título nunca mais mostra "(em milhares)", mesmo com Previsto do mês muito acima de 1000', () => {
+  const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
+  const semanas = semanasDoMes(ANO, VIGENTE_JULHO);
+  const registros = [registro(50000)]; // bem acima do antigo limiar de 1000
+  const html = construirPainelGraficoSemanalHtml(
+    registros, [0], 'volume', VIGENTE_JULHO, semanas, semanas.length,
+    false, -1, null, null
+  );
+  assert.doesNotMatch(html, /em milhares/i);
+});
+
 test('construirGraficoSemanalSvg: viewBox exato 0 0 1000 320 (mesma dimensão do gráfico de barras do orçamento)', () => {
   const svg = construirGraficoSemanalSvg([{ serie: 'previsto', valores: [10, 20, 30, 40, 50] }], 0, 5, null);
   assert.match(svg.svg, /<svg viewBox="0 0 1000 320" class="grafico-svg">/);

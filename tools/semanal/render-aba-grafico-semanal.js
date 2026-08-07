@@ -82,6 +82,14 @@ var GRAFICO_MARGEM_BARRAS = { topo: 36, baixo: 36, esquerda: 68, direita: 28 };
 var GRAFICO_MARGEM_LINHA = { topo: 36, baixo: 36, esquerda: 68, direita: 36 };
 var GRAFICO_BARRA_MAX = 24;
 var GRAFICO_BARRA_GAP = 2;
+// Desativado (pedido do dono do projeto, 2026-08-06): eixo/rótulos do
+// gráfico não dividem mais por mil a partir deste limiar -- sempre o número
+// cheio, mesmo padrão "#.###" (agrupado por toLocaleString('pt-BR')) que a
+// Tabela Semanal já usa. As duas linhas "var usarMilhares = ..." abaixo
+// ficam fixas em false; a constante e a lógica de divisão em
+// formatarValorGrafico permanecem no arquivo (não removidas) só pra não
+// espalhar a mudança pra mais funções do que o necessário -- reativar é
+// trocar as duas atribuições de volta pra >= GRAFICO_LIMIAR_MILHARES.
 var GRAFICO_LIMIAR_MILHARES = 1000;
 
 function escalaLinear(valor, valorMax, pixelMax) {
@@ -276,7 +284,7 @@ function construirGraficoSemanalSvg(dadosPorSerie, casasDecimais, numSemanas, se
   var maxSemanal = 0;
   dadosPorSerie.forEach(function (d) { d.valores.forEach(function (v) { if (v > maxSemanal) maxSemanal = v; }); });
   var escala = calcularEscalaEixo(maxSemanal);
-  var usarMilhares = maxSemanal >= GRAFICO_LIMIAR_MILHARES;
+  var usarMilhares = false; // ver comentário de GRAFICO_LIMIAR_MILHARES acima
 
   var svg = '';
   svg += construirEixoYSvg(escala, alturaPlot, margem, usarMilhares, casasDecimais);
@@ -302,7 +310,7 @@ function construirGraficoAcumuladoSemanalSvg(dadosPorSerie, casasDecimais, numSe
   var maxAcumulado = 0;
   dadosPorSerie.forEach(function (d) { d.acumulado.forEach(function (v) { if (v > maxAcumulado) maxAcumulado = v; }); });
   var escala = calcularEscalaEixo(maxAcumulado);
-  var usarMilhares = maxAcumulado >= GRAFICO_LIMIAR_MILHARES;
+  var usarMilhares = false; // ver comentário de GRAFICO_LIMIAR_MILHARES acima
 
   var svg = '';
   svg += construirEixoYSvg(escala, alturaPlot, margem, usarMilhares, casasDecimais);
