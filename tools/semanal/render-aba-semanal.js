@@ -392,17 +392,24 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
     // consumidor daquela função, não tem painel de estoque -- ver
     // render-aba-grafico-semanal.js).
     if (dimensao === 'volume' && temDemandas) {
+      // Cada semana mostra o saldo pendente apurado no seu PRIMEIRO dia, e
+      // esse valor fica fixo dali em diante -- não é o saldo de hoje
+      // recalculado, nem o saldo do domingo de fechamento (dono do projeto,
+      // 2026-08-06). Ao começar a próxima semana, ela ganha o próprio
+      // instantâneo no início dela; a semana anterior não muda mais. Semana
+      // que ainda não começou (início no futuro) não tem instantâneo ainda
+      // -- sem-dado, não projeta estoque futuro.
       var semanasPendentes = temSemanasReais
-        ? semanas.map(function (semana, i) {
-            if (i === indiceAtual) return pendentesNaData(registros, indices, opts.demandas, opts.hojeEpoch);
-            if (semana.fim < opts.hojeEpoch) return pendentesNaData(registros, indices, opts.demandas, semana.fim);
-            return null; // semana futura -- sem-dado, não projeta estoque futuro
+        ? semanas.map(function (semana) {
+            if (semana.inicio > opts.hojeEpoch) return null;
+            return pendentesNaData(registros, indices, opts.demandas, semana.inicio);
           })
         : semanasSemDado;
       // Fechamento SEMPRE o saldo de hoje, calculado direto e independente
       // da quebra semanal -- "quantas demandas estão pendentes agora" não
       // depende de qual das N semanas está em curso, nem de haver semana
-      // válida nenhuma.
+      // válida nenhuma. Diferente das células por semana (instantâneo fixo
+      // no início): o fechamento é sempre o saldo AO VIVO.
       var fechamentoPendentes = pendentesNaData(registros, indices, opts.demandas, opts.hojeEpoch);
       linhaPendentes = renderLinhaSerie('Demandas Pendentes', 'pendentes-demandas', semanasPendentes, fechamentoPendentes);
     }

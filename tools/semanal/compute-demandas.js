@@ -88,13 +88,19 @@ function computeDemandas(furos, periodos, ensaiosLab) {
       eventosRegistro.sondagemRealizada.push(diaEpoch(f.terminoSondagem));
     }
 
-    // saidaEstoque: o MENOR entre término (qualquer status) e cancelamento
-    // -- nunca os dois independentes, pra não contar duas vezes os furos
-    // CANCELADO que também têm data de término preenchida (16 na planilha
-    // real, ver spec). Só entra se pelo menos um dos dois existir; sem
-    // nenhum, o furo nunca sai do estoque (mesma regra da série 'pendentes' abaixo).
+    // saidaEstoque: o MENOR entre início da sondagem (qualquer status) e
+    // cancelamento -- nunca os dois independentes, pra não contar duas vezes
+    // os furos CANCELADO que também têm data de início preenchida. Uma
+    // demanda deixa de estar "disponível para execução" quando a sondagem
+    // COMEÇA (dono do projeto, 2026-08-06, confirmado contra o extrato Avanço
+    // Sondagens) -- não quando termina. Só entra se pelo menos um dos dois
+    // existir; sem nenhum, o furo nunca sai do estoque (mesma regra da série
+    // 'pendentes' abaixo). f.inicioSondagem já passou por dataSaneada
+    // (parse-avancos.js): as ~6,3% de linhas com data fora da janela
+    // 2023-2027 chegam aqui como null, e o furo permanece no estoque -- igual
+    // ao que já acontecia com furo sem data de término antes desta troca.
     const candidatosSaida = [];
-    if (f.terminoSondagem) candidatosSaida.push(diaEpoch(f.terminoSondagem));
+    if (f.inicioSondagem) candidatosSaida.push(diaEpoch(f.inicioSondagem));
     if (cancelado && f.cancelamento) candidatosSaida.push(diaEpoch(f.cancelamento));
     if (candidatosSaida.length) eventosRegistro.saidaEstoque.push(Math.min.apply(null, candidatosSaida));
 
@@ -116,18 +122,23 @@ function computeDemandas(furos, periodos, ensaiosLab) {
       if (iCancel >= 0) series.canceladas[iCancel] += 1;
     }
 
-    // Estoque: aberto no fim do mês = chegou até ali, e nem a sondagem terminou
-    // nem o cancelamento ocorreu até ali. Cancelada sai pela DATA (coluna P), não
-    // por status: um furo cancelado em julho estava de fato aberto em janeiro, e o
-    // saldo de janeiro tem que dizer isso. Cancelada sem data legível permanece no
-    // estoque de propósito -- "não sei quando saiu" é mais honesto que "saiu no
-    // começo", e o build reporta a contagem.
+    // Estoque: aberto no fim do mês = chegou até ali, e nem a sondagem começou
+    // nem o cancelamento ocorreu até ali. Mesma regra de negócio de
+    // saidaEstoque acima (uma demanda deixa de estar "disponível para
+    // execução" quando a sondagem COMEÇA, não quando termina). Cancelada sai
+    // pela DATA (coluna P), não por status: um furo cancelado em julho estava
+    // de fato aberto em janeiro, e o saldo de janeiro tem que dizer isso.
+    // Cancelada sem data legível permanece no estoque de propósito -- "não
+    // sei quando saiu" é mais honesto que "saiu no começo", e o build reporta
+    // a contagem. Mesma ressalva de dataSaneada da nota acima: início de
+    // sondagem com data fora da janela 2023-2027 vira null e o furo continua
+    // no estoque, nunca é tratado como já iniciado.
     if (f.criacaoOS) {
       for (let i = 0; i < n; i++) {
         if (f.criacaoOS > fins[i]) continue;
-        const terminou = f.terminoSondagem && f.terminoSondagem <= fins[i];
+        const iniciou = f.inicioSondagem && f.inicioSondagem <= fins[i];
         const cancelou = f.cancelamento && f.cancelamento <= fins[i];
-        if (!terminou && !cancelou) { series.pendentes[i] += 1; }
+        if (!iniciou && !cancelou) { series.pendentes[i] += 1; }
       }
     }
   }

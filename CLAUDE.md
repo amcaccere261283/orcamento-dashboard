@@ -454,6 +454,22 @@ defeito do refresh.
 
 ### Pendências conhecidas
 
+**Em discussão (2026-08-06) — saída do estoque de "Demandas Pendentes" pode estar usando o
+campo errado.** Hoje `pendentesNaData`/`saidaEstoque` (`compute-demandas.js:91-99`,
+`render-aba-semanal.js:111-127`) tiram um furo do saldo pendente pela data de **Término
+Sondagem** (mais Cancelamento, o menor dos dois). O dono do projeto revisou essa conta com
+o Claude e afirmou que a regra de negócio real é **Início Sondagem**: uma demanda deixa de
+estar "disponível para execução" quando a sondagem COMEÇA, não quando termina. Ele vai
+confirmar com o AmCaccere antes de mudar — **por ora o código continua como está,
+propositalmente, não mexer sem essa confirmação.**
+
+Isso esbarra num problema já documentado em `parse-avancos.js:22-33`: a coluna **Inicio
+Sondagem tem 3.929 de 61.927 linhas (≈6,3%) com data fora da janela plausível 2023-2027**
+(de 1901 a 2078) — é por isso que nenhuma série hoje ancora nela. Se a resposta do
+AmCaccere confirmar Início Sondagem, a migração precisa decidir o que fazer com essas
+linhas fora da janela (hoje tratadas como "sem data", o que faria o furo nunca sair do
+estoque) antes de trocar `terminoSondagem` por `inicioSondagem` em `saidaEstoque`.
+
 **Fase 2 — os filtros: FEITA em 6ff1bfc.** `tools/comum/render-shell.js` exporta
 `scriptFiltros()` (estado, `indicesFiltrados`, `montarFiltroMulti` com
 `aoMudar(cfg)`), consumido pelas duas páginas -- ver `FILTROS_SEMANAL` em

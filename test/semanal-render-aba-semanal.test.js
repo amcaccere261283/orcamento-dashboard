@@ -363,22 +363,28 @@ test('Tendência: indiceAtual === -1 (nenhuma semana do mês começou -- hoje an
     'sem nenhuma semana fechada, o ramo é "igual" e a Tendência reproduz exatamente a fatia inteira do Previsto em cada semana');
 });
 
-test('Demandas Pendentes: semana fechada mostra o saldo no domingo daquela semana, semana em curso mostra o saldo de hoje, semana futura fica sem-dado', () => {
+test('Demandas Pendentes: cada semana mostra o saldo fixo do SEU primeiro dia, semana futura fica sem-dado, fechamento é sempre o saldo de hoje', () => {
+  // Semanas de julho/2026: S1 01-05/07, S2 06-12/07, S3 13-19/07 (em curso,
+  // hoje=15/07), S4 20-26/07 (futura), S5 27-31/07 (futura).
   const eventos = {
     chegada: new Array(10).fill(diaJul(-30)), // 10 furos, todos chegados antes de julho
-    saidaEstoque: [diaJul(2), diaJul(2), diaJul(9)], // 2 saem durante S27, 1 durante S28
+    saidaEstoque: [diaJul(2), diaJul(2), diaJul(9)], // 2 saem em 02/07, 1 em 09/07
     sondagemRealizada: [],
   };
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': eventos } };
   const html = renderAbaSemanal([registro(0)], [0], ['volume'], VIGENTE_JULHO, ANO, { demandas, hojeEpoch: HOJE_15_JUL });
   const linhaPendentes = html.match(/<tr class="linha-serie-semanal linha-pendentes-demandas">[\s\S]*?<\/tr>/)[0];
   const celulas = linhaPendentes.match(/<td class="num[^"]*"[^>]*>([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
-  // S1 fim (05/07): 10 chegaram - 2 saíram = 8. S2 fim (12/07): 10-3=7.
-  // S3 (em curso, hoje 15/07): 10-3=7 (nenhuma saída nova entre 09/07 e 15/07).
-  // S4/S5 (futuras): sem-dado (célula vazia). 6º elemento é o fechamento
-  // (celula-total-linha também casa com o regex "num[^\"]*") -- sempre o
-  // saldo de hoje, 7,00.
-  assert.deepStrictEqual(celulas, ['8,00', '7,00', '7,00', '', '', '7,00']);
+  // Saldo no 1º dia de cada semana (10 chegaram, nenhuma saída ainda contada
+  // além das que já ocorreram até aquele dia inclusive):
+  // S1 início (01/07): 10 - 0 saídas até 01/07 = 10.
+  // S2 início (06/07): 10 - 2 saídas até 06/07 (as duas de 02/07) = 8.
+  // S3 início (13/07): 10 - 3 saídas até 13/07 (as duas de 02/07 + a de 09/07) = 7.
+  // S4/S5 (início no futuro, ainda não começaram): sem-dado (célula vazia).
+  // 6º elemento é o fechamento (celula-total-linha também casa com o regex
+  // "num[^\"]*") -- SEMPRE o saldo de hoje (15/07), não o instantâneo da
+  // semana em curso: 10 - 3 = 7.
+  assert.deepStrictEqual(celulas, ['10,00', '8,00', '7,00', '', '', '7,00']);
   assert.match(linhaPendentes, /celula-total-linha">7,00/, 'fechamento é sempre o saldo de hoje, calculado direto');
 });
 

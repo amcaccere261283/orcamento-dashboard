@@ -107,10 +107,10 @@ test('cancelada cujo cancelamento é anterior ao ano nunca entra no estoque de 2
   assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(0));
 });
 
-test('término vence cancelamento posterior: quem terminou a sondagem saiu do estoque ali', () => {
+test('início vence cancelamento posterior: quem começou a sondagem saiu do estoque ali', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 5), terminoSondagem: d(2026, 2, 10),
-           conclusao: null, cancelamento: d(2026, 6, 1) }),
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 5), inicioSondagem: d(2026, 2, 10),
+           terminoSondagem: null, conclusao: null, cancelamento: d(2026, 6, 1) }),
   ], PERIODOS_2026);
   assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes').slice(0, 4), [1, 0, 0, 0]);
 });
@@ -122,13 +122,13 @@ test('estoque é SALDO: o furo aberto em janeiro conta em todo mês até o térm
   assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(1));
 });
 
-test('o furo sai do estoque no mês em que a sondagem termina, não antes nem depois', () => {
+test('o furo sai do estoque no mês em que a sondagem começa, não antes nem depois', () => {
   const saida = computeDemandas([
-    furo({ criacaoOS: d(2026, 1, 10), terminoSondagem: d(2026, 3, 20) }),
+    furo({ criacaoOS: d(2026, 1, 10), inicioSondagem: d(2026, 3, 20) }),
   ], PERIODOS_2026);
   const pendentes = serieDe(saida, 'SP', 'pendentes');
   assert.deepStrictEqual(pendentes.slice(0, 4), [1, 1, 0, 0],
-    'março é o mês do término: ao FIM de março o furo já não está aberto');
+    'março é o mês do início: ao FIM de março o furo já não está aberto');
 });
 
 test('furo que chegou antes do ano (legado) entra no estoque desde janeiro, mas não em chegadas', () => {
@@ -231,18 +231,20 @@ test('porRegistroEventos: chegada tem um dia por furo (qualquer status), sondage
   assert.strictEqual(entrada.sondagemRealizada.length, 1, 'só o CONCLUIDO conta pro fluxo Realizado');
 });
 
-test('porRegistroEventos: saidaEstoque é o MENOR entre término e cancelamento, nunca os dois separados -- furos CANCELADO com término preenchido existem na planilha real (16, ver spec)', () => {
+test('porRegistroEventos: saidaEstoque é o MENOR entre início e cancelamento, nunca os dois separados -- furos CANCELADO com início preenchido existem na planilha real', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), terminoSondagem: d(2026, 2, 1), cancelamento: d(2026, 3, 1), conclusao: null }),
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), inicioSondagem: d(2026, 2, 1),
+           terminoSondagem: null, cancelamento: d(2026, 3, 1), conclusao: null }),
   ], PERIODOS_2026);
   const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
   assert.strictEqual(entrada.saidaEstoque.length, 1, 'um furo só sai do estoque uma vez, mesmo com 2 datas candidatas');
-  assert.strictEqual(entrada.saidaEstoque[0], diaEpoch(d(2026, 2, 1)), 'usa a data mais cedo (término), não o cancelamento');
+  assert.strictEqual(entrada.saidaEstoque[0], diaEpoch(d(2026, 2, 1)), 'usa a data mais cedo (início), não o cancelamento');
 });
 
-test('porRegistroEventos: cancelamento antes do término também usa o menor (o cancelamento)', () => {
+test('porRegistroEventos: cancelamento antes do início também usa o menor (o cancelamento)', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), terminoSondagem: d(2026, 5, 1), cancelamento: d(2026, 2, 1), conclusao: null }),
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), inicioSondagem: d(2026, 5, 1),
+           terminoSondagem: null, cancelamento: d(2026, 2, 1), conclusao: null }),
   ], PERIODOS_2026);
   const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
   assert.strictEqual(entrada.saidaEstoque.length, 1);
@@ -259,7 +261,7 @@ test('porRegistroEventos: furo sem término nem cancelamento nunca aparece em sa
 
 test('porRegistroEventos: reconstrói o saldo mensal correto, contando chegada/saidaEstoque até o fim de cada mês', () => {
   const furos = [
-    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 10), terminoSondagem: d(2026, 3, 20) }),
+    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 10), inicioSondagem: d(2026, 3, 20), terminoSondagem: null }),
     furo({ status: 'PENDENTE', criacaoOS: d(2026, 2, 5), terminoSondagem: null, conclusao: null }),
   ];
   const saida = computeDemandas(furos, PERIODOS_2026);
@@ -267,7 +269,7 @@ test('porRegistroEventos: reconstrói o saldo mensal correto, contando chegada/s
   const fimDoMes1Based = (ano, mesUm) => diaEpoch(new Date(Date.UTC(ano, mesUm, 0, 23, 59, 59)));
   const saldoEm = (corte) =>
     eventos.chegada.filter(dia => dia <= corte).length - eventos.saidaEstoque.filter(dia => dia <= corte).length;
-  // Furo 1: chega jan/10, sai (termina) mar/20 -> aberto no fim de jan e fev, fechado a
+  // Furo 1: chega jan/10, sai (começa) mar/20 -> aberto no fim de jan e fev, fechado a
   // partir do fim de mar. Furo 2: chega fev/5, nunca sai -> aberto do fim de fev em diante.
   // fim-jan: só furo1 (1). fim-fev: os dois (2). fim-mar em diante: só furo2 (1).
   const esperado = [1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
