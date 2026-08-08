@@ -62,6 +62,45 @@ function baselineParaCliente(porChave, registros) {
   return Array.from(porChaveMatriz, ([chave, dados]) => ({ chave, ...dados }));
 }
 
+// Extraída de build() (revisão final de branch, 2026-08-08) pra ser
+// testável em isolamento, sem precisar montar a MATRIZ real (config.js lê de
+// G:\, indisponível fora da máquina do dono do projeto -- ver os testes que
+// já pulam com "G: não montado"). É EXATAMENTE o bloco que lê
+// equipes-online.csv (formato "SUP,Tipo,DiaEpoch,Fracao", já pré-agregado
+// por atualizar-equipes-online.js/agregarEquipesFracao) e monta
+// demandas.equipesPorDia/equipesPeriodo -- só puro texto CSV + registros da
+// MATRIZ entrando, sem tocar em fs/path. Devolve { equipesPorDia: null,
+// equipesPeriodo: null } quando o CSV não produz nenhum dia utilizável --
+// build() decide o que fazer com isso (manter a fonte de reserva).
+function parseEquipesFracaoCsv(csvTexto, registros) {
+  const linhasCsv = (csvTexto || '').trim().split('\n').slice(1);
+  const porDiaFracao = {};
+  const diasEncontrados = new Set();
+  // resolverSup construída UMA VEZ fora do loop -- resolverSupConhecido(registros)
+  // devolve uma função, e reconstruí-la a cada linha é trabalho repetido à toa
+  // (achado da revisão final de branch, 2026-08-08).
+  const resolverSup = resolverSupConhecido(registros);
+  for (const linha of linhasCsv) {
+    if (!linha) continue;
+    const [sup, tipo, diaStr, fracaoStr] = linha.split(',');
+    const supResolvido = resolverSup(sup, tipo);
+    const chave = supResolvido + '||' + tipo;
+    const dia = Number(diaStr);
+    if (!porDiaFracao[chave]) porDiaFracao[chave] = {};
+    porDiaFracao[chave][dia] = (porDiaFracao[chave][dia] || 0) + Number(fracaoStr);
+    diasEncontrados.add(dia);
+  }
+  if (!Object.keys(porDiaFracao).length) {
+    return { equipesPorDia: null, equipesPeriodo: null };
+  }
+  // periodo: o mês/ano do dia mais antigo encontrado (equipes-online.csv já
+  // é buscado por mês -- ver atualizar-equipes-online.js).
+  const diasArr = [...diasEncontrados];
+  const diaRepresentativo = new Date(Math.min(...diasArr) * 86400000);
+  const equipesPeriodo = { ano: diaRepresentativo.getUTCFullYear(), mes: diaRepresentativo.getUTCMonth() + 1 };
+  return { equipesPorDia: porDiaFracao, equipesPeriodo };
+}
+
 
 // A senha nunca vem de um arquivo do repositório -- só de variável de
 // ambiente, lida na hora do build e descartada depois (mesmo raciocínio de
@@ -324,26 +363,10 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // se o CSV novo não existir ou não produzir nenhum dia utilizável.
   const CAMINHO_EQUIPES_ONLINE = path.join(__dirname, '..', '..', 'dist', 'equipes-online.csv');
   if (fs.existsSync(CAMINHO_EQUIPES_ONLINE)) {
-    const linhasCsv = fs.readFileSync(CAMINHO_EQUIPES_ONLINE, 'utf8').trim().split('\n').slice(1);
-    const porDiaFracao = {};
-    let diasEncontrados = new Set();
-    for (const linha of linhasCsv) {
-      if (!linha) continue;
-      const [sup, tipo, diaStr, fracaoStr] = linha.split(',');
-      const supResolvido = resolverSupConhecido(registros)(sup, tipo);
-      const chave = supResolvido + '||' + tipo;
-      const dia = Number(diaStr);
-      if (!porDiaFracao[chave]) porDiaFracao[chave] = {};
-      porDiaFracao[chave][dia] = (porDiaFracao[chave][dia] || 0) + Number(fracaoStr);
-      diasEncontrados.add(dia);
-    }
-    if (Object.keys(porDiaFracao).length) {
-      demandas.equipesPorDia = porDiaFracao;
-      // periodoProdutivas equivalente: o mês/ano do build (equipes-online.csv
-      // já é buscado por mês -- ver atualizar-equipes-online.js).
-      const diasArr = [...diasEncontrados];
-      const diaRepresentativo = new Date(Math.min(...diasArr) * 86400000);
-      demandas.equipesPeriodo = { ano: diaRepresentativo.getUTCFullYear(), mes: diaRepresentativo.getUTCMonth() + 1 };
+    const { equipesPorDia, equipesPeriodo } = parseEquipesFracaoCsv(fs.readFileSync(CAMINHO_EQUIPES_ONLINE, 'utf8'), registros);
+    if (equipesPorDia) {
+      demandas.equipesPorDia = equipesPorDia;
+      demandas.equipesPeriodo = equipesPeriodo;
       fonteEquipes = 'FRACIONADAS (Link 6 + 7)';
     } else {
       console.warn('Equipes fracionadas: CSV existe mas não produziu nenhum dia utilizável -- mantendo a fonte de reserva (ativas/mobilizadas).');
@@ -438,4 +461,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, baselineParaCliente, redirecionarSupsDesconhecidos };
+module.exports = { build, baselineParaCliente, redirecionarSupsDesconhecidos, parseEquipesFracaoCsv };

@@ -1564,6 +1564,9 @@ function atualizarDadosAoVivoSemanal() {
         var gridEquipesCliente = ParseMatrizCliente.parseCsvGrid(textos[4]);
         var porDiaFracaoCliente = {};
         var diasFracaoCliente = [];
+        // resolverSup construída UMA VEZ fora do loop, mesmo motivo do gêmeo
+        // em build-dashboard.js (achado da revisão final de branch, 2026-08-08).
+        var resolverSupFracionadas = ComputeDemandas.resolverSupConhecido(registrosNovos);
         gridEquipesCliente.slice(1).forEach(function (linha) {
           if (!linha || !linha.length) return;
           var sup = linha[0];
@@ -1575,7 +1578,7 @@ function atualizarDadosAoVivoSemanal() {
           // conhece vira "Diversos" em vez de sumir do Δ equipes -- e
           // fracionadas é a fonte PRIMÁRIA dele. Ver o gêmeo em
           // build-dashboard.js.
-          var supResolvido = ComputeDemandas.resolverSupConhecido(registrosNovos)(sup, tipo);
+          var supResolvido = resolverSupFracionadas(sup, tipo);
           var chave = supResolvido + '||' + tipo;
           if (!porDiaFracaoCliente[chave]) porDiaFracaoCliente[chave] = {};
           porDiaFracaoCliente[chave][dia] = (porDiaFracaoCliente[chave][dia] || 0) + fracao;
