@@ -132,38 +132,42 @@ function pendentesNaData(registros, indices, demandas, dataEpoch) {
   return total;
 }
 
-// Média diária de equipes ATIVAS (headcount do roster, não atividade de
-// campo) num intervalo [inicioEpoch, fimEpoch] (inclusive nos dois
-// extremos) -- pra Realizado da dimensão Equipes na Tabela Semanal
-// (2026-08-06). equipesAtivoPorDia (demandas.equipesAtivoPorDia) vem do
-// "Ativas (total)" que o dashboard Matriz já publica (ver
-// compute-equipes-ativo-matriz.js) -- um número da EMPRESA INTEIRA por dia,
-// não por (SUP, tipologia), e por isso esta função NÃO recebe registros/
-// indices: filtrar por SUP na barra de cima não muda esta linha, porque a
-// fonte não é decomponível por contrato (é roster, não produção).
+// Substitui a antiga mediaEquipesNoIntervalo (achado do dono do projeto, 2026-08-08:
+// "troquei o ID Contrato no filtro e o Realizado de Equipes não mudou" --
+// era o número FIXO da empresa inteira, igual em toda linha, porque
+// equipesAtivoPorDia nunca olhava pra 'registros'/'indices'). Agora soma,
+// dia a dia, demandas.equipesPorDia[chaveDemandas(sup,tipologia)] através dos
+// registros em 'indices' -- MESMO raciocínio de somaMesVigente (linha 42-43
+// acima): equipes de contratos DIFERENTES no mesmo dia se somam (times
+// simultâneos), só não se soma equipes ao longo do TEMPO -- por isso soma por
+// dia, depois MÉDIA sobre os dias da janela (é foto, não flui).
 //
-// Um dia SEM retrato (ninguém publicou historico.json aquele dia -- gap,
-// não zero) fica de fora do denominador, ao contrário de outras médias
-// deste arquivo: aqui ausência É ausência de medição, não "zero equipes"
-// (a empresa não zera o quadro de um dia pro outro). Denominador só conta
-// os dias com dado real.
-//
-// null quando não sobra nenhum dia com dado no intervalo -- "sem fonte
-// ainda" é diferente de "zero equipes", e renderLinhaSerie já sabe desenhar
-// null como sem-dado.
-function mediaEquipesNoIntervalo(equipesAtivoPorDia, inicioEpoch, fimEpoch) {
-  if (!equipesAtivoPorDia || fimEpoch < inicioEpoch) return null;
-  var soma = 0;
-  var diasComDado = 0;
+// Não precisa checar "cobertura do mês" explicitamente (ao contrário de
+// foraDaCoberturaDeEquipes em compute-balanco.js): um dia fora do que
+// equipesPorDia cobre simplesmente não tem chave nenhuma no mapa pra nenhum
+// registro, então 'achouAlgumaChave' fica false e a função devolve null
+// (sem dado) sozinha -- diaEpoch é uma contagem absoluta de dias, nunca
+// colide entre meses diferentes.
+function somarEquipesNoIntervalo(registros, indices, demandas, inicioEpoch, fimEpoch) {
+  var equipesPorDia = demandas && demandas.equipesPorDia;
+  if (!equipesPorDia || fimEpoch < inicioEpoch) return null;
+  var totalDias = fimEpoch - inicioEpoch + 1;
+  var somaTotal = 0;
+  var achouAlgumaChave = false;
   for (var dia = inicioEpoch; dia <= fimEpoch; dia++) {
-    if (typeof equipesAtivoPorDia[dia] === 'number') { soma += equipesAtivoPorDia[dia]; diasComDado++; }
+    (indices || []).forEach(function (i) {
+      var registro = registros[i];
+      if (!registro) return;
+      var porDiaRegistro = equipesPorDia[chaveDemandas(registro.sup, registro.tipologia)];
+      if (porDiaRegistro && typeof porDiaRegistro[dia] === 'number') {
+        somaTotal += porDiaRegistro[dia];
+        achouAlgumaChave = true;
+      }
+    });
   }
-  if (!diasComDado) return null;
-  // Arredonda pra CIMA, nunca pro mais próximo (pedido do dono do projeto,
-  // 2026-08-06): a média diária quase sempre sai quebrada (85+85+83+.../N), e
-  // pra "quantas equipes trabalharam" a leitura conservadora é a de cima --
-  // 83,75 nunca é lido como "83 equipes e um pouco", é "84 no pior dia".
-  return Math.ceil(soma / diasComDado);
+  if (!achouAlgumaChave) return null;
+  // Mesmo arredondamento conservador de mediaEquipesNoIntervalo acima.
+  return Math.ceil(somaTotal / totalDias);
 }
 
 // '05' em vez de '5' -- sem toLocaleString/padStart (o resto deste módulo já
@@ -336,24 +340,25 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
       });
   }
 
-  // Realizado de Equipes (2026-08-06, pedido do dono do projeto -- calibrado
-  // contra historico.xlsx do Matriz depois de uma primeira versão errada):
-  // média diária de equipesAtivoPorDia (o "Ativas total" que o dashboard
-  // Matriz já publica, ver compute-equipes-ativo-matriz.js) em cada semana
-  // -- é FOTO de roster, não fluxo, por isso média e não soma (mesma
-  // convenção de Previsto, dividirEmSemanas). Número da EMPRESA INTEIRA,
-  // não decomponível por SUP -- não usa 'registros'/'indices' de propósito.
-  // A janela corta em hojeEpoch, igual ao Δ equipes do Balanço (compute-
-  // balanco.js): sem isso, a semana em curso diluiria a média com dias que
-  // ainda não aconteceram, e uma semana inteiramente futura mostraria uma
-  // "média" de puro zero em vez de sem-dado. Fechamento usa fecharMes, que
-  // já sabe fazer MÉDIA das semanas (não soma) quando dimensao === 'equipes'
-  // -- mesmo tratamento que a linha Previsto já recebe.
+  // Realizado de Equipes: soma demandas.equipesPorDia POR SUP através de
+  // 'indices' (ver somarEquipesNoIntervalo acima) -- decomponível por SUP
+  // desde 2026-08-08, quando o link Equipes ganhou a fonte fracionada
+  // (Link 6 + 7). Substitui a versão de 2026-08-06 (equipesAtivoPorDia, um
+  // número FIXO da empresa inteira, igual em toda linha -- era o motivo de
+  // "filtrei por ID Contrato e o número não mudou", achado ao vivo pelo dono
+  // do projeto). É FOTO de roster, não fluxo -- por isso média e não soma
+  // sobre os dias (mesma convenção de Previsto, dividirEmSemanas). A janela
+  // corta em hojeEpoch, igual ao Δ equipes do Balanço (compute-balanco.js):
+  // sem isso, a semana em curso diluiria a média com dias que ainda não
+  // aconteceram, e uma semana inteiramente futura mostraria uma "média" de
+  // puro zero em vez de sem-dado. Fechamento usa fecharMes, que já sabe
+  // fazer MÉDIA das semanas (não soma) quando dimensao === 'equipes' --
+  // mesmo tratamento que a linha Previsto já recebe.
   if (dimensao === 'equipes' && temSemanasReais) {
     semanasRealizado = semanas.map(function (semana) {
       if (semana.inicio > hojeEpoch) return null; // semana futura -- nada aconteceu ainda
       var fim = Math.min(semana.fim, hojeEpoch);
-      return mediaEquipesNoIntervalo(demandas.equipesAtivoPorDia, semana.inicio, fim);
+      return somarEquipesNoIntervalo(registros, indices, demandas, semana.inicio, fim);
     });
     fechamentoRealizado = fecharMes(semanasRealizado, dimensao);
 
@@ -470,7 +475,7 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
       // 2026-08-06, substitui a regra anterior que mantinha as duas com 2
       // casas). formatarNumero(v, 0) já agrupa milhar em pt-BR via
       // toLocaleString ("4.415"). Equipes Realizado chega já inteiro de
-      // mediaEquipesNoIntervalo (Math.ceil embutido ali); os outros valores
+      // somarEquipesNoIntervalo (Math.ceil embutido ali); os outros valores
       // fracionários (Tendência de Volume, médias) são só arredondados pro
       // inteiro mais próximo aqui, não pra cima.
       // Financeiro usa formatarFinanceiroMilhares em vez de casas fixas --

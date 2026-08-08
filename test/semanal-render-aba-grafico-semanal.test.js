@@ -210,16 +210,21 @@ test('construirPainelGraficoSemanalHtml: Equipes sem demandas/mês-vigente-real 
   assert.match(html, /Semanal — Equipes/);
 });
 
-test('construirPainelGraficoSemanalHtml: com mês vigente real, Equipes desenha barras de Realizado (de demandas.equipesAtivoPorDia) e Tendência (de registro.total.equipes)', () => {
+test('construirPainelGraficoSemanalHtml: com mês vigente real, Equipes desenha barras de Realizado (de demandas.equipesPorDia, por SUP+tipologia desde 2026-08-08) e Tendência (de registro.total.equipes)', () => {
   const semanas = require('../tools/semanal/compute-semanal.js').semanasDoMes(ANO, VIGENTE_JULHO);
-  // Só o dia 1 (dentro de S1, 01/07 a 05/07) tem retrato: S1 fecha em 3
-  // (único dia com dado, sem diluir pelos outros 4 -- ver mediaEquipesNoIntervalo
-  // em render-aba-semanal.js). S2..S5 ficam sem-dado (nenhum dia com retrato),
+  // Todos os 5 dias de S1 (01/07 a 05/07) com o mesmo valor (3): fecha em 3
+  // -- ver somarEquipesNoIntervalo em render-aba-semanal.js (soma por dia
+  // através dos registros, depois média sobre os dias da JANELA, não só os
+  // dias com dado). S2..S5 ficam sem-dado (nenhum dia com produção),
   // inclusive S3 (a semana vigente, hoje=15/07) -- valor exato já travado no
   // teste de compute-level em semanal-render-aba-semanal.test.js; aqui só
   // prova que o Gráfico desenha a barra/tooltip com o mesmo número.
-  const equipesAtivoPorDia = { [diaJul(1)]: 3 };
-  const demandas = { porRegistroEventos: {}, equipesAtivoPorDia };
+  const equipesPorDia = {
+    'SUP-0001-24||ST': {
+      [diaJul(1)]: 3, [diaJul(2)]: 3, [diaJul(3)]: 3, [diaJul(4)]: 3, [diaJul(5)]: 3,
+    },
+  };
+  const demandas = { porRegistroEventos: {}, equipesPorDia };
   const registroComTendencia = registro(100);
   registroComTendencia.total.equipes = new Array(12).fill(0);
   registroComTendencia.total.equipes[VIGENTE_JULHO] = 5;
