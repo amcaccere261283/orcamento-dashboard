@@ -27,14 +27,33 @@ const HEADER_SAIDA = [
   'Observações de Campo', 'OS', 'Sondador',
 ];
 
+// Exclusão de Tomador == "Suporte Sondagens - Filial Lapa" (auto-consumo
+// interno, não é demanda de cliente) e Tipo contendo SEG/SN -- MESMA regra
+// que mapear-demandas-lab.js já aplica (TOMADOR_EXCLUIDO/RE_EXCLUSAO_TIPO
+// lá), exigida pela spec pro Link 1 também (achado da revisão final de
+// branch, 2026-08-08: só o lab tinha essa exclusão implementada).
+// HEADER_SAIDA não carrega Tomador (parseAvancos não a conhece), então a
+// exclusão TEM que acontecer aqui, antes da linha de saída existir -- não dá
+// pra filtrar depois.
+const RE_EXCLUSAO_TIPO = /SEG|SN/;
+const TOMADOR_EXCLUIDO = 'Suporte Sondagens - Filial Lapa';
+
 function texto(valor) {
   return String(valor === null || valor === undefined ? '' : valor).trim();
 }
 
 function mapearProducaoTotal(linhas) {
-  const rows = (linhas || []).map((linha) => {
+  const rows = [];
+  let excluidos = 0;
+  for (const linha of linhas || []) {
+    const tomador = texto(linha['Tomador']);
+    const tipoCru = texto(linha['Tipo']).toUpperCase();
+    if (tomador === TOMADOR_EXCLUIDO || RE_EXCLUSAO_TIPO.test(tipoCru)) {
+      excluidos++;
+      continue;
+    }
     const executadoDia = texto(linha['Executado Dia']);
-    return [
+    rows.push([
       texto(linha['ID Contrato']),
       texto(linha['Criação da OS']),
       texto(linha['Tipo']),
@@ -47,9 +66,9 @@ function mapearProducaoTotal(linhas) {
       texto(linha['Observações de campo']),
       texto(linha['OS']),
       texto(linha['Sondador']),
-    ];
-  });
-  return { header: HEADER_SAIDA, rows };
+    ]);
+  }
+  return { header: HEADER_SAIDA, rows, excluidos };
 }
 
 module.exports = { mapearProducaoTotal, COLUNAS_LINK1, HEADER_SAIDA };

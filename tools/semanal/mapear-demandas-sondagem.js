@@ -8,6 +8,17 @@ const { HEADER_SAIDA } = require('./mapear-producao-total.js');
 // daquela OS no Link 2 (aproximação de lote, confirmada com o usuário). Ver
 // docs/superpowers/specs/2026-08-08-troca-origem-realizado-demandas-equipes-design.md,
 // seção "Demandas de sondagens".
+// Exclusão de Tomador == "Suporte Sondagens - Filial Lapa" e Tipo contendo
+// SEG/SN -- MESMA regra de mapear-producao-total.js/mapear-demandas-lab.js
+// (achado da revisão final de branch, 2026-08-08). O Link 2 (furos
+// pendentes) não tem coluna Tomador -- só o Link 3 tem, via join por OS --
+// então a exclusão só pode acontecer DEPOIS do join, usando o Tomador do
+// Link 3 (linha correspondente) e o Tipo do próprio Link 2 (fonte da verdade
+// do Tipo individual, ver o teste "Link 3 com Tipo diferente... não confunde
+// a linha").
+const RE_EXCLUSAO_TIPO = /SEG|SN/;
+const TOMADOR_EXCLUIDO = 'Suporte Sondagens - Filial Lapa';
+
 function texto(valor) {
   return String(valor === null || valor === undefined ? '' : valor).trim();
 }
@@ -17,20 +28,30 @@ function juntarPendentesSondagem(linhasLink2, linhasLink3) {
   for (const l3 of linhasLink3 || []) {
     const os = texto(l3['Ordens de Serviço (OS)']);
     if (os && !porOS.has(os)) {
-      porOS.set(os, { contrato: texto(l3['Contrato']), osDesde: texto(l3['OS desde']) });
+      porOS.set(os, {
+        contrato: texto(l3['Contrato']),
+        osDesde: texto(l3['OS desde']),
+        tomador: texto(l3['Tomador']),
+      });
     }
   }
 
   const rows = [];
   let semContrato = 0;
+  let excluidos = 0;
   for (const l2 of linhasLink2 || []) {
     const os = texto(l2['Ordem de Serviço (OS)']);
     const info = porOS.get(os);
     if (!info) { semContrato++; continue; }
+    const tipo = texto(l2['Tipo']);
+    if (info.tomador === TOMADOR_EXCLUIDO || RE_EXCLUSAO_TIPO.test(tipo.toUpperCase())) {
+      excluidos++;
+      continue;
+    }
     rows.push([
       info.contrato,
       info.osDesde,
-      texto(l2['Tipo']),
+      tipo,
       'PENDENTE',
       '', '', '', '', '',
       '',
@@ -39,7 +60,7 @@ function juntarPendentesSondagem(linhasLink2, linhasLink3) {
     ]);
   }
 
-  return { header: HEADER_SAIDA, rows, semContrato };
+  return { header: HEADER_SAIDA, rows, semContrato, excluidos };
 }
 
 module.exports = { juntarPendentesSondagem };

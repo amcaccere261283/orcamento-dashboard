@@ -74,3 +74,36 @@ test('múltiplas linhas mantêm a ordem', () => {
   assert.strictEqual(rows[0][cols.os], '1');
   assert.strictEqual(rows[1][cols.os], '2');
 });
+
+// Exclusão de Tomador/SEG-SN (achado da revisão final de branch, 2026-08-08):
+// a spec exige a mesma regra que mapear-demandas-lab.js já implementa,
+// também pro Link 1 (Realizado).
+test('linha com Tomador "Suporte Sondagens - Filial Lapa" é excluída, não entra em rows', () => {
+  const { rows, excluidos } = mapearProducaoTotal([linhaLink1({ Tomador: 'Suporte Sondagens - Filial Lapa' })]);
+  assert.strictEqual(rows.length, 0);
+  assert.strictEqual(excluidos, 1);
+});
+
+test('linha com Tipo contendo SEG (ex.: "SEG.A") é excluída', () => {
+  const { rows, excluidos } = mapearProducaoTotal([linhaLink1({ Tipo: 'SEG.A' })]);
+  assert.strictEqual(rows.length, 0);
+  assert.strictEqual(excluidos, 1);
+});
+
+test('linha com Tipo "SN" é excluída', () => {
+  const { rows, excluidos } = mapearProducaoTotal([linhaLink1({ Tipo: 'SN' })]);
+  assert.strictEqual(rows.length, 0);
+  assert.strictEqual(excluidos, 1);
+});
+
+test('exclusão de Tipo é case-insensitive', () => {
+  const { rows, excluidos } = mapearProducaoTotal([linhaLink1({ Tipo: 'seg.v' })]);
+  assert.strictEqual(rows.length, 0);
+  assert.strictEqual(excluidos, 1);
+});
+
+test('linhas normais (sem Tomador excluído nem Tipo SEG/SN) continuam entrando, contadas fora de excluidos', () => {
+  const { rows, excluidos } = mapearProducaoTotal([linhaLink1(), linhaLink1({ Tomador: 'Suporte Sondagens - Filial Lapa' })]);
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(excluidos, 1);
+});
