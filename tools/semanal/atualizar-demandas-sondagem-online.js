@@ -35,9 +35,23 @@ async function main() {
   }
   console.log(`  ${linhasLink3.length} linha(s) de OS+Tipo encontrada(s).`);
 
-  const { header, rows, semContrato } = juntarPendentesSondagem(linhasLink2, linhasLink3);
+  // Guard de "zero linhas" (mesmo espírito de atualizar-lab-online.js): se a
+  // sessão CDP expirou mas a página carregou sem erro HTTP, a tabela pode vir
+  // vazia -- sem este guard o CSV seria sobrescrito só de cabeçalho, zerando
+  // Demandas Pendentes de sondagem em silêncio.
+  if (!linhasLink2.length || !linhasLink3.length) {
+    throw new Error(
+      `Nenhuma linha encontrada em ${!linhasLink2.length ? 'Link 2 (maps-sondagens)' : 'Link 3 (avanco-sondagens)'} ` +
+      `-- abortando sem gravar (sessao expirada? confira se o Chrome ainda esta logado em sond.com.br).`
+    );
+  }
+
+  const { header, rows, semContrato, excluidos } = juntarPendentesSondagem(linhasLink2, linhasLink3);
   if (semContrato > 0) {
     console.warn(`AVISO: ${semContrato} furo(s) pendente(s) do Link 2 sem OS correspondente no Link 3 -- ficaram DE FORA (sem Contrato pra atribuir).`);
+  }
+  if (excluidos > 0) {
+    console.log(`${excluidos} furo(s) pendente(s) excluído(s) (Suporte Sondagens/SEG/SN).`);
   }
 
   try {

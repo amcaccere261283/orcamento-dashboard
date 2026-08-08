@@ -21,6 +21,14 @@ async function main() {
     await cdp.fecharSessao(session, target);
   }
 
+  // Guard de "zero linhas" (mesmo de atualizar-lab-online.js): se a sessão
+  // CDP expirou mas a página carregou sem erro HTTP, a tabela pode vir
+  // vazia -- sem este guard o JSON seria sobrescrito vazio, zerando Demandas
+  // Pendentes de LAB.C/LAB.E em silêncio.
+  if (!linhas.length) {
+    throw new Error('Nenhuma linha encontrada -- abortando sem gravar (sessao expirada, ou nenhum ensaio programado ainda?).');
+  }
+
   const { ensaios, excluidos } = mapearDemandasLab(linhas);
   console.log(`Pronto: ${ensaios.length} ensaio(s) pendente(s), ${excluidos} excluído(s) (Suporte Sondagens/SEG/SN).`);
 
