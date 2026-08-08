@@ -21,7 +21,6 @@ const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, resolve
 const { agregarEquipesPorDia } = require('./compute-equipes-mobilizadas.js');
 const { parseAbaEq, agregarEquipesAtivas, mesDaAbaEq } = require('./compute-equipes-ativas.js');
 const { agregarEquipesAtivoPorDia } = require('./compute-equipes-ativo-matriz.js');
-const { agregarEquipesProdutivas } = require('./compute-equipes-produtivas.js');
 const { agregarEquipesNaoProdutivas } = require('./compute-equipes-nao-produtivas.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const configDemandas = require('./config-demandas.js');
@@ -196,11 +195,11 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // combinado tem cabeçalho na linha 0, mas parseAvancos espera cabeçalho em
   // grid[1] (o formato do .xlsx original, que tem uma linha em branco antes).
   const CAMINHO_AVANCOS_ONLINE = path.join(__dirname, '..', '..', 'dist', 'avancos-online.csv');
+  const CAMINHO_DEMANDAS_SONDAGEM_ONLINE = path.join(__dirname, '..', '..', 'dist', 'demandas-sondagem-online.csv');
   let gridAvancos;
   try {
     const csvTexto = fs.readFileSync(CAMINHO_AVANCOS_ONLINE, 'utf8');
     gridAvancos = parseCsvGrid(csvTexto);
-    gridAvancos.unshift(null);
   } catch (err) {
     throw new Error(
       `Não consegui ler ${CAMINHO_AVANCOS_ONLINE}. Rode ` +
@@ -208,6 +207,19 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
       `aberto com --remote-debugging-port=9222, logado em sond.com.br). Erro original: ${err.message}`
     );
   }
+  // Demandas pendentes de sondagem (Link 2 + 3) são OPCIONAIS: sem o arquivo,
+  // o build continua com Realizado normal, só sem os furos ainda não
+  // executados no estoque de Demandas -- mesmo espírito de robustez que
+  // equipes-online.csv já tem (ver mais abaixo).
+  if (fs.existsSync(CAMINHO_DEMANDAS_SONDAGEM_ONLINE)) {
+    const gridPendentes = parseCsvGrid(fs.readFileSync(CAMINHO_DEMANDAS_SONDAGEM_ONLINE, 'utf8'));
+    // gridPendentes[0] é cabeçalho (igual ao de gridAvancos[0]) -- só as
+    // linhas de dado (índice 1 em diante) entram.
+    for (let i = 1; i < gridPendentes.length; i++) gridAvancos.push(gridPendentes[i]);
+  } else {
+    console.warn(`AVISO: ${CAMINHO_DEMANDAS_SONDAGEM_ONLINE} não encontrado -- Demandas Pendentes de sondagem não inclui furos ainda não executados. Rode "node tools/semanal/atualizar-demandas-sondagem-online.js".`);
+  }
+  gridAvancos.unshift(null);
   const { furos: furosLidos, descartadas, semDataTermino, cancelamentoIlegivel, deslocamentos } = parseAvancos(gridAvancos);
 
   // Quarta fonte desta página: ensaios de laboratório REALIZADOS. Alimenta só
@@ -239,7 +251,24 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
     );
   }
   const { ensaios: ensaiosLidos, descartadas: ensaiosDescartados } = parseLab(gridLab);
-  const { itens: ensaios, redirecionados: ensaiosRedirecionados } = redirecionarSupsDesconhecidos(ensaiosLidos, registros);
+
+  // Demandas de lab pendentes (Link 4 + 5): ensaios ainda não realizados,
+  // juntados aos REALIZADOS (ensaiosLidos) antes do redirecionamento de SUP
+  // desconhecido -- mesmo espírito de robustez que Demandas de sondagem
+  // (opcional via fs.existsSync, ver acima). 'concluido: null' marca cada
+  // pendente como ainda não concluído pro mesmo formato que parseLab produz.
+  const CAMINHO_DEMANDAS_LAB_ONLINE = path.join(__dirname, '..', '..', 'dist', 'demandas-lab-online.json');
+  let ensaiosComPendentes = ensaiosLidos;
+  if (fs.existsSync(CAMINHO_DEMANDAS_LAB_ONLINE)) {
+    const pendentesLab = JSON.parse(fs.readFileSync(CAMINHO_DEMANDAS_LAB_ONLINE, 'utf8'))
+      .map((e) => ({ ...e, criacao: e.criacao ? new Date(e.criacao) : null, concluido: null }));
+    ensaiosComPendentes = ensaiosLidos.concat(pendentesLab);
+    console.log(`Demandas de lab: ${pendentesLab.length} ensaio(s) pendente(s) incluído(s).`);
+  } else {
+    console.warn(`AVISO: ${CAMINHO_DEMANDAS_LAB_ONLINE} não encontrado -- Demandas Pendentes de LAB.C/LAB.E não inclui backlog. Rode "node tools/semanal/atualizar-demandas-lab-online.js".`);
+  }
+
+  const { itens: ensaios, redirecionados: ensaiosRedirecionados } = redirecionarSupsDesconhecidos(ensaiosComPendentes, registros);
   console.log(`Lab: ${ensaiosLidos.length} ensaio(s) lido(s), ${ensaiosDescartados} linha(s) descartada(s) (lixo "TESTE" ou vazia), ${ensaiosRedirecionados} ensaio(s) redirecionado(s) pra "Diversos" (SUP sem registro LAB.C/LAB.E na MATRIZ).`);
 
   // Mesmo redirecionamento aplicado aos furos de Sondagem/Avanços -- ver o
@@ -271,74 +300,56 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // tipologiaPorSondador é desestruturado À PARTE (nunca entra em 'demandas')
   // porque 'demandas' é JSON.stringify'd por inteiro pro blob cifrado do HTML
   // -- ver renderSemanal() mais abaixo. Anexar essa chave inflaria o payload
-  // sem nenhum consumidor no cliente: quem precisa dela é só o bloco de
-  // equipes PRODUTIVAS logo abaixo, ainda dentro de build().
-  const { tipologiaPorSondador, ...resultadoEquipesAtivas } = montarEquipesAtivas(furos, equipesAtivasCsv);
+  // sem nenhum consumidor no cliente. Desde a Task 12 (2026-08-08, troca de
+  // equipes PRODUTIVAS por FRACIONADAS -- ver o bloco logo abaixo) o valor
+  // tampouco tem consumidor DENTRO de build(): equipes-online.csv já chega
+  // pré-agregado por (SUP, tipologia), então quem resolve o SUP desconhecido
+  // é resolverSupConhecido(registros), não mais tipologiaPorSondador. Mantido
+  // fora de 'demandas' mesmo assim, por segurança -- se um dia entrar outro
+  // consumidor Node dele, não deve viajar solto no payload sem decisão
+  // própria.
+  const { tipologiaPorSondador: _tipologiaPorSondador, ...resultadoEquipesAtivas } = montarEquipesAtivas(furos, equipesAtivasCsv);
   Object.assign(demandas, resultadoEquipesAtivas);
   if (demandas.equipesPeriodo) fonteEquipes = 'ATIVAS (aba EQ)';
 
-  // Δ equipes PRODUTIVAS (2026-08-05): fonte online (campo/fotos), vira a
-  // PRIMEIRA prioridade pro Δ equipes -- ativas (aba EQ, acima) e mobilizadas
-  // (furos) continuam como reserva se o CSV novo não existir ou não produzir
-  // nenhum dia utilizável. Ver
-  // docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
-  const CAMINHO_EQUIPES_PRODUTIVAS = path.join(__dirname, '..', '..', 'dist', 'equipes-produtivas-online.csv');
-  if (fs.existsSync(CAMINHO_EQUIPES_PRODUTIVAS)) {
-    try {
-      const csvProdutivas = fs.readFileSync(CAMINHO_EQUIPES_PRODUTIVAS, 'utf8');
-      const gridProdutivas = parseCsvGrid(csvProdutivas);
-      const cabecalho = gridProdutivas[0] || [];
-      const linhasProdutivas = gridProdutivas.slice(1).map((linha) => {
-        const obj = {};
-        cabecalho.forEach((h, i) => { if (h) obj[h] = linha[i]; });
-        return obj;
-      });
-      // resolverSup: MESMA regra de redirecionarSupsDesconhecidos que furos e
-      // ensaios já aplicam acima -- par (contrato, tipologia) que a MATRIZ não
-      // conhece vai pra "Diversos" em vez de sumir. Sem isso, agora que
-      // produtivas é a fonte PRIMÁRIA do Δ equipes, todo contrato fora da MATRIZ
-      // baixaria o número principal em silêncio. Injetado (e não resolvido lá
-      // dentro) para compute-equipes-produtivas.js seguir sem conhecer a MATRIZ,
-      // do mesmo jeito que não conhece fs nem CDP.
-      const {
-        porDia: porDiaProdutivas,
-        semTipologia: semTipologiaProdutivas,
-        redirecionados: produtivasRedirecionadas,
-        periodo: periodoProdutivas,
-      } = agregarEquipesProdutivas({
-        linhas: linhasProdutivas,
-        tipologiaPorSondador,
-        resolverSup: resolverSupConhecido(registros),
-      });
-      if (Object.keys(porDiaProdutivas).length) {
-        demandas.equipesPorDia = porDiaProdutivas;
-        // equipesPeriodo JUNTO com equipesPorDia, sempre -- ver o comentário nas
-        // mobilizadas acima. periodoProdutivas sai do próprio dado (o mês mais
-        // frequente entre os dias contados), não de um relógio: o build pode
-        // rodar num dia diferente do da busca.
-        demandas.equipesPeriodo = periodoProdutivas;
-        fonteEquipes = 'PRODUTIVAS (campo/fotos online)';
-        const mesProdutivas = periodoProdutivas
-          ? `${String(periodoProdutivas.mes).padStart(2, '0')}/${periodoProdutivas.ano}`
-          : 'mês indeterminado';
-        // "equipe-dia" é literal: semTipologia conta (sondador, dia) DISTINTO, não
-        // linha de CSV. A tabela é uma linha por FOTO (~1.900/dia), e contar
-        // linhas imprimia aqui um número de 5 dígitos que se leria como perda
-        // catastrófica de dado sendo só artefato da contagem de fotos.
-        console.log(
-          `Equipes produtivas (${mesProdutivas}): fonte online em uso -- `
-          + `${semTipologiaProdutivas} equipe-dia sem tipologia conhecida (fora da conta), `
-          + `${produtivasRedirecionadas} par(es) (contrato, tipologia) redirecionado(s) pra "Diversos" `
-          + `(contrato sem registro na MATRIZ pra aquela tipologia).`
-        );
-      } else {
-        console.warn('Equipes produtivas: CSV existe mas não produziu nenhum dia utilizável -- mantendo a fonte de reserva (ativas/mobilizadas).');
-      }
-    } catch (err) {
-      console.warn(`Equipes produtivas: falha ao ler ${CAMINHO_EQUIPES_PRODUTIVAS} (${err.message}) -- mantendo a fonte de reserva.`);
+  // Δ equipes FRACIONADAS (2026-08-08): fonte online (Link 6 roster + Link 7
+  // campo/produção, já agregadas em atualizar-equipes-online.js via
+  // agregarEquipesFracao -- compute-equipes-fracao.js), no formato plano
+  // "SUP,Tipo,DiaEpoch,Fracao". Substitui inteiramente o antigo
+  // equipes-produtivas-online.csv + agregarEquipesProdutivas
+  // (compute-equipes-produtivas.js, sem consumidor NESTE arquivo a partir
+  // desta task -- ver docs/superpowers/sdd/2026-08-08-troca-origem-realizado-
+  // demandas-equipes-design.md). Continua sendo a PRIMEIRA prioridade pro Δ
+  // equipes -- ativas (aba EQ) e mobilizadas (furos) continuam como reserva
+  // se o CSV novo não existir ou não produzir nenhum dia utilizável.
+  const CAMINHO_EQUIPES_ONLINE = path.join(__dirname, '..', '..', 'dist', 'equipes-online.csv');
+  if (fs.existsSync(CAMINHO_EQUIPES_ONLINE)) {
+    const linhasCsv = fs.readFileSync(CAMINHO_EQUIPES_ONLINE, 'utf8').trim().split('\n').slice(1);
+    const porDiaFracao = {};
+    let diasEncontrados = new Set();
+    for (const linha of linhasCsv) {
+      if (!linha) continue;
+      const [sup, tipo, diaStr, fracaoStr] = linha.split(',');
+      const supResolvido = resolverSupConhecido(registros)(sup, tipo);
+      const chave = supResolvido + '||' + tipo;
+      const dia = Number(diaStr);
+      if (!porDiaFracao[chave]) porDiaFracao[chave] = {};
+      porDiaFracao[chave][dia] = (porDiaFracao[chave][dia] || 0) + Number(fracaoStr);
+      diasEncontrados.add(dia);
+    }
+    if (Object.keys(porDiaFracao).length) {
+      demandas.equipesPorDia = porDiaFracao;
+      // periodoProdutivas equivalente: o mês/ano do build (equipes-online.csv
+      // já é buscado por mês -- ver atualizar-equipes-online.js).
+      const diasArr = [...diasEncontrados];
+      const diaRepresentativo = new Date(Math.min(...diasArr) * 86400000);
+      demandas.equipesPeriodo = { ano: diaRepresentativo.getUTCFullYear(), mes: diaRepresentativo.getUTCMonth() + 1 };
+      fonteEquipes = 'FRACIONADAS (Link 6 + 7)';
+    } else {
+      console.warn('Equipes fracionadas: CSV existe mas não produziu nenhum dia utilizável -- mantendo a fonte de reserva (ativas/mobilizadas).');
     }
   } else {
-    console.warn(`Equipes produtivas: ${CAMINHO_EQUIPES_PRODUTIVAS} não existe -- rode "node tools/semanal/atualizar-equipes-produtivas-online.js". Mantendo a fonte de reserva (ativas/mobilizadas).`);
+    console.warn(`Equipes fracionadas: ${CAMINHO_EQUIPES_ONLINE} não existe -- rode "node tools/semanal/atualizar-equipes-online.js". Mantendo a fonte de reserva (ativas/mobilizadas).`);
   }
 
   // Realizado de equipes para a Tabela Semanal (2026-08-06, recalibrado no

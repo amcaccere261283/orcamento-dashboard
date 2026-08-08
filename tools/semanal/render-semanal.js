@@ -541,13 +541,17 @@ const BUNDLE_ARQUIVOS = [
   // ANTES de quem o desestrutura.
   'parse-matriz-cliente.js',
   'classificar-dia-equipe.js', 'compute-equipes-ativas.js',
-  // Equipes PRODUTIVAS/NÃO PRODUTIVAS (2026-08-05): nenhum dos dois tem
-  // require de outro módulo same-dir, exceto compute-equipes-nao-produtivas.js
-  // (classificar-dia-equipe.js, já registrado acima). Precisam vir ANTES de
+  // Equipes NÃO PRODUTIVAS (2026-08-05): tem require de
+  // classificar-dia-equipe.js, já registrado acima. Precisa vir ANTES de
   // compute-balanco.js/render-aba-balanco.js só porque este bundle é lido em
-  // ordem -- nenhum dos dois consome os dois novos módulos hoje (a ligação é
+  // ordem -- não é consumido por nenhum dos módulos acima hoje (a ligação é
   // feita em JS solto dentro de SCRIPT_CLIENTE_SEMANAL, não por require).
-  'compute-equipes-produtivas.js', 'compute-equipes-nao-produtivas.js',
+  // compute-equipes-produtivas.js SAIU desta lista na Task 12 (2026-08-08):
+  // o botão "Atualizar dados" não roda mais agregação de equipes própria
+  // sobre dado cru -- equipes-online.csv já chega pré-agregado (ver
+  // URL_ESPELHO_EQUIPES_SEMANAL acima). O módulo continua no repositório,
+  // sem consumidor aqui.
+  'compute-equipes-nao-produtivas.js',
   // Equipes ATIVAS via Matriz (2026-08-06): também sem require same-dir.
   'compute-equipes-ativo-matriz.js',
   'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js',
@@ -629,7 +633,6 @@ var ParseLab = MODULOS['parse-lab.js'];
 var ComputeDemandas = MODULOS['compute-demandas.js'];
 var ComputeEquipes = MODULOS['compute-equipes-mobilizadas.js'];
 var ComputeEquipesAtivas = MODULOS['compute-equipes-ativas.js'];
-var ComputeEquipesProdutivas = MODULOS['compute-equipes-produtivas.js'];
 var ComputeEquipesNaoProdutivas = MODULOS['compute-equipes-nao-produtivas.js'];
 var ComputeEquipesAtivoMatriz = MODULOS['compute-equipes-ativo-matriz.js'];
 var FiltroAtivos = MODULOS['filtro-ativos.js'];
@@ -1334,8 +1337,15 @@ var URL_ESPELHO_EQ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ
 // junto com a própria página -- mesmo padrão de URL_ESPELHO_AVANCOS_SEMANAL.
 // Ver docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
 var URL_ESPELHO_LAB_SEMANAL = 'lab-online.csv';
-// 2026-08-05: equipes produtivas, mesmo padrão de publicação relativa.
-var URL_ESPELHO_EQUIPES_PRODUTIVAS_SEMANAL = 'equipes-produtivas-online.csv';
+// 2026-08-08 (Task 12): equipes FRACIONADAS -- substitui o antigo
+// equipes-produtivas-online.csv. O CSV publicado já vem pré-agregado por
+// (SUP, tipologia, dia) no formato "SUP,Tipo,DiaEpoch,Fracao"
+// (atualizar-equipes-online.js, via agregarEquipesFracao em
+// compute-equipes-fracao.js), então o botão só faz parse+soma abaixo --
+// MESMA lógica que o bloco equivalente em build-dashboard.js (Task 12) --
+// em vez de rodar uma agregação própria sobre dado cru. Mesmo padrão de
+// publicação relativa dos outros dois.
+var URL_ESPELHO_EQUIPES_SEMANAL = 'equipes-online.csv';
 // 2026-08-06: "Ativas (total)" do dashboard Matriz (outro projeto deste
 // repositório-mãe) -- JSON público, domínio diferente do GitHub Pages desta
 // página (por isso URL absoluta, não relativa como as de cima). Alimenta o
@@ -1410,18 +1420,18 @@ function atualizarDadosAoVivoSemanal() {
     // fica com o dado do build -- em vez de o botão inteiro dar erro por causa
     // da série secundária.
     buscarCsvSemanal(URL_ESPELHO_EQ_SEMANAL).catch(function () { return null; }),
-    // Equipes PRODUTIVAS (2026-08-05). Gated pelo MESMO avancosLabConfigurados
-    // dos dois de cima: sem tipologiaPorSondador (derivado dos furos) esta
-    // fonte não tem como apropriar equipe a (SUP, tipologia).
+    // Equipes FRACIONADAS (2026-08-08, Task 12 -- antes "produtivas"). Gated
+    // pelo MESMO avancosLabConfigurados dos dois de cima: o parse+soma abaixo
+    // roda depois de furos/ensaios estarem prontos, igual ao build.
     //
     // Falha sozinha, igual à aba EQ acima: este CSV é publicado à parte
-    // (cp dist/equipes-produtivas-online.csv docs/), então um 404 por cópia
-    // esquecida é o modo de falha ESPERADO -- e sem o .catch ele derrubava o
-    // botão INTEIRO ("Falha ao atualizar: HTTP 404"), levando MATRIZ e Avanços
-    // com ele. Sem produtivas o Δ equipes só volta pra reserva
+    // (cp dist/equipes-online.csv docs/), então um 404 por cópia esquecida é
+    // o modo de falha ESPERADO -- e sem o .catch ele derrubava o botão
+    // INTEIRO ("Falha ao atualizar: HTTP 404"), levando MATRIZ e Avanços com
+    // ele. Sem fracionadas o Δ equipes só volta pra reserva
     // (ativas/mobilizadas), que é como era antes desta branch.
     avancosLabConfigurados
-      ? buscarCsvSemanal(URL_ESPELHO_EQUIPES_PRODUTIVAS_SEMANAL).catch(function () { return null; })
+      ? buscarCsvSemanal(URL_ESPELHO_EQUIPES_SEMANAL).catch(function () { return null; })
       : Promise.resolve(null),
     // "Ativas (total)" do dashboard Matriz (2026-08-06) -- alimenta o
     // Realizado de Equipes da Tabela Semanal (ver compute-equipes-ativo-
@@ -1490,17 +1500,19 @@ function atualizarDadosAoVivoSemanal() {
       var periodoEq = csvEq ? ComputeEquipesAtivas.mesDaAbaEq(csvEq) : null;
 
       // FORA do if (periodoEq): só dependem de 'furos'. Mesmo tratamento que
-      // montarEquipesAtivas recebeu no lado Node (build-dashboard.js), e pela
-      // mesma razão -- equipes PRODUTIVAS, mais abaixo, precisa de
-      // tipologiaPorSondador MESMO quando o espelho da aba EQ está fora do ar.
+      // montarEquipesAtivas recebeu no lado Node (build-dashboard.js).
       //
       // Estava declarado com 'var' DENTRO do if, e 'var' é escopo de FUNÇÃO:
-      // com periodoEq falso, o bloco de produtivas lia 'undefined',
-      // agregarEquipesProdutivas caía no default {}, toda linha ia pra
-      // semTipologia, porDia voltava vazio -- e o botão degradava o Δ equipes
-      // de produtivas pra mobilizadas em silêncio, com status verde
-      // "Atualizado". Exatamente a classe de bug "um caminho se comporta
-      // diferente do outro" que esta branch precisa evitar.
+      // com periodoEq falso, o bloco de produtivas (existia até a Task 12,
+      // 2026-08-08 -- substituído pelo bloco de equipes FRACIONADAS abaixo,
+      // que lê o CSV já pré-agregado e não depende mais de
+      // tipologiaPorSondador) lia 'undefined', agregarEquipesProdutivas caía
+      // no default {}, toda linha ia pra semTipologia, porDia voltava vazio
+      // -- e o botão degradava o Δ equipes de produtivas pra mobilizadas em
+      // silêncio, com status verde "Atualizado". Exatamente a classe de bug
+      // "um caminho se comporta diferente do outro" que esta branch
+      // precisava evitar -- tipologiaPorSondador continua calculado aqui
+      // porque equipes ATIVAS (logo abaixo) ainda o consome.
       var osParaSup = {};
       var contagemTip = {};
       furos.forEach(function (f) {
@@ -1537,34 +1549,49 @@ function atualizarDadosAoVivoSemanal() {
         demandasNovas.equipesPeriodo = periodoEq;
       }
 
-      // Equipes PRODUTIVAS (2026-08-05): mesma prioridade que o build já dá --
-      // se o CSV respondeu e produz pelo menos um dia utilizável, ela GANHA de
-      // ativas/mobilizadas (setadas acima). Sem require nenhum aqui: as linhas
-      // já chegam como objetos simples via parseCsvGrid + zip contra o próprio
-      // cabeçalho, igual ao bloco Node equivalente em build-dashboard.js.
+      // Equipes FRACIONADAS (2026-08-08, Task 12 -- antes "produtivas"):
+      // mesma prioridade que o build já dá -- se o CSV respondeu e produz
+      // pelo menos um dia utilizável, ela GANHA de ativas/mobilizadas
+      // (setadas acima). O CSV já chega PRÉ-AGREGADO por (SUP, tipologia,
+      // dia) no formato "SUP,Tipo,DiaEpoch,Fracao" (mesmo que
+      // atualizar-equipes-online.js grava em dist/) -- por isso este bloco
+      // só faz parse+soma, MESMA lógica do bloco Node equivalente em
+      // build-dashboard.js (Task 12), sem chamar nenhuma função de
+      // "agregar*": a agregação de verdade (Link 6 roster + Link 7
+      // campo/produção) já rodou fora do navegador, em
+      // atualizar-equipes-online.js.
       if (textos[4]) {
-        var gridProdutivasCliente = ParseMatrizCliente.parseCsvGrid(textos[4]);
-        var cabecalhoProdutivas = gridProdutivasCliente[0] || [];
-        var linhasProdutivasCliente = gridProdutivasCliente.slice(1).map(function (linha) {
-          var obj = {};
-          cabecalhoProdutivas.forEach(function (h, i) { if (h) obj[h] = linha[i]; });
-          return obj;
-        });
-        var agregadoProdutivas = ComputeEquipesProdutivas.agregarEquipesProdutivas({
-          linhas: linhasProdutivasCliente,
-          tipologiaPorSondador: tipologiaPorSondador,
+        var gridEquipesCliente = ParseMatrizCliente.parseCsvGrid(textos[4]);
+        var porDiaFracaoCliente = {};
+        var diasFracaoCliente = [];
+        gridEquipesCliente.slice(1).forEach(function (linha) {
+          if (!linha || !linha.length) return;
+          var sup = linha[0];
+          var tipo = linha[1];
+          var dia = Number(linha[2]);
+          var fracao = Number(linha[3]);
           // MESMO redirecionamento que furos/ensaios levam nas duas linhas do
-          // topo deste bloco: par (contrato, tipologia) que a MATRIZ não conhece
-          // vira "Diversos" em vez de sumir do Δ equipes -- e produtivas é a
-          // fonte PRIMÁRIA dele. Ver o gêmeo em build-dashboard.js.
-          resolverSup: ComputeDemandas.resolverSupConhecido(registrosNovos),
+          // topo deste bloco: par (contrato, tipologia) que a MATRIZ não
+          // conhece vira "Diversos" em vez de sumir do Δ equipes -- e
+          // fracionadas é a fonte PRIMÁRIA dele. Ver o gêmeo em
+          // build-dashboard.js.
+          var supResolvido = ComputeDemandas.resolverSupConhecido(registrosNovos)(sup, tipo);
+          var chave = supResolvido + '||' + tipo;
+          if (!porDiaFracaoCliente[chave]) porDiaFracaoCliente[chave] = {};
+          porDiaFracaoCliente[chave][dia] = (porDiaFracaoCliente[chave][dia] || 0) + fracao;
+          diasFracaoCliente.push(dia);
         });
-        if (Object.keys(agregadoProdutivas.porDia).length) {
-          demandasNovas.equipesPorDia = agregadoProdutivas.porDia;
-          // JUNTO com equipesPorDia, sempre: produtivas cobre UM mês, e sem
+        if (Object.keys(porDiaFracaoCliente).length) {
+          demandasNovas.equipesPorDia = porDiaFracaoCliente;
+          // JUNTO com equipesPorDia, sempre: fracionadas cobre UM mês, e sem
           // isto escolher um mês passado desenharia Δ equipes quase zero sem o
-          // aviso de "sem dado".
-          demandasNovas.equipesPeriodo = agregadoProdutivas.periodo;
+          // aviso de "sem dado". Período equivalente ao que build-dashboard.js
+          // deriva: o mês/ano do dia mais antigo encontrado.
+          var diaRepresentativoCliente = new Date(Math.min.apply(null, diasFracaoCliente) * 86400000);
+          demandasNovas.equipesPeriodo = {
+            ano: diaRepresentativoCliente.getUTCFullYear(),
+            mes: diaRepresentativoCliente.getUTCMonth() + 1,
+          };
         }
       }
 

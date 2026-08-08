@@ -1439,13 +1439,16 @@ const CSV_EQ_PRIORIDADE = 'ID,Nome,Extra,Serviços,15/03/2026\n'
   + '-,do condutor,-,-,-\n'
   + '1,Sondador Sintético,-,SP,(17851-26)\n';
 
-// Uma foto, num dia que nenhuma das outras duas fontes produz.
-const CSV_PRODUTIVAS_PRIORIDADE = 'Contrato Financeiro,Sondador,Data\n'
-  + 'SUP-0002-25,Sondador Sintético,20/03/2026\n';
-
 const DIA_MOBILIZADAS = Math.floor(Date.UTC(2026, 2, 10) / 86400000);
 const DIA_ATIVAS = Math.floor(Date.UTC(2026, 2, 15) / 86400000);
 const DIA_PRODUTIVAS = Math.floor(Date.UTC(2026, 2, 20) / 86400000);
+
+// Um dia de equipe fracionada (Link 6 + 7 já agregados, formato
+// "SUP,Tipo,DiaEpoch,Fracao" -- ver atualizar-equipes-online.js/
+// compute-equipes-fracao.js), num dia que nenhuma das outras duas fontes
+// produz. Fração 1 (equipe inteira num único par SUP/tipo naquele dia).
+const CSV_PRODUTIVAS_PRIORIDADE = 'SUP,Tipo,DiaEpoch,Fracao\n'
+  + `SUP-0002-25,SP,${DIA_PRODUTIVAS},1\n`;
 
 // Junta todos os dias presentes em equipesPorDia, de todas as chaves -- a
 // impressão digital de qual fonte alimentou o mapa.
@@ -1487,7 +1490,7 @@ test('atualizarDadosAoVivoSemanal: com a aba EQ fora do ar mas o CSV de produtiv
     if (url.indexOf('lab-configurado-teste') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_PRIORIDADE) });
     // A aba EQ cai -- é o cenário deste teste.
     if (url.indexOf('pub?gid=199381651') !== -1) return Promise.reject(new Error('espelho da aba EQ fora do ar'));
-    if (url.indexOf('equipes-produtivas-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_PRODUTIVAS_PRIORIDADE) });
+    if (url.indexOf('equipes-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_PRODUTIVAS_PRIORIDADE) });
     return Promise.reject(new Error('URL inesperada no mock: ' + url));
   };
 
@@ -1526,12 +1529,12 @@ test('atualizarDadosAoVivoSemanal: com a aba EQ fora do ar mas o CSV de produtiv
   const periodoProdutivas = sandbox.window.__DEMANDAS__.equipesPeriodo;
   assert.ok(periodoProdutivas, 'equipesPeriodo não pode ficar null por a aba EQ ter caído -- produtivas cobre um mês e o gate depende dele');
   assert.strictEqual(periodoProdutivas.ano, 2026);
-  assert.strictEqual(periodoProdutivas.mes, 3, 'o mês tem de ser o das PRODUTIVAS (03/2026, a Data do CSV de fotos)');
+  assert.strictEqual(periodoProdutivas.mes, 3, 'o mês tem de ser o das FRACIONADAS (03/2026, o DiaEpoch do CSV de equipes-online.csv)');
 });
 
 // FIX 3: a entrada de produtivas no Promise.all não tinha .catch, então um 404
 // nela (o modo de falha esperado: esquecer o
-// `cp dist/equipes-produtivas-online.csv docs/`) rejeitava o Promise.all
+// `cp dist/equipes-online.csv docs/`) rejeitava o Promise.all
 // INTEIRO e o botão morria com "Falha ao atualizar: HTTP 404", levando MATRIZ,
 // Avanços, Lab e EQ com ele.
 test('atualizarDadosAoVivoSemanal: se o CSV de equipes produtivas dá 404, o refresh AINDA conclui e as outras 4 fontes atualizam', async () => {
@@ -1541,7 +1544,7 @@ test('atualizarDadosAoVivoSemanal: se o CSV de equipes produtivas dá 404, o ref
     if (url.indexOf('lab-configurado-teste') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_PRIORIDADE) });
     if (url.indexOf('pub?gid=199381651') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_EQ_PRIORIDADE) });
     // Publicação esquecida: o arquivo não está em docs/.
-    if (url.indexOf('equipes-produtivas-online.csv') !== -1) return Promise.resolve({ ok: false, status: 404 });
+    if (url.indexOf('equipes-online.csv') !== -1) return Promise.resolve({ ok: false, status: 404 });
     return Promise.reject(new Error('URL inesperada no mock: ' + url));
   };
 
