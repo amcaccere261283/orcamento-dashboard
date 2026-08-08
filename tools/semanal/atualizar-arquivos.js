@@ -5,14 +5,16 @@ const { execFileSync } = require('node:child_process');
 
 // Atalho local pro pedido original (2026-08-07) de um botão "Atualizar
 // arquivos" na própria página publicada: não dá pra existir de verdade --
-// planejamento-semanal.html é HTML estático no GitHub Pages, e as 3 buscas
+// planejamento-semanal.html é HTML estático no GitHub Pages, e as buscas
 // abaixo são processos Node que precisam de Chrome aberto com
 // --remote-debugging-port=9222 já logado em sond.com.br (ver CLAUDE.md,
 // "Atualizar os dados"). JS de página nenhuma consegue disparar isso na
 // máquina de quem só está VENDO a página publicada. Este script substitui o
-// botão: os mesmos 3 comandos manuais + o build + a cópia pra docs/ + commit
-// + push, numa chamada só, pra rodar ANTES de usar "Atualizar dados" na
-// página (que só troca dados já publicados, nunca busca nada sozinho).
+// botão: os mesmos comandos manuais (5 desde a Task 12/13 -- avanços,
+// demandas de sondagem, lab, demandas de lab, equipes) + o build + a cópia
+// pra docs/ + commit + push, numa chamada só, pra rodar ANTES de usar
+// "Atualizar dados" na página (que só troca dados já publicados, nunca
+// busca nada sozinho).
 //
 // Uso: ORCAMENTO_SENHA='...' node tools/semanal/atualizar-arquivos.js
 //
@@ -29,18 +31,23 @@ const DOCS = path.join(RAIZ, 'docs');
 
 const BUSCAS = [
   { nome: 'Avanços (furos)', modulo: './atualizar-avancos-online.js' },
+  { nome: 'Demandas de sondagem (furos não executados)', modulo: './atualizar-demandas-sondagem-online.js' },
   { nome: 'Lab Realizado (ensaios)', modulo: './atualizar-lab-online.js' },
-  { nome: 'Equipes produtivas', modulo: './atualizar-equipes-produtivas-online.js' },
+  { nome: 'Demandas de LAB.C/LAB.E (backlog)', modulo: './atualizar-demandas-lab-online.js' },
+  { nome: 'Equipes', modulo: './atualizar-equipes-online.js' },
 ];
 
-// Mesmos 4 pares que test/publicacao-docs-sincronizado.test.js trava pra
-// esta página (o 5º par do teste, orcamento-dashboard.html/index.html, é do
-// outro dashboard e fica fora do escopo deste script).
+// Mesmos pares que test/publicacao-docs-sincronizado.test.js trava pra esta
+// página (o par orcamento-dashboard.html/index.html do teste é do outro
+// dashboard e fica fora do escopo deste script). demandas-sondagem-online.csv
+// e demandas-lab-online.json ficam de fora daqui de propósito: só alimentam
+// o build a partir de dist/ (Task 12), o botão "Atualizar dados" da página
+// publicada não os busca diretamente -- ver Task 13.
 const ARQUIVOS_PUBLICAR = [
   'planejamento-semanal.html',
   'avancos-online.csv',
   'lab-online.csv',
-  'equipes-produtivas-online.csv',
+  'equipes-online.csv',
 ];
 
 async function rodarBuscas() {

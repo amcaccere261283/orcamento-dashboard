@@ -53,10 +53,10 @@ const PARES = [
     comando: 'cp dist/lab-online.csv docs/lab-online.csv',
   },
   {
-    nome: 'CSV de Equipes produtivas',
-    origem: path.join(RAIZ, 'dist', 'equipes-produtivas-online.csv'),
-    publicado: path.join(RAIZ, 'docs', 'equipes-produtivas-online.csv'),
-    comando: 'cp dist/equipes-produtivas-online.csv docs/equipes-produtivas-online.csv',
+    nome: 'CSV de Equipes',
+    origem: path.join(RAIZ, 'dist', 'equipes-online.csv'),
+    publicado: path.join(RAIZ, 'docs', 'equipes-online.csv'),
+    comando: 'cp dist/equipes-online.csv docs/equipes-online.csv',
   },
 ];
 
