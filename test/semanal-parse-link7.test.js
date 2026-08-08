@@ -11,14 +11,34 @@ function linhaLink7Cru(over = {}) {
     'Contrato Financeiro': 'SUP-7722-24',
     'Data / Hora Primeira Foto': '08/08/2026 07:54',
     'ID Sondador': '3275',
+    Líder: 'Evamar Fernandes de Macedo',
   }, over);
 }
 
-test('extrai idSondador, sup, tipo e diaEpoch da data/hora da primeira foto', () => {
+// Link por NOME (Líder), não por ID Sondador -- achado rodando o pipeline de
+// verdade em 2026-08-08: o "ID" do roster do Link 6 é ID de EQUIPE, e "ID
+// Sondador" do Link 7 é ID de PESSOA -- sistemas diferentes, sem interseção
+// real (medido: 1 em 105 IDs). Ver comentário em compute-equipes-fracao.js.
+test('extrai lider, sup, tipo e diaEpoch da data/hora da primeira foto', () => {
   const [linha] = parseLinhasLink7([linhaLink7Cru()]);
-  assert.strictEqual(linha.idSondador, '3275');
+  assert.strictEqual(linha.lider, 'Evamar Fernandes de Macedo');
   assert.strictEqual(linha.sup, 'SUP-7722-24');
   assert.strictEqual(linha.tipo, 'SP');
+  assert.strictEqual(linha.diaEpoch, diaEpoch(new Date('2026-08-08T00:00:00Z')));
+});
+
+// Achado rodando o pipeline de verdade em 2026-08-08: o cabeçalho REAL desta
+// coluna no site tem espaço DUPLO ("Data / Hora  Primeira Foto"), diferente
+// da fixture original acima (espaço simples) -- toda linha era descartada em
+// silêncio (0 sondagem-dia, sem erro), porque o acesso por chave exata dava
+// undefined. colunaTolerante ignora a variação de espaçamento.
+test('cabeçalho real com espaço DUPLO ("Data / Hora  Primeira Foto") ainda é lido -- não fica preso ao espaçamento exato do site', () => {
+  const linhaEspacoDuplo = {
+    'Ordem de Serviço (OS)': '16744-25', Tipo: 'SP', 'Contrato Financeiro': 'SUP-7722-24',
+    'Data / Hora  Primeira Foto': '08/08/2026 07:54', 'ID Sondador': '3275',
+  };
+  const [linha] = parseLinhasLink7([linhaEspacoDuplo]);
+  assert.ok(linha, 'linha não deveria ter sido descartada');
   assert.strictEqual(linha.diaEpoch, diaEpoch(new Date('2026-08-08T00:00:00Z')));
 });
 

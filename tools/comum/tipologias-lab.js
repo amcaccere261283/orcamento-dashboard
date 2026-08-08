@@ -33,6 +33,10 @@ const MAPA_TIPO_ENSAIO_LAB = {
   'IND.F.P': 'LAB.E', 'IND.VAZ': 'LAB.E',
   LL: 'LAB.C', 'LOAD.TEST': 'LAB.E', LP: 'LAB.C', LWD: 'LAB.E',
   'M.ESP': 'LAB.C', 'M.ESP.A': 'LAB.E', 'MCT.C': 'LAB.E', 'MCT.P': 'LAB.C', 'MOLD.CP': 'LAB.C',
+  // Achado ao vivo em 2026-08-08 (Link 5, detalhes-ensaios-programados),
+  // ausente da tabela do Frcst. Decidido com o usuário: mesma família de
+  // MCT.C (Especial), não de MCT.P (Convencional).
+  'MCT-INFILT': 'LAB.E',
   'MR.A': 'LAB.E', 'MR.C': 'LAB.E', 'MR.G': 'LAB.E', 'MR.S': 'LAB.E',
   PEN: 'LAB.C', 'PERM.C': 'LAB.E', 'PERM.V': 'LAB.E', PH: 'LAB.E',
   'RES.COMP.SIM': 'LAB.E',

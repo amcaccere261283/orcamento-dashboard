@@ -9,8 +9,8 @@ test('todo destino do mapa é LAB.C ou LAB.E, nunca outra coisa', () => {
   }
 });
 
-test('mapa consolidado 2026-08-08 tem 106 tipos de ensaio (125 pares do Frcst Novo 2.xlsx menos 19 de tipologia de avanço, de escopo de tipologias-avancos.js)', () => {
-  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 106);
+test('mapa consolidado 2026-08-08 tem 107 tipos de ensaio (125 pares do Frcst Novo 2.xlsx menos 19 de tipologia de avanço, de escopo de tipologias-avancos.js, mais MCT-INFILT achado ao vivo em produção)', () => {
+  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 107);
 });
 
 test('COMP.EN.3 (achado na primeira busca online de Lab Realizado) classifica como Convencional, mesmo padrão da variante ".3" já mapeada em COMP.EM.3 (após consolidação 2026-08-08)', () => {

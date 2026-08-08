@@ -37,6 +37,17 @@ function acharAbaEq(nomesReais, ano, mesIndice0) {
   return achada;
 }
 
+// Acha o valor de uma coluna comparando o rótulo ignorando variação de
+// espaçamento (a planilha real usa espaço duplo em algumas colunas, ex.
+// "Data / Hora  Primeira Foto" -- não confiável usar a chave exata).
+function colunaTolerante(linha, rotulo) {
+  const alvo = rotulo.replace(/\s+/g, ' ').trim();
+  for (const chave of Object.keys(linha || {})) {
+    if (chave.replace(/\s+/g, ' ').trim() === alvo) return linha[chave];
+  }
+  return undefined;
+}
+
 const RE_DATA_HORA = /^(\d{2})\/(\d{2})\/(\d{4})/;
 // O Link 7 traz o Tipo BRUTO (ex.: "SM", "SM.F", "SR", "CPTU", "SP.F", "BQ",
 // "DN", "SN"...), o mesmo alfabeto de 21 rótulos que a aba Avanços do
@@ -54,12 +65,21 @@ const RE_DATA_HORA = /^(\d{2})\/(\d{2})\/(\d{4})/;
 function parseLinhasLink7(linhasCru) {
   const saida = [];
   for (const l of linhasCru || []) {
-    const bruto = String(l['Data / Hora Primeira Foto'] || '').trim();
+    // Achado ao vivo em 2026-08-08: o cabeçalho real desta coluna tem
+    // espaço DUPLO ("Data / Hora  Primeira Foto"), diferente da fixture de
+    // teste original (espaço simples) -- o acesso direto por chave ficava
+    // sempre undefined, e TODA linha era descartada em silêncio (0
+    // sondagem-dia, sem erro nenhum). colunaTolerante ignora a variação de
+    // espaçamento em vez de depender do nome exato vindo do DataTable.
+    const bruto = String(colunaTolerante(l, 'Data / Hora Primeira Foto') || '').trim();
     const m = RE_DATA_HORA.exec(bruto);
     if (!m) continue;
     const dia = diaEpoch(new Date(Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]))));
+    // Link por NOME (Líder), não por ID -- ver comentário no topo de
+    // compute-equipes-fracao.js: "ID Sondador" (pessoa) e o "ID" do roster
+    // do Link 6 (equipe) são sistemas de ID diferentes, sem interseção real.
     saida.push({
-      idSondador: String(l['ID Sondador'] || '').trim(),
+      lider: String(l['Líder'] || '').trim(),
       sup: String(l['Contrato Financeiro'] || '').trim(),
       tipo: rotularTipologia(l['Tipo']),
       diaEpoch: dia,
@@ -110,10 +130,13 @@ async function main() {
   }
   console.log(`  ${linhasLink7.length} sondagem-dia encontrada(s).`);
 
-  const { porDia, semLink7, diasPorEstado, textosNoDefault } = agregarEquipesFracao({
+  const { porDia, semLink7, semNomeCasado, diasPorEstado, textosNoDefault } = agregarEquipesFracao({
     equipes, linhasLink7, ano, mes: mesIndice0 + 1, resolverSup: (sup) => sup, janelaFallbackDias: JANELA_FALLBACK_DIAS,
   });
   console.log(`  Estados do mês: ${JSON.stringify(diasPorEstado)}. ${semLink7} equipe-dia sem produção em ${JANELA_FALLBACK_DIAS} dias -- fora da conta.`);
+  if (semNomeCasado > 0) {
+    console.warn(`  AVISO: ${semNomeCasado} de ${equipes.length} equipe(s) do roster não casaram por nome com nenhum "Líder" do Link 7 (ambíguo ou ausente) -- link por nome é ajuste temporário, ver comentário em compute-equipes-fracao.js.`);
+  }
   if (textosNoDefault && Object.keys(textosNoDefault).length) {
     console.warn(`  Texto(s) de dia de equipe não reconhecido(s), caindo por padrão em "campo sem furo": ${JSON.stringify(textosNoDefault)}`);
   }
