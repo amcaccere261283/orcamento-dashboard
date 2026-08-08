@@ -602,7 +602,14 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
   const demandas = sandbox.window.__DEMANDAS__;
   assert.ok(demandas.tipologias.length > 0, '__DEMANDAS__ precisa ter tipologias');
   assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 1, 'a única linha de Avanços tem que virar 1 chegada no ano');
-  assert.strictEqual(demandas.totais.sondagemRealizada.reduce((a, b) => a + b, 0), 1, 'a linha CONCLUIDO com Termino Sondagem tem que virar 1 sondagem realizada');
+  // 2: 1 do furo SP (Avanços, CONCLUIDO com Termino Sondagem) + 1 do ensaio
+  // LAB.C (Lab, Ensaiado Dia = concluido) -- desde a Task 7
+  // (compute-demandas.js), 'concluido' de ensaiosLab soma em
+  // tipologias/totais.sondagemRealizada mesmo sem 'criacao' (Data
+  // Programada, Link 5), que este CSV mockado ainda não traz. Antes da
+  // Task 7, só o furo contava aqui (LAB.C/LAB.E ficavam fora de
+  // tipologias/totais por completo).
+  assert.strictEqual(demandas.totais.sondagemRealizada.reduce((a, b) => a + b, 0), 2, 'furo SP + ensaio LAB.C, ambos viram sondagem realizada em tipologias/totais');
   assert.ok(Object.keys(demandas.porRegistroEventos).length > 0, 'porRegistroEventos precisa ter entrada -- é o que alimenta Realizado/Tendência da Tabela Semanal (furos + ensaios de Lab)');
 });
 

@@ -311,15 +311,6 @@ test('ensaiosLab alimenta sondagemRealizada em porRegistroEventos, chaveado por 
   );
 });
 
-test('ensaiosLab NÃO entra em tipologias/totais -- a aba Demandas (mensal) continua exclusiva de Sondagem', () => {
-  const saida = computeDemandas([], PERIODOS_2026, [ensaioLab({ tipologia: 'LAB.C' })]);
-  const blocoLabC = saida.tipologias.find(t => t.tipologia === 'LAB.C');
-  assert.ok(blocoLabC, 'LAB.C continua aparecendo na aba Demandas (zerado)');
-  assert.deepStrictEqual(blocoLabC.series.sondagemRealizada, new Array(12).fill(0),
-    'zerado mesmo com ensaio real em porRegistroEventos -- fontes diferentes, aba Demandas não lê ensaiosLab');
-  assert.deepStrictEqual(saida.totais.sondagemRealizada, new Array(12).fill(0));
-});
-
 test('furos e ensaiosLab convivem em porRegistroEventos sem se misturar -- chaves diferentes (tipologia diferente), mesmo SUP', () => {
   const saida = computeDemandas([furo({ sup: 'SUP-0001-24', tipologia: 'SP' })], PERIODOS_2026, [
     ensaioLab({ sup: 'SUP-0001-24', tipologia: 'LAB.C' }),
@@ -339,8 +330,37 @@ test('ensaio sem data de conclusão (concluido: null) não entra em sondagemReal
   assert.strictEqual(saida.porRegistroEventos['SUP-0001-24||LAB.C'].sondagemRealizada.length, 0);
 });
 
-test('ensaiosLab não gera chegada/saidaEstoque -- Demandas Pendentes de LAB.C/LAB.E fica sem-dado de propósito (sem fonte de backlog ainda)', () => {
-  const saida = computeDemandas([], PERIODOS_2026, [ensaioLab()]);
+test('ensaiosLab SEM "criacao" continua com tipologias/totais zerados e sem chegada/saidaEstoque -- compatibilidade com quem ainda não tem a fonte de backlog (2026-08-08: Lab Realizado sem Data Programada, caso raro)', () => {
+  const saida = computeDemandas([], PERIODOS_2026, [ensaioLab({ tipologia: 'LAB.C', criacao: undefined })]);
+  const blocoLabC = saida.tipologias.find(t => t.tipologia === 'LAB.C');
+  assert.deepStrictEqual(blocoLabC.series.chegadas, new Array(12).fill(0));
   assert.deepStrictEqual(saida.porRegistroEventos['SUP-0001-24||LAB.C'].chegada, []);
   assert.deepStrictEqual(saida.porRegistroEventos['SUP-0001-24||LAB.C'].saidaEstoque, []);
+});
+
+test('ensaiosLab COM "criacao" (Data Programada, Link 4/5) alimenta chegada/pendentes de LAB.C/LAB.E em tipologias/totais -- ligado em 2026-08-08 (antes ficava zerado por falta de fonte de backlog)', () => {
+  const saida = computeDemandas([], PERIODOS_2026, [
+    ensaioLab({ tipologia: 'LAB.C', criacao: d(2026, 1, 10), concluido: d(2026, 2, 5) }),
+  ]);
+  const blocoLabC = saida.tipologias.find(t => t.tipologia === 'LAB.C');
+  assert.strictEqual(blocoLabC.series.chegadas[0], 1, 'chegada em janeiro');
+  assert.strictEqual(blocoLabC.series.sondagemRealizada[1], 1, 'concluído em fevereiro');
+  assert.deepStrictEqual(blocoLabC.series.pendentes.slice(0, 3), [1, 0, 0], 'aberto em jan, fechado a partir de fev (concluído)');
+});
+
+test('ensaio ainda pendente (concluido null, criacao presente) fica no estoque indefinidamente -- mesma regra de furo sem data de saída', () => {
+  const saida = computeDemandas([], PERIODOS_2026, [
+    ensaioLab({ tipologia: 'LAB.E', criacao: d(2026, 3, 1), concluido: null }),
+  ]);
+  const blocoLabE = saida.tipologias.find(t => t.tipologia === 'LAB.E');
+  assert.deepStrictEqual(blocoLabE.series.pendentes.slice(2, 12), new Array(10).fill(1));
+});
+
+test('porRegistroEventos de LAB ganha chegada/saidaEstoque quando criacao está presente', () => {
+  const saida = computeDemandas([], PERIODOS_2026, [
+    ensaioLab({ sup: 'SUP-0001-24', tipologia: 'LAB.C', criacao: d(2026, 1, 10), concluido: d(2026, 2, 5) }),
+  ]);
+  const entrada = saida.porRegistroEventos['SUP-0001-24||LAB.C'];
+  assert.strictEqual(entrada.chegada.length, 1);
+  assert.strictEqual(entrada.saidaEstoque.length, 1, 'concluído também sai do estoque -- lab não tem "início" separado de "conclusão"');
 });

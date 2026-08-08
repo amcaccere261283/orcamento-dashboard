@@ -143,23 +143,44 @@ function computeDemandas(furos, periodos, ensaiosLab) {
     }
   }
 
-  // Ensaios de laboratório (parse-lab.js, aba "Lab Concluido") -- SÓ
-  // alimentam porRegistroEventos.sondagemRealizada, pro acompanhamento
-  // semanal de LAB.C/LAB.E na Tabela Semanal (mesma série que os furos
-  // acima usam, reaproveitada -- render-aba-semanal.js não precisa saber
-  // se o "volume" é furo ou ensaio). NÃO entram em tipologias/totais: a
-  // aba Demandas (mensal) continua exclusiva de Sondagem/Avanços, fora de
-  // escopo deste ajuste -- "LAB.C/LAB.E zerados" ali continua sendo o
-  // sinal de "sem fonte", não um bug. Sem chegada/saidaEstoque (a aba Lab
-  // Concluido só mostra o que já terminou, sem visibilidade de backlog),
-  // então Demandas Pendentes continua sem-dado pra LAB.C/LAB.E, mesmo
-  // com Realizado/Tendência já ativos -- decisão do dono do projeto,
-  // 2026-07-31: ele pretende trazer a demanda de laboratório pra
-  // planilha depois.
+  // Ensaios de laboratório (Link 4: extrato-ensaios-realizados, mesma fonte
+  // de sempre; Link 5: detalhes-ensaios-programados, novo em 2026-08-08).
+  // 'criacao' (Data Programada) é OPCIONAL: quando ausente, comportamento
+  // idêntico ao anterior (só sondagemRealizada, tipologias/totais zerados
+  // pra LAB -- "sem fonte de backlog"). Quando presente, LAB.C/LAB.E entram
+  // no mesmo tratamento de chegada/pendentes que Sondagem já tem, porque
+  // agora existe fonte pra isso (Link 4 dá chegada+saída na mesma linha
+  // quando concluído; Link 5 dá chegada sem saída quando ainda pendente).
+  // Diferente de furos, não existe "início" separado de "conclusão" pra
+  // ensaio -- a saída do estoque é a PRÓPRIA conclusão.
   for (const e of ensaiosLab || []) {
+    if (!porTipologia.has(e.tipologia)) porTipologia.set(e.tipologia, serieVazia(n));
+    const seriesLab = porTipologia.get(e.tipologia);
+
     const chaveRegistro = chaveMatriz(e.sup, e.tipologia);
     if (!porRegistroEventos.has(chaveRegistro)) porRegistroEventos.set(chaveRegistro, entradaEventosVazia());
-    if (e.concluido) porRegistroEventos.get(chaveRegistro).sondagemRealizada.push(diaEpoch(e.concluido));
+    const eventosLab = porRegistroEventos.get(chaveRegistro);
+
+    if (e.concluido) eventosLab.sondagemRealizada.push(diaEpoch(e.concluido));
+
+    if (e.criacao) {
+      eventosLab.chegada.push(diaEpoch(e.criacao));
+      if (e.concluido) eventosLab.saidaEstoque.push(diaEpoch(e.concluido));
+
+      const iChegada = indiceDoMes(e.criacao, periodos);
+      if (iChegada >= 0) seriesLab.chegadas[iChegada] += 1;
+
+      for (let i = 0; i < n; i++) {
+        if (e.criacao > fins[i]) continue;
+        const saiu = e.concluido && e.concluido <= fins[i];
+        if (!saiu) seriesLab.pendentes[i] += 1;
+      }
+    }
+
+    if (e.concluido) {
+      const iSondagem = indiceDoMes(e.concluido, periodos);
+      if (iSondagem >= 0) seriesLab.sondagemRealizada[iSondagem] += 1;
+    }
   }
 
   const tipologias = [];
