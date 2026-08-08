@@ -106,6 +106,13 @@ async function fetchJson(session, urlPath) {
   return JSON.parse(raw);
 }
 
+// Busca uma URL ABSOLUTA (fora do site já aberto na sessão -- ex.: o export
+// gviz do Google Sheets) no contexto da PAGINA e devolve o texto cru, sem
+// tentar JSON.parse (fetchJson faz isso; aqui o resultado é CSV, não JSON).
+async function fetchTexto(session, urlAbsoluta) {
+  return session.evaluate(`fetch(${JSON.stringify(urlAbsoluta)}).then(r => r.text())`, 30000);
+}
+
 // Baixa um arquivo binario (o .xlsx de um contrato) no contexto da pagina e
 // devolve um Buffer do Node.
 async function fetchBuffer(session, urlPath) {
@@ -210,4 +217,7 @@ function linhasComoObjetos({ headers, rows }) {
   });
 }
 
-module.exports = { abrirSessao, fecharSessao, checarConexao, fetchJson, fetchBuffer, rasparTabelaDataTable, linhasComoObjetos };
+module.exports = {
+  abrirSessao, fecharSessao, checarConexao, fetchJson, fetchTexto, fetchBuffer,
+  rasparTabelaDataTable, linhasComoObjetos, CdpSession,
+};
