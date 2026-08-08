@@ -4,6 +4,7 @@ const path = require('node:path');
 const { parseAbaEq } = require('./compute-equipes-ativas.js');
 const { agregarEquipesFracao } = require('./compute-equipes-fracao.js');
 const { diaEpoch } = require('./compute-semanal.js');
+const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const cdp = require('./cdp-client.js');
 
 const SITE_ORIGIN = 'https://sond.com.br';
@@ -37,6 +38,19 @@ function acharAbaEq(nomesReais, ano, mesIndice0) {
 }
 
 const RE_DATA_HORA = /^(\d{2})\/(\d{2})\/(\d{4})/;
+// O Link 7 traz o Tipo BRUTO (ex.: "SM", "SM.F", "SR", "CPTU", "SP.F", "BQ",
+// "DN", "SN"...), o mesmo alfabeto de 21 rótulos que a aba Avanços do
+// Avanço Sond.xlsx sempre usou -- não o rótulo de 10 tipologias que a
+// MATRIZ conhece. Sem traduzir aqui, resolverSupConhecido(registros)(sup,
+// tipo) (em build-dashboard.js/render-semanal.js) nunca acha o par na
+// MATRIZ pra "SM"/"CPTU"/etc., redireciona pra "Diversos", e a chave final
+// (ex. "Diversos||SM") nunca é lida por compute-balanco.js -- o Realizado de
+// Equipes fica 0,0 pra essas tipologias em silêncio (achado da revisão final
+// de branch, 2026-08-08). rotularTipologia (tools/comum/tipologias-avancos.js)
+// é a MESMA tradução que parse-avancos.js já aplica pra Sondagem -- reaplicada
+// aqui pra que equipes-online.csv já saia com o rótulo certo, igual todo o
+// resto do projeto. Tipo desconhecido LANÇA (fail-loud, mesmo comportamento
+// de rotularTipologia) -- não há "cair em Especiais por omissão" tolerável.
 function parseLinhasLink7(linhasCru) {
   const saida = [];
   for (const l of linhasCru || []) {
@@ -47,7 +61,7 @@ function parseLinhasLink7(linhasCru) {
     saida.push({
       idSondador: String(l['ID Sondador'] || '').trim(),
       sup: String(l['Contrato Financeiro'] || '').trim(),
-      tipo: String(l['Tipo'] || '').trim(),
+      tipo: rotularTipologia(l['Tipo']),
       diaEpoch: dia,
     });
   }

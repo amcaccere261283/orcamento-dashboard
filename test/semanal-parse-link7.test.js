@@ -27,6 +27,26 @@ test('linha com data ilegível é descartada, não quebra', () => {
   assert.strictEqual(linhas.length, 0);
 });
 
+// Achado da revisão final de branch (2026-08-08): o Tipo do Link 7 é BRUTO
+// (alfabeto de 21 rótulos da aba Avanços), não o rótulo de 10 tipologias da
+// MATRIZ -- sem traduzir aqui, resolverSupConhecido nunca acha o par na
+// MATRIZ e o Realizado de Equipes fica 0,0 pra essas tipologias, em
+// silêncio. rotularTipologia (tools/comum/tipologias-avancos.js) é a MESMA
+// tradução que parse-avancos.js já aplica.
+test('Tipo bruto "SM" é traduzido pro rótulo da MATRIZ "SM / SM.F / SR"', () => {
+  const [linha] = parseLinhasLink7([linhaLink7Cru({ Tipo: 'SM' })]);
+  assert.strictEqual(linha.tipo, 'SM / SM.F / SR');
+});
+
+test('Tipo bruto "CPTU" é traduzido pro rótulo da MATRIZ "CPTu" (note a troca de maiúscula/minúscula)', () => {
+  const [linha] = parseLinhasLink7([linhaLink7Cru({ Tipo: 'CPTU' })]);
+  assert.strictEqual(linha.tipo, 'CPTu');
+});
+
+test('Tipo desconhecido lança erro (fail-loud) em vez de cair calado em algum balde', () => {
+  assert.throws(() => parseLinhasLink7([linhaLink7Cru({ Tipo: 'ALGO-NUNCA-VISTO' })]), /Tipologia desconhecida/);
+});
+
 test('duas linhas da mesma OS+dia (múltiplas fotos) viram duas entradas -- a deduplicação de combinação acontece em compute-equipes-fracao.js, não aqui', () => {
   const linhas = parseLinhasLink7([linhaLink7Cru(), linhaLink7Cru()]);
   assert.strictEqual(linhas.length, 2);
