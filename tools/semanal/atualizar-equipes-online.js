@@ -79,9 +79,12 @@ function parseLinhasLink7(linhasCru) {
     // compute-equipes-fracao.js: "ID Sondador" (pessoa) e o "ID" do roster
     // do Link 6 (equipe) são sistemas de ID diferentes, sem interseção real.
     saida.push({
-      lider: String(l['Líder'] || '').trim(),
-      sup: String(l['Contrato Financeiro'] || '').trim(),
-      tipo: rotularTipologia(l['Tipo']),
+      // colunaTolerante em todas -- "Líder" passou a ser dependência real
+      // nesta correção, mesma classe de risco de espaçamento que já pegou
+      // "Data / Hora Primeira Foto" ao vivo.
+      lider: String(colunaTolerante(l, 'Líder') || '').trim(),
+      sup: String(colunaTolerante(l, 'Contrato Financeiro') || '').trim(),
+      tipo: rotularTipologia(colunaTolerante(l, 'Tipo')),
       diaEpoch: dia,
     });
   }
