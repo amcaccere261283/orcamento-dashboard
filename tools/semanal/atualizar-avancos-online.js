@@ -36,15 +36,17 @@ function caminhoCache(ano, mes) {
 
 // Busca um mês (Link 1). Mês corrente é sempre buscado de novo; mês fechado
 // só é buscado se o cache não existir -- execução já concluída não muda.
-// Devolve o GRID (array de arrays: [header, ...rows]) -- nunca texto CSV já
-// serializado, pra concatenação em main() não precisar cortar por '\n' (o que
-// corromperia campos com quebra de linha interna, ex. "Observações de
-// campo"). O cache em disco continua sendo texto CSV (formato de arquivo);
-// ao ler do cache, reparseia pra grid com parseCsvGrid.
-async function buscarMes(session, ano, mes, ehMesCorrente) {
+// Devolve { grid, excluidos } -- grid é array de arrays ([header, ...rows]),
+// nunca texto CSV já serializado, pra concatenação em main() não precisar
+// cortar por '\n' (o que corromperia campos com quebra de linha interna, ex.
+// "Observações de campo"). O cache em disco continua sendo texto CSV
+// (formato de arquivo, já excluído); ao ler do cache, reparseia pra grid com
+// parseCsvGrid e excluidos vem 0 -- a exclusão já aconteceu na execução que
+// gravou o cache, não há como recontar sobre um CSV que já saiu filtrado.
+async function buscarMes(ano, mes, ehMesCorrente) {
   const cache = caminhoCache(ano, mes);
   if (!ehMesCorrente && fs.existsSync(cache)) {
-    return parseCsvGrid(fs.readFileSync(cache, 'utf8'));
+    return { grid: parseCsvGrid(fs.readFileSync(cache, 'utf8')), excluidos: 0 };
   }
   const mm = String(mes).padStart(2, '0');
   const url = `${SITE_ORIGIN}/extrato-producao-total/mes/${mm}/ano/${ano}/`;
@@ -52,13 +54,13 @@ async function buscarMes(session, ano, mes, ehMesCorrente) {
   try {
     const { headers, rows } = await cdp.rasparTabelaDataTable(sessaoMes, '.producao-grid', { timeoutMs: 30000 });
     const linhas = cdp.linhasComoObjetos({ headers, rows });
-    const { header, rows: rowsMapeadas } = mapearProducaoTotal(linhas);
+    const { header, rows: rowsMapeadas, excluidos } = mapearProducaoTotal(linhas);
     const grid = [header, ...rowsMapeadas];
     if (!ehMesCorrente) {
       fs.mkdirSync(CACHE_DIR, { recursive: true });
       fs.writeFileSync(cache, gridParaCsv(grid), 'utf8');
     }
-    return grid;
+    return { grid, excluidos };
   } finally {
     await cdp.fecharSessao(sessaoMes, target);
   }
@@ -73,20 +75,43 @@ async function main() {
 
   const grids = [];
   const falhas = [];
+  let excluidosTotal = 0;
   for (const m of meses) {
     try {
-      const grid = await buscarMes(null, m.ano, m.mes, m.ehMesCorrente);
+      const { grid, excluidos } = await buscarMes(m.ano, m.mes, m.ehMesCorrente);
       const linhas = grid.length - 1;
       grids.push(grid);
+      excluidosTotal += excluidos;
       console.log(`  ${m.ano}-${String(m.mes).padStart(2, '0')}${m.ehMesCorrente ? ' (corrente)' : ''}: ${linhas} linha(s)`);
     } catch (err) {
-      falhas.push({ mes: `${m.ano}-${String(m.mes).padStart(2, '0')}`, erro: err.message });
+      falhas.push({ mes: `${m.ano}-${String(m.mes).padStart(2, '0')}`, erro: err.message, ehMesCorrente: m.ehMesCorrente });
       console.warn(`  ${m.ano}-${String(m.mes).padStart(2, '0')}: FALHOU -- ${err.message}`);
     }
   }
 
   if (!grids.length) {
     throw new Error('Nenhum mês foi baixado com sucesso -- abortando sem gravar (ver falhas acima).');
+  }
+
+  // Achado da revisão final de branch (2026-08-08): meses FECHADOS vêm do
+  // cache local na maioria das execuções (só o mês corrente busca CDP toda
+  // vez -- ver buscarMes), então uma sessão CDP quebrada normalmente derruba
+  // SÓ o mês corrente. Sem este guard, o build seguia em frente com um
+  // console.warn e regravava avancos-online.csv sem o mês corrente -- o
+  // Realizado do mês em curso ficava perto de zero, silenciosamente, sem
+  // nenhum sinal além de um log que ninguém olha. Mesmo espírito de "nunca
+  // substituir dado bom por dado ruim" que o resto do projeto já segue (ver
+  // o guard de cabeçalho inválido logo abaixo). Meses FECHADOS que falharem
+  // continuam só avisando -- o cache local já cobre a maioria dos casos, e
+  // abortar por um mês fechado isolado seria trocar disponibilidade por um
+  // rigor que o dado antigo já satisfaz.
+  const falhaMesCorrente = falhas.find((f) => f.ehMesCorrente);
+  if (falhaMesCorrente) {
+    throw new Error(
+      `O mês CORRENTE (${falhaMesCorrente.mes}) falhou ao buscar -- abortando SEM gravar ${OUT_PATH} ` +
+      `pra não substituir o CSV bom já publicado por um sem o mês em curso (o Realizado ficaria perto de ` +
+      `zero em silêncio). Erro original: ${falhaMesCorrente.erro}`
+    );
   }
 
   // Concatena os GRIDS (arrays de arrays), não texto CSV: cabeçalho do
@@ -110,6 +135,9 @@ async function main() {
   fs.writeFileSync(OUT_PATH, csvFinal, 'utf8');
 
   console.log(`Pronto: ${grids.length}/${meses.length} mes(es) combinados, ${linhasDado.length} linha(s), gravado em ${OUT_PATH}.`);
+  if (excluidosTotal > 0) {
+    console.log(`${excluidosTotal} linha(s) excluída(s) no total (Suporte Sondagens/SEG/SN).`);
+  }
   if (falhas.length) {
     console.warn(`${falhas.length} mes(es) falharam e ficaram DE FORA: ${falhas.map((f) => f.mes).join(', ')}`);
   }
