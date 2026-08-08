@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { mapearProducaoTotal } = require('./mapear-producao-total.js');
 const { gridParaCsv } = require('./csv-writer-avancos.js');
+const { parseCsvGrid } = require('./parse-matriz-cliente.js');
 const { locateColunasAvancos } = require('./parse-avancos.js');
 const cdp = require('./cdp-client.js');
 
@@ -35,10 +36,15 @@ function caminhoCache(ano, mes) {
 
 // Busca um mês (Link 1). Mês corrente é sempre buscado de novo; mês fechado
 // só é buscado se o cache não existir -- execução já concluída não muda.
+// Devolve o GRID (array de arrays: [header, ...rows]) -- nunca texto CSV já
+// serializado, pra concatenação em main() não precisar cortar por '\n' (o que
+// corromperia campos com quebra de linha interna, ex. "Observações de
+// campo"). O cache em disco continua sendo texto CSV (formato de arquivo);
+// ao ler do cache, reparseia pra grid com parseCsvGrid.
 async function buscarMes(session, ano, mes, ehMesCorrente) {
   const cache = caminhoCache(ano, mes);
   if (!ehMesCorrente && fs.existsSync(cache)) {
-    return fs.readFileSync(cache, 'utf8');
+    return parseCsvGrid(fs.readFileSync(cache, 'utf8'));
   }
   const mm = String(mes).padStart(2, '0');
   const url = `${SITE_ORIGIN}/extrato-producao-total/mes/${mm}/ano/${ano}/`;
@@ -47,12 +53,12 @@ async function buscarMes(session, ano, mes, ehMesCorrente) {
     const { headers, rows } = await cdp.rasparTabelaDataTable(sessaoMes, '.producao-grid', { timeoutMs: 30000 });
     const linhas = cdp.linhasComoObjetos({ headers, rows });
     const { header, rows: rowsMapeadas } = mapearProducaoTotal(linhas);
-    const csv = gridParaCsv([header, ...rowsMapeadas]);
+    const grid = [header, ...rowsMapeadas];
     if (!ehMesCorrente) {
       fs.mkdirSync(CACHE_DIR, { recursive: true });
-      fs.writeFileSync(cache, csv, 'utf8');
+      fs.writeFileSync(cache, gridParaCsv(grid), 'utf8');
     }
-    return csv;
+    return grid;
   } finally {
     await cdp.fecharSessao(sessaoMes, target);
   }
@@ -69,9 +75,9 @@ async function main() {
   const falhas = [];
   for (const m of meses) {
     try {
-      const csv = await buscarMes(null, m.ano, m.mes, m.ehMesCorrente);
-      const linhas = csv.trim().split('\n').length - 1;
-      grids.push(csv);
+      const grid = await buscarMes(null, m.ano, m.mes, m.ehMesCorrente);
+      const linhas = grid.length - 1;
+      grids.push(grid);
       console.log(`  ${m.ano}-${String(m.mes).padStart(2, '0')}${m.ehMesCorrente ? ' (corrente)' : ''}: ${linhas} linha(s)`);
     } catch (err) {
       falhas.push({ mes: `${m.ano}-${String(m.mes).padStart(2, '0')}`, erro: err.message });
@@ -83,18 +89,23 @@ async function main() {
     throw new Error('Nenhum mês foi baixado com sucesso -- abortando sem gravar (ver falhas acima).');
   }
 
-  // Concatena: cabeçalho do primeiro grid + linhas de dado de TODOS (o
-  // cabeçalho é sempre o mesmo, produzido por mapearProducaoTotal).
-  const header = grids[0].split('\n')[0];
-  const linhasDado = grids.flatMap((csv) => csv.trim().split('\n').slice(1));
-  const csvFinal = [header, ...linhasDado].join('\n') + '\n';
+  // Concatena os GRIDS (arrays de arrays), não texto CSV: cabeçalho do
+  // primeiro grid + linhas de dado de TODOS (o cabeçalho é sempre o mesmo,
+  // produzido por mapearProducaoTotal). Serializa com gridParaCsv só UMA VEZ,
+  // no final, sobre o array combinado -- assim campos com quebra de linha
+  // interna (ex. "Observações de campo") ficam corretamente entre aspas e
+  // não são confundidos com fim de linha.
+  const header = grids[0][0];
+  const linhasDado = grids.flatMap((grid) => grid.slice(1));
+  const gridFinal = [header, ...linhasDado];
 
   try {
-    locateColunasAvancos(header.split(','));
+    locateColunasAvancos(header);
   } catch (err) {
     throw new Error(`Cabeçalho combinado ficou inválido -- abortando SEM gravar ${OUT_PATH}. Erro original: ${err.message}`);
   }
 
+  const csvFinal = gridParaCsv(gridFinal);
   fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
   fs.writeFileSync(OUT_PATH, csvFinal, 'utf8');
 
