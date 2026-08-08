@@ -11,10 +11,29 @@ const SHEET_ID = '1Mgj87eSKMO4Gh2aHQWChNl5YCH2vatMDC2fCNuxB8TU';
 const OUT_PATH = path.join(__dirname, '..', '..', 'dist', 'equipes-online.csv');
 const JANELA_FALLBACK_DIAS = 45;
 
-const MESES_PT = ['JANEIRO', 'FEVEREIRO', 'MAR', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+// A convenção de nomenclatura das abas "(EQ)" na planilha real NÃO é
+// uniforme -- alguns meses usam nome completo, outros abreviação de 3
+// letras (verificado ao vivo em 2026-08-08). Por isso não adivinhamos o
+// nome exato: descobrimos os nomes reais das abas via CDP (acharAbaEq) e
+// casamos com uma regex tolerante às duas formas.
+const MESES_ALIASES = [
+  ['JAN', 'JANEIRO'], ['FEV', 'FEVEREIRO'], ['MAR', 'MARÇO', 'MARCO'],
+  ['ABR', 'ABRIL'], ['MAI', 'MAIO'], ['JUN', 'JUNHO'],
+  ['JUL', 'JULHO'], ['AGO', 'AGOSTO'], ['SET', 'SETEMBRO'],
+  ['OUT', 'OUTUBRO'], ['NOV', 'NOVEMBRO'], ['DEZ', 'DEZEMBRO'],
+];
 
-function nomeAbaEq(ano, mesIndice0) {
-  return `${ano} - ${MESES_PT[mesIndice0]} (EQ)`;
+// Acha o nome EXATO da aba "(EQ)" do mês entre os nomes reais das abas da
+// planilha (lidos do DOM via CDP, não adivinhados). `\(EQ\)\s*$` (fim de
+// string) evita casar com "(EQ e SUP.)" ou "(EQP)".
+function acharAbaEq(nomesReais, ano, mesIndice0) {
+  const aliases = MESES_ALIASES[mesIndice0];
+  const re = new RegExp('^\\s*' + ano + '\\s*-\\s*(' + aliases.join('|') + ')\\s*\\(EQ\\)\\s*$', 'i');
+  const achada = (nomesReais || []).find((n) => re.test(n));
+  if (!achada) {
+    throw new Error(`Nenhuma aba "(EQ)" encontrada pra ${ano}, mês ${mesIndice0 + 1} entre as ${(nomesReais || []).length} abas da planilha. Abas disponíveis (amostra): ${(nomesReais || []).slice(0, 10).join(', ')}...`);
+  }
+  return achada;
 }
 
 const RE_DATA_HORA = /^(\d{2})\/(\d{2})\/(\d{4})/;
@@ -42,12 +61,17 @@ async function main() {
   const hoje = new Date();
   const ano = hoje.getUTCFullYear();
   const mesIndice0 = hoje.getUTCMonth();
-  const aba = nomeAbaEq(ano, mesIndice0);
 
-  console.log(`Buscando roster de equipes (Link 6 -- aba "${aba}")...`);
+  console.log('Buscando roster de equipes (Link 6 -- descobrindo nome real da aba "(EQ)" do mês)...');
   const { session: s6, target: t6 } = await cdp.abrirSessao('https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit');
   let csvLink6;
+  let aba;
   try {
+    const nomesReais = await s6.evaluate(`
+      Array.from(document.querySelectorAll('.docs-sheet-tab-name')).map(el => el.textContent)
+    `);
+    aba = acharAbaEq(nomesReais, ano, mesIndice0);
+    console.log(`  Aba encontrada: "${aba}".`);
     const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(aba)}`;
     csvLink6 = await cdp.fetchTexto(s6, url);
   } finally {
@@ -97,4 +121,4 @@ if (require.main === module) {
   main().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { parseLinhasLink7, nomeAbaEq, main };
+module.exports = { parseLinhasLink7, acharAbaEq, main };

@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseLinhasLink7 } = require('../tools/semanal/atualizar-equipes-online.js');
+const { parseLinhasLink7, acharAbaEq } = require('../tools/semanal/atualizar-equipes-online.js');
 const { diaEpoch } = require('../tools/semanal/compute-semanal.js');
 
 function linhaLink7Cru(over = {}) {
@@ -30,4 +30,24 @@ test('linha com data ilegível é descartada, não quebra', () => {
 test('duas linhas da mesma OS+dia (múltiplas fotos) viram duas entradas -- a deduplicação de combinação acontece em compute-equipes-fracao.js, não aqui', () => {
   const linhas = parseLinhasLink7([linhaLink7Cru(), linhaLink7Cru()]);
   assert.strictEqual(linhas.length, 2);
+});
+
+test('acharAbaEq: casa mês abreviado (ex.: "2026 - OUT (EQ)")', () => {
+  const nomes = ['CRONOGRAMAS', '2026 - SET (EQ)', '2026 - OUT (EQ)', '2026 - NOV (EQ)'];
+  assert.strictEqual(acharAbaEq(nomes, 2026, 9), '2026 - OUT (EQ)'); // outubro = índice 9
+});
+
+test('acharAbaEq: casa mês completo (ex.: "2026 - AGOSTO (EQ)")', () => {
+  const nomes = ['CRONOGRAMAS', '2026 - AGOSTO (EQ)', '2026 - SETEMBRO (EQ)'];
+  assert.strictEqual(acharAbaEq(nomes, 2026, 7), '2026 - AGOSTO (EQ)'); // agosto = índice 7
+});
+
+test('acharAbaEq: NÃO casa "(EQ e SUP.)" nem "(EQP)" -- só a aba "(EQ)" exata', () => {
+  const nomes = ['2026 - AGOSTO (EQ e SUP.)', '2026 - AGOSTO (EQP)', '2026 - AGOSTO (EQ)'];
+  assert.strictEqual(acharAbaEq(nomes, 2026, 7), '2026 - AGOSTO (EQ)');
+});
+
+test('acharAbaEq: nenhuma aba encontrada lança erro claro em vez de cair calado numa aba errada', () => {
+  const nomes = ['CRONOGRAMAS', '2026 - SETEMBRO (EQ)'];
+  assert.throws(() => acharAbaEq(nomes, 2026, 7), /Nenhuma aba "\(EQ\)" encontrada/);
 });
