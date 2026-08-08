@@ -9,6 +9,7 @@ const CABECALHO = [];
 CABECALHO[0] = 'ID Contrato';
 CABECALHO[3] = 'Ensaiado Dia';
 CABECALHO[6] = 'Tipo de Ensaio';
+CABECALHO[9] = 'Data Programada';
 
 // 2026-03-10 em serial Excel.
 const MAR10 = 46091;
@@ -20,11 +21,12 @@ function grade(linhas) {
   return grid;
 }
 
-function ensaio({ sup = 'SUP-0001-24', concluido = MAR10, tipo = 'LL' } = {}) {
+function ensaio({ sup = 'SUP-0001-24', concluido = MAR10, criacao = MAR10, tipo = 'LL' } = {}) {
   const linha = [];
   linha[0] = sup;
   linha[3] = concluido;
   linha[6] = tipo;
+  linha[9] = criacao;
   return linha;
 }
 
@@ -89,16 +91,39 @@ test('as colunas são achadas pelo NOME, não por posição fixa', () => {
   deslocado[1][2] = 'ID Contrato';
   deslocado[1][5] = 'Ensaiado Dia';
   deslocado[1][9] = 'Tipo de Ensaio';
+  deslocado[1][11] = 'Data Programada';
   deslocado[2] = [];
   deslocado[2][2] = 'SUP-9999-26';
   deslocado[2][5] = MAR10;
   deslocado[2][9] = 'LL';
+  deslocado[2][11] = MAR10;
   const { ensaios } = parseLab(deslocado);
   assert.strictEqual(ensaios[0].sup, 'SUP-9999-26');
   assert.strictEqual(ensaios[0].tipologia, 'LAB.C');
 });
 
-test('locateColunasLab acha as 3 colunas pelo nome', () => {
+test('locateColunasLab acha as 4 colunas pelo nome', () => {
   const cols = locateColunasLab(CABECALHO);
-  assert.deepStrictEqual(cols, { sup: 0, concluidoDia: 3, tipoEnsaio: 6 });
+  assert.deepStrictEqual(cols, { sup: 0, concluidoDia: 3, tipoEnsaio: 6, criacaoOS: 9 });
+});
+
+test('ensaios ganham "criacao" a partir de Data Programada', () => {
+  const grid = [
+    null,
+    ['Data Programada', 'ID Contrato', 'Ensaiado Dia', 'Tipo de Ensaio'],
+    ['07/05/2026', 'SUP-6806-23', '03/08/2026', 'M.ESP'],
+  ];
+  const { ensaios } = parseLab(grid);
+  assert.strictEqual(ensaios[0].criacao.getUTCFullYear(), 2026);
+  assert.strictEqual(ensaios[0].criacao.getUTCMonth(), 4); // maio, 0-indexado
+  assert.strictEqual(ensaios[0].criacao.getUTCDate(), 7);
+});
+
+test('Data Programada ausente no cabeçalho lança (coluna passou a ser obrigatória)', () => {
+  const grid = [
+    null,
+    ['ID Contrato', 'Ensaiado Dia', 'Tipo de Ensaio'],
+    ['SUP-6806-23', '03/08/2026', 'M.ESP'],
+  ];
+  assert.throws(() => parseLab(grid), /Data Programada/);
 });

@@ -557,8 +557,8 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
   // parser, então precisam existir aqui ou locateColunasAvancos lança.
   const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo,Inicio Sondagem,Sondador,OS\n'
     + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,,46091,Sondador Sintético,17851-26\n';
-  const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio\n'
-    + 'SUP-0002-25,46091,LL\n';
+  const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n'
+    + 'SUP-0002-25,46091,LL,46091\n';
 
   // URLs fictícias, só pra deixarem de bater no padrão RE_URL_PENDENTE
   // (render-semanal.js) -- é isso que liga o caminho completo de 3 fontes.
@@ -601,14 +601,13 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
   // "Atualizado"), e porRegistroEventos prova que o ensaio de Lab chegou.
   const demandas = sandbox.window.__DEMANDAS__;
   assert.ok(demandas.tipologias.length > 0, '__DEMANDAS__ precisa ter tipologias');
-  assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 1, 'a única linha de Avanços tem que virar 1 chegada no ano');
+  // 2 chegadas: 1 do furo SP (Avanços, Criação da OS) + 1 do ensaio LAB.C
+  // (Lab, Data Programada) -- desde a Task 7 (compute-demandas.js), 'concluido'
+  // de ensaiosLab soma em tipologias/totais.sondagemRealizada; desde a Task 8,
+  // 'criacao' (Data Programada) alimenta chegadas de Lab também.
+  assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 2, 'furo SP (Criação da OS) + ensaio LAB.C (Data Programada), ambos viram chegada em tipologias/totais');
   // 2: 1 do furo SP (Avanços, CONCLUIDO com Termino Sondagem) + 1 do ensaio
-  // LAB.C (Lab, Ensaiado Dia = concluido) -- desde a Task 7
-  // (compute-demandas.js), 'concluido' de ensaiosLab soma em
-  // tipologias/totais.sondagemRealizada mesmo sem 'criacao' (Data
-  // Programada, Link 5), que este CSV mockado ainda não traz. Antes da
-  // Task 7, só o furo contava aqui (LAB.C/LAB.E ficavam fora de
-  // tipologias/totais por completo).
+  // LAB.C (Lab, Ensaiado Dia = concluido)
   assert.strictEqual(demandas.totais.sondagemRealizada.reduce((a, b) => a + b, 0), 2, 'furo SP + ensaio LAB.C, ambos viram sondagem realizada em tipologias/totais');
   assert.ok(Object.keys(demandas.porRegistroEventos).length > 0, 'porRegistroEventos precisa ter entrada -- é o que alimenta Realizado/Tendência da Tabela Semanal (furos + ensaios de Lab)');
 });
@@ -651,8 +650,8 @@ test('atualizarDadosAoVivoSemanal: equipesAtivoPorDia (Realizado de Equipes) sob
     + Array(12).fill('0').join(',') + ',0,0,\n';
   const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo,Inicio Sondagem,Sondador,OS\n'
     + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,,46091,Sondador Sintético,17851-26\n';
-  const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio\n'
-    + 'SUP-0002-25,46091,LL\n';
+  const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n'
+    + 'SUP-0002-25,46091,LL,46091\n';
   const historicoMatrizFresco = [
     { data: '2026-08-05T23:00:00Z', ativo: 80 },
     { data: '2026-08-06T23:00:00Z', ativo: 82 },
@@ -1429,8 +1428,8 @@ const CSV_MATRIZ_PRIORIDADE = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERM
 // intervalo que compute-equipes-mobilizadas.js ocupa.
 const CSV_AVANCOS_PRIORIDADE = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo,Inicio Sondagem,Sondador,OS\n'
   + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,,46091,Sondador Sintético,17851-26\n';
-const CSV_LAB_PRIORIDADE = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio\n'
-  + 'SUP-0002-25,46091,LL\n';
+const CSV_LAB_PRIORIDADE = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n'
+  + 'SUP-0002-25,46091,LL,46091\n';
 
 // Aba EQ: linha 0 cabeçalho (a coluna de dia em formato completo, que é o que
 // mesDaAbaEq lê pra saber ano/mês), linha 1 sub-cabeçalho, linha 2+ equipes.
@@ -1567,7 +1566,7 @@ test('atualizarDadosAoVivoSemanal: se o CSV de equipes produtivas dá 404, o ref
 
   // Avanços/Lab atualizaram.
   const demandas = sandbox.window.__DEMANDAS__;
-  assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 1, 'a linha de Avanços tem de virar 1 chegada');
+  assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 2, 'furo SP (Criação da OS) + ensaio LAB.C (Data Programada), ambos viram chegada');
   assert.ok(Object.keys(demandas.porRegistroEventos).length > 0, 'porRegistroEventos alimentado por furos + ensaios de Lab');
 
   // E a aba EQ também: sem produtivas, o Δ equipes cai na RESERVA imediata

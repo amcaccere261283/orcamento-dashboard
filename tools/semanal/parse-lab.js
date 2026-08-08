@@ -47,6 +47,11 @@ const COLUNAS_OBRIGATORIAS = {
   sup: 'ID Contrato',
   concluidoDia: 'Ensaiado Dia',
   tipoEnsaio: 'Tipo de Ensaio',
+  // Achada ao vivo em 2026-08-08 -- a coluna já existe no extrato, só não
+  // estava documentada. Alimenta a chegada de Demandas de laboratório
+  // (compute-demandas.js, Task 7 deste plano); sem ela, chegada/pendentes de
+  // LAB.C/LAB.E ficariam zerados de novo.
+  criacaoOS: 'Data Programada',
 };
 
 function texto(valor) {
@@ -114,6 +119,7 @@ function parseLab(grid) {
       sup,
       tipologia,
       concluido: dataSaneada(linha[cols.concluidoDia]),
+      criacao: dataSaneada(linha[cols.criacaoOS]),
     });
   }
 
