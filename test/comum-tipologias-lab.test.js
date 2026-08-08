@@ -9,12 +9,12 @@ test('todo destino do mapa é LAB.C ou LAB.E, nunca outra coisa', () => {
   }
 });
 
-test('mapa tem exatamente os 62 tipos de ensaio medidos na planilha real (60 em 2026-07-31 + TRI.UU em 2026-08-02 + COMP.EN.3 em 2026-08-06)', () => {
-  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 62);
+test('mapa consolidado 2026-08-08 tem 106 tipos de ensaio (125 pares do Frcst Novo 2.xlsx menos 19 de tipologia de avanço, de escopo de tipologias-avancos.js)', () => {
+  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 106);
 });
 
-test('COMP.EN.3 (achado na primeira busca online de Lab Realizado) classifica como Especial, mesmo padrão da variante ".3" já mapeada em COMP.EM.3', () => {
-  assert.strictEqual(classificarEnsaioLab('COMP.EN.3'), 'LAB.E');
+test('COMP.EN.3 (achado na primeira busca online de Lab Realizado) classifica como Convencional, mesmo padrão da variante ".3" já mapeada em COMP.EM.3 (após consolidação 2026-08-08)', () => {
+  assert.strictEqual(classificarEnsaioLab('COMP.EN.3'), 'LAB.C');
 });
 
 test('TRI.UU (sem número de estágio) classifica igual à família TRI2.UU/TRI3.UU/TRI4.UU -- LAB.E', () => {
@@ -22,7 +22,7 @@ test('TRI.UU (sem número de estágio) classifica igual à família TRI2.UU/TRI3
 });
 
 test('amostra de Convencional: caracterização básica', () => {
-  for (const t of ['LL', 'LP', 'SED', 'M.ESP', 'PEN', 'CBR.5', 'MCT.C', 'PH']) {
+  for (const t of ['LL', 'LP', 'SED', 'M.ESP', 'PEN', 'CBR.5', 'MCT.P']) {
     assert.strictEqual(classificarEnsaioLab(t), 'LAB.C', `esperava LAB.C pra "${t}"`);
   }
 });
@@ -67,4 +67,25 @@ return { MAPA_TIPO_ENSAIO_LAB: MAPA_TIPO_ENSAIO_LAB, classificarEnsaioLab: class
   assert.strictEqual(cliente.classificarEnsaioLab('LL'), classificarEnsaioLab('LL'));
   assert.strictEqual(cliente.classificarEnsaioLab('TRI2.UU'), classificarEnsaioLab('TRI2.UU'));
   assert.throws(() => cliente.classificarEnsaioLab('ENSAIO-INEXISTENTE'), /Tipo de Ensaio desconhecido/);
+});
+
+test('9 rótulos que divergiam do Frcst Novo 2.xlsx agora seguem o Frcst (decidido com o usuário em 2026-08-08)', () => {
+  const esperado = {
+    'M.ESP.A': 'LAB.E', 'COMP.D.3': 'LAB.E', 'COMP.R': 'LAB.E', 'MCT.C': 'LAB.E',
+    DP: 'LAB.E', PH: 'LAB.E', 'T.ORG': 'LAB.E', 'COMP.EM.3': 'LAB.C', 'COMP.EN.3': 'LAB.C',
+  };
+  for (const [tipo, destino] of Object.entries(esperado)) {
+    assert.strictEqual(classificarEnsaioLab(tipo), destino, tipo);
+  }
+});
+
+test('pares do Frcst ausentes do mapa antigo entram sem quebrar os já existentes', () => {
+  // Amostra dos pares novos (Frcst tem 125, o mapa antigo tinha ~60).
+  assert.strictEqual(classificarEnsaioLab('CBR.1'), 'LAB.C');
+  assert.strictEqual(classificarEnsaioLab('DSS'), 'LAB.E');
+  assert.strictEqual(classificarEnsaioLab('LWD'), 'LAB.E');
+  assert.strictEqual(classificarEnsaioLab('RES.COMP.SIM'), 'LAB.E');
+  // Rótulos já existentes que NÃO mudaram continuam iguais.
+  assert.strictEqual(classificarEnsaioLab('LL'), 'LAB.C');
+  assert.strictEqual(classificarEnsaioLab('TRI4.CD'), 'LAB.E');
 });
