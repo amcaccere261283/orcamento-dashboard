@@ -86,3 +86,12 @@ test('duas equipes diferentes no mesmo SUP+Tipo+dia SOMAM', () => {
   const dia = diaEpoch(new Date('2026-08-01T00:00:00Z'));
   assert.strictEqual(porDia['SUP-A||SP'][dia], 2);
 });
+
+test('texto de dia desconhecido cai no default (campoSemFuro) mas aparece em textosNoDefault, sem mudar a contagem', () => {
+  const equipes = [equipe('4', { 1: 'Trabalhando em local novo XYZ' })];
+  const link7 = [linhaLink7('4', 'SUP-A', 'SP', '2026-08-01')];
+  const { porDia, textosNoDefault } = agregarEquipesFracao({ equipes, linhasLink7: link7, ano: ANO, mes: MES, resolverSup: identidade });
+  const dia = diaEpoch(new Date('2026-08-01T00:00:00Z'));
+  assert.strictEqual(porDia['SUP-A||SP'][dia], 1, 'dia ainda conta como ativo/produtivo normalmente');
+  assert.deepStrictEqual(textosNoDefault, { 'Trabalhando em local novo XYZ': 1 });
+});

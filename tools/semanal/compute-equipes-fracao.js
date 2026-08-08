@@ -56,6 +56,7 @@ function agregarEquipesFracao(opcoes) {
   const porDia = {};
   let semLink7 = 0;
   const diasPorEstado = { mobilizada: 0, campoSemFuro: 0, fora: 0, naoEquipe: 0 };
+  const textosNoDefault = {};
 
   function somar(sup, tipo, dia, fracao) {
     const chave = resolverSup(sup, tipo) + '||' + tipo;
@@ -69,6 +70,7 @@ function agregarEquipesFracao(opcoes) {
       const classe = classificarDiaEquipe(d.texto);
       if (!classe) continue;
       diasPorEstado[classe.estado] += 1;
+      if (classe.noDefault) textosNoDefault[d.texto] = (textosNoDefault[d.texto] || 0) + 1;
       if (!contaComoAtiva(classe.estado)) continue;
 
       const dia = diaEpoch(new Date(Date.UTC(ano, mes - 1, d.dia)));
@@ -92,7 +94,7 @@ function agregarEquipesFracao(opcoes) {
     }
   }
 
-  return { porDia, semLink7, diasPorEstado };
+  return { porDia, semLink7, diasPorEstado, textosNoDefault };
 }
 
 module.exports = { agregarEquipesFracao, JANELA_FALLBACK_PADRAO };
