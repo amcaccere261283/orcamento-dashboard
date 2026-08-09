@@ -351,23 +351,27 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   Object.assign(demandas, resultadoEquipesAtivas);
   if (demandas.equipesPeriodo) fonteEquipes = 'ATIVAS (aba EQ)';
 
-  // Δ equipes FRACIONADAS (2026-08-08): fonte online (Link 6 roster + Link 7
-  // campo/produção, já agregadas em atualizar-equipes-online.js via
-  // agregarEquipesFracao -- compute-equipes-fracao.js), no formato plano
-  // "SUP,Tipo,DiaEpoch,Fracao". Substitui inteiramente o antigo
-  // equipes-produtivas-online.csv + agregarEquipesProdutivas
-  // (compute-equipes-produtivas.js, sem consumidor NESTE arquivo a partir
-  // desta task -- ver docs/superpowers/sdd/2026-08-08-troca-origem-realizado-
-  // demandas-equipes-design.md). Continua sendo a PRIMEIRA prioridade pro Δ
-  // equipes -- ativas (aba EQ) e mobilizadas (furos) continuam como reserva
-  // se o CSV novo não existir ou não produzir nenhum dia utilizável.
+  // Δ equipes PRODUTIVAS (2026-08-09): fonte online, direto do Link 7
+  // (campo/produção, já agregado em atualizar-equipes-online.js via
+  // agregarEquipesProdutivas -- compute-equipes-produtivas-link7.js), no
+  // formato plano "SUP,Tipo,DiaEpoch,Fracao". Substitui a versão FRACIONADA
+  // de 2026-08-08 (Link 6 roster + Link 7, casamento por nome via
+  // compute-equipes-fracao.js) -- o link por nome só cobria ~20% do roster
+  // por causa da inconsistência de nomenclatura entre as duas fontes; o dono
+  // do projeto pediu pra usar só o Link 7 por enquanto, e revisitar Equipes
+  // ATIVAS (que precisa do roster completo, incluindo quem não produziu)
+  // depois. compute-equipes-fracao.js fica no repositório sem consumidor
+  // aqui, não removido -- ver comentário no topo dele. Continua sendo a
+  // PRIMEIRA prioridade pro Δ equipes -- ativas (aba EQ) e mobilizadas
+  // (furos) continuam como reserva se o CSV novo não existir ou não
+  // produzir nenhum dia utilizável.
   const CAMINHO_EQUIPES_ONLINE = path.join(__dirname, '..', '..', 'dist', 'equipes-online.csv');
   if (fs.existsSync(CAMINHO_EQUIPES_ONLINE)) {
     const { equipesPorDia, equipesPeriodo } = parseEquipesFracaoCsv(fs.readFileSync(CAMINHO_EQUIPES_ONLINE, 'utf8'), registros);
     if (equipesPorDia) {
       demandas.equipesPorDia = equipesPorDia;
       demandas.equipesPeriodo = equipesPeriodo;
-      fonteEquipes = 'FRACIONADAS (Link 6 + 7)';
+      fonteEquipes = 'PRODUTIVAS (Link 7)';
     } else {
       console.warn('Equipes fracionadas: CSV existe mas não produziu nenhum dia utilizável -- mantendo a fonte de reserva (ativas/mobilizadas).');
     }

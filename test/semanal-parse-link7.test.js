@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseLinhasLink7, acharAbaEq } = require('../tools/semanal/atualizar-equipes-online.js');
+const { parseLinhasLink7 } = require('../tools/semanal/atualizar-equipes-online.js');
 const { diaEpoch } = require('../tools/semanal/compute-semanal.js');
 
 function linhaLink7Cru(over = {}) {
@@ -11,17 +11,16 @@ function linhaLink7Cru(over = {}) {
     'Contrato Financeiro': 'SUP-7722-24',
     'Data / Hora Primeira Foto': '08/08/2026 07:54',
     'ID Sondador': '3275',
-    Líder: 'Evamar Fernandes de Macedo',
   }, over);
 }
 
-// Link por NOME (Líder), não por ID Sondador -- achado rodando o pipeline de
-// verdade em 2026-08-08: o "ID" do roster do Link 6 é ID de EQUIPE, e "ID
-// Sondador" do Link 7 é ID de PESSOA -- sistemas diferentes, sem interseção
-// real (medido: 1 em 105 IDs). Ver comentário em compute-equipes-fracao.js.
-test('extrai lider, sup, tipo e diaEpoch da data/hora da primeira foto', () => {
+// Equipes PRODUTIVAS (2026-08-09): direto do Link 7, ID Sondador como chave
+// -- não precisa mais casar com o roster do Link 6 (o link por nome via
+// "Líder" foi um ajuste temporário só cobria ~20%; a discussão de Equipes
+// ATIVAS via roster fica pra depois, ver compute-equipes-fracao.js).
+test('extrai idSondador, sup, tipo e diaEpoch da data/hora da primeira foto', () => {
   const [linha] = parseLinhasLink7([linhaLink7Cru()]);
-  assert.strictEqual(linha.lider, 'Evamar Fernandes de Macedo');
+  assert.strictEqual(linha.idSondador, '3275');
   assert.strictEqual(linha.sup, 'SUP-7722-24');
   assert.strictEqual(linha.tipo, 'SP');
   assert.strictEqual(linha.diaEpoch, diaEpoch(new Date('2026-08-08T00:00:00Z')));
@@ -67,27 +66,7 @@ test('Tipo desconhecido lança erro (fail-loud) em vez de cair calado em algum b
   assert.throws(() => parseLinhasLink7([linhaLink7Cru({ Tipo: 'ALGO-NUNCA-VISTO' })]), /Tipologia desconhecida/);
 });
 
-test('duas linhas da mesma OS+dia (múltiplas fotos) viram duas entradas -- a deduplicação de combinação acontece em compute-equipes-fracao.js, não aqui', () => {
+test('duas linhas da mesma OS+dia (múltiplas fotos) viram duas entradas -- a deduplicação de combinação acontece em compute-equipes-produtivas-link7.js, não aqui', () => {
   const linhas = parseLinhasLink7([linhaLink7Cru(), linhaLink7Cru()]);
   assert.strictEqual(linhas.length, 2);
-});
-
-test('acharAbaEq: casa mês abreviado (ex.: "2026 - OUT (EQ)")', () => {
-  const nomes = ['CRONOGRAMAS', '2026 - SET (EQ)', '2026 - OUT (EQ)', '2026 - NOV (EQ)'];
-  assert.strictEqual(acharAbaEq(nomes, 2026, 9), '2026 - OUT (EQ)'); // outubro = índice 9
-});
-
-test('acharAbaEq: casa mês completo (ex.: "2026 - AGOSTO (EQ)")', () => {
-  const nomes = ['CRONOGRAMAS', '2026 - AGOSTO (EQ)', '2026 - SETEMBRO (EQ)'];
-  assert.strictEqual(acharAbaEq(nomes, 2026, 7), '2026 - AGOSTO (EQ)'); // agosto = índice 7
-});
-
-test('acharAbaEq: NÃO casa "(EQ e SUP.)" nem "(EQP)" -- só a aba "(EQ)" exata', () => {
-  const nomes = ['2026 - AGOSTO (EQ e SUP.)', '2026 - AGOSTO (EQP)', '2026 - AGOSTO (EQ)'];
-  assert.strictEqual(acharAbaEq(nomes, 2026, 7), '2026 - AGOSTO (EQ)');
-});
-
-test('acharAbaEq: nenhuma aba encontrada lança erro claro em vez de cair calado numa aba errada', () => {
-  const nomes = ['CRONOGRAMAS', '2026 - SETEMBRO (EQ)'];
-  assert.throws(() => acharAbaEq(nomes, 2026, 7), /Nenhuma aba "\(EQ\)" encontrada/);
 });

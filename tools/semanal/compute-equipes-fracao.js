@@ -3,6 +3,16 @@ const { classificarDiaEquipe, contaComoAtiva } = require('./classificar-dia-equi
 const { diaEpoch } = require('./compute-semanal.js');
 const { casarSondador } = require('./compute-equipes-ativas.js');
 
+// SEM CONSUMIDOR a partir de 2026-08-09 -- não remover, ver por quê.
+// `atualizar-equipes-online.js` parou de chamar este módulo: o dono do
+// projeto pediu equipes PRODUTIVAS direto do Link 7 (sem roster), porque o
+// casamento por nome daqui (Equipe do Link 6 vs Líder do Link 7) só cobria
+// ~20% do roster -- ver compute-equipes-produtivas-link7.js, que substituiu
+// este módulo nessa função. Este arquivo fica guardado porque a lógica de
+// ROSTER (quem está ativo no mês, mesmo sem produzir -- férias/baixada/
+// exclusão de dia via classificarDiaEquipe) é exatamente o que "Equipes
+// ATIVAS" vai precisar quando essa conversa for retomada com o usuário.
+//
 // Equipes produtivas por (SUP, tipologia) e por dia, a partir de:
 //   - Link 6 (planilha "Equipes", aba "AAAA - MÊS (EQ)"): roster do mês +
 //     exclusão de dia (férias/baixada/desligada/afastada/atestado), via
