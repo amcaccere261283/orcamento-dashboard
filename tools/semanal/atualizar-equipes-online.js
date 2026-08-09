@@ -75,17 +75,40 @@ async function main() {
   const { session, target } = await cdp.abrirSessao(
     `${SITE_ORIGIN}/campo/sondagens/de/${fmtData(inicio)}/ate/${fmtData(fim)}/tabela/1/`
   );
-  let linhasLink7;
+  let linhasLink7Brutas;
   try {
     const { headers, rows } = await cdp.rasparTabelaDataTable(session, '#table', { timeoutMs: 45000 });
-    linhasLink7 = parseLinhasLink7(cdp.linhasComoObjetos({ headers, rows }));
+    linhasLink7Brutas = parseLinhasLink7(cdp.linhasComoObjetos({ headers, rows }));
   } finally {
     await cdp.fecharSessao(session, target);
   }
-  console.log(`  ${linhasLink7.length} sondagem-dia encontrada(s).`);
+  console.log(`  ${linhasLink7Brutas.length} sondagem-dia encontrada(s) (bruto, pode extrapolar o mes).`);
 
-  if (!linhasLink7.length) {
+  if (!linhasLink7Brutas.length) {
     throw new Error('Nenhuma linha encontrada no Link 7 -- abortando sem gravar (sessao expirada, ou mes sem nenhuma sondagem ainda -- confira antes de aceitar um CSV vazio).');
+  }
+
+  // O filtro de/ate do site NÃO restringe "Data / Hora Primeira Foto" ao
+  // intervalo pedido -- achado ao vivo em 2026-08-09: uma busca de
+  // 01/08-31/08 devolveu sessões de foto genuínas desde 25/06 (OS aberta há
+  // semanas, ainda ativa em agosto, mas com sessões antigas incluídas na
+  // resposta). Cada linha tem data PRÓPRIA e correta (confirmado: a mesma OS
+  // aparece várias vezes, cada uma com timestamp distinto -- não é um resumo
+  // por OS) -- o problema é só que a resposta não fica contida no mês
+  // pedido. Sem este filtro, equipesPeriodo (calculado a partir do dia MAIS
+  // ANTIGO no CSV, ver parseEquipesFracaoCsv em build-dashboard.js) sairia
+  // com o mês errado (ex.: junho em vez de agosto), e o mês REAL (agosto)
+  // seria tratado como "fora da cobertura" pelo Balanço -- silenciosamente
+  // sem dado, mesmo o CSV tendo dado bom pra agosto.
+  const diaInicioMes = diaEpoch(inicio);
+  const diaFimMes = diaEpoch(fim);
+  const linhasLink7 = linhasLink7Brutas.filter((l) => l.diaEpoch >= diaInicioMes && l.diaEpoch <= diaFimMes);
+  const foraDoMes = linhasLink7Brutas.length - linhasLink7.length;
+  if (foraDoMes > 0) {
+    console.log(`  ${foraDoMes} linha(s) fora do mês pedido (sessão de foto de OS antiga ainda ativa) -- descartadas, ficam ${linhasLink7.length}.`);
+  }
+  if (!linhasLink7.length) {
+    throw new Error('Todas as linhas do Link 7 ficaram fora do mês pedido depois do filtro -- abortando sem gravar (não é o caso normal, confira antes de aceitar um CSV vazio).');
   }
 
   const { porDia } = agregarEquipesProdutivas(linhasLink7);
