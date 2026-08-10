@@ -47,7 +47,7 @@ const COLUNAS_LINK1 = [
 
 const HEADER_SAIDA = [
   'Contrato', 'Criação da OS', 'Tipo', 'Status', 'Executado Dia',
-  'Deslocamento', 'Observações de Campo', 'OS', 'Sondador',
+  'Deslocamento', 'Total (m)', 'Observações de Campo', 'OS', 'Sondador',
 ];
 
 function texto(valor) {
@@ -75,6 +75,10 @@ function mapearProducaoTotal(linhas) {
       texto(linha['Status Atual']),
       texto(linha['Executado Dia']),
       texto(linha['Deslocamento']),
+      // "Total (m)" volta ao layout em 2026-08-10: o valor 0,01 marca furo
+      // que não produziu metragem e sai do Realizado (ver parse-avancos.js).
+      // Medido em jun+jul/2026: 92 linhas em 4.103.
+      texto(linha['Total (m)']),
       texto(linha['Observações de campo']),
       texto(linha['OS']),
       texto(linha['Sondador']),

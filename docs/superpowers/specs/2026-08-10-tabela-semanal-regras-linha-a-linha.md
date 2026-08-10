@@ -37,10 +37,17 @@ Três decisões do dono do projeto (2026-08-10):
    | todas as linhas do roster | 84,8 | 87,0 |
 
 2. **Domingo sai da conta; sábado conta.** Semana cheia = **6 dias**
-   (segunda a sábado), e a média divide por 6. **Exceção:** quando a semana
-   tiver *só* domingo (acontece no recorte de mês, que corta as semanas
-   dentro do mês), esse domingo é contado sozinho — senão a semana ficaria
-   sem denominador.
+   (segunda a sábado), e a média divide por 6.
+
+   **Regra fechada para as bordas (2026-08-10):** o denominador é *os dias
+   daquela semana que estão dentro do mês e não são domingo*. Semana cheia dá
+   6 naturalmente; semana parcial de fim de mês dá os dias que tem; e se o
+   resultado for zero — semana composta só de domingo, que acontece no
+   recorte por mês — então esse domingo é contado sozinho.
+
+   **Fechamento do mês (coluna Total): média das SEMANAS**, como já é hoje
+   (`fecharMes`). Decisão do dono do projeto, ciente de que com denominadores
+   diferentes por semana a média das médias não é a média dos dias.
 
    Medido na semana 03–09/08 (dado até o dia 8): seg..sáb ÷ 6 = **77,3**;
    seg..sex ÷ 5 = 79,4; seg..dom ÷ 7 = 66,3 (o que está errado hoje).
@@ -106,9 +113,19 @@ sondagens (Link 1), **retira** as linhas em que:
 - `Total (m)` = `0,01`, **ou**
 - `Status Atual` = `"Cancelado"`
 
-> **A confirmar:** li os três como critérios INDEPENDENTES (exclui se qualquer
-> um bater). Se for conjunção, muda muito o volume excluído — perguntar antes
-> de implementar.
+**RESOLVIDO por medição (2026-08-10): são INDEPENDENTES (OR).** Em jun+jul/2026
+(4.103 linhas do Link 1): `Deslocamento=Sim` 175, `Total (m)=0,01` 92,
+`Status=Cancelado` **0** — o Link 1 só devolve CONCLUIDO e EXECUTADO. Os três
+JUNTOS dão zero linhas, ou seja, como conjunção a regra nunca excluiria nada.
+Em OR são 262 de 4.103 (6,4%), com apenas 5 de sobreposição entre deslocamento
+e metragem.
+
+O critério `Status = Cancelado` é quase inerte nesta fonte (29 linhas em toda a
+base de 47.852) — fica implementado porque protege se a fonte mudar, mas quem
+corta de verdade é o `Total (m) = 0,01`.
+
+**IMPLEMENTADO** em 2026-08-10: `Total (m)` voltou ao `HEADER_SAIDA` e
+`foraDoRealizado()` (`parse-avancos.js`) aplica os três em OR.
 
 `Deslocamento` já está implementado (2026-08-10, commit `ceb3720`): a coluna
 própria do Link 1 substituiu um regex sobre `Observações de Campo`, que
@@ -139,6 +156,16 @@ O estoque de demanda numa data D é montado de cinco fontes:
 Regra de estoque já fechada em 2026-08-10 e mantida: na data D conta quem tem
 pendência ≤ D e execução > D, com **D = o primeiro dia do período**.
 
+**O que está errado é o BOTÃO, não o build** (confirmado com o dono do projeto
+em 2026-08-10). O refresh não busca `demandas-sondagem-online.csv` (5.493
+pendentes) nem `demandas-lab-online.json` (12.781), e os dois nem chegam a
+`docs/` — `atualizar-arquivos.js` os exclui de `ARQUIVOS_PUBLICAR` de
+propósito. Resultado: clicar em "Atualizar dados" zera o estoque, com status
+verde "Atualizado".
+
+**Correção pedida: publicar os dois arquivos e fazer o refresh buscá-los**, de
+modo que as 18.306 unidades apareçam na tabela nos dois caminhos.
+
 ---
 
 ## FINANCEIRO
@@ -149,8 +176,16 @@ pendência ≤ D e execução > D, com **D = o primeiro dia do período**.
 
 - **Mês vigente:** como está hoje (eventos do Avanço Sond × ticket médio).
   Correto.
-- **Meses anteriores:** usar o valor da **MATRIZ** e repartir
-  **proporcionalmente** entre as semanas do mês.
+- **Meses anteriores:** usar o valor da **MATRIZ** (`realizado.financeiro`) e
+  repartir **proporcionalmente** entre as semanas do mês.
+
+**Ciente e aceito pelo dono do projeto (2026-08-10):** de janeiro a junho a
+coluna Realizado da MATRIZ é *idêntica* ao Previsto (5130/5130, 8873/8873,
+8749/8749, 9347/9347, 8283/8283, 8258/8258 — em milhares). Só julho diverge
+(previsto 9212, realizado 9409). Portanto, depois desta mudança, jan–jun vão
+mostrar Realizado exatamente igual ao Previsto, com desvio zero. Foi
+perguntado explicitamente e a resposta foi "é exatamente isso que eu quero
+ver".
 
 Exemplo dado pelo dono do projeto: em julho a página mostra 9.832 e a MATRIZ
 tem **9.408** — o que deve aparecer é o 9.408 repartido entre as semanas.

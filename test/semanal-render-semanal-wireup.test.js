@@ -555,8 +555,8 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
   // O contrato de colunas encolheu em 2026-08-10: "Executado Dia" (data
   // única de execução) e "Deslocamento" (coluna própria do Link 1) no lugar
   // do par Inicio/Termino e das três datas que o Link 1 não tem.
-  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Observações de Campo,OS,Sondador\n'
-    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,Não,,17851-26,Sondador Sintético\n';
+  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,Não,12.5,,17851-26,Sondador Sintético\n';
   const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n'
     + 'SUP-0002-25,46091,LL,46091\n';
 
@@ -648,8 +648,8 @@ test('atualizarDadosAoVivoSemanal: equipesAtivoPorDia (Realizado de Equipes) sob
     + Array(12).fill('0').join(',') + ',0,0,0,0,'
     + Array(12).fill('0').join(',') + ',0,0,0,'
     + Array(12).fill('0').join(',') + ',0,0,\n';
-  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Observações de Campo,OS,Sondador\n'
-    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,Não,,17851-26,Sondador Sintético\n';
+  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,Não,12.5,,17851-26,Sondador Sintético\n';
   const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n'
     + 'SUP-0002-25,46091,LL,46091\n';
   const historicoMatrizFresco = [
@@ -1426,8 +1426,8 @@ const CSV_MATRIZ_PRIORIDADE = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERM
 
 // 46091 = 2026-03-10 (Criação da OS), 46093 = 2026-03-12 (Executado Dia -- o
 // dia que compute-equipes-mobilizadas.js passa a ocupar desde 2026-08-10).
-const CSV_AVANCOS_PRIORIDADE = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Observações de Campo,OS,Sondador\n'
-  + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,Não,,17851-26,Sondador Sintético\n';
+const CSV_AVANCOS_PRIORIDADE = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+  + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,Não,12.5,,17851-26,Sondador Sintético\n';
 const CSV_LAB_PRIORIDADE = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n'
   + 'SUP-0002-25,46091,LL,46091\n';
 

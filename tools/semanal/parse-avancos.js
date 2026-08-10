@@ -57,6 +57,9 @@ const COLUNAS_OBRIGATORIAS = {
   // Coluna própria do Link 1, valores "Sim"/"Não" (medido ao vivo em
   // 2026-08-10: 82 "Sim" e 1.971 "Não" em julho/2026, sem nenhuma vazia).
   deslocamento: 'Deslocamento',
+  // Metragem total do furo. 0,01 é o marcador de "não produziu metragem" --
+  // ver NAO_PRODUZIU abaixo.
+  totalMetros: 'Total (m)',
   observacoesCampo: 'Observações de Campo',
   // A OS é o que liga o furo ao dia da aba EQ: é o código que aparece entre
   // parênteses lá ("CCR RioSP (17851-26)"), e é dele que sai o SUP daquele dia
@@ -94,6 +97,39 @@ const DESLOCAMENTO_SIM = 'SIM';
 
 function ehDeslocamento(valor) {
   return texto(valor).toUpperCase() === DESLOCAMENTO_SIM;
+}
+
+// Metragem 0,01 é o marcador da fonte para furo que NÃO produziu metragem --
+// não é um furo de 1 cm. Decisão do dono do projeto em 2026-08-10: sai do
+// Realizado. Medido em jun+jul/2026: 92 linhas em 4.103, e só 5 delas também
+// são deslocamento -- ou seja, é um corte quase inteiramente adicional.
+//
+// A fonte escreve com vírgula decimal; normaliza antes de comparar, e usa
+// tolerância em vez de igualdade exata (0,01 não tem representação binária
+// exata).
+const METRAGEM_NAO_PRODUZIU = 0.01;
+
+function naoProduziuMetragem(valor) {
+  const n = parseFloat(texto(valor).replace(',', '.'));
+  return Number.isFinite(n) && Math.abs(n - METRAGEM_NAO_PRODUZIU) < 1e-9;
+}
+
+// Status cancelado. Praticamente inerte no Link 1 -- medido em 2026-08-10:
+// ZERO linhas em jun+jul, e 29 em toda a base de 47.852. Fica implementado
+// porque o dono do projeto o listou e porque protege se a fonte passar a
+// devolver canceladas, mas não espere efeito visível.
+function ehCancelado(valor) {
+  return /CANCEL/i.test(texto(valor));
+}
+
+// Os três critérios são INDEPENDENTES (exclui se QUALQUER um bater), e isso
+// não é interpretação: medido em jun+jul/2026, os três JUNTOS dão zero linhas
+// -- como conjunção a regra nunca excluiria nada. Em OR são 262 de 4.103
+// (6,4%).
+function foraDoRealizado(linha, cols) {
+  return ehDeslocamento(linha[cols.deslocamento])
+    || naoProduziuMetragem(linha[cols.totalMetros])
+    || ehCancelado(linha[cols.status]);
 }
 
 function locateColunasAvancos(headerRow) {
@@ -169,10 +205,10 @@ function parseAvancos(grid) {
     // lançaria por tipologia vazia).
     if (!sup && !tipoCru) { descartadas++; continue; }
 
-    // Deslocamento: descartada ANTES de rotular (não precisa de tipologia
-    // válida pra ser excluída) -- ver DESLOCAMENTO_SIM acima. Sai de TODAS as
-    // séries: nem Realizado, nem chegada, nem saída de estoque.
-    if (ehDeslocamento(linha[cols.deslocamento])) { deslocamentos++; continue; }
+    // Descartada ANTES de rotular (não precisa de tipologia válida pra ser
+    // excluída) -- ver foraDoRealizado acima. Sai de TODAS as séries: nem
+    // Realizado, nem chegada, nem saída de estoque.
+    if (foraDoRealizado(linha, cols)) { deslocamentos++; continue; }
 
     let tipologia;
     try {

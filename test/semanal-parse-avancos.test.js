@@ -20,9 +20,10 @@ CABECALHO[2] = 'Tipo';
 CABECALHO[3] = 'Status';
 CABECALHO[4] = 'Executado Dia';
 CABECALHO[5] = 'Deslocamento';
-CABECALHO[6] = 'Observações de Campo';
-CABECALHO[7] = 'OS';
-CABECALHO[8] = 'Sondador';
+CABECALHO[6] = 'Total (m)';
+CABECALHO[7] = 'Observações de Campo';
+CABECALHO[8] = 'OS';
+CABECALHO[9] = 'Sondador';
 
 // 2026-03-10 e 2026-03-12 em serial Excel.
 const MAR10 = 46091, MAR12 = 46093;
@@ -36,8 +37,8 @@ function grade(linhas) {
 
 function furo({
   sup = 'SUP-0001-24', tipo = 'SP', status = 'CONCLUIDO', criacao = MAR10,
-  executado = MAR12, deslocamento = 'Não', observacoesCampo = '',
-  os = '15534-24', sondador = 'Fulano de Tal',
+  executado = MAR12, deslocamento = 'Não', totalMetros = '12,50',
+  observacoesCampo = '', os = '15534-24', sondador = 'Fulano de Tal',
 } = {}) {
   const linha = [];
   linha[0] = sup;
@@ -46,9 +47,10 @@ function furo({
   linha[3] = status;
   linha[4] = executado;
   linha[5] = deslocamento;
-  linha[6] = observacoesCampo;
-  linha[7] = os;
-  linha[8] = sondador;
+  linha[6] = totalMetros;
+  linha[7] = observacoesCampo;
+  linha[8] = os;
+  linha[9] = sondador;
   return linha;
 }
 
@@ -208,9 +210,10 @@ test('as colunas são achadas pelo NOME, não por posição fixa', () => {
   deslocado[1][6] = 'Status';
   deslocado[1][7] = 'Executado Dia';
   deslocado[1][8] = 'Deslocamento';
-  deslocado[1][9] = 'Observações de Campo';
-  deslocado[1][10] = 'Sondador';
-  deslocado[1][11] = 'OS';
+  deslocado[1][9] = 'Total (m)';
+  deslocado[1][10] = 'Observações de Campo';
+  deslocado[1][11] = 'Sondador';
+  deslocado[1][12] = 'OS';
   deslocado[2] = [];
   deslocado[2][3] = 'SUP-9999-26';
   deslocado[2][4] = MAR10;
@@ -271,4 +274,51 @@ test('SERIAL_MIN/SERIAL_MAX delimitam a janela de sanidade de 2023 a 2027', () =
   assert.ok(SERIAL_MIN < SERIAL_MAX);
   const { furos } = parseAvancos(grade([furo({ executado: SERIAL_MIN - 1 })]));
   assert.strictEqual(furos[0].executadoDia, null);
+});
+
+// --- os três critérios de exclusão do Realizado (2026-08-10) ---------------
+//
+// Independentes, não conjuntos: medido em jun+jul/2026, os três JUNTOS dão
+// ZERO linhas (Status=Cancelado não existe no Link 1), então como conjunção a
+// regra nunca excluiria nada. Em OR são 262 de 4.103 (6,4%).
+
+test('Total (m) = 0,01 sai do Realizado -- é o marcador de "não produziu metragem"', () => {
+  const { furos, deslocamentos } = parseAvancos(grade([
+    furo({ totalMetros: '0,01' }),
+    furo({ totalMetros: '12,50' }),
+  ]));
+  assert.strictEqual(furos.length, 1);
+  assert.strictEqual(deslocamentos, 1);
+});
+
+test('Total (m) = 0,01 é reconhecido com ponto OU vírgula decimal', () => {
+  assert.strictEqual(parseAvancos(grade([furo({ totalMetros: '0.01' })])).furos.length, 0);
+  assert.strictEqual(parseAvancos(grade([furo({ totalMetros: '0,01' })])).furos.length, 0);
+});
+
+test('metragem próxima de 0,01 mas diferente NÃO é excluída', () => {
+  for (const m of ['0,02', '0,1', '1,01', '10,01']) {
+    assert.strictEqual(parseAvancos(grade([furo({ totalMetros: m })])).furos.length, 1, m);
+  }
+});
+
+test('Status Cancelado sai do Realizado', () => {
+  assert.strictEqual(parseAvancos(grade([furo({ status: 'CANCELADO' })])).furos.length, 0);
+  assert.strictEqual(parseAvancos(grade([furo({ status: 'Cancelado' })])).furos.length, 0);
+});
+
+test('os três critérios são independentes -- basta UM bater', () => {
+  const { furos, deslocamentos } = parseAvancos(grade([
+    furo({ deslocamento: 'Sim', totalMetros: '12,50', status: 'CONCLUIDO' }),
+    furo({ deslocamento: 'Não', totalMetros: '0,01', status: 'CONCLUIDO' }),
+    furo({ deslocamento: 'Não', totalMetros: '12,50', status: 'CANCELADO' }),
+    furo({ deslocamento: 'Não', totalMetros: '12,50', status: 'CONCLUIDO' }),
+  ]));
+  assert.strictEqual(furos.length, 1, 'só a última linha, que não bate em nenhum critério');
+  assert.strictEqual(deslocamentos, 3);
+});
+
+test('metragem vazia não bate no corte -- é o caso do furo PENDENTE', () => {
+  const { furos } = parseAvancos(grade([furo({ status: 'PENDENTE', executado: '', totalMetros: '' })]));
+  assert.strictEqual(furos.length, 1);
 });

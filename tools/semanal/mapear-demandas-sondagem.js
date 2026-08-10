@@ -53,14 +53,16 @@ function juntarPendentesSondagem(linhasLink2, linhasLink3) {
     }
     // Layout de HEADER_SAIDA (mapear-producao-total.js), que encolheu em
     // 2026-08-10: Contrato, Criação da OS, Tipo, Status, Executado Dia,
-    // Deslocamento, Observações de Campo, OS, Sondador. Furo pendente não
-    // tem execução nem deslocamento -- fica vazio, e é isso que o mantém no
-    // estoque de demandas pela regra de compute-demandas.js.
+    // Deslocamento, Total (m), Observações de Campo, OS, Sondador. Furo
+    // pendente não tem execução, deslocamento nem metragem -- ficam vazios, e
+    // é isso que o mantém no estoque de demandas pela regra de
+    // compute-demandas.js. Metragem vazia NÃO bate no corte de 0,01.
     rows.push([
       info.contrato,
       info.osDesde,
       tipo,
       'PENDENTE',
+      '',
       '',
       '',
       '',
