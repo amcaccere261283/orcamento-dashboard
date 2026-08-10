@@ -18,9 +18,9 @@ function linhaLink7Cru(over = {}) {
 // -- não precisa mais casar com o roster do Link 6 (o link por nome via
 // "Líder" foi um ajuste temporário só cobria ~20%; a discussão de Equipes
 // ATIVAS via roster fica pra depois, ver compute-equipes-fracao.js).
-test('extrai idSondador, sup, tipo e diaEpoch da data/hora da primeira foto', () => {
+test('extrai idEquipe, sup, tipo e diaEpoch da data/hora da primeira foto', () => {
   const [linha] = parseLinhasLink7([linhaLink7Cru()]);
-  assert.strictEqual(linha.idSondador, '3275');
+  assert.strictEqual(linha.idEquipe, '3275');
   assert.strictEqual(linha.sup, 'SUP-7722-24');
   assert.strictEqual(linha.tipo, 'SP');
   assert.strictEqual(linha.diaEpoch, diaEpoch(new Date('2026-08-08T00:00:00Z')));
@@ -69,4 +69,38 @@ test('Tipo desconhecido lança erro (fail-loud) em vez de cair calado em algum b
 test('duas linhas da mesma OS+dia (múltiplas fotos) viram duas entradas -- a deduplicação de combinação acontece em compute-equipes-produtivas-link7.js, não aqui', () => {
   const linhas = parseLinhasLink7([linhaLink7Cru(), linhaLink7Cru()]);
   assert.strictEqual(linhas.length, 2);
+});
+
+// --- renomeação de coluna na fonte (2026-08-10) ----------------------------
+//
+// O sond.com.br renomeou a coluna que identifica a equipe: o spec de
+// 2026-08-08 registrou "ID Sondador", e dois dias depois a tabela veio com
+// "Nº Equipe". O modo de falha foi o pior possível -- silencioso: toda linha
+// saía com id vazio, agregarEquipesProdutivas descartava as 8.618 linhas por
+// "sem id", o CSV era gravado só com cabeçalho, o fetcher relatava "119 dias
+// novos" e o build caía na fonte de reserva sem avisar ninguém.
+
+test('aceita a grafia NOVA "Nº Equipe"', () => {
+  const l = parseLinhasLink7([linhaLink7Cru({ 'Nº Equipe': '441', 'ID Sondador': undefined })])[0];
+  assert.strictEqual(l.idEquipe, '441');
+});
+
+test('aceita a grafia ANTIGA "ID Sondador" -- a fonte pode voltar atrás', () => {
+  const l = parseLinhasLink7([linhaLink7Cru({ 'ID Sondador': '3275' })])[0];
+  assert.strictEqual(l.idEquipe, '3275');
+});
+
+test('sem NENHUMA das grafias, LANÇA citando as colunas recebidas -- nunca devolve lista vazia em silêncio', () => {
+  const semColuna = linhaLink7Cru();
+  delete semColuna['ID Sondador'];
+  assert.throws(() => parseLinhasLink7([semColuna]), /Nenhuma coluna de identificação de equipe/);
+  assert.throws(() => parseLinhasLink7([semColuna]), /Contrato Financeiro/, 'a mensagem lista o que chegou, pra dar o nome novo de graça');
+});
+
+test('a checagem de coluna não confunde valor VAZIO com coluna AUSENTE', () => {
+  // Coluna presente e vazia é dado ruim de uma linha só -- a linha é
+  // ignorada pelo agregador, mas não derruba o fetch inteiro.
+  const vazia = parseLinhasLink7([linhaLink7Cru({ 'ID Sondador': '' })]);
+  assert.strictEqual(vazia.length, 1);
+  assert.strictEqual(vazia[0].idEquipe, '');
 });

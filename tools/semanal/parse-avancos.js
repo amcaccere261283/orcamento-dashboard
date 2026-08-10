@@ -19,14 +19,25 @@ const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 // de nada disso -- por isso os testes passariam mesmo se a injeção sumisse:
 // quem cobre isso é test/comum-browser-bundle.test.js.
 //
-// Colunas usadas, com o nome EXATO da planilha (medido em 2026-07-29):
-// Contrato(A) · Criação da OS(I) · Tipo(J) · Status(L) · Termino Sondagem(N,
-// sem acento em "Termino") · Conclusão(O) · Cancelamento(P) · Atualizado(Q) ·
-// Observações de Campo(AB).
+// Colunas usadas, com o nome EXATO que mapear-producao-total.js produz a
+// partir do Link 1 (sond.com.br/extrato-producao-total):
+// Contrato · Criação da OS · Tipo · Status · Executado Dia · Deslocamento ·
+// Observações de Campo · OS · Sondador.
 //
-// Uma coluna de propósito NÃO usada:
-// - Inicio Sondagem(M): 3.929 das 61.927 linhas têm data fora de 2023-2027
-//   (de 1901 a 2078). Nenhuma série ancora nela.
+// REESCRITO EM 2026-08-10 pelas decisões do dono do projeto:
+//
+// - "Executado Dia" é a ÚNICA data de execução que a fonte tem. As antigas
+//   "Inicio Sondagem"/"Termino Sondagem" eram a MESMA data duplicada por
+//   mapear-producao-total.js sob dois nomes -- confirmado pelo dono em
+//   2026-08-10 ("confirmo que é o mesmo campo"). Uma coluna só, com o nome
+//   do link, pela regra "não alterar nenhuma informação que venha dos links".
+// - "Conclusão", "Cancelamento" e "Atualizado" não existem no Link 1 e
+//   deixaram de ser fabricadas vazias. Os campos correspondentes saem daqui
+//   como null: as séries que os liam (relatorioConcluido/canceladas, da aba
+//   Demandas) já eram zero em 100% dos meses medidos, então o comportamento
+//   delas não muda -- só fica explícito que a fonte não tem o dado.
+// - Deslocamento vem da COLUNA própria do Link 1, não de um regex sobre o
+//   texto livre de "Observações de Campo" -- ver DESLOCAMENTO_SIM abaixo.
 
 // Janela de sanidade de data. A planilha só tem operação a partir de
 // 2023-02; qualquer serial fora daqui é lixo (a coluna Inicio Sondagem tem
@@ -39,11 +50,13 @@ const COLUNAS_OBRIGATORIAS = {
   criacaoOS: 'Criação da OS',
   tipo: 'Tipo',
   status: 'Status',
-  inicioSondagem: 'Inicio Sondagem',
-  terminoSondagem: 'Termino Sondagem',
-  conclusao: 'Conclusão',
-  cancelamento: 'Cancelamento',
-  atualizado: 'Atualizado',
+  // A data de execução do furo: alimenta o evento "sondagem realizada"
+  // (Realizado da Tabela Semanal e dos Gráficos) E a saída do estoque de
+  // Demandas. É um campo só porque a fonte tem um campo só.
+  executadoDia: 'Executado Dia',
+  // Coluna própria do Link 1, valores "Sim"/"Não" (medido ao vivo em
+  // 2026-08-10: 82 "Sim" e 1.971 "Não" em julho/2026, sem nenhuma vazia).
+  deslocamento: 'Deslocamento',
   observacoesCampo: 'Observações de Campo',
   // A OS é o que liga o furo ao dia da aba EQ: é o código que aparece entre
   // parênteses lá ("CCR RioSP (17851-26)"), e é dele que sai o SUP daquele dia
@@ -63,13 +76,25 @@ function texto(valor) {
   return String(valor === null || valor === undefined ? '' : valor).trim();
 }
 
-// Ponto de "deslocamento" (novo furo aberto ao lado de um impenetrável) não é
-// demanda nova -- é o mesmo furo original, reposicionado. Fica marcado só na
-// Observações de Campo, em texto livre ("Deslocamento A", "Foram executados
-// deslocamentos A e B" etc.) -- decisão do dono do projeto, 2026-08-01: 10.407
-// linhas na planilha real levam a palavra, e nenhuma delas deve contar em
-// nenhuma série. Regex insensível a maiúsculas: a grafia varia entre linhas.
-const RE_DESLOCAMENTO = /deslocamento/i;
+// Deslocamento, definido pelo dono do projeto em 2026-08-10: sondagem que
+// aparece "Sim" nessa coluna NÃO foi finalizada por causa de alguma situação
+// durante a execução, e acabou sendo executada em outra linha -- ou seja,
+// originou outra linha de sondagem SEM gerar demanda nova. Por isso não
+// conta nem em Sondagens Realizadas nem nas contas de Demandas: é o mesmo
+// furo, reposicionado, e contá-lo duplicaria tanto o realizado quanto a
+// chegada.
+//
+// Vinha de um regex sobre "Observações de Campo" até 2026-08-10. Medido ao
+// vivo no Link 1 em julho/2026 (2.053 linhas), os dois critérios divergiam
+// em 119 linhas (5,8%): a coluna acusa 82, o regex acusava 185; concordavam
+// em 74; o regex derrubava 111 furos legítimos (bastava a palavra aparecer
+// numa observação) e deixava passar 8 deslocamentos reais que ninguém tinha
+// descrito em texto. A coluna é o dado; o texto livre era inferência.
+const DESLOCAMENTO_SIM = 'SIM';
+
+function ehDeslocamento(valor) {
+  return texto(valor).toUpperCase() === DESLOCAMENTO_SIM;
+}
 
 function locateColunasAvancos(headerRow) {
   const linha = headerRow || [];
@@ -145,8 +170,9 @@ function parseAvancos(grid) {
     if (!sup && !tipoCru) { descartadas++; continue; }
 
     // Deslocamento: descartada ANTES de rotular (não precisa de tipologia
-    // válida pra ser excluída) -- ver RE_DESLOCAMENTO acima.
-    if (RE_DESLOCAMENTO.test(texto(linha[cols.observacoesCampo]))) { deslocamentos++; continue; }
+    // válida pra ser excluída) -- ver DESLOCAMENTO_SIM acima. Sai de TODAS as
+    // séries: nem Realizado, nem chegada, nem saída de estoque.
+    if (ehDeslocamento(linha[cols.deslocamento])) { deslocamentos++; continue; }
 
     let tipologia;
     try {
@@ -156,28 +182,26 @@ function parseAvancos(grid) {
     }
 
     const status = texto(linha[cols.status]).toUpperCase();
-    const terminoSondagem = dataSaneada(linha[cols.terminoSondagem]);
-    if ((status === 'CONCLUIDO' || status === 'EXECUTADO') && terminoSondagem === null) {
+    const executadoDia = dataSaneada(linha[cols.executadoDia]);
+    if ((status === 'CONCLUIDO' || status === 'EXECUTADO') && executadoDia === null) {
       semDataTermino++;
     }
-
-    const cancelamento = dataDeTexto(linha[cols.cancelamento]);
-    // Só é anomalia quando a linha ESTÁ cancelada: nas outras a coluna é
-    // legitimamente vazia. Uma cancelada sem data legível fica fora da série de
-    // canceladas e, de propósito, DENTRO do estoque -- "não sei quando saiu" é
-    // mais honesto que "saiu no começo".
-    if (status === 'CANCELADO' && cancelamento === null) cancelamentoIlegivel++;
 
     furos.push({
       sup,
       tipologia,
       status,
       criacaoOS: dataSaneada(linha[cols.criacaoOS]),
-      inicioSondagem: dataSaneada(linha[cols.inicioSondagem]),
-      terminoSondagem,
-      conclusao: dataSaneada(linha[cols.conclusao]),
-      cancelamento,
-      atualizado: dataSaneada(linha[cols.atualizado]),
+      // A data de execução, uma só. Alimenta o evento de sondagem realizada
+      // e a saída do estoque de demandas -- ver compute-demandas.js.
+      executadoDia,
+      // O Link 1 não traz estas três. Ficam explicitamente null em vez de
+      // ausentes, pra quem consome poder distinguir "a fonte não tem" de
+      // "esqueci de mapear". As séries que as leem já eram zero em 100% dos
+      // meses medidos.
+      conclusao: null,
+      cancelamento: null,
+      atualizado: null,
       // String vazia, nunca null, pra quem consome poder testar sem se
       // preocupar com o tipo.
       //

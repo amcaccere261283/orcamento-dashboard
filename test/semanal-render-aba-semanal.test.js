@@ -446,12 +446,12 @@ test('Realizado/Tendência aparecem em Volume E Financeiro (Financeiro pesado pe
 // não soma). registro() default é sup='SUP-0001-24', tipologia='ST' -- as
 // fixtures abaixo usam a chave 'SUP-0001-24||ST'.
 
-test('Realizado de Equipes: média diária por semana, cortada em hoje -- S1 fechada (2,00), S2 fechada (7,00), S3 vigente truncada em 3 dias (3,00), S4/S5 futuras sem-dado; fechamento é a MÉDIA das semanas com dado (4,00). Tendência (2026-08-07) vem de registro.total.equipes, repetida em TODAS as semanas -- inclusive futuras, é foto/premissa, não fluxo truncado em hoje como o Realizado', () => {
+test('Realizado de Equipes: média diária por semana, cortada em d-1 -- S1 e S2 fechadas, S3 vigente truncada em 2 dias, S4/S5 futuras sem-dado. Tendência (2026-08-07) vem de registro.total.equipes, repetida em TODAS as semanas -- inclusive futuras, é foto/premissa, não fluxo truncado como o Realizado', () => {
   const equipesPorDia = {
     'SUP-0001-24||ST': {
       [diaJul(1)]: 3, [diaJul(3)]: 1,    // S1 (5 dias, só 2 com dado): soma 4 / 5 dias da semana = 0,8 -- ver teste seguinte pra denominador
       [diaJul(8)]: 7,                     // S2 (7 dias, só 1 com dado): 7 / 7 dias = 1,00 -- ver teste seguinte
-      [diaJul(14)]: 3,                    // S3 (13-19, truncada em hoje=15 -> 3 dias)
+      [diaJul(14)]: 3,                    // S3 (13-19, truncada em d-1=14 -> 2 dias: 13 e 14)
       [diaJul(22)]: 99,                   // S4 é futura (hoje=15) -- não deve entrar em nada
     },
   };
@@ -469,9 +469,14 @@ test('Realizado de Equipes: média diária por semana, cortada em hoje -- S1 fec
   // somarEquipesNoIntervalo divide pelo TAMANHO DA JANELA (dias corridos),
   // não pelos dias com dado -- diferente de mediaEquipesNoIntervalo (a versão
   // anterior, roster global): S1 = (3+1)/5 dias = 0,8 -> Math.ceil = 1; S2 =
-  // 7/7 dias = 1,00 -> 1; S3 truncada em 3 dias = 3/3 = 1,00 -> 1.
-  assert.deepStrictEqual(series.semanasRealizado, [1, 1, 1, null, null]);
-  assert.ok(Math.abs(series.fechamentoRealizado - 1) < 1e-9, 'fechamento é a MÉDIA de [1,1,1] = 1, não a soma');
+  // 7/7 dias = 1,00 -> 1.
+  //
+  // S3 desde 2026-08-10: a janela para em d-1 (dia 14), não em hoje (15) --
+  // são 2 dias, não 3, então 3/2 = 1,5 -> Math.ceil = 2. O dia corrente está
+  // incompleto no Link 7 (as fotos chegam ao longo do dia) e incluí-lo
+  // diluía a média com um dia parcial.
+  assert.deepStrictEqual(series.semanasRealizado, [1, 1, 2, null, null]);
+  assert.ok(Math.abs(series.fechamentoRealizado - 4 / 3) < 1e-9, 'fechamento é a MÉDIA de [1,1,2], não a soma');
   assert.deepStrictEqual(series.semanasTendencia, [5, 5, 5, 5, 5], 'repete o Total do mês (5) em toda semana, igual ao Previsto');
   assert.strictEqual(series.fechamentoTendencia, 5, 'fechamento é a MÉDIA das semanas (foto) -- aqui o próprio valor repetido');
 });

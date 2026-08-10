@@ -70,20 +70,20 @@ function agregarEquipesPorDia(furos) {
     if (!furo) return;
     var sondador = String(furo.sondador === null || furo.sondador === undefined ? '' : furo.sondador).trim();
     if (!sondador) return;
-    var inicio = paraDiaEpoch(furo.inicioSondagem);
-    if (inicio === null) return;
-    // Término ausente OU anterior ao início (dado invertido, existe na
-    // planilha): ocupa só o dia de início. Nunca extrapola para trás nem
-    // deixa o laço abaixo sem fim.
-    var fim = paraDiaEpoch(furo.terminoSondagem);
-    if (fim === null || fim < inicio) fim = inicio;
+    // Desde 2026-08-10 a fonte (Link 1) tem UMA data de execução, não um par
+    // início/término -- confirmado pelo dono do projeto ("confirmo que é o
+    // mesmo campo"). A ocupação da equipe é, portanto, o dia da execução.
+    // O laço por intervalo saiu junto: com uma data só, ele sempre daria
+    // exatamente uma iteração. Esta função continua sendo a TERCEIRA
+    // prioridade do Δ equipes (reserva de ativas/produtivas), então a perda
+    // de granularidade não afeta o número normalmente exibido.
+    var dia = paraDiaEpoch(furo.executadoDia);
+    if (dia === null) return;
 
     var chave = furo.sup + '||' + furo.tipologia;
     if (!porDiaSets[chave]) porDiaSets[chave] = {};
-    for (var d = inicio; d <= fim; d++) {
-      if (!porDiaSets[chave][d]) porDiaSets[chave][d] = {};
-      porDiaSets[chave][d][sondador] = true;
-    }
+    if (!porDiaSets[chave][dia]) porDiaSets[chave][dia] = {};
+    porDiaSets[chave][dia][sondador] = true;
   });
 
   var saida = {};

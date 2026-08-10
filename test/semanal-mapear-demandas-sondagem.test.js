@@ -33,12 +33,15 @@ test('furo pendente do Link 2 recebe Contrato e Criação da OS do Link 3 pela m
   assert.strictEqual(rows[0][cols.os], '17656-26');
 });
 
-test('Inicio Sondagem, Termino Sondagem, Cancelamento, Sondador ficam vazios -- furo ainda não aconteceu', () => {
+// Executado Dia vazio é o que MANTÉM o furo no estoque de demandas: pela
+// regra de 2026-08-10, sai do estoque quem tem data de execução <= a data de
+// referência. Sem data, nunca sai -- que é exatamente o certo para um furo
+// que ainda não aconteceu. Deslocamento vazio idem: não é deslocamento.
+test('Executado Dia, Deslocamento e Sondador ficam vazios -- furo ainda não aconteceu, então nunca sai do estoque', () => {
   const { header, rows } = juntarPendentesSondagem([linhaLink2()], [linhaLink3()]);
   const cols = locateColunasAvancos(header);
-  assert.strictEqual(rows[0][cols.inicioSondagem], '');
-  assert.strictEqual(rows[0][cols.terminoSondagem], '');
-  assert.strictEqual(rows[0][cols.cancelamento], '');
+  assert.strictEqual(rows[0][cols.executadoDia], '');
+  assert.strictEqual(rows[0][cols.deslocamento], '');
   assert.strictEqual(rows[0][cols.sondador], '');
 });
 

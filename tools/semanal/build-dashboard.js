@@ -93,11 +93,28 @@ function parseEquipesFracaoCsv(csvTexto, registros) {
   if (!Object.keys(porDiaFracao).length) {
     return { equipesPorDia: null, equipesPeriodo: null };
   }
-  // periodo: o mês/ano do dia mais antigo encontrado (equipes-online.csv já
-  // é buscado por mês -- ver atualizar-equipes-online.js).
+  // equipesPeriodo é um contrato de UM mês (ou null = "sem restrição") --
+  // ver foraDaCoberturaDeEquipes em compute-balanco.js, que compara ano e mês
+  // exatos. Ele nasceu quando equipes-online.csv cobria só o mês corrente.
+  //
+  // Desde o backfill de 2026-08-10 o CSV cobre o ANO todo, e aí declarar um
+  // mês só seria pior que não declarar nada: o Balanço passaria a mostrar
+  // "sem dado" em TODOS os meses menos aquele -- regressão em relação ao
+  // comportamento anterior, em que pelo menos o mês corrente funcionava.
+  // Por isso: um mês só no CSV mantém o gate; vários meses devolvem null,
+  // que é exatamente o que as equipes MOBILIZADAS (cobertura anual) sempre
+  // usaram. Estender o gate para um INTERVALO é a correção de verdade, e
+  // fica para a rodada do Balanço -- ele está fora do escopo desta.
   const diasArr = [...diasEncontrados];
-  const diaRepresentativo = new Date(Math.min(...diasArr) * 86400000);
-  const equipesPeriodo = { ano: diaRepresentativo.getUTCFullYear(), mes: diaRepresentativo.getUTCMonth() + 1 };
+  const meses = new Set(diasArr.map((d) => {
+    const data = new Date(d * 86400000);
+    return `${data.getUTCFullYear()}-${data.getUTCMonth() + 1}`;
+  }));
+  let equipesPeriodo = null;
+  if (meses.size === 1) {
+    const diaRepresentativo = new Date(Math.min(...diasArr) * 86400000);
+    equipesPeriodo = { ano: diaRepresentativo.getUTCFullYear(), mes: diaRepresentativo.getUTCMonth() + 1 };
+  }
   return { equipesPorDia: porDiaFracao, equipesPeriodo };
 }
 

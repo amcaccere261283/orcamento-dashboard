@@ -19,8 +19,11 @@ const { execFileSync } = require('node:child_process');
 // Uso: ORCAMENTO_SENHA='...' node tools/semanal/atualizar-arquivos.js
 //
 // Cada busca já se protege sozinha (não sobrescreve o CSV bom em dist/ com
-// um vazio/malformado -- ver o comentário de TAXA_SUCESSO_MINIMA em
-// atualizar-avancos-online.js) -- por isso a falha de UMA busca aqui não
+// um vazio/malformado -- ver o guard de "mês corrente falhou -> aborta sem
+// gravar" em atualizar-avancos-online.js e atualizar-lab-online.js; a
+// TAXA_SUCESSO_MINIMA citada aqui até 2026-08-10 não existe mais desde que a
+// busca deixou de ser por contrato e passou a ser por mês) -- por isso a
+// falha de UMA busca aqui não
 // aborta as outras nem o build: build-dashboard.js sempre lê o que já está
 // em dist/, novo ou de um run anterior. Só aborta cedo se ORCAMENTO_SENHA
 // não estiver definida (build não roda sem ela de qualquer forma).

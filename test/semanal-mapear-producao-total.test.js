@@ -15,6 +15,7 @@ function linhaLink1(over = {}) {
     Identificação: 'ELP-SP-PR092-A-5-1067',
     Obra: 'Projetos do Ano 05',
     'Observações de campo': '',
+    Deslocamento: 'Não',
     'Executado Dia': '01/08/2026',
     'Tags de Serviço': 'SP.Instal (1)',
     'Status Atual': 'EXECUTADO',
@@ -37,11 +38,23 @@ test('Contrato, Tipo, OS, Sondador e Status vêm direto das colunas homônimas d
   assert.strictEqual(rows[0][cols.status], 'EXECUTADO');
 });
 
-test('Executado Dia alimenta Termino Sondagem E Inicio Sondagem -- a saída do estoque de Demandas usa Executado Dia, decidido com o usuário', () => {
+// 2026-08-10: o Link 1 tem UMA data de execução, e ela sai numa coluna só,
+// com o nome do link. A versão anterior deste mapeador gravava o mesmo
+// "Executado Dia" também numa coluna "Inicio Sondagem" -- que o Link 1 não
+// tem. O dono do projeto confirmou que é o mesmo campo, e a regra "não
+// alterar nenhuma informação que venha dos links" mandou tirar a duplicata.
+test('Executado Dia sai numa coluna só, com o nome do link -- não existe mais "Inicio Sondagem" fabricada', () => {
   const { header, rows } = mapearProducaoTotal([linhaLink1()]);
   const cols = locateColunasAvancos(header);
-  assert.strictEqual(rows[0][cols.terminoSondagem], '01/08/2026');
-  assert.strictEqual(rows[0][cols.inicioSondagem], '01/08/2026');
+  assert.strictEqual(rows[0][cols.executadoDia], '01/08/2026');
+  assert.ok(!header.includes('Inicio Sondagem'), 'o cabeçalho não pode reintroduzir a coluna inventada');
+  assert.ok(!header.includes('Termino Sondagem'), 'nem o par dela');
+});
+
+test('a coluna Deslocamento do Link 1 é carregada para a saída, sem transformação', () => {
+  const { header, rows } = mapearProducaoTotal([linhaLink1({ Deslocamento: 'Sim' })]);
+  const cols = locateColunasAvancos(header);
+  assert.strictEqual(rows[0][cols.deslocamento], 'Sim');
 });
 
 test('Criação da OS alimenta Criação da OS sem transformação', () => {
@@ -50,14 +63,18 @@ test('Criação da OS alimenta Criação da OS sem transformação', () => {
   assert.strictEqual(rows[0][cols.criacaoOS], '18/09/2025');
 });
 
-test('Cancelamento e Conclusão ficam vazios -- Link 1 não tem essas datas separadas (limitação conhecida)', () => {
-  const { header, rows } = mapearProducaoTotal([linhaLink1()]);
-  const cols = locateColunasAvancos(header);
-  assert.strictEqual(rows[0][cols.cancelamento], '');
-  assert.strictEqual(rows[0][cols.conclusao], '');
+// 2026-08-10: Cancelamento/Conclusão/Atualizado deixaram de ser fabricadas
+// como colunas vazias. O Link 1 não tem essas datas, e inventar coluna vazia
+// é o mesmo vício de inventar coluna duplicada -- quem consome descobre a
+// ausência pelo campo null que parse-avancos.js entrega.
+test('Cancelamento, Conclusão e Atualizado não são fabricadas -- o Link 1 não tem essas datas', () => {
+  const { header } = mapearProducaoTotal([linhaLink1()]);
+  assert.ok(!header.includes('Cancelamento'));
+  assert.ok(!header.includes('Conclusão'));
+  assert.ok(!header.includes('Atualizado'));
 });
 
-test('Observações de campo do Link 1 vira Observações de Campo -- deslocamento continua filtrável em parse-avancos.js', () => {
+test('Observações de campo do Link 1 vira Observações de Campo -- continua carregada, agora só como informação', () => {
   const { header, rows } = mapearProducaoTotal([linhaLink1({ 'Observações de campo': 'Deslocamento A' })]);
   const cols = locateColunasAvancos(header);
   assert.strictEqual(rows[0][cols.observacoesCampo], 'Deslocamento A');

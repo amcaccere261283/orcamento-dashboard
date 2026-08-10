@@ -43,6 +43,43 @@ function diaEpoch(data) {
   return Math.floor(data.getTime() / 86400000);
 }
 
+// Fuso de referência do projeto, decidido pelo dono em 2026-08-10:
+// "considerar o utc-3 sempre". O Brasil não tem horário de verão desde 2019,
+// então UTC-3 é fixo o ano inteiro e um deslocamento constante é exato --
+// nada de Intl/tabela de fuso, que traria dependência de ICU pra resolver um
+// offset que não varia.
+//
+// Antes disso havia TRÊS relógios no pipeline: atualizar-avancos-online.js e
+// atualizar-equipes-online.js liam getUTC*, enquanto atualizar-lab-online.js
+// e atualizar-equipes-produtivas-online.js liam a hora LOCAL da máquina. Nas
+// últimas 3h de cada mês os dois grupos discordavam sobre qual é o "mês
+// corrente" -- e atualizar-avancos-online.js aborta a gravação inteira se o
+// mês corrente falhar, o que nessa janela seria um mês que ainda não começou.
+const OFFSET_PROJETO_MS = 3 * 60 * 60 * 1000;
+
+// O instante 'agora' deslocado pra UTC-3, pra que os getters getUTC* devolvam
+// os componentes de data do fuso do projeto. O Date resultante NÃO representa
+// o mesmo instante -- é um portador de componentes, e só deve ser lido com
+// getUTC*, nunca comparado com outro Date de instante real.
+function agoraNoFusoProjeto(agora = new Date()) {
+  return new Date(agora.getTime() - OFFSET_PROJETO_MS);
+}
+
+// { ano, mes (1-12), dia } de hoje no fuso do projeto.
+function hojeNoFusoProjeto(agora = new Date()) {
+  const d = agoraNoFusoProjeto(agora);
+  return { ano: d.getUTCFullYear(), mes: d.getUTCMonth() + 1, dia: d.getUTCDate() };
+}
+
+// Dia-desde-época do ÚLTIMO dia que já fechou (d-1). Decisão do dono do
+// projeto em 2026-08-10: "realizado sempre considerar até o dia anterior ao
+// atual". O dia corrente nunca entra em série de Realizado -- ele está
+// incompleto por construção, e contá-lo faz toda semana em curso parecer em
+// queda até virar a meia-noite.
+function diaEpochDeOntem(agora = new Date()) {
+  return diaEpoch(agoraNoFusoProjeto(agora)) - 1;
+}
+
 function trechosParaCliente() {
   const src = fs.readFileSync(__filename, 'utf8').replace(/\r\n/g, '\n');
   const padrao = /\/\/ <<< INICIO CLIENTE([\s\S]*?)\/\/ FIM CLIENTE >>>/g;
@@ -56,4 +93,8 @@ function fonteParaCliente() {
   return trechosParaCliente().join('');
 }
 
-module.exports = { excelSerialParaData, formatarMesAno, calcularVigenteIdx, diaEpoch, trechosParaCliente, fonteParaCliente };
+module.exports = {
+  excelSerialParaData, formatarMesAno, calcularVigenteIdx, diaEpoch,
+  OFFSET_PROJETO_MS, agoraNoFusoProjeto, hojeNoFusoProjeto, diaEpochDeOntem,
+  trechosParaCliente, fonteParaCliente,
+};

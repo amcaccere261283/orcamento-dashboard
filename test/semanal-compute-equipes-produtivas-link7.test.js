@@ -7,8 +7,8 @@ const { diaEpoch } = require('../tools/semanal/compute-semanal.js');
 const dia1 = diaEpoch(new Date('2026-08-01T00:00:00Z'));
 const dia2 = diaEpoch(new Date('2026-08-02T00:00:00Z'));
 
-function linha(idSondador, sup, tipo, dia) {
-  return { idSondador, sup, tipo, diaEpoch: dia };
+function linha(idEquipe, sup, tipo, dia) {
+  return { idEquipe, sup, tipo, diaEpoch: dia };
 }
 
 test('sondador que produziu 1 SUP+Tipo no dia conta 1 inteiro nessa combinação', () => {
@@ -43,7 +43,7 @@ test('mesmo sondador em dias diferentes conta 1 em cada dia, sem acumular', () =
   assert.strictEqual(porDia['SUP-A||SP'][dia2], 1);
 });
 
-test('linha sem idSondador é ignorada, não quebra', () => {
+test('linha sem idEquipe é ignorada, não quebra', () => {
   const { porDia } = agregarEquipesProdutivas([linha('', 'SUP-A', 'SP', dia1)]);
   assert.deepStrictEqual(porDia, {});
 });

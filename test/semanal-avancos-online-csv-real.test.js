@@ -44,6 +44,6 @@ test('o CSV combinado de Avanços publicado (dist/ ou docs/) é lido e parseado 
 
   assert.ok(resultado.furos.length > 0, 'CSV publicado deveria render pelo menos um furo lido');
 
-  const comDataLegivel = resultado.furos.some((f) => f.terminoSondagem !== null || f.criacaoOS !== null);
-  assert.ok(comDataLegivel, 'pelo menos um furo deveria ter Termino Sondagem ou Criação da OS legível -- senão as datas do CSV publicado estão vindo ilegíveis em silêncio');
+  const comDataLegivel = resultado.furos.some((f) => f.executadoDia !== null || f.criacaoOS !== null);
+  assert.ok(comDataLegivel, 'pelo menos um furo deveria ter Executado Dia ou Criação da OS legível -- senão as datas do CSV publicado estão vindo ilegíveis em silêncio');
 });

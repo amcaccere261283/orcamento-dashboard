@@ -153,7 +153,7 @@ padrão de Avanços. Ver
 
 ```bash
 node tools/semanal/atualizar-lab-online.js
-node tools/semanal/atualizar-equipes-produtivas-online.js
+node tools/semanal/atualizar-equipes-online.js
 ```
 
 Mesmo requisito de Chrome com `--remote-debugging-port=9222` logado em sond.com.br
@@ -406,9 +406,15 @@ Quatro coisas desta planilha que parecem bug e não são:
   2026-08-03 são 0 (os que faltavam eram deslocamentos, hoje descartados antes da conta).
   O build reporta a contagem — se ela voltar a subir, é aqui que a diferença aparece.
 
-`tools/comum/tipologias-avancos.js` mapeia os 20 rótulos crus nos 10 da MATRIZ mais
-`SP.F`/`SM.A` (independentes), `SEG.A`/`SEG.V` (só quando acionadas) e `Especiais`. Rótulo
+`tools/comum/tipologias-avancos.js` mapeia os 20 rótulos crus nos 10 da MATRIZ. Rótulo
 novo **falha o build de propósito** — não caia calado em Especiais.
+
+**Correção (2026-08-10):** este parágrafo dizia que `SP.F` e `SM.A` eram tipologias
+independentes — não são desde 2026-08-01, quando foram reclassificadas em `SP` e
+`SM / SM.F / SR` (ver o bloco de sete reclassificações no próprio módulo). E
+`SEG.A`/`SEG.V`/`SN` deixaram de chegar por completo desde que a exclusão passou a
+valer em todas as fontes: `SEG.A`/`SEG.V` nunca aparecem, e `Especiais` (cujo único
+rótulo é `SN`) fica permanentemente zerada.
 
 **Para medir esta planilha, use `readXlsxSheet` do próprio repositório, nunca um leitor
 improvisado.** Os números da primeira versão do spec vieram de um script de sondagem cujo
@@ -495,8 +501,9 @@ meio da função pega um campo desprevenido.
 Pedido original do dono do projeto: um botão "Atualizar arquivos" na própria página
 publicada, perto de "Atualizar dados", que buscasse dado novo de verdade. **Não dá pra
 existir como botão** -- `planejamento-semanal.html` é HTML estático servido pelo Pages, e
-as três buscas (`atualizar-avancos-online.js`, `atualizar-lab-online.js`,
-`atualizar-equipes-produtivas-online.js`) são processos Node que precisam do Chrome local
+as cinco buscas (`atualizar-avancos-online.js`, `atualizar-demandas-sondagem-online.js`,
+`atualizar-lab-online.js`, `atualizar-demandas-lab-online.js`,
+`atualizar-equipes-online.js`) são processos Node que precisam do Chrome local
 aberto com `--remote-debugging-port=9222` já logado em sond.com.br -- JS de página nenhuma
 aciona isso na máquina de quem só está vendo o site. "Atualizar dados" (acima) só troca
 dados JÁ publicados; ele nunca busca nada sozinho, e não tem como passar a buscar sem virar
@@ -518,8 +525,10 @@ commit + push) por uma chamada só:
 ORCAMENTO_SENHA='...' node tools/semanal/atualizar-arquivos.js
 ```
 
-Cada busca já se protege sozinha contra gravar um CSV vazio/malformado por cima do bom (ver
-`TAXA_SUCESSO_MINIMA` em `atualizar-avancos-online.js`) -- por isso uma busca falhando
+Cada busca já se protege sozinha contra gravar um CSV vazio/malformado por cima do bom (o
+guard de "mês corrente falhou -> aborta sem gravar", em `atualizar-avancos-online.js`;
+`TAXA_SUCESSO_MINIMA`, citada aqui antes de 2026-08-10, não existe mais desde que a busca
+deixou de ser por contrato e passou a ser por mês) -- por isso uma busca falhando
 **não aborta as outras nem o build**: `build-dashboard.js` sempre lê o que já estiver em
 `dist/`, seja do run de agora ou de um anterior. Só aborta ANTES de tentar qualquer coisa
 se `ORCAMENTO_SENHA` não estiver definida. O commit final lista no corpo da mensagem quais
@@ -595,10 +604,63 @@ semana em lugar nenhum" -- essa frase ficou desatualizada por este mesmo pedido 
 JÁ mede, na Tabela e no Gráfico), mas mexer no Consolidado não foi pedido nesta rodada;
 fica como pendência se um dia isso incomodar.
 
+### Regras de dados da Tabela Semanal e dos Gráficos (2026-08-10)
+
+Seis regras fechadas pelo dono do projeto depois de uma auditoria de origem/regra
+de cada número desses dois quadros. **Elas mandam sobre qualquer coisa datada antes
+disto nesta seção.** Escopo declarado: só Tabela Semanal e Gráficos — Balanço,
+Demandas, Alertas e Consolidado entram numa rodada seguinte.
+
+1. **Cobertura e corte em d−1.** Realizado de Sondagem (Link 1) e de Lab (Link 4)
+   cobrem **de 2025-01 em diante** — o Lab buscava só o mês corrente, o que fazia
+   LAB.C/LAB.E aparecer com Realizado zero em qualquer mês passado (medido: 3.550
+   ensaios contra os 169.041 reais de 15 meses). Equipes (Link 7) faz backfill do
+   **ano corrente**, por mês faltante. E **todo Realizado para em d−1** — o dia
+   corrente está incompleto por construção. `realizadoAteEpoch`
+   (`render-aba-semanal.js`) existe só para isso; `hojeEpoch` continua sendo hoje
+   para semana em curso, saldo de pendentes e congelamento do Consolidado.
+2. **Demanda é estoque numa data:** pendência ≤ D e execução > D, com **D = o
+   primeiro dia do período**. Execução exatamente em D já não é demanda em D.
+   Cancelamento **não** participa mais da saída do estoque.
+3. **O Link 1 é a fonte única de sondagem executada** — só muda mês/ano na URL.
+4. **A exclusão vale em todas as fontes** (`tools/comum/exclusoes.js`, uma
+   implementação só). No Lab, `Tomadora` é lida como `Tomador` — é a mesma coluna.
+5. **UTC−3 sempre** (`hojeNoFusoProjeto`/`diaEpochDeOntem` em `tools/comum/datas.js`),
+   inclusive no navegador. **E nada que vem dos links é transformado.**
+6. **Troca de fonte pergunta sobre a anterior** antes de deixar órfão no repositório.
+
+**Duas correções de fato que vieram junto, e que contradiziam o que este arquivo
+dizia:**
+
+- **O Link 1 NÃO tem data de início de sondagem.** Ele tem `Criação da OS` e
+  `Executado Dia`, e só. O mapeador gravava o mesmo `Executado Dia` em duas colunas,
+  uma batizada `Inicio Sondagem` — coluna que a fonte não tem. Confirmado com o dono
+  do projeto que é o mesmo campo; a duplicata saiu, e `parse-avancos.js` expõe um
+  campo só, `executadoDia`. **Isso anula a regra de 2026-08-06** ("sai do estoque
+  quando a sondagem COMEÇA") descrita mais abaixo: com uma data só, começar e
+  executar são o mesmo evento.
+- **Deslocamento vem da coluna `Deslocamento` do Link 1**, não de um regex sobre
+  `Observações de Campo`. Definição do dono do projeto: sondagem com `"Sim"` não foi
+  finalizada por alguma situação durante a execução e foi refeita em outra linha —
+  origina outra sondagem **sem gerar demanda nova**, então fica fora de Sondagens
+  Realizadas **e** das contas de Demandas. Medido na base inteira: a coluna acusa
+  2.950, o regex acusava 7.735, concordando em 2.793 — o regex derrubava **4.942
+  furos legítimos** e deixava passar 157. O Realizado subiu de 40.117 para 44.902
+  furos (**+11,9%**).
+
+**Cuidado ao mexer no cache:** `dist/cache/*.csv` guarda o grid **já mapeado**.
+Mudou o conjunto de colunas, o cache velho tem que ser invalidado — senão os meses
+fechados voltam no formato antigo e o combinador, que usa o cabeçalho do PRIMEIRO
+grid para todos, desalinha o histórico inteiro em silêncio. `cacheUtilizavel()`
+(nos dois fetchers com cache) faz esse guard.
+
 ### Pendências conhecidas
 
-**RESOLVIDO em 2026-08-06 (commit `88f137b`) — saída do estoque de "Demandas Pendentes"
-passou a usar Início Sondagem, não Término.** `pendentesNaData`/`saidaEstoque`
+**SUPERADO em 2026-08-10 — ver "Regras de dados" acima. O Link 1 não tem data de início
+separada da de execução, então esta distinção deixou de existir; a saída do estoque é a
+data de execução. O texto abaixo fica como histórico.** ~~RESOLVIDO em 2026-08-06 (commit
+`88f137b`) — saída do estoque de "Demandas Pendentes" passou a usar Início Sondagem, não
+Término.~~ `pendentesNaData`/`saidaEstoque`
 (`compute-demandas.js:91-99`, `render-aba-semanal.js:111-127`) agora tiram um furo do
 saldo pendente pela data de **Início Sondagem** (mais Cancelamento, o menor dos dois) —
 confirmado pelo dono do projeto contra o extrato Avanço Sondagens: uma demanda deixa de

@@ -8,26 +8,25 @@ const { diaEpoch } = require('../tools/semanal/compute-semanal.js');
 
 const dia = (d) => diaEpoch(new Date(Date.UTC(2026, 6, d))); // julho/2026
 
-function furo({ sup = 'SUP-0001-24', tipologia = 'ST', sondador = 'Fulano', ini, fim }) {
-  return { sup, tipologia, sondador, inicioSondagem: ini, terminoSondagem: fim };
+// 2026-08-10: a fonte (Link 1) tem UMA data de execução, não um par
+// início/término -- confirmado pelo dono do projeto ("confirmo que é o mesmo
+// campo"). A ocupação da equipe passou a ser o dia da execução, e o laço por
+// intervalo saiu: com uma data só ele sempre daria exatamente uma iteração.
+function furo({ sup = 'SUP-0001-24', tipologia = 'ST', sondador = 'Fulano', dia: diaExec }) {
+  return { sup, tipologia, sondador, executadoDia: diaExec };
 }
 
-test('a equipe ocupa TODOS os dias do furo, não só o dia em que terminou', () => {
-  // Um furo de 01 a 03/07 é uma equipe ocupada em três dias. Contar só o
-  // término subestimaria a ocupação em furos longos, que são justamente os
-  // que mais consomem equipe.
-  const porDia = agregarEquipesPorDia([furo({ ini: dia(1), fim: dia(3) })]);
-  assert.deepStrictEqual(porDia['SUP-0001-24||ST'], {
-    [dia(1)]: 1, [dia(2)]: 1, [dia(3)]: 1,
-  });
+test('a equipe ocupa o dia da execução do furo', () => {
+  const porDia = agregarEquipesPorDia([furo({ dia: dia(3) })]);
+  assert.deepStrictEqual(porDia['SUP-0001-24||ST'], { [dia(3)]: 1 });
 });
 
 test('dois sondadores no mesmo dia e SUP contam 2; o mesmo sondador em dois furos conta 1', () => {
   const porDia = agregarEquipesPorDia([
-    furo({ sondador: 'Ana', ini: dia(1), fim: dia(1) }),
-    furo({ sondador: 'Bruno', ini: dia(1), fim: dia(1) }),
+    furo({ sondador: 'Ana', dia: dia(1) }),
+    furo({ sondador: 'Bruno', dia: dia(1) }),
     // Mesmo sondador, outro furo no mesmo dia -- é a mesma equipe, não duas.
-    furo({ sondador: 'Ana', ini: dia(1), fim: dia(1) }),
+    furo({ sondador: 'Ana', dia: dia(1) }),
   ]);
   assert.strictEqual(porDia['SUP-0001-24||ST'][dia(1)], 2);
 });
@@ -39,8 +38,8 @@ test('o mesmo sondador em dois SUPs no mesmo dia conta em cada um -- é assim qu
   // contrário de "sondadores distintos no mês", que inflava 95 pessoas em
   // 185 equipes (medido em julho/2026).
   const porDia = agregarEquipesPorDia([
-    furo({ sup: 'SUP-A', sondador: 'Ana', ini: dia(1), fim: dia(1) }),
-    furo({ sup: 'SUP-B', sondador: 'Ana', ini: dia(1), fim: dia(1) }),
+    furo({ sup: 'SUP-A', sondador: 'Ana', dia: dia(1) }),
+    furo({ sup: 'SUP-B', sondador: 'Ana', dia: dia(1) }),
   ]);
   assert.strictEqual(porDia['SUP-A||ST'][dia(1)], 1);
   assert.strictEqual(porDia['SUP-B||ST'][dia(1)], 1);
@@ -51,25 +50,19 @@ test('o mesmo sondador em dois SUPs no mesmo dia conta em cada um -- é assim qu
 // não ocupou equipe. Ignorar é o comportamento certo, não uma perda.
 test('furo sem sondador não entra na conta', () => {
   const porDia = agregarEquipesPorDia([
-    furo({ sondador: '', ini: dia(1), fim: dia(1) }),
-    furo({ sondador: '   ', ini: dia(2), fim: dia(2) }),
+    furo({ sondador: '', dia: dia(1) }),
+    furo({ sondador: '   ', dia: dia(2) }),
   ]);
   assert.deepStrictEqual(porDia, {});
 });
 
-test('furo sem data de início não entra; sem término, ocupa só o dia de início', () => {
+test('furo sem data de execução não entra -- não dá para saber quando ocupou', () => {
   const porDia = agregarEquipesPorDia([
-    furo({ sondador: 'Ana', ini: null, fim: dia(3) }),
-    furo({ sup: 'SUP-B', sondador: 'Bruno', ini: dia(5), fim: null }),
+    furo({ sondador: 'Ana', dia: null }),
+    furo({ sup: 'SUP-B', sondador: 'Bruno', dia: dia(5) }),
   ]);
-  assert.strictEqual(porDia['SUP-0001-24||ST'], undefined, 'sem início não dá para saber quando ocupou');
+  assert.strictEqual(porDia['SUP-0001-24||ST'], undefined);
   assert.deepStrictEqual(porDia['SUP-B||ST'], { [dia(5)]: 1 });
-});
-
-test('término anterior ao início (dado invertido) não gera intervalo negativo nem laço infinito', () => {
-  const porDia = agregarEquipesPorDia([furo({ sondador: 'Ana', ini: dia(10), fim: dia(3) })]);
-  assert.deepStrictEqual(porDia['SUP-0001-24||ST'], { [dia(10)]: 1 },
-    'cai no comportamento de "sem término": ocupa só o dia de início');
 });
 
 // --- equipesEquivalentes ---------------------------------------------------
@@ -118,27 +111,25 @@ test('período sem nenhuma equipe devolve 0, não null -- ausência no Avanço S
 // dava 2,87 trilhões de iterações. Estes dois testes prendem o tipo real.
 
 test('aceita Date (o que parseAvancos realmente entrega), não só dia-desde-época', () => {
-  const d1 = new Date(Date.UTC(2026, 6, 1));
-  const d3 = new Date(Date.UTC(2026, 6, 3));
   const porDia = agregarEquipesPorDia([
-    { sup: 'SUP-0001-24', tipologia: 'ST', sondador: 'Ana', inicioSondagem: d1, terminoSondagem: d3 },
+    { sup: 'SUP-0001-24', tipologia: 'ST', sondador: 'Ana', executadoDia: new Date(Date.UTC(2026, 6, 3)) },
   ]);
-  assert.deepStrictEqual(porDia['SUP-0001-24||ST'], { [dia(1)]: 1, [dia(2)]: 1, [dia(3)]: 1 });
+  assert.deepStrictEqual(porDia['SUP-0001-24||ST'], { [dia(3)]: 1 });
 });
 
 test('Date e número produzem exatamente o mesmo resultado', () => {
   const comDate = agregarEquipesPorDia([
-    { sup: 'S', tipologia: 'T', sondador: 'Ana', inicioSondagem: new Date(Date.UTC(2026, 6, 5)), terminoSondagem: new Date(Date.UTC(2026, 6, 6)) },
+    { sup: 'S', tipologia: 'T', sondador: 'Ana', executadoDia: new Date(Date.UTC(2026, 6, 5)) },
   ]);
   const comNumero = agregarEquipesPorDia([
-    { sup: 'S', tipologia: 'T', sondador: 'Ana', inicioSondagem: dia(5), terminoSondagem: dia(6) },
+    { sup: 'S', tipologia: 'T', sondador: 'Ana', executadoDia: dia(5) },
   ]);
   assert.deepStrictEqual(comDate, comNumero);
 });
 
-test('Date inválido não vira intervalo gigante -- entra como ausente', () => {
+test('Date inválido entra como ausente, nunca como dia', () => {
   const porDia = agregarEquipesPorDia([
-    { sup: 'S', tipologia: 'T', sondador: 'Ana', inicioSondagem: new Date('nada'), terminoSondagem: dia(6) },
+    { sup: 'S', tipologia: 'T', sondador: 'Ana', executadoDia: new Date('nada') },
   ]);
   assert.deepStrictEqual(porDia, {});
 });

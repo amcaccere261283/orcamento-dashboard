@@ -751,9 +751,15 @@ var mesSelecionadoIdx = Math.max(0, Math.min(11, window.__VIGENTE_IDX__));
 // anterior de montarAbaBalanco construía TRÊS Dates novos na mesma expressão,
 // o que numa virada de meia-noite entre eles montaria uma data que nunca
 // existiu.
+// UTC-3 desde 2026-08-10 ("considerar o utc-3 sempre"), e não mais o fuso
+// LOCAL de quem abre a página: um viewer em Lisboa ou nos EUA via a semana
+// em curso mudar de lugar, e com ela o ramo da Tendência e o saldo de
+// Demandas Pendentes. O dashboard descreve uma operação em São Paulo, então
+// "hoje" é o dia de lá, independente de onde a página é aberta. O Brasil não
+// tem horário de verão desde 2019, então o deslocamento fixo é exato.
 function hojeEpochDoNavegador() {
   var agora = new Date();
-  return ComputeSemanal.diaEpoch(new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate())));
+  return ComputeSemanal.diaEpoch(new Date(agora.getTime() - 3 * 60 * 60 * 1000));
 }
 
 // As semanas reais do mês SELECIONADO -- o mesmo calendário que a Tabela
@@ -1477,7 +1483,7 @@ function atualizarDadosAoVivoSemanal() {
       // reconhecem -- e computeDemandas devolveria zeros em todas as séries com
       // o status dizendo "Atualizado". Erro antes de qualquer atribuição, pra
       // manter a atomicidade tudo-ou-nada.
-      var algumaData = furos.some(function (f) { return f.criacaoOS || f.terminoSondagem || f.conclusao; });
+      var algumaData = furos.some(function (f) { return f.criacaoOS || f.executadoDia; });
       if (furos.length > 0 && !algumaData) {
         throw new Error('nenhuma data legível encontrada nos furos do espelho de Avanços -- confira se o formato de data mudou (serial vs texto)');
       }
@@ -1586,15 +1592,27 @@ function atualizarDadosAoVivoSemanal() {
         });
         if (Object.keys(porDiaFracaoCliente).length) {
           demandasNovas.equipesPorDia = porDiaFracaoCliente;
-          // JUNTO com equipesPorDia, sempre: fracionadas cobre UM mês, e sem
-          // isto escolher um mês passado desenharia Δ equipes quase zero sem o
-          // aviso de "sem dado". Período equivalente ao que build-dashboard.js
-          // deriva: o mês/ano do dia mais antigo encontrado.
-          var diaRepresentativoCliente = new Date(Math.min.apply(null, diasFracaoCliente) * 86400000);
-          demandasNovas.equipesPeriodo = {
-            ano: diaRepresentativoCliente.getUTCFullYear(),
-            mes: diaRepresentativoCliente.getUTCMonth() + 1,
-          };
+          // JUNTO com equipesPorDia, sempre -- e pela MESMA regra que
+          // parseEquipesFracaoCsv aplica no build (build-dashboard.js): um
+          // mês só no CSV mantém o gate de cobertura; vários meses devolvem
+          // null ("sem restrição"), porque equipesPeriodo é um contrato de um
+          // mês só e declarar um deles apagaria o Δ equipes de todos os
+          // outros. Os dois caminhos TÊM que concordar: build e refresh
+          // desenham a mesma tela.
+          var mesesFracaoCliente = {};
+          for (var iF = 0; iF < diasFracaoCliente.length; iF++) {
+            var dF = new Date(diasFracaoCliente[iF] * 86400000);
+            mesesFracaoCliente[dF.getUTCFullYear() + '-' + (dF.getUTCMonth() + 1)] = true;
+          }
+          if (Object.keys(mesesFracaoCliente).length === 1) {
+            var diaRepresentativoCliente = new Date(Math.min.apply(null, diasFracaoCliente) * 86400000);
+            demandasNovas.equipesPeriodo = {
+              ano: diaRepresentativoCliente.getUTCFullYear(),
+              mes: diaRepresentativoCliente.getUTCMonth() + 1,
+            };
+          } else {
+            demandasNovas.equipesPeriodo = null;
+          }
         }
       }
 

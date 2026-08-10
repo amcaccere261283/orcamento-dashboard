@@ -1,15 +1,18 @@
 'use strict';
 const { classificarEnsaioLab } = require('../comum/tipologias-lab.js');
 const { dataDeTexto } = require('./parse-avancos.js');
+const { linhaExcluida } = require('../comum/exclusoes.js');
 
 // Link 5 (detalhes-ensaios-programados): ensaios de lab ainda PENDENTES, um
 // por linha, já auto-suficiente (tem a própria Data Programada -- diferente
 // de Demandas de sondagem, não precisa de join com outra fonte). Ver
 // docs/superpowers/specs/2026-08-08-troca-origem-realizado-demandas-equipes-design.md,
 // seção "Link 5".
-const RE_EXCLUSAO_TIPO = /SEG|SN/;
-const TOMADOR_EXCLUIDO = 'Suporte Sondagens - Filial Lapa';
-
+// A exclusão mora em tools/comum/exclusoes.js desde 2026-08-10 -- uma
+// implementação só para as cinco fontes. linhaExcluida() já procura o
+// tomador tanto em "Tomador" quanto em "Tomadora": o extrato de lab usa a
+// segunda grafia, e a versão anterior deste arquivo lia só "Tomador", então
+// o filtro de tomador nunca disparava aqui (o de tipo disparava).
 function texto(valor) {
   return String(valor === null || valor === undefined ? '' : valor).trim();
 }
@@ -19,9 +22,7 @@ function mapearDemandasLab(linhas) {
   let excluidos = 0;
 
   for (const linha of linhas || []) {
-    const tomador = texto(linha['Tomador']);
-    const sondagemTipo = texto(linha['Sondagem Tipo']).toUpperCase();
-    if (tomador === TOMADOR_EXCLUIDO || RE_EXCLUSAO_TIPO.test(sondagemTipo)) {
+    if (linhaExcluida(linha, texto(linha['Sondagem Tipo']))) {
       excluidos++;
       continue;
     }

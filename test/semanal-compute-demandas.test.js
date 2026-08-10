@@ -12,7 +12,7 @@ const d = (ano, mes, dia) => new Date(Date.UTC(ano, mes - 1, dia));
 function furo(over = {}) {
   return Object.assign({
     sup: 'SUP-0001-24', tipologia: 'SP', status: 'CONCLUIDO',
-    criacaoOS: d(2026, 1, 10), terminoSondagem: d(2026, 2, 10),
+    criacaoOS: d(2026, 1, 10), executadoDia: d(2026, 2, 10),
     conclusao: d(2026, 3, 10), cancelamento: null, atualizado: d(2026, 3, 12),
   }, over);
 }
@@ -38,8 +38,8 @@ test('cada série cai no mês da SUA data: chegada em jan, sondagem em fev, rela
 
 test('chegadas conta TODOS os status, inclusive a que foi cancelada depois', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null }),
-    furo({ status: 'PENDENTE', terminoSondagem: null, conclusao: null }),
+    furo({ status: 'CANCELADO', executadoDia: null, conclusao: null }),
+    furo({ status: 'PENDENTE', executadoDia: null, conclusao: null }),
   ], PERIODOS_2026);
   assert.strictEqual(serieDe(saida, 'SP', 'chegadas')[0], 2);
 });
@@ -61,7 +61,7 @@ test('relatório concluído exige status CONCLUIDO: medido em 2026-07-30, 0 das 
 
 test('canceladas ancoram em cancelamento (coluna P), não em atualizado (coluna Q)', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null,
+    furo({ status: 'CANCELADO', executadoDia: null, conclusao: null,
            cancelamento: d(2026, 2, 20), atualizado: d(2026, 11, 30) }),
   ], PERIODOS_2026);
   assert.strictEqual(serieDe(saida, 'SP', 'canceladas')[1], 1, 'fevereiro, o mês do cancelamento');
@@ -70,70 +70,76 @@ test('canceladas ancoram em cancelamento (coluna P), não em atualizado (coluna 
 
 test('cancelada sem data legível fica fora da série de canceladas', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null, cancelamento: null }),
+    furo({ status: 'CANCELADO', executadoDia: null, conclusao: null, cancelamento: null }),
   ], PERIODOS_2026);
   assert.deepStrictEqual(serieDe(saida, 'SP', 'canceladas'), new Array(12).fill(0));
 });
 
-test('cancelada NÃO entra no estoque de pendentes, em nenhum mês', () => {
-  const saida = computeDemandas([
-    furo({ status: 'CANCELADO', terminoSondagem: null, conclusao: null, cancelamento: d(2026, 1, 5) }),
-  ], PERIODOS_2026);
-  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(0));
-});
+// --- saída do estoque: só a EXECUÇÃO ---------------------------------------
+//
+// Regra do dono do projeto, 2026-08-10: "na data de referência, o que eu
+// tenho onde a data de pendência é menor ou igual a ela e a data de execução
+// foi após ela". O cancelamento deixou de participar -- e não por descuido:
+// a fonte atual (Link 1) não traz data de cancelamento nenhuma, então a
+// regra anterior (min entre início e cancelamento) só existia no papel.
 
-test('cancelada sai do estoque NO MÊS do cancelamento -- estava aberta antes disso', () => {
+test('cancelada SEM execução permanece no estoque -- é dívida conhecida, não bug', () => {
+  // O Link 1 não traz data de cancelamento, então um furo cancelado nunca
+  // ganha data de execução e nunca sai do estoque. São poucos (29 em 47.809
+  // medidos em 2026-08-10), mas inflam a demanda de todo mês futuro. O
+  // tratamento (usar "Data Status Atual" como saída quando o status é
+  // CANCELADO) está registrado como pendência junto com a aba Demandas.
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 10), terminoSondagem: null,
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 10), executadoDia: null,
            conclusao: null, cancelamento: d(2026, 4, 15) }),
   ], PERIODOS_2026);
-  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes').slice(0, 6), [1, 1, 1, 0, 0, 0],
-    'aberta jan-mar, fora a partir de abril');
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(1),
+    'a data de cancelamento NÃO tira mais do estoque -- só a execução tira');
 });
 
-test('cancelada SEM data legível continua no estoque -- "não sei quando saiu" não é "saiu no começo"', () => {
+test('cancelada que chegou a ser executada sai do estoque na execução, como qualquer furo', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 10), terminoSondagem: null,
-           conclusao: null, cancelamento: null }),
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 5), executadoDia: d(2026, 2, 10),
+           conclusao: null, cancelamento: d(2026, 6, 1) }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes').slice(0, 4), [1, 0, 0, 0],
+    'a data de cancelamento posterior é irrelevante: quem manda é a execução');
+});
+
+test('furo criado antes do ano e nunca executado conta no estoque de todos os meses', () => {
+  const saida = computeDemandas([
+    furo({ status: 'PENDENTE', criacaoOS: d(2025, 6, 1), executadoDia: null, conclusao: null }),
   ], PERIODOS_2026);
   assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(1));
 });
 
-test('cancelada cujo cancelamento é anterior ao ano nunca entra no estoque de 2026', () => {
+test('estoque é SALDO: o furo aberto em janeiro conta em todo mês até ser executado', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', criacaoOS: d(2025, 6, 1), terminoSondagem: null,
-           conclusao: null, cancelamento: d(2025, 8, 1) }),
-  ], PERIODOS_2026);
-  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(0));
-});
-
-test('início vence cancelamento posterior: quem começou a sondagem saiu do estoque ali', () => {
-  const saida = computeDemandas([
-    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 5), inicioSondagem: d(2026, 2, 10),
-           terminoSondagem: null, conclusao: null, cancelamento: d(2026, 6, 1) }),
-  ], PERIODOS_2026);
-  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes').slice(0, 4), [1, 0, 0, 0]);
-});
-
-test('estoque é SALDO: o furo aberto em janeiro conta em todo mês até o término', () => {
-  const saida = computeDemandas([
-    furo({ status: 'PENDENTE', criacaoOS: d(2026, 1, 10), terminoSondagem: null, conclusao: null }),
+    furo({ status: 'PENDENTE', criacaoOS: d(2026, 1, 10), executadoDia: null, conclusao: null }),
   ], PERIODOS_2026);
   assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(1));
 });
 
-test('o furo sai do estoque no mês em que a sondagem começa, não antes nem depois', () => {
+test('o furo sai do estoque no mês em que é EXECUTADO, não antes nem depois', () => {
   const saida = computeDemandas([
-    furo({ criacaoOS: d(2026, 1, 10), inicioSondagem: d(2026, 3, 20) }),
+    furo({ criacaoOS: d(2026, 1, 10), executadoDia: d(2026, 3, 20) }),
   ], PERIODOS_2026);
-  const pendentes = serieDe(saida, 'SP', 'pendentes');
-  assert.deepStrictEqual(pendentes.slice(0, 4), [1, 1, 0, 0],
-    'março é o mês do início: ao FIM de março o furo já não está aberto');
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes').slice(0, 4), [1, 1, 0, 0],
+    'março é o mês da execução: ao FIM de março o furo já não está aberto');
+});
+
+test('execução EXATAMENTE no último dia do mês já tira do estoque daquele mês', () => {
+  // "a data de execução foi APÓS o dia D" -- execução == D já não é demanda
+  // em D. Confirmado com o dono do projeto em 2026-08-10.
+  const saida = computeDemandas([
+    furo({ criacaoOS: d(2026, 1, 10), executadoDia: d(2026, 1, 31) }),
+  ], PERIODOS_2026);
+  assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes').slice(0, 2), [0, 0]);
 });
 
 test('furo que chegou antes do ano (legado) entra no estoque desde janeiro, mas não em chegadas', () => {
   const saida = computeDemandas([
-    furo({ status: 'PENDENTE', criacaoOS: d(2025, 11, 3), terminoSondagem: null, conclusao: null }),
+    furo({ status: 'PENDENTE', criacaoOS: d(2025, 11, 3), executadoDia: null, conclusao: null }),
   ], PERIODOS_2026);
   assert.strictEqual(serieDe(saida, 'SP', 'chegadas')[0], 0);
   assert.strictEqual(serieDe(saida, 'SP', 'pendentes')[0], 1);
@@ -141,14 +147,14 @@ test('furo que chegou antes do ano (legado) entra no estoque desde janeiro, mas 
 
 test('furo concluído sem data de término válida nunca sai do estoque -- limitação conhecida, não bug', () => {
   const saida = computeDemandas([
-    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 5), terminoSondagem: null, conclusao: null }),
+    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 5), executadoDia: null, conclusao: null }),
   ], PERIODOS_2026);
   assert.deepStrictEqual(serieDe(saida, 'SP', 'pendentes'), new Array(12).fill(1));
 });
 
 test('data fora dos 12 períodos não vira mês nenhum, e não estoura o array', () => {
   const saida = computeDemandas([
-    furo({ criacaoOS: d(2027, 2, 1), terminoSondagem: d(2027, 3, 1), conclusao: d(2027, 4, 1) }),
+    furo({ criacaoOS: d(2027, 2, 1), executadoDia: d(2027, 3, 1), conclusao: d(2027, 4, 1) }),
   ], PERIODOS_2026);
   assert.deepStrictEqual(serieDe(saida, 'SP', 'chegadas'), new Array(12).fill(0));
   assert.strictEqual(serieDe(saida, 'SP', 'chegadas').length, 12);
@@ -156,7 +162,7 @@ test('data fora dos 12 períodos não vira mês nenhum, e não estoura o array',
 
 test('data nula é ignorada sem quebrar', () => {
   const saida = computeDemandas([
-    furo({ criacaoOS: null, terminoSondagem: null, conclusao: null, atualizado: null }),
+    furo({ criacaoOS: null, executadoDia: null, conclusao: null, atualizado: null }),
   ], PERIODOS_2026);
   assert.deepStrictEqual(serieDe(saida, 'SP', 'chegadas'), new Array(12).fill(0));
 });
@@ -180,8 +186,8 @@ test('SEG.A e SEG.V só aparecem quando há acionamento no período', () => {
 
 test('totais somam as tipologias mês a mês; pendentes também soma (saldos do MESMO mês se somam)', () => {
   const saida = computeDemandas([
-    furo({ tipologia: 'SP', status: 'PENDENTE', criacaoOS: d(2026, 1, 5), terminoSondagem: null, conclusao: null }),
-    furo({ tipologia: 'ST', status: 'PENDENTE', criacaoOS: d(2026, 1, 6), terminoSondagem: null, conclusao: null }),
+    furo({ tipologia: 'SP', status: 'PENDENTE', criacaoOS: d(2026, 1, 5), executadoDia: null, conclusao: null }),
+    furo({ tipologia: 'ST', status: 'PENDENTE', criacaoOS: d(2026, 1, 6), executadoDia: null, conclusao: null }),
   ], PERIODOS_2026);
   assert.strictEqual(saida.totais.chegadas[0], 2);
   assert.strictEqual(saida.totais.pendentes[0], 2);
@@ -223,37 +229,37 @@ test('canceladas exige status CANCELADO: não-cancelados com cancelamento válid
 
 test('porRegistroEventos: chegada tem um dia por furo (qualquer status), sondagemRealizada só CONCLUIDO/EXECUTADO', () => {
   const saida = computeDemandas([
-    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 5), terminoSondagem: d(2026, 2, 10) }),
-    furo({ status: 'PENDENTE', criacaoOS: d(2026, 1, 6), terminoSondagem: null, conclusao: null }),
+    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 5), executadoDia: d(2026, 2, 10) }),
+    furo({ status: 'PENDENTE', criacaoOS: d(2026, 1, 6), executadoDia: null, conclusao: null }),
   ], PERIODOS_2026);
   const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
   assert.strictEqual(entrada.chegada.length, 2, 'os 2 furos têm criacaoOS, PENDENTE inclusive');
   assert.strictEqual(entrada.sondagemRealizada.length, 1, 'só o CONCLUIDO conta pro fluxo Realizado');
 });
 
-test('porRegistroEventos: saidaEstoque é o MENOR entre início e cancelamento, nunca os dois separados -- furos CANCELADO com início preenchido existem na planilha real', () => {
+test('porRegistroEventos: saidaEstoque é a data de EXECUÇÃO, uma só por furo', () => {
   const saida = computeDemandas([
-    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), inicioSondagem: d(2026, 2, 1),
-           terminoSondagem: null, cancelamento: d(2026, 3, 1), conclusao: null }),
-  ], PERIODOS_2026);
-  const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
-  assert.strictEqual(entrada.saidaEstoque.length, 1, 'um furo só sai do estoque uma vez, mesmo com 2 datas candidatas');
-  assert.strictEqual(entrada.saidaEstoque[0], diaEpoch(d(2026, 2, 1)), 'usa a data mais cedo (início), não o cancelamento');
-});
-
-test('porRegistroEventos: cancelamento antes do início também usa o menor (o cancelamento)', () => {
-  const saida = computeDemandas([
-    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), inicioSondagem: d(2026, 5, 1),
-           terminoSondagem: null, cancelamento: d(2026, 2, 1), conclusao: null }),
+    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 1), executadoDia: d(2026, 2, 1), conclusao: null }),
   ], PERIODOS_2026);
   const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
   assert.strictEqual(entrada.saidaEstoque.length, 1);
   assert.strictEqual(entrada.saidaEstoque[0], diaEpoch(d(2026, 2, 1)));
 });
 
-test('porRegistroEventos: furo sem término nem cancelamento nunca aparece em saidaEstoque (nunca sai do estoque)', () => {
+test('porRegistroEventos: a data de cancelamento NÃO gera saída de estoque', () => {
+  // Antes de 2026-08-10 o cancelamento competia com o início pelo "menor".
+  // Agora ele é ignorado: a saída é a execução, e só ela.
   const saida = computeDemandas([
-    furo({ status: 'PENDENTE', criacaoOS: d(2026, 1, 1), terminoSondagem: null, cancelamento: null, conclusao: null }),
+    furo({ status: 'CANCELADO', criacaoOS: d(2026, 1, 1), executadoDia: null,
+           cancelamento: d(2026, 2, 1), conclusao: null }),
+  ], PERIODOS_2026);
+  const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
+  assert.deepStrictEqual(entrada.saidaEstoque, []);
+});
+
+test('porRegistroEventos: furo sem execução nunca aparece em saidaEstoque (nunca sai do estoque)', () => {
+  const saida = computeDemandas([
+    furo({ status: 'PENDENTE', criacaoOS: d(2026, 1, 1), executadoDia: null, cancelamento: null, conclusao: null }),
   ], PERIODOS_2026);
   const entrada = saida.porRegistroEventos['SUP-0001-24||SP'];
   assert.deepStrictEqual(entrada.saidaEstoque, []);
@@ -261,8 +267,8 @@ test('porRegistroEventos: furo sem término nem cancelamento nunca aparece em sa
 
 test('porRegistroEventos: reconstrói o saldo mensal correto, contando chegada/saidaEstoque até o fim de cada mês', () => {
   const furos = [
-    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 10), inicioSondagem: d(2026, 3, 20), terminoSondagem: null }),
-    furo({ status: 'PENDENTE', criacaoOS: d(2026, 2, 5), terminoSondagem: null, conclusao: null }),
+    furo({ status: 'CONCLUIDO', criacaoOS: d(2026, 1, 10), executadoDia: d(2026, 3, 20) }),
+    furo({ status: 'PENDENTE', criacaoOS: d(2026, 2, 5), executadoDia: null, conclusao: null }),
   ];
   const saida = computeDemandas(furos, PERIODOS_2026);
   const eventos = saida.porRegistroEventos['SUP-0001-24||SP'];

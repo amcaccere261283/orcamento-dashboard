@@ -16,8 +16,11 @@ const { HEADER_SAIDA } = require('./mapear-producao-total.js');
 // Link 3 (linha correspondente) e o Tipo do próprio Link 2 (fonte da verdade
 // do Tipo individual, ver o teste "Link 3 com Tipo diferente... não confunde
 // a linha").
-const RE_EXCLUSAO_TIPO = /SEG|SN/;
-const TOMADOR_EXCLUIDO = 'Suporte Sondagens - Filial Lapa';
+// A exclusão mora em tools/comum/exclusoes.js desde 2026-08-10. Aqui ela
+// continua sendo aplicada DEPOIS do join, pelo mesmo motivo de sempre: o
+// Link 2 (furos pendentes) não tem coluna de tomador -- só o Link 3 tem --
+// enquanto o Tipo confiável é o do próprio Link 2.
+const { tomadorExcluido, tipoExcluido } = require('../comum/exclusoes.js');
 
 function texto(valor) {
   return String(valor === null || valor === undefined ? '' : valor).trim();
@@ -44,16 +47,22 @@ function juntarPendentesSondagem(linhasLink2, linhasLink3) {
     const info = porOS.get(os);
     if (!info) { semContrato++; continue; }
     const tipo = texto(l2['Tipo']);
-    if (info.tomador === TOMADOR_EXCLUIDO || RE_EXCLUSAO_TIPO.test(tipo.toUpperCase())) {
+    if (tomadorExcluido(info.tomador) || tipoExcluido(tipo)) {
       excluidos++;
       continue;
     }
+    // Layout de HEADER_SAIDA (mapear-producao-total.js), que encolheu em
+    // 2026-08-10: Contrato, Criação da OS, Tipo, Status, Executado Dia,
+    // Deslocamento, Observações de Campo, OS, Sondador. Furo pendente não
+    // tem execução nem deslocamento -- fica vazio, e é isso que o mantém no
+    // estoque de demandas pela regra de compute-demandas.js.
     rows.push([
       info.contrato,
       info.osDesde,
       tipo,
       'PENDENTE',
-      '', '', '', '', '',
+      '',
+      '',
       '',
       os,
       '',

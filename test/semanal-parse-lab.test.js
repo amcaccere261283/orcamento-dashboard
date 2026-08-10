@@ -127,3 +127,36 @@ test('Data Programada ausente no cabeçalho lança (coluna passou a ser obrigat�
   ];
   assert.throws(() => parseLab(grid), /Data Programada/);
 });
+
+// --- projeção de colunas na publicação (2026-08-10) ------------------------
+//
+// O extrato traz 11 colunas e só 5 têm consumidor. Com a cobertura indo de 1
+// para 20 meses, o CSV publicado saltou de 516 KB para 33 MB -- e ele é
+// baixado inteiro pelo botão "Atualizar dados" a cada clique. Projetar corta
+// para 12 MB sem perder nada que a página leia.
+const { projetarColunas, COLUNAS_PUBLICADAS } = require('../tools/semanal/atualizar-lab-online.js');
+
+test('projetarColunas mantém exatamente as colunas publicadas, na ordem', () => {
+  const cab = ['Data Programada', 'Ensaiado Dia', 'Tomadora', 'ID Contrato', 'Usuário',
+    'Tipo de Amostra', 'Tipo de Ensaio', 'Cod. Amostra', 'Identificação', 'OS', 'Ações'];
+  const linha = ['01/03/2026', '05/03/2026', 'CCR MSVia', 'SUP-1', 'Fulano',
+    'PREP', 'LL', 'AM-01', 'id', '123-26', ''];
+  const r = projetarColunas(cab, [linha]);
+  assert.deepStrictEqual(r.cabecalho, COLUNAS_PUBLICADAS);
+  assert.deepStrictEqual(r.linhas[0], ['01/03/2026', '05/03/2026', 'CCR MSVia', 'SUP-1', 'LL']);
+});
+
+test('o cabeçalho projetado ainda satisfaz locateColunasLab -- é o contrato que parseLab exige', () => {
+  assert.doesNotThrow(() => locateColunasLab(COLUNAS_PUBLICADAS));
+});
+
+test('projetarColunas LANÇA se a fonte deixar de trazer uma coluna publicada', () => {
+  const cab = ['Data Programada', 'Ensaiado Dia', 'Tomadora', 'ID Contrato'];
+  assert.throws(() => projetarColunas(cab, [[]]), /Tipo de Ensaio/);
+});
+
+test('projetarColunas tolera espaçamento duplo no cabeçalho da fonte', () => {
+  const cab = ['Data  Programada', 'Ensaiado Dia', 'Tomadora', 'ID Contrato', 'Tipo de Ensaio'];
+  const r = projetarColunas(cab, [['a', 'b', 'c', 'd', 'e']]);
+  assert.deepStrictEqual(r.linhas[0], ['a', 'b', 'c', 'd', 'e']);
+});

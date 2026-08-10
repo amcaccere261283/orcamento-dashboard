@@ -9,8 +9,14 @@ test('todo destino do mapa é LAB.C ou LAB.E, nunca outra coisa', () => {
   }
 });
 
-test('mapa consolidado 2026-08-08 tem 107 tipos de ensaio (125 pares do Frcst Novo 2.xlsx menos 19 de tipologia de avanço, de escopo de tipologias-avancos.js, mais MCT-INFILT achado ao vivo em produção)', () => {
-  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 107);
+// 125 pares do Frcst Novo 2.xlsx menos 19 de tipologia de avanço (escopo de
+// tipologias-avancos.js), mais MCT-INFILT achado ao vivo em produção = 107 em
+// 2026-08-08. Em 2026-08-10 subiu para 109: RES.CT e T.PULV apareceram quando
+// o Realizado de Lab passou a cobrir desde 2025-01 em vez de só o mês
+// corrente -- são 18 e 13 ensaios, todos de 2025, e por isso nunca tinham
+// chegado ao build. Classificados como LAB.E pelo dono do projeto.
+test('mapa consolidado tem 109 tipos de ensaio', () => {
+  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 109);
 });
 
 test('COMP.EN.3 (achado na primeira busca online de Lab Realizado) classifica como Convencional, mesmo padrão da variante ".3" já mapeada em COMP.EM.3 (após consolidação 2026-08-08)', () => {
@@ -88,4 +94,30 @@ test('pares do Frcst ausentes do mapa antigo entram sem quebrar os já existente
   // Rótulos já existentes que NÃO mudaram continuam iguais.
   assert.strictEqual(classificarEnsaioLab('LL'), 'LAB.C');
   assert.strictEqual(classificarEnsaioLab('TRI4.CD'), 'LAB.E');
+});
+
+// Regressão de 2026-08-10: classificarEnsaioLab faz .toUpperCase() na chave
+// antes de consultar o mapa, mas SETE chaves do mapa tinham "d" minúsculo
+// ('COMP.S.28d', 'COMP.D.7d', ...). Elas eram inalcançáveis por construção --
+// nenhuma entrada da fonte jamais casaria com elas -- e o efeito só apareceu
+// quando o Realizado de Lab passou a cobrir 20 meses em vez de 1, trazendo
+// ensaios desses tipos e derrubando o build com "tipo desconhecido".
+//
+// O build falhar foi o comportamento CERTO (fail-loud). O defeito era o mapa
+// prometer uma classificação que nunca seria usada.
+test('toda chave do mapa está em CAIXA ALTA -- o lookup normaliza, então chave com minúscula é inalcançável', () => {
+  const inalcancaveis = Object.keys(MAPA_TIPO_ENSAIO_LAB).filter((k) => k !== k.toUpperCase());
+  assert.deepStrictEqual(inalcancaveis, [],
+    'estas chaves nunca casariam: o lookup faz .toUpperCase() e elas têm minúscula');
+});
+
+test('os 7 tipos que estavam inalcançáveis agora classificam', () => {
+  for (const tipo of ['COMP.D.28D', 'COMP.D.7D', 'COMP.S.28D', 'COMP.S.3D', 'COMP.S.3D.2', 'COMP.S.3D.3', 'COMP.S.7D']) {
+    assert.strictEqual(classificarEnsaioLab(tipo), 'LAB.E', tipo);
+  }
+});
+
+test('a classificação continua insensível à caixa da FONTE -- é o lookup que normaliza', () => {
+  assert.strictEqual(classificarEnsaioLab('comp.s.28d'), 'LAB.E');
+  assert.strictEqual(classificarEnsaioLab(' COMP.S.28D '), 'LAB.E');
 });

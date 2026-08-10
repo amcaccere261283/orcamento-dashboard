@@ -136,22 +136,44 @@ test('semana encerrada e semana em curso trazem a data-ancora no cabecalho, sem 
   assert.strictEqual((thTendencia(encerrada).match(/06\/07/g) || []).length, 1);
 });
 
-// Lacuna achada por mutação na revisão final de 2026-08-04: trocar
+// HISTÓRICO -- leia antes de "consertar" este teste.
+//
+// Ele nasceu de uma lacuna achada por mutação em 2026-08-04: trocar
 // ctx.indiceAtualEfetivo por ctx.indiceAtual na chamada congelada
-// (render-aba-consolidado.js) deixava a bateria INTEIRA verde. Nenhuma fixture
-// punha furo no 1º DIA da semana escolhida, que é o único dia em que o índice
-// passado ao recálculo muda o resultado -- com hojeEfetivo = início da S2, é
-// esse índice que decide se a S2 é "a vigente" (parcial, até 06/07) ou se a
-// vigente é outra semana.
-test('a Tendência congelada usa o índice de semana do HOJE EFETIVO, não o do hoje real', () => {
+// (render-aba-consolidado.js) deixava a bateria INTEIRA verde. A fixture
+// original punha 30 furos em 06/07 (1º dia da S2), congelava a S2 e esperava
+// 97 -- contra 74 com o índice trocado.
+//
+// A regra de 2026-08-10 ("realizado sempre considerar até d-1") APAGOU essa
+// diferença, e não por acidente: congelar ancora hojeEfetivo no PRIMEIRO dia
+// da semana k, então a janela de Realizado dela vai de semanas[k].inicio até
+// semanas[k].inicio - 1 -- vazia por construção. E como só se congela semana
+// que já começou, o índice do hoje real é sempre >= k, o que faz as semanas
+// anteriores a k serem contadas inteiras pelos DOIS caminhos. Verificado por
+// varredura exaustiva (todas as semanas de julho/2026 x todos os dias de
+// evento x todos os índices possíveis): no cenário real, nenhuma combinação
+// distingue os dois. O parâmetro continua semanticamente certo, mas deixou
+// de ser observável aqui.
+//
+// O que este teste prende agora é o mecanismo que sobrou e importa: a
+// Tendência congelada é RECALCULADA na âncora, e por isso a semana ancorada
+// não carrega nenhum Realizado dela mesma -- é a projeção que se fazia para
+// a semana inteira no dia em que ela começou.
+test('a Tendência congelada é recalculada na âncora: a semana ancorada não conta Realizado dela mesma', () => {
   const eventos = [];
   for (let i = 0; i < 30; i++) eventos.push(diaJul(6)); // 06/07 = 1º dia da S2
   const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
     semanaIdx: 1, demandas: demandasCom({ 'SUP-A||ST': eventos }), hojeEpoch: diaJul(15),
   }));
   const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
-  assert.strictEqual(celulas[5], '97',
-    'com ctx.indiceAtual (hoje real, S3) no lugar de ctx.indiceAtualEfetivo (S2) esta célula cai pra 74');
+  assert.strictEqual(celulas[5], '74',
+    'os 30 furos de 06/07 NÃO entram: em 06/07 nenhum dia da S2 tinha fechado ainda (corte em d-1)');
+
+  // E o Realizado exibido NUNCA congela -- ele sai do hoje real, então os
+  // mesmos 30 furos aparecem nele. É o contraste que prova que são duas
+  // séries com âncoras diferentes, não uma só.
+  assert.strictEqual(celulas[4], '30',
+    'o Realizado da S2 vê os 30 furos de 06/07, porque é calculado com o hoje real (15/07)');
 });
 
 // --- Abertura de linhas: a hierarquia da Tabela do orçamento --------------

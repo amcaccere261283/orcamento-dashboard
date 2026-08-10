@@ -552,11 +552,11 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
   // Datas em serial Excel (46091 = 2026-03-10, 46093 = 2026-03-12,
   // 46114 = 2026-04-02, 46117 = 2026-04-05): o fallback pra texto dd/MM/yyyy
   // de dataSaneada é coberto pelos testes unitários de cada parser.
-  // "Inicio Sondagem" e "Sondador" entraram em 2026-08-03 (equipes
-  // mobilizadas, ver compute-equipes-mobilizadas.js) -- são obrigatórias no
-  // parser, então precisam existir aqui ou locateColunasAvancos lança.
-  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo,Inicio Sondagem,Sondador,OS\n'
-    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,,46091,Sondador Sintético,17851-26\n';
+  // O contrato de colunas encolheu em 2026-08-10: "Executado Dia" (data
+  // única de execução) e "Deslocamento" (coluna própria do Link 1) no lugar
+  // do par Inicio/Termino e das três datas que o Link 1 não tem.
+  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Observações de Campo,OS,Sondador\n'
+    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,Não,,17851-26,Sondador Sintético\n';
   const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n'
     + 'SUP-0002-25,46091,LL,46091\n';
 
@@ -606,7 +606,7 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
   // de ensaiosLab soma em tipologias/totais.sondagemRealizada; desde a Task 8,
   // 'criacao' (Data Programada) alimenta chegadas de Lab também.
   assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 2, 'furo SP (Criação da OS) + ensaio LAB.C (Data Programada), ambos viram chegada em tipologias/totais');
-  // 2: 1 do furo SP (Avanços, CONCLUIDO com Termino Sondagem) + 1 do ensaio
+  // 2: 1 do furo SP (Avanços, CONCLUIDO com Executado Dia) + 1 do ensaio
   // LAB.C (Lab, Ensaiado Dia = concluido)
   assert.strictEqual(demandas.totais.sondagemRealizada.reduce((a, b) => a + b, 0), 2, 'furo SP + ensaio LAB.C, ambos viram sondagem realizada em tipologias/totais');
   assert.ok(Object.keys(demandas.porRegistroEventos).length > 0, 'porRegistroEventos precisa ter entrada -- é o que alimenta Realizado/Tendência da Tabela Semanal (furos + ensaios de Lab)');
@@ -648,8 +648,8 @@ test('atualizarDadosAoVivoSemanal: equipesAtivoPorDia (Realizado de Equipes) sob
     + Array(12).fill('0').join(',') + ',0,0,0,0,'
     + Array(12).fill('0').join(',') + ',0,0,0,'
     + Array(12).fill('0').join(',') + ',0,0,\n';
-  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo,Inicio Sondagem,Sondador,OS\n'
-    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,,46091,Sondador Sintético,17851-26\n';
+  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Observações de Campo,OS,Sondador\n'
+    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,Não,,17851-26,Sondador Sintético\n';
   const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n'
     + 'SUP-0002-25,46091,LL,46091\n';
   const historicoMatrizFresco = [
@@ -1424,10 +1424,10 @@ const CSV_MATRIZ_PRIORIDADE = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERM
   + Array(12).fill('0').join(',') + ',0,0,0,'
   + Array(12).fill('0').join(',') + ',0,0,\n';
 
-// 46091 = 2026-03-10, 46093 = 2026-03-12 -- Inicio/Termino Sondagem, o
-// intervalo que compute-equipes-mobilizadas.js ocupa.
-const CSV_AVANCOS_PRIORIDADE = 'Contrato,Criação da OS,Tipo,Status,Termino Sondagem,Conclusão,Cancelamento,Atualizado,Observações de Campo,Inicio Sondagem,Sondador,OS\n'
-  + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,46114,,46117,,46091,Sondador Sintético,17851-26\n';
+// 46091 = 2026-03-10 (Criação da OS), 46093 = 2026-03-12 (Executado Dia -- o
+// dia que compute-equipes-mobilizadas.js passa a ocupar desde 2026-08-10).
+const CSV_AVANCOS_PRIORIDADE = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Observações de Campo,OS,Sondador\n'
+  + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,Não,,17851-26,Sondador Sintético\n';
 const CSV_LAB_PRIORIDADE = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n'
   + 'SUP-0002-25,46091,LL,46091\n';
 

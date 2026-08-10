@@ -1,42 +1,54 @@
 'use strict';
+const { linhaExcluida } = require('../comum/exclusoes.js');
 
 // Transforma linhas cruas do Link 1 (sond.com.br/extrato-producao-total),
-// já em objetos {coluna: valor} via cdp.linhasComoObjetos, no MESMO layout
-// de colunas que parse-avancos.js já exige -- assim parseAvancos() roda
-// sem nenhuma mudança sobre este grid. Ver
+// já em objetos {coluna: valor} via cdp.linhasComoObjetos, no layout de
+// colunas que parse-avancos.js consome. Ver
 // docs/superpowers/specs/2026-08-08-troca-origem-realizado-demandas-equipes-design.md,
 // seção "Link 1".
 //
-// Duas repurposições deliberadas, confirmadas com o usuário:
-// - "Executado Dia" alimenta TANTO "Termino Sondagem" (evento sondagem
-//   realizada) QUANTO "Inicio Sondagem" (que compute-demandas.js usa como
-//   evento de SAÍDA do estoque de pendentes desde 2026-08-06) -- o Link 1
-//   só tem uma data de execução, não duas.
-// - "Cancelamento"/"Conclusão"/"Atualizado" ficam vazios: o Link 1 (relatório
-//   de PRODUÇÃO) não distingue essas datas. Furo cancelado não aparece nesta
-//   tela (nada foi produzido) -- limitação conhecida, não bug.
+// REESCRITO EM 2026-08-10 pelas decisões do dono do projeto. Duas regras
+// novas mandam aqui:
+//
+// 1. "Não alterar nenhuma informação que venha dos links." A versão anterior
+//    gravava o MESMO "Executado Dia" em duas colunas de saída, uma delas
+//    batizada "Inicio Sondagem" -- uma coluna que o Link 1 não tem. Isso
+//    fazia parecer que existiam duas datas distintas (e o CLAUDE.md chegou a
+//    documentar uma regra de negócio inteira em cima dessa distinção
+//    fantasma). Confirmado pelo dono em 2026-08-10: início e execução são o
+//    MESMO campo. Agora existe uma coluna só, "Executado Dia", com o nome
+//    que o link usa.
+//
+// 2. Deslocamento vem da COLUNA "Deslocamento" do próprio Link 1, não de um
+//    regex sobre o texto livre de "Observações de campo". Medido ao vivo em
+//    julho/2026 (2.053 linhas): a coluna acusa 82 deslocamentos, o regex
+//    acusava 185 -- os dois concordavam em 74, o regex derrubava 111 furos
+//    legítimos e deixava passar 8 deslocamentos reais. O regex dependia da
+//    grafia livre ("Deslocamento A", "Foram executados deslocamentos A e B")
+//    e bastava a palavra aparecer numa observação qualquer pra matar o furo.
+//
+// Colunas do Link 1 confirmadas ao vivo (21, em 2026-08-08 e reconfirmadas
+// em 2026-08-10):
+//   Tomador, ID Contrato, Sondador, Tipo, OS, Criação da OS, Identificação,
+//   Obra, Observações de campo, Deslocamento, Solo c/SPT (m), Solo s/SPT (m),
+//   Rocha (m), Pavimento (m), Água (m), Total (m), Executado Dia,
+//   Tags de Serviço, Status Atual, Data Status Atual, Ações
+//
+// "Cancelamento" e "Conclusão" não existem nesta fonte e por isso não são
+// mais fabricadas como colunas vazias -- o Link 1 é relatório de PRODUÇÃO e
+// só traz o que foi executado (medido: só CONCLUIDO e EXECUTADO).
 const COLUNAS_LINK1 = [
   'Tomador', 'ID Contrato', 'Sondador', 'Tipo', 'OS', 'Criação da OS',
-  'Identificação', 'Obra', 'Observações de campo', 'Executado Dia',
-  'Tags de Serviço', 'Status Atual', 'Data Status Atual',
+  'Identificação', 'Obra', 'Observações de campo', 'Deslocamento',
+  'Solo c/SPT (m)', 'Solo s/SPT (m)', 'Rocha (m)', 'Pavimento (m)',
+  'Água (m)', 'Total (m)', 'Executado Dia', 'Tags de Serviço',
+  'Status Atual', 'Data Status Atual',
 ];
 
 const HEADER_SAIDA = [
-  'Contrato', 'Criação da OS', 'Tipo', 'Status', 'Inicio Sondagem',
-  'Termino Sondagem', 'Conclusão', 'Cancelamento', 'Atualizado',
-  'Observações de Campo', 'OS', 'Sondador',
+  'Contrato', 'Criação da OS', 'Tipo', 'Status', 'Executado Dia',
+  'Deslocamento', 'Observações de Campo', 'OS', 'Sondador',
 ];
-
-// Exclusão de Tomador == "Suporte Sondagens - Filial Lapa" (auto-consumo
-// interno, não é demanda de cliente) e Tipo contendo SEG/SN -- MESMA regra
-// que mapear-demandas-lab.js já aplica (TOMADOR_EXCLUIDO/RE_EXCLUSAO_TIPO
-// lá), exigida pela spec pro Link 1 também (achado da revisão final de
-// branch, 2026-08-08: só o lab tinha essa exclusão implementada).
-// HEADER_SAIDA não carrega Tomador (parseAvancos não a conhece), então a
-// exclusão TEM que acontecer aqui, antes da linha de saída existir -- não dá
-// pra filtrar depois.
-const RE_EXCLUSAO_TIPO = /SEG|SN/;
-const TOMADOR_EXCLUIDO = 'Suporte Sondagens - Filial Lapa';
 
 function texto(valor) {
   return String(valor === null || valor === undefined ? '' : valor).trim();
@@ -46,23 +58,23 @@ function mapearProducaoTotal(linhas) {
   const rows = [];
   let excluidos = 0;
   for (const linha of linhas || []) {
-    const tomador = texto(linha['Tomador']);
-    const tipoCru = texto(linha['Tipo']).toUpperCase();
-    if (tomador === TOMADOR_EXCLUIDO || RE_EXCLUSAO_TIPO.test(tipoCru)) {
+    const tipo = texto(linha['Tipo']);
+    // Exclusão de auto-consumo interno (Tomador "Suporte Sondagens - Filial
+    // Lapa" e tipos SEG/SN), agora numa implementação só -- ver
+    // tools/comum/exclusoes.js. HEADER_SAIDA não carrega Tomador
+    // (parse-avancos não a conhece), então a exclusão TEM que acontecer aqui,
+    // antes de a linha de saída existir.
+    if (linhaExcluida(linha, tipo)) {
       excluidos++;
       continue;
     }
-    const executadoDia = texto(linha['Executado Dia']);
     rows.push([
       texto(linha['ID Contrato']),
       texto(linha['Criação da OS']),
-      texto(linha['Tipo']),
+      tipo,
       texto(linha['Status Atual']),
-      executadoDia,
-      executadoDia,
-      '',
-      '',
-      texto(linha['Data Status Atual']),
+      texto(linha['Executado Dia']),
+      texto(linha['Deslocamento']),
       texto(linha['Observações de campo']),
       texto(linha['OS']),
       texto(linha['Sondador']),

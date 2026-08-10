@@ -18,14 +18,14 @@ const MAPA_TIPO_ENSAIO_LAB = {
   'CBR.1': 'LAB.C', 'CBR.3': 'LAB.C', 'CBR.5': 'LAB.C',
   'CD.IN': 'LAB.E', 'CD.NAT': 'LAB.E', 'CD3.IN': 'LAB.E', 'CD3.NAT': 'LAB.E',
   'CD4.IN': 'LAB.E', 'CD4.NAT': 'LAB.E', 'CD5.IN': 'LAB.E', 'CD5.NAT': 'LAB.E', 'CDA.IN': 'LAB.E',
-  'COMP.D': 'LAB.E', 'COMP.D.14D': 'LAB.E', 'COMP.D.28d': 'LAB.E', 'COMP.D.28D.2': 'LAB.E',
-  'COMP.D.28D.3': 'LAB.E', 'COMP.D.3': 'LAB.E', 'COMP.D.7d': 'LAB.E', 'COMP.D.7D.2': 'LAB.E',
+  'COMP.D': 'LAB.E', 'COMP.D.14D': 'LAB.E', 'COMP.D.28D': 'LAB.E', 'COMP.D.28D.2': 'LAB.E',
+  'COMP.D.28D.3': 'LAB.E', 'COMP.D.3': 'LAB.E', 'COMP.D.7D': 'LAB.E', 'COMP.D.7D.2': 'LAB.E',
   'COMP.D.7D.3': 'LAB.E', 'COMP.DIA': 'LAB.E',
   'COMP.EI.3': 'LAB.C', 'COMP.EI.5': 'LAB.C', 'COMP.EM.3': 'LAB.C', 'COMP.EM.5': 'LAB.C',
   'COMP.EN.3': 'LAB.C', 'COMP.EN.5': 'LAB.C',
   'COMP.NC': 'LAB.E', 'COMP.R': 'LAB.E', 'COMP.S': 'LAB.E', 'COMP.S.14D': 'LAB.E',
-  'COMP.S.28d': 'LAB.E', 'COMP.S.28D.2': 'LAB.E', 'COMP.S.28D.3': 'LAB.E', 'COMP.S.3d': 'LAB.E',
-  'COMP.S.3d.2': 'LAB.E', 'COMP.S.3d.3': 'LAB.E', 'COMP.S.7d': 'LAB.E', 'COMP.S.7D.2': 'LAB.E',
+  'COMP.S.28D': 'LAB.E', 'COMP.S.28D.2': 'LAB.E', 'COMP.S.28D.3': 'LAB.E', 'COMP.S.3D': 'LAB.E',
+  'COMP.S.3D.2': 'LAB.E', 'COMP.S.3D.3': 'LAB.E', 'COMP.S.7D': 'LAB.E', 'COMP.S.7D.2': 'LAB.E',
   'COMP.S.7D.3': 'LAB.E',
   'D.HILF': 'LAB.C', 'D.NAT.L': 'LAB.E', DISSIP: 'LAB.E', 'DOSAG.': 'LAB.E', DP: 'LAB.E',
   DRX: 'LAB.E', DSS: 'LAB.E', DUR: 'LAB.E', DURAB: 'LAB.E',
@@ -39,9 +39,14 @@ const MAPA_TIPO_ENSAIO_LAB = {
   'MCT-INFILT': 'LAB.E',
   'MR.A': 'LAB.E', 'MR.C': 'LAB.E', 'MR.G': 'LAB.E', 'MR.S': 'LAB.E',
   PEN: 'LAB.C', 'PERM.C': 'LAB.E', 'PERM.V': 'LAB.E', PH: 'LAB.E',
-  'RES.COMP.SIM': 'LAB.E',
+  // RES.CT e T.PULV apareceram em 2026-08-10, quando o Realizado de Lab
+  // passou a cobrir desde 2025-01 em vez de só o mês corrente (regra 01) --
+  // são 18 e 13 ensaios, todos de 2025, e por isso nunca tinham chegado ao
+  // build. Classificados como LAB.E pelo dono do projeto, seguindo os
+  // vizinhos: RES.COMP.SIM já era LAB.E, e T.ARG/T.ORG também.
+  'RES.COMP.SIM': 'LAB.E', 'RES.CT': 'LAB.E',
   SED: 'LAB.C',
-  'T.ARG': 'LAB.E', 'T.ORG': 'LAB.E',
+  'T.ARG': 'LAB.E', 'T.ORG': 'LAB.E', 'T.PULV': 'LAB.E',
   'TRI.CD': 'LAB.E', 'TRI.CD4': 'LAB.E', 'TRI.CU': 'LAB.E', 'TRI.CU4': 'LAB.E',
   'TRI.PN': 'LAB.E', 'TRI.UU': 'LAB.E',
   'TRI2.CD': 'LAB.E', 'TRI2.CU': 'LAB.E', 'TRI2.UU': 'LAB.E',

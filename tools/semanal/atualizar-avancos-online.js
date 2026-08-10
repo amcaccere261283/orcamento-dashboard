@@ -1,10 +1,11 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { mapearProducaoTotal } = require('./mapear-producao-total.js');
+const { mapearProducaoTotal, HEADER_SAIDA } = require('./mapear-producao-total.js');
 const { gridParaCsv } = require('./csv-writer-avancos.js');
 const { parseCsvGrid } = require('./parse-matriz-cliente.js');
 const { locateColunasAvancos } = require('./parse-avancos.js');
+const { hojeNoFusoProjeto } = require('../comum/datas.js');
 const cdp = require('./cdp-client.js');
 
 const SITE_ORIGIN = 'https://sond.com.br';
@@ -16,8 +17,10 @@ const DESDE = { ano: 2025, mes: 1 };
 // inclusive. Só o ÚLTIMO item é o mês corrente -- todos os anteriores já
 // fecharam e são candidatos a cache (execução passada não muda).
 function mesesParaBuscar(hoje) {
-  const anoAtual = hoje.getUTCFullYear();
-  const mesAtual = hoje.getUTCMonth() + 1;
+  // UTC-3 desde 2026-08-10 ("considerar o utc-3 sempre"). Importa porque o
+  // guard de "mês corrente falhou -> aborta sem gravar" (ver main) usaria,
+  // nas últimas 3h de cada mês em UTC, um mês que ainda nem começou aqui.
+  const { ano: anoAtual, mes: mesAtual } = hojeNoFusoProjeto(hoje);
   const meses = [];
   let ano = DESDE.ano;
   let mes = DESDE.mes;
@@ -43,10 +46,26 @@ function caminhoCache(ano, mes) {
 // (formato de arquivo, já excluído); ao ler do cache, reparseia pra grid com
 // parseCsvGrid e excluidos vem 0 -- a exclusão já aconteceu na execução que
 // gravou o cache, não há como recontar sobre um CSV que já saiu filtrado.
+// Um cache gravado por uma versão ANTERIOR do mapeador tem outro conjunto de
+// colunas. Sem esta checagem, meses fechados voltariam do disco no formato
+// velho e o mês corrente viria no novo: main() usa o cabeçalho do PRIMEIRO
+// grid para todos, então as colunas de quase todo o histórico ficariam
+// deslocadas em silêncio -- a mesma classe de erro que o guard de cabeçalho
+// combinado já evita na saída. Cache com formato divergente é tratado como
+// inexistente e rebuscado. (Necessário em 2026-08-10, quando HEADER_SAIDA
+// encolheu de 12 para 9 colunas.)
+function cacheUtilizavel(grid) {
+  const cabecalho = (grid && grid[0]) || [];
+  return HEADER_SAIDA.length === cabecalho.length
+    && HEADER_SAIDA.every((rotulo, i) => String(cabecalho[i] || '').trim() === rotulo);
+}
+
 async function buscarMes(ano, mes, ehMesCorrente) {
   const cache = caminhoCache(ano, mes);
   if (!ehMesCorrente && fs.existsSync(cache)) {
-    return { grid: parseCsvGrid(fs.readFileSync(cache, 'utf8')), excluidos: 0 };
+    const grid = parseCsvGrid(fs.readFileSync(cache, 'utf8'));
+    if (cacheUtilizavel(grid)) return { grid, excluidos: 0 };
+    console.warn(`  cache de ${ano}-${String(mes).padStart(2, '0')} está no formato antigo -- rebuscando.`);
   }
   const mm = String(mes).padStart(2, '0');
   const url = `${SITE_ORIGIN}/extrato-producao-total/mes/${mm}/ano/${ano}/`;
@@ -147,4 +166,4 @@ if (require.main === module) {
   main().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { mesesParaBuscar, main };
+module.exports = { mesesParaBuscar, cacheUtilizavel, main };

@@ -84,31 +84,29 @@ function computeDemandas(furos, periodos, ensaiosLab) {
 
     if (f.criacaoOS) eventosRegistro.chegada.push(diaEpoch(f.criacaoOS));
 
-    if (STATUS_REALIZADO.indexOf(f.status) !== -1 && f.terminoSondagem) {
-      eventosRegistro.sondagemRealizada.push(diaEpoch(f.terminoSondagem));
+    if (STATUS_REALIZADO.indexOf(f.status) !== -1 && f.executadoDia) {
+      eventosRegistro.sondagemRealizada.push(diaEpoch(f.executadoDia));
     }
 
-    // saidaEstoque: o MENOR entre início da sondagem (qualquer status) e
-    // cancelamento -- nunca os dois independentes, pra não contar duas vezes
-    // os furos CANCELADO que também têm data de início preenchida. Uma
-    // demanda deixa de estar "disponível para execução" quando a sondagem
-    // COMEÇA (dono do projeto, 2026-08-06, confirmado contra o extrato Avanço
-    // Sondagens) -- não quando termina. Só entra se pelo menos um dos dois
-    // existir; sem nenhum, o furo nunca sai do estoque (mesma regra da série
-    // 'pendentes' abaixo). f.inicioSondagem já passou por dataSaneada
-    // (parse-avancos.js): as ~6,3% de linhas com data fora da janela
-    // 2023-2027 chegam aqui como null, e o furo permanece no estoque -- igual
-    // ao que já acontecia com furo sem data de término antes desta troca.
-    const candidatosSaida = [];
-    if (f.inicioSondagem) candidatosSaida.push(diaEpoch(f.inicioSondagem));
-    if (cancelado && f.cancelamento) candidatosSaida.push(diaEpoch(f.cancelamento));
-    if (candidatosSaida.length) eventosRegistro.saidaEstoque.push(Math.min.apply(null, candidatosSaida));
+    // saidaEstoque: a DATA DE EXECUÇÃO, e só ela. Regra do dono do projeto,
+    // 2026-08-10: na data de referência D, a demanda é o que tem data de
+    // pendência <= D e data de execução > D.
+    //
+    // Substitui a regra de 2026-08-06 (min entre início da sondagem e
+    // cancelamento). As duas datas que ela combinava não existem mais como
+    // campos distintos: o Link 1 tem uma única data de execução -- confirmado
+    // pelo dono em 2026-08-10 -- e não traz data de cancelamento nenhuma
+    // (a série 'canceladas' já era zero em 100% dos meses medidos, então
+    // tirar o ramo não muda número nenhum, só para de fingir que existe).
+    // Sem data de execução o furo nunca sai do estoque, mesma regra
+    // conservadora de sempre.
+    if (f.executadoDia) eventosRegistro.saidaEstoque.push(diaEpoch(f.executadoDia));
 
     const iChegada = indiceDoMes(f.criacaoOS, periodos);
     if (iChegada >= 0) series.chegadas[iChegada] += 1;
 
     if (STATUS_REALIZADO.indexOf(f.status) !== -1) {
-      const iSondagem = indiceDoMes(f.terminoSondagem, periodos);
+      const iSondagem = indiceDoMes(f.executadoDia, periodos);
       if (iSondagem >= 0) { series.sondagemRealizada[iSondagem] += 1; }
     }
 
@@ -122,23 +120,20 @@ function computeDemandas(furos, periodos, ensaiosLab) {
       if (iCancel >= 0) series.canceladas[iCancel] += 1;
     }
 
-    // Estoque: aberto no fim do mês = chegou até ali, e nem a sondagem começou
-    // nem o cancelamento ocorreu até ali. Mesma regra de negócio de
-    // saidaEstoque acima (uma demanda deixa de estar "disponível para
-    // execução" quando a sondagem COMEÇA, não quando termina). Cancelada sai
-    // pela DATA (coluna P), não por status: um furo cancelado em julho estava
-    // de fato aberto em janeiro, e o saldo de janeiro tem que dizer isso.
-    // Cancelada sem data legível permanece no estoque de propósito -- "não
-    // sei quando saiu" é mais honesto que "saiu no começo", e o build reporta
-    // a contagem. Mesma ressalva de dataSaneada da nota acima: início de
-    // sondagem com data fora da janela 2023-2027 vira null e o furo continua
-    // no estoque, nunca é tratado como já iniciado.
+    // Estoque no fim do mês i: chegou até ali (criação <= fim) e ainda não
+    // foi executado até ali (execução > fim, ou inexistente). É a MESMA regra
+    // de saidaEstoque acima, aplicada mês a mês -- a definição do dono do
+    // projeto em 2026-08-10, palavra por palavra: "na data de referência, o
+    // que eu tenho onde a data de pendência é menor ou igual a ela e a data
+    // de execução foi após ela".
+    //
+    // Execução EXATAMENTE no dia de corte conta como já saída (o teste é
+    // <= fins[i]), coerente com "execução APÓS o dia D".
     if (f.criacaoOS) {
       for (let i = 0; i < n; i++) {
         if (f.criacaoOS > fins[i]) continue;
-        const iniciou = f.inicioSondagem && f.inicioSondagem <= fins[i];
-        const cancelou = f.cancelamento && f.cancelamento <= fins[i];
-        if (!iniciou && !cancelou) { series.pendentes[i] += 1; }
+        const executou = f.executadoDia && f.executadoDia <= fins[i];
+        if (!executou) { series.pendentes[i] += 1; }
       }
     }
   }
