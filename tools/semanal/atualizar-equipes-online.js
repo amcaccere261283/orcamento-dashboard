@@ -51,9 +51,32 @@ function acharIdEquipe(linha) {
   return undefined;
 }
 
+// A chave de agrupamento: o número da equipe quando existe, o NOME do
+// sondador quando não existe.
+//
+// Medido em 2026-08-10 sobre 3 meses do Link 7: de 10 a 48 linhas por mês têm
+// "Nº Equipe" vazio e "Sondador" preenchido. Elas eram descartadas em
+// silêncio por agregarEquipesProdutivas ("sem id"), e isso é produção real
+// sumindo -- 2 a 4 sondadores espalhados por 16 a 22 dias do mês.
+//
+// O fallback é seguro porque as duas chaves não podem colidir para a mesma
+// pessoa no mesmo dia: verificado em julho e maio/2026, NENHUM sondador sem
+// número aparece também com número no mesmo dia (0 de 25 e 0 de 48). O
+// prefixo "nome:" mantém os dois espaços de chave separados de qualquer
+// forma, para que um sondador chamado "441" jamais se confunda com a equipe
+// 441.
+function chaveEquipe(linha) {
+  const numero = acharIdEquipe(linha);
+  if (numero) return numero;
+  const sondador = String(colunaTolerante(linha, 'Sondador') || '').trim();
+  return sondador ? `nome:${sondador}` : '';
+}
+
 function parseLinhasLink7(linhasCru) {
   const saida = [];
   let excluidos = 0;
+  let porNome = 0;
+  let semChave = 0;
   // Falha ALTO se nenhuma das grafias existir. Sem isto, a renomeação de
   // 2026-08-10 se comportou exatamente como o pior modo de falha deste
   // projeto: acharIdEquipe devolvia undefined em toda linha, o agregador
@@ -91,8 +114,11 @@ function parseLinhasLink7(linhasCru) {
     // PRODUTIVAS não precisa casar com nenhum roster externo (ver
     // compute-equipes-produtivas-link7.js) -- só precisa ser consistente
     // DENTRO do próprio Link 7, e este número já é.
+    const chave = chaveEquipe(l);
+    if (!chave) semChave++;
+    else if (!acharIdEquipe(l)) porNome++;
     saida.push({
-      idEquipe: acharIdEquipe(l) || '',
+      idEquipe: chave,
       sup: String(colunaTolerante(l, 'Contrato Financeiro') || '').trim(),
       tipo: rotularTipologia(colunaTolerante(l, 'Tipo')),
       diaEpoch: dia,
@@ -100,6 +126,15 @@ function parseLinhasLink7(linhasCru) {
   }
   if (excluidos > 0) {
     console.log(`  ${excluidos} linha(s) excluída(s) (Suporte Sondagens/SEG/SN).`);
+  }
+  // Visibilidade do que antes sumia calado: quantas linhas dependeram do
+  // fallback por nome, e quantas não tinham nem número nem sondador (essas
+  // últimas o agregador realmente descarta -- não há como atribuí-las).
+  if (porNome > 0) {
+    console.log(`  ${porNome} linha(s) sem "Nº Equipe" agrupada(s) pelo NOME do sondador.`);
+  }
+  if (semChave > 0) {
+    console.warn(`  ATENÇÃO: ${semChave} linha(s) sem "Nº Equipe" E sem "Sondador" -- ficam fora da conta de equipes.`);
   }
   return saida;
 }

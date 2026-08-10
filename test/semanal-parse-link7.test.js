@@ -104,3 +104,32 @@ test('a checagem de coluna não confunde valor VAZIO com coluna AUSENTE', () => 
   assert.strictEqual(vazia.length, 1);
   assert.strictEqual(vazia[0].idEquipe, '');
 });
+
+// --- fallback por nome quando não há Nº Equipe (2026-08-10) ----------------
+//
+// Medido em 3 meses do Link 7: de 10 a 48 linhas por mês têm "Nº Equipe"
+// vazio e "Sondador" preenchido, e eram descartadas em silêncio pelo
+// agregador. Verificado em julho e maio/2026 que nenhum desses sondadores
+// aparece TAMBÉM com número no mesmo dia (0 de 25 e 0 de 48), então agrupar
+// pelo nome recupera o dado sem contar ninguém duas vezes.
+
+test('sem Nº Equipe, agrupa pelo NOME do sondador (com prefixo, pra não colidir com número)', () => {
+  const l = parseLinhasLink7([linhaLink7Cru({ 'ID Sondador': '', Sondador: 'Ana Silva' })])[0];
+  assert.strictEqual(l.idEquipe, 'nome:Ana Silva');
+});
+
+test('com Nº Equipe, o número ganha do nome -- o nome é só fallback', () => {
+  const l = parseLinhasLink7([linhaLink7Cru({ 'ID Sondador': '441', Sondador: 'Ana Silva' })])[0];
+  assert.strictEqual(l.idEquipe, '441');
+});
+
+test('o prefixo impede que um sondador chamado "441" se confunda com a equipe 441', () => {
+  const porNome = parseLinhasLink7([linhaLink7Cru({ 'ID Sondador': '', Sondador: '441' })])[0];
+  const porNumero = parseLinhasLink7([linhaLink7Cru({ 'ID Sondador': '441' })])[0];
+  assert.notStrictEqual(porNome.idEquipe, porNumero.idEquipe);
+});
+
+test('sem Nº Equipe E sem Sondador, a chave fica vazia -- o agregador descarta, e o fetcher avisa', () => {
+  const l = parseLinhasLink7([linhaLink7Cru({ 'ID Sondador': '', Sondador: '' })])[0];
+  assert.strictEqual(l.idEquipe, '');
+});
