@@ -604,6 +604,44 @@ semana em lugar nenhum" -- essa frase ficou desatualizada por este mesmo pedido 
 JÁ mede, na Tabela e no Gráfico), mas mexer no Consolidado não foi pedido nesta rodada;
 fica como pendência se um dia isso incomodar.
 
+### Segunda rodada da Tabela Semanal — Volume, Financeiro, Tendência, Demandas (2026-08-10)
+
+Ver a spec completa em
+`docs/superpowers/specs/2026-08-10-tabela-semanal-regras-linha-a-linha.md`
+(regra a regra, com as medições que sustentam cada decisão). Resumo do que
+mudou nesta rodada:
+
+- **Volume Realizado** exclui furos com `Deslocamento=Sim` OU `Total (m)=0,01`
+  OU `Status=Cancelado` (independentes — medido: os três JUNTOS dão zero
+  linhas, então como conjunção a regra seria inerte). `Total (m)` voltou ao
+  `HEADER_SAIDA` do Link 1 (tinha sido descartada). `foraDoRealizado()` em
+  `parse-avancos.js`.
+- **Equipes Tendência** some (null) nas semanas já ENCERRADAS — antes repetia
+  o Total da MATRIZ em toda semana, inclusive nas fechadas.
+  `semanasTendenciaCompleta` continua com o valor repetido, para quem
+  precisar do mês inteiro.
+- **Financeiro Realizado** no mês vigente continua sendo eventos × ticket
+  médio; em meses JÁ FECHADOS passa a usar `realizado.financeiro` da MATRIZ,
+  repartido proporcionalmente entre as semanas (`dividirEmSemanas`). Novo
+  parâmetro opcional `mesAtualReal` em `calcularSeriesSemanaisDimensao`
+  distingue mês SELECIONADO de mês REAL de hoje — só `renderAbaSemanal`
+  passa; Consolidado/Alertas não mudam. **Consequência aceita pelo dono do
+  projeto:** jan–jun/2026 têm Realizado idêntico ao Previsto na MATRIZ, então
+  mostram desvio zero.
+- **Demandas Pendentes**: o achado mais grave da auditoria. O botão
+  "Atualizar dados" nunca buscava `demandas-sondagem-online.csv` (5.493
+  furos pendentes) nem `demandas-lab-online.json` (12.781 ensaios) — zerava
+  o backlog a cada clique, com status verde "Atualizado". Os dois arquivos
+  entraram em `ARQUIVOS_PUBLICAR` e o refresh (`render-semanal.js`) passou a
+  buscá-los e mesclar, no mesmo formato que o build já usava.
+
+**Pendente:** Equipes Realizado — o item grande da spec. Bloqueado por
+formato: `equipes-online.csv` grava agregado (`SUP,Tipo,DiaEpoch,Fracao`),
+sem o ID da equipe, e a regra pedida (Link 6 roster + Link 7 produção, com
+carry-forward pro último contrato de quem não produziu) precisa da produção
+CRUA por equipe. Atinge fetcher, build e refresh juntos — não fazer pela
+metade.
+
 ### Regras de dados da Tabela Semanal e dos Gráficos (2026-08-10)
 
 Seis regras fechadas pelo dono do projeto depois de uma auditoria de origem/regra
