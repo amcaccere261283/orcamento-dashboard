@@ -416,13 +416,15 @@ test('Realizado/Tendência aparecem em Volume E Financeiro (Financeiro pesado pe
   const blocoEquipes = html.split('<div class="bloco-dimensao-semanal">')[1];
   const blocoFinanceiro = html.split('<div class="bloco-dimensao-semanal">')[2];
   const semDadoEquipes = (blocoEquipes.match(/class="num sem-dado"/g) || []).length;
-  // Só o Realizado (5 semanas): sem demandas.equipesPorDia, fica sem-dado.
-  // Tendência (2026-08-07) não depende de demandas -- vem de
-  // registro.total.equipes (fixture registro() usa 2 nos três blocos), e
-  // Previsto sempre tem dado real -- nenhum dos dois entra nesta contagem.
-  assert.strictEqual(semDadoEquipes, 5, 'Equipes: só as 5 semanas do Realizado ficam sem-dado (sem equipesPorDia); Tendência já mostra o Total da MATRIZ');
+  // Realizado (5 semanas): sem demandas.equipesPorDia, fica sem-dado.
+  // Tendência (2026-08-07, e desde 2026-08-10 some nas semanas ENCERRADAS):
+  // não depende de demandas -- vem de registro.total.equipes -- mas com
+  // hoje=15/07 as semanas S1/S2 (fim < 15/07) já fecharam, então elas
+  // também ficam sem-dado na Tendência (+2). Previsto sempre tem dado real.
+  assert.strictEqual(semDadoEquipes, 7, '5 semanas do Realizado (sem equipesPorDia) + 2 semanas encerradas da Tendência (S1/S2)');
   const linhaTendenciaEquipes = blocoEquipes.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
-  assert.doesNotMatch(linhaTendenciaEquipes, /sem-dado/, 'Tendência de Equipes não depende de demandas, só da MATRIZ');
+  const semDadoTendenciaEquipes = (linhaTendenciaEquipes.match(/class="num sem-dado"/g) || []).length;
+  assert.strictEqual(semDadoTendenciaEquipes, 2, 'Tendência de Equipes some nas semanas já encerradas (S1/S2 com hoje=15/07), mostra nas demais');
   const linhaRealizadoFinanceiro = blocoFinanceiro.match(/<tr class="linha-serie-semanal linha-realizado">[\s\S]*?<\/tr>/)[0];
   const linhaTendenciaFinanceiro = blocoFinanceiro.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
   assert.doesNotMatch(linhaRealizadoFinanceiro, /sem-dado/, 'Realizado ativo em todas as semanas (ticket médio 1 na fixture registro(), mesmos números de furos que Volume mostraria)');
@@ -446,7 +448,7 @@ test('Realizado/Tendência aparecem em Volume E Financeiro (Financeiro pesado pe
 // não soma). registro() default é sup='SUP-0001-24', tipologia='ST' -- as
 // fixtures abaixo usam a chave 'SUP-0001-24||ST'.
 
-test('Realizado de Equipes: média diária por semana, cortada em d-1 -- S1 e S2 fechadas, S3 vigente truncada em 2 dias, S4/S5 futuras sem-dado. Tendência (2026-08-07) vem de registro.total.equipes, repetida em TODAS as semanas -- inclusive futuras, é foto/premissa, não fluxo truncado como o Realizado', () => {
+test('Realizado de Equipes: média diária por semana, cortada em d-1 -- S1 e S2 fechadas, S3 vigente truncada em 2 dias, S4/S5 futuras sem-dado. Tendência (2026-08-07) vem de registro.total.equipes, repetida nas semanas que ainda NÃO fecharam (2026-08-10: some nas encerradas -- S1/S2 aqui)', () => {
   const equipesPorDia = {
     'SUP-0001-24||ST': {
       [diaJul(1)]: 3, [diaJul(3)]: 1,    // S1 (5 dias, só 2 com dado): soma 4 / 5 dias da semana = 0,8 -- ver teste seguinte pra denominador
@@ -477,8 +479,14 @@ test('Realizado de Equipes: média diária por semana, cortada em d-1 -- S1 e S2
   // diluía a média com um dia parcial.
   assert.deepStrictEqual(series.semanasRealizado, [1, 1, 2, null, null]);
   assert.ok(Math.abs(series.fechamentoRealizado - 4 / 3) < 1e-9, 'fechamento é a MÉDIA de [1,1,2], não a soma');
-  assert.deepStrictEqual(series.semanasTendencia, [5, 5, 5, 5, 5], 'repete o Total do mês (5) em toda semana, igual ao Previsto');
-  assert.strictEqual(series.fechamentoTendencia, 5, 'fechamento é a MÉDIA das semanas (foto) -- aqui o próprio valor repetido');
+  // 2026-08-10: Tendência de Equipes some nas semanas já ENCERRADAS (fim <
+  // hoje) -- S1 e S2 fecharam antes de 15/07, ficam null. S3 (vigente),
+  // S4/S5 (futuras) continuam mostrando o Total repetido, igual ao Previsto.
+  // semanasTendenciaCompleta continua com o valor em TODAS -- só a exibição
+  // (semanasTendencia) muda.
+  assert.deepStrictEqual(series.semanasTendencia, [null, null, 5, 5, 5], 'some nas semanas encerradas (S1/S2), mostra nas que ainda não fecharam');
+  assert.deepStrictEqual(series.semanasTendenciaCompleta, [5, 5, 5, 5, 5], 'a versão completa continua repetindo em todas -- alimenta o Gráfico/Consolidado');
+  assert.strictEqual(series.fechamentoTendencia, 5, 'fechamento é a MÉDIA das semanas COM DADO (foto) -- aqui o próprio valor repetido nas 3 visíveis');
 });
 
 test('Realizado de Equipes: divide pelos DIAS DA JANELA (não pelos dias com dado) -- semana de 5 dias com só 1 dia de dado (4) dá 4/5=0,8 -> Math.ceil=1', () => {
@@ -684,4 +692,109 @@ test('mes corrente: o fechamento da Tendencia continua sendo o mes projetado, e 
   const somaCompleta = series.semanasTendenciaCompleta.reduce((a, b) => a + b, 0);
   assert.ok(Math.abs(somaCompleta - series.fechamentoTendencia) < 1e-9,
     'o fechamento tem de ser a soma da serie completa -- e o invariante da curva Acumulada');
+});
+
+// --- Financeiro Realizado em mês FECHADO usa a MATRIZ (2026-08-10) --------
+//
+// Decisão do dono do projeto: no mês vigente o cálculo continua sendo
+// eventos x ticket médio (como sempre foi); em meses JÁ FECHADOS passa a
+// usar 'realizado.financeiro' da MATRIZ, repartido PROPORCIONALMENTE entre
+// as semanas (dividirEmSemanas, fracionária). Confirmado com exemplo real:
+// julho/2026 mostrava 9.832 pela conta de eventos contra 9.408 na MATRIZ.
+//
+// mesAtualReal é o parâmetro NOVO que distingue "mês selecionado" (vigenteIdx)
+// de "mês real de hoje" -- só quem passa esse parâmetro (renderAbaSemanal)
+// aciona a troca de fonte; Consolidado/Alertas não passam, e continuam
+// intocados (é por isso que os testes deles não quebraram).
+
+test('Financeiro Realizado: mês FECHADO usa a MATRIZ (realizado.financeiro), não eventos', () => {
+  const registroFinanceiro = registro(0);
+  registroFinanceiro.realizado.financeiro = new Array(12).fill(0);
+  registroFinanceiro.realizado.financeiro[VIGENTE_JULHO] = 9408; // exemplo real do dono do projeto
+  // Eventos que, pela conta antiga, dariam um número BEM diferente (9832 no
+  // caso real) -- se a MATRIZ não estivesse sendo usada, o teste pegaria.
+  const demandasComEventos = {
+    porRegistroEventos: {
+      'SUP-0001-24||ST': { sondagemRealizada: new Array(50).fill(diaJul(2)), chegada: [], saidaEstoque: [] },
+    },
+  };
+  const mesAtualReal = 7; // agosto -- julho (6) já fechou
+  const series = calcularSeriesSemanaisDimensao(
+    [registroFinanceiro], [0], 'financeiro', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
+    true, indiceSemanaAtual(SEMANAS_JULHO, HOJE_15_JUL), demandasComEventos, HOJE_15_JUL, mesAtualReal
+  );
+  const soma = series.semanasRealizado.reduce((a, b) => a + (b || 0), 0);
+  assert.ok(Math.abs(soma - 9408) < 1e-9, `as 5 semanas devem somar exatamente o valor da MATRIZ (9408), deu ${soma}`);
+  // Repartição PROPORCIONAL aos dias de cada semana (dividirEmSemanas) --
+  // não por partes iguais nem "inteira" (Math.floor por semana).
+  const diasTotal = SEMANAS_JULHO.reduce((a, s) => a + (s.fim - s.inicio + 1), 0);
+  SEMANAS_JULHO.forEach((s, i) => {
+    const esperado = 9408 * (s.fim - s.inicio + 1) / diasTotal;
+    assert.ok(Math.abs(series.semanasRealizado[i] - esperado) < 1e-6, `semana ${i}`);
+  });
+});
+
+test('Financeiro Realizado: mês VIGENTE (selecionado == mesAtualReal) continua com a conta de eventos, ignora a MATRIZ', () => {
+  const registroFinanceiro = registro(0);
+  registroFinanceiro.realizado.financeiro = new Array(12).fill(0);
+  registroFinanceiro.realizado.financeiro[VIGENTE_JULHO] = 9408;
+  const demandas = {
+    porRegistroEventos: {
+      'SUP-0001-24||ST': { sondagemRealizada: [diaJul(2), diaJul(8)], chegada: [], saidaEstoque: [] },
+    },
+  };
+  const mesAtualReal = VIGENTE_JULHO; // julho é o mês corrente -- não fechado
+  const series = calcularSeriesSemanaisDimensao(
+    [registroFinanceiro], [0], 'financeiro', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
+    true, indiceSemanaAtual(SEMANAS_JULHO, HOJE_15_JUL), demandas, HOJE_15_JUL, mesAtualReal
+  );
+  const soma = series.semanasRealizado.reduce((a, b) => a + (b || 0), 0);
+  assert.strictEqual(soma, 2, '2 eventos x ticket médio 1 (fixture registro()) = 2 -- não os 9408 da MATRIZ');
+});
+
+test('Financeiro Realizado: mês FUTURO (selecionado depois do vigente) continua com a conta de eventos', () => {
+  const registroFinanceiro = registro(0);
+  registroFinanceiro.realizado.financeiro = new Array(12).fill(0);
+  registroFinanceiro.realizado.financeiro[VIGENTE_JULHO] = 9408;
+  const mesAtualReal = 5; // junho -- julho ainda não chegou
+  const series = calcularSeriesSemanaisDimensao(
+    [registroFinanceiro], [0], 'financeiro', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
+    true, indiceSemanaAtual(SEMANAS_JULHO, HOJE_15_JUL), { porRegistroEventos: {} }, HOJE_15_JUL, mesAtualReal
+  );
+  const soma = series.semanasRealizado.reduce((a, b) => a + (b || 0), 0);
+  assert.strictEqual(soma, 0, 'sem eventos e mês ainda não fechou -- nunca usa a MATRIZ pra mês futuro');
+});
+
+test('Financeiro Realizado: SEM mesAtualReal (chamador antigo, ex. Consolidado/Alertas) nunca usa a MATRIZ', () => {
+  const registroFinanceiro = registro(0);
+  registroFinanceiro.realizado.financeiro = new Array(12).fill(0);
+  registroFinanceiro.realizado.financeiro[VIGENTE_JULHO] = 9408;
+  const demandas = {
+    porRegistroEventos: {
+      'SUP-0001-24||ST': { sondagemRealizada: [diaJul(2)], chegada: [], saidaEstoque: [] },
+    },
+  };
+  const series = calcularSeriesSemanaisDimensao(
+    [registroFinanceiro], [0], 'financeiro', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
+    true, indiceSemanaAtual(SEMANAS_JULHO, HOJE_15_JUL), demandas, HOJE_15_JUL
+    // mesAtualReal omitido de propósito
+  );
+  const soma = series.semanasRealizado.reduce((a, b) => a + (b || 0), 0);
+  assert.strictEqual(soma, 1, '1 evento x ticket médio 1 -- comportamento idêntico ao de antes desta mudança');
+});
+
+test('Volume Realizado NUNCA usa a MATRIZ, mesmo em mês fechado -- só Financeiro troca de fonte', () => {
+  const registroVolume = registro(1000); // volume previsto/realizado já preenchidos pela fixture
+  const demandas = {
+    porRegistroEventos: {
+      'SUP-0001-24||ST': { sondagemRealizada: [diaJul(2), diaJul(8)], chegada: [], saidaEstoque: [] },
+    },
+  };
+  const mesAtualReal = 7; // agosto -- julho fechado
+  const series = calcularSeriesSemanaisDimensao(
+    [registroVolume], [0], 'volume', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
+    true, indiceSemanaAtual(SEMANAS_JULHO, HOJE_15_JUL), demandas, HOJE_15_JUL, mesAtualReal
+  );
+  const soma = series.semanasRealizado.reduce((a, b) => a + (b || 0), 0);
+  assert.strictEqual(soma, 2, 'continua contando os 2 furos reais -- Volume não tem valor mensal único pra comparar com a MATRIZ');
 });
