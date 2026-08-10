@@ -1,4 +1,9 @@
 .worktrees/
+# Worktrees do Claude Code (.claude/worktrees/<hash>): infraestrutura do
+# próprio git, criada por sessões/agentes. `git worktree list` as registra
+# apontando para branches próprios -- commitá-las seria commitar um checkout
+# do repositório dentro dele mesmo. Mesma categoria de .worktrees/ acima.
+.claude/
 # Scratchpad do subagent-driven-development (ledger, briefs, review packages).
 # É rascunho de sessão, não histórico -- o histórico é o git log.
 .superpowers/
