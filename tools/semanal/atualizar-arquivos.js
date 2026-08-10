@@ -41,16 +41,25 @@ const BUSCAS = [
 ];
 
 // Mesmos pares que test/publicacao-docs-sincronizado.test.js trava pra esta
-// página (o par orcamento-dashboard.html/index.html do teste é do outro
-// dashboard e fica fora do escopo deste script). demandas-sondagem-online.csv
-// e demandas-lab-online.json ficam de fora daqui de propósito: só alimentam
-// o build a partir de dist/ (Task 12), o botão "Atualizar dados" da página
-// publicada não os busca diretamente -- ver Task 13.
+// página.
+//
+// demandas-sondagem-online.csv e demandas-lab-online.json ENTRARAM aqui em
+// 2026-08-10 -- até então só alimentavam o build a partir de dist/ (Task 12),
+// e o botão "Atualizar dados" nunca os buscava (Task 13, decisão antiga).
+// Isso era o bug mais grave achado na auditoria de 2026-08-10: o refresh
+// recalculava Demandas Pendentes SEM o backlog (5.493 furos pendentes de
+// sondagem + 12.781 ensaios pendentes de lab, medidos em 2026-08-10), e o
+// estoque despencava pra perto de zero com o status mostrando "Atualizado"
+// em verde -- sem erro nenhum. Publicar os dois arquivos é o que permite ao
+// botão buscá-los -- ver render-semanal.js (URL_ESPELHO_DEMANDAS_SONDAGEM/
+// URL_ESPELHO_DEMANDAS_LAB).
 const ARQUIVOS_PUBLICAR = [
   'planejamento-semanal.html',
   'avancos-online.csv',
   'lab-online.csv',
   'equipes-online.csv',
+  'demandas-sondagem-online.csv',
+  'demandas-lab-online.json',
 ];
 
 async function rodarBuscas() {

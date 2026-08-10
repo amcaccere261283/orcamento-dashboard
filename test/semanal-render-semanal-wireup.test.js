@@ -562,7 +562,18 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
 
   // URLs fictícias, só pra deixarem de bater no padrão RE_URL_PENDENTE
   // (render-semanal.js) -- é isso que liga o caminho completo de 3 fontes.
+  //
+  // demandas-sondagem-online.csv/demandas-lab-online.json (2026-08-10):
+  // respondem 404 aqui de propósito -- este teste não cobre o merge do
+  // backlog (ver o teste dedicado logo abaixo), só precisa que a AUSÊNCIA
+  // delas não corrompa o resto do refresh. Sem esta rota explícita, o
+  // fallback `: csvLab` abaixo devolveria o CSV de Lab (4 colunas) como se
+  // fosse o de pendentes de sondagem (10 colunas) -- desalinhando
+  // gridAvancosCliente e derrubando parseAvancos.
   const fetchMock = (url) => {
+    if (url.indexOf('demandas-sondagem-online.csv') !== -1 || url.indexOf('demandas-lab-online.json') !== -1) {
+      return Promise.resolve({ ok: false, status: 404 });
+    }
     const texto = url.indexOf('pub?gid=609773455') !== -1 ? csvMatriz
       : url.indexOf('avancos-configurado-teste') !== -1 ? csvAvancos
       : csvLab;
@@ -610,6 +621,76 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
   // LAB.C (Lab, Ensaiado Dia = concluido)
   assert.strictEqual(demandas.totais.sondagemRealizada.reduce((a, b) => a + b, 0), 2, 'furo SP + ensaio LAB.C, ambos viram sondagem realizada em tipologias/totais');
   assert.ok(Object.keys(demandas.porRegistroEventos).length > 0, 'porRegistroEventos precisa ter entrada -- é o que alimenta Realizado/Tendência da Tabela Semanal (furos + ensaios de Lab)');
+});
+
+// Achado da auditoria de 2026-08-10: demandas-sondagem-online.csv e
+// demandas-lab-online.json alimentavam o BUILD (via build-dashboard.js), mas
+// o botão nunca os buscava -- clicar em "Atualizar dados" zerava o backlog
+// (5.493 furos + 12.781 ensaios pendentes, medidos naquele dia), com o
+// status mostrando "Atualizado" em verde, sem erro nenhum. Este teste prova
+// que o refresh agora busca e MESCLA as duas fontes, do mesmo jeito que o
+// build já fazia.
+test('atualizarDadosAoVivoSemanal: busca e mescla o backlog (demandas-sondagem-online.csv + demandas-lab-online.json) -- é o bug que zerava as pendentes', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-01T00:00:00Z');
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+
+  const csvMatriz = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERMINO,SONDAGEM,BASE,'
+    + Array(12).fill('mes').join(',') + ',PICO,MÉDIA,PROD.,DIAS,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,TICKET,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,OBS\n'
+    + 'Origem-B,Grupo-B,Tomador-Novo,SUP-0001-24,Escopo,Apoio,01/2026,12/2026,ST,P,'
+    + Array(12).fill('0').join(',') + ',2,2,8,25,'
+    + Array(12).fill('0').join(',') + ',100,100,9999,'
+    + Array(12).fill('0').join(',') + ',100,100,\n'
+    + ',,,,,,,,,T,'
+    + Array(12).fill('0').join(',') + ',0,0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,\n';
+  // 1 furo JÁ REALIZADO (entra sozinho, sem depender do backlog).
+  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+    + 'SUP-0001-24,46091,SP,CONCLUIDO,46093,Não,12.5,,17851-26,Sondador Sintético\n';
+  const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
+  // Backlog de sondagem: mesmo formato de 10 colunas (HEADER_SAIDA), status
+  // PENDENTE, sem Executado Dia -- furo ainda não realizado.
+  const csvDemandasSondagem = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+    + 'SUP-0001-24,46080,ST,PENDENTE,,,,,, \n';
+  const jsonDemandasLab = JSON.stringify([
+    { sup: 'SUP-0001-24', tipologia: 'LAB.C', concluido: null, criacao: '2026-03-05T00:00:00.000Z' },
+  ]);
+
+  const fetchMock = (url) => {
+    if (url.indexOf('demandas-sondagem-online.csv') !== -1) {
+      return Promise.resolve({ ok: true, text: () => Promise.resolve(csvDemandasSondagem) });
+    }
+    if (url.indexOf('demandas-lab-online.json') !== -1) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(JSON.parse(jsonDemandasLab)) });
+    }
+    const texto = url.indexOf('pub?gid=609773455') !== -1 ? csvMatriz
+      : url.indexOf('avancos-configurado-teste') !== -1 ? csvAvancos
+      : csvLab;
+    return Promise.resolve({ ok: true, text: () => Promise.resolve(texto) });
+  };
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'https://exemplo.com/avancos-configurado-teste.csv';
+  sandbox.URL_ESPELHO_LAB_SEMANAL = 'https://exemplo.com/lab-configurado-teste.csv';
+
+  await chamarEsperarAtualizacao(sandbox);
+
+  assert.match(documentoFalso.getElementById('status-atualizacao').textContent, /^Atualizado às \d{2}:\d{2}$/);
+  const demandas = sandbox.window.__DEMANDAS__;
+  // 3 chegadas: o furo CONCLUIDO (Criação da OS) + o furo PENDENTE do
+  // backlog de sondagem (Criação da OS) + o ensaio pendente do backlog de
+  // lab (Data Programada). Sem o merge desta rodada seriam só 1.
+  assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 3,
+    'furo realizado + furo pendente (backlog sondagem) + ensaio pendente (backlog lab)');
+  // O furo pendente nunca teve Executado Dia -- continua no estoque em
+  // TODOS os meses a partir da chegada. dezembro (índice 11) é o último mês
+  // do ano corrente na fixture PERIODOS_2026.
+  assert.ok(demandas.totais.pendentes[11] >= 1, 'o furo pendente do backlog fica no estoque de Demandas Pendentes');
 });
 
 // Regressão: com avancosLabConfigurados=true (o caso normal desde
@@ -660,6 +741,12 @@ test('atualizarDadosAoVivoSemanal: equipesAtivoPorDia (Realizado de Equipes) sob
   const fetchMock = (url) => {
     if (url.indexOf('historico.json') !== -1) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(historicoMatrizFresco) });
+    }
+    // Backlog (2026-08-10) fora do escopo deste teste -- 404 explícito, mesmo
+    // motivo do teste acima: sem isso, o fallback ': csvLab' corromperia o
+    // grid de Avanços com o CSV errado.
+    if (url.indexOf('demandas-sondagem-online.csv') !== -1 || url.indexOf('demandas-lab-online.json') !== -1) {
+      return Promise.resolve({ ok: false, status: 404 });
     }
     const texto = url.indexOf('pub?gid=609773455') !== -1 ? csvMatriz
       : url.indexOf('avancos-configurado-teste') !== -1 ? csvAvancos

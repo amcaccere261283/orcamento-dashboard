@@ -58,6 +58,23 @@ const PARES = [
     publicado: path.join(RAIZ, 'docs', 'equipes-online.csv'),
     comando: 'cp dist/equipes-online.csv docs/equipes-online.csv',
   },
+  // Entraram em 2026-08-10: até então só alimentavam o build a partir de
+  // dist/, e o botão "Atualizar dados" nunca os buscava -- o refresh
+  // recalculava Demandas Pendentes sem o backlog (5.493 furos + 12.781
+  // ensaios pendentes, medidos em 2026-08-10) e o estoque desabava pra perto
+  // de zero com o status "Atualizado" em verde, sem erro nenhum.
+  {
+    nome: 'CSV de Demandas de Sondagem',
+    origem: path.join(RAIZ, 'dist', 'demandas-sondagem-online.csv'),
+    publicado: path.join(RAIZ, 'docs', 'demandas-sondagem-online.csv'),
+    comando: 'cp dist/demandas-sondagem-online.csv docs/demandas-sondagem-online.csv',
+  },
+  {
+    nome: 'JSON de Demandas de Lab',
+    origem: path.join(RAIZ, 'dist', 'demandas-lab-online.json'),
+    publicado: path.join(RAIZ, 'docs', 'demandas-lab-online.json'),
+    comando: 'cp dist/demandas-lab-online.json docs/demandas-lab-online.json',
+  },
 ];
 
 function relativo(p) {

@@ -1352,6 +1352,14 @@ var URL_ESPELHO_LAB_SEMANAL = 'lab-online.csv';
 // em vez de rodar uma agregação própria sobre dado cru. Mesmo padrão de
 // publicação relativa dos outros dois.
 var URL_ESPELHO_EQUIPES_SEMANAL = 'equipes-online.csv';
+// 2026-08-10: os dois arquivos de BACKLOG (furos/ensaios ainda não
+// executados), que até então só alimentavam o build a partir de dist/ --
+// o botão nunca os buscava, e por isso zerava Demandas Pendentes a cada
+// clique (5.493 furos + 12.781 ensaios pendentes, medidos em 2026-08-10,
+// desapareciam com o status mostrando "Atualizado" em verde). Publicados
+// junto com a própria página, mesmo padrão relativo dos CSVs de cima.
+var URL_ESPELHO_DEMANDAS_SONDAGEM_SEMANAL = 'demandas-sondagem-online.csv';
+var URL_ESPELHO_DEMANDAS_LAB_SEMANAL = 'demandas-lab-online.json';
 // 2026-08-06: "Ativas (total)" do dashboard Matriz (outro projeto deste
 // repositório-mãe) -- JSON público, domínio diferente do GitHub Pages desta
 // página (por isso URL absoluta, não relativa como as de cima). Alimenta o
@@ -1450,6 +1458,20 @@ function atualizarDadosAoVivoSemanal() {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).catch(function () { return null; }),
+    // Demandas pendentes de sondagem/lab (2026-08-10) -- OPCIONAIS, mesmo
+    // espírito de robustez que equipes/aba EQ: sem elas, Demandas Pendentes
+    // volta a ficar sem o backlog (como sempre foi até aqui), mas o resto do
+    // refresh conclui normalmente. Gated por avancosLabConfigurados: fazem
+    // sentido só quando furos/ensaios também estão sendo recalculados.
+    avancosLabConfigurados
+      ? buscarCsvSemanal(URL_ESPELHO_DEMANDAS_SONDAGEM_SEMANAL).catch(function () { return null; })
+      : Promise.resolve(null),
+    avancosLabConfigurados
+      ? fetch(URL_ESPELHO_DEMANDAS_LAB_SEMANAL).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).catch(function () { return null; })
+      : Promise.resolve(null),
   ]).then(function (textos) {
     var registrosNovos = ParseMatrizCliente.parseMatrizCliente(ParseMatrizCliente.parseCsvGrid(textos[0]));
     if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho da MATRIZ -- confira se o Apps Script já rodou pelo menos uma vez');
@@ -1471,8 +1493,32 @@ function atualizarDadosAoVivoSemanal() {
       : window.__DEMANDAS__.equipesAtivoPorDia;
 
     if (avancosLabConfigurados) {
-      var furosLidos = ParseAvancos.parseAvancos(gridCsvComoXlsx(textos[1])).furos;
+      // Demandas pendentes de sondagem (textos[6], OPCIONAL): mesmo tratamento
+      // que build-dashboard.js -- as linhas de dado são anexadas ao grid de
+      // Avanços ANTES do parse (mesmo formato de 10 colunas, HEADER_SAIDA),
+      // então parseAvancos as lê como furos PENDENTE normais, sem precisar de
+      // um caminho de código à parte.
+      var gridAvancosCliente = ParseMatrizCliente.parseCsvGrid(textos[1]);
+      if (textos[6]) {
+        var gridPendentesCliente = ParseMatrizCliente.parseCsvGrid(textos[6]);
+        for (var iP = 1; iP < gridPendentesCliente.length; iP++) gridAvancosCliente.push(gridPendentesCliente[iP]);
+      }
+      gridAvancosCliente.unshift(null);
+      var furosLidos = ParseAvancos.parseAvancos(gridAvancosCliente).furos;
       var ensaiosLidos = ParseLab.parseLab(gridCsvComoXlsx(textos[2])).ensaios;
+      // Demandas pendentes de lab (textos[7], OPCIONAL): já chega no shape
+      // que parseLab produz ({sup, tipologia, concluido, criacao}) -- só
+      // reidrata 'criacao' de ISO string pra Date, mesmo que
+      // atualizar-demandas-lab-online.js grava. 'concluido' já vem null.
+      if (textos[7]) {
+        for (var iL = 0; iL < textos[7].length; iL++) {
+          var pend = textos[7][iL];
+          ensaiosLidos.push({
+            sup: pend.sup, tipologia: pend.tipologia, concluido: null,
+            criacao: pend.criacao ? new Date(pend.criacao) : null,
+          });
+        }
+      }
 
       var furos = ComputeDemandas.redirecionarSupsDesconhecidos(furosLidos, registrosNovos).itens;
       var ensaios = ComputeDemandas.redirecionarSupsDesconhecidos(ensaiosLidos, registrosNovos).itens;
