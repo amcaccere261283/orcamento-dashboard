@@ -92,11 +92,13 @@ Protótipo rodado em 2026-08-10 (roster + Link 7 de julho/agosto, carry-forward
 sem limite de 45 dias, definição de ativa anterior): média alocada 58,0 sobre
 32 pares (SUP, tipologia).
 
-### Tendência (amarelo) — ERRADO
+### Tendência (amarelo) — RESOLVIDO (2026-08-10)
 
-Vem da planilha (MATRIZ, linha `BASE=T`) — isso está certo e não muda. O que
-falta: **o valor tem que sumir nas semanas já encerradas.** Hoje ele se repete
-em todas as semanas do mês, inclusive nas fechadas.
+Vem da planilha (MATRIZ, linha `BASE=T`) — isso já estava certo e não mudou.
+**Implementado:** o valor some (null) nas semanas já ENCERRADAS (fim < hoje).
+Só a exibição muda -- `semanasTendenciaCompleta` continua com o valor
+repetido em toda semana, para quem precisar do mês inteiro (Gráfico,
+Consolidado). Commit `673aeb1`.
 
 ---
 
@@ -135,7 +137,7 @@ derrubava 4.942 furos legítimos e deixava passar 157.
 ela precisa entrar em `HEADER_SAIDA` e ser lida por `parse-avancos.js`. O
 `Status Atual` já é carregado.
 
-### Tendência — CORRETA por enquanto
+### Tendência — CORRETA (sem mudança)
 
 ### Demandas — ERRADA
 
@@ -163,8 +165,12 @@ pendentes) nem `demandas-lab-online.json` (12.781), e os dois nem chegam a
 propósito. Resultado: clicar em "Atualizar dados" zera o estoque, com status
 verde "Atualizado".
 
-**Correção pedida: publicar os dois arquivos e fazer o refresh buscá-los**, de
-modo que as 18.306 unidades apareçam na tabela nos dois caminhos.
+**IMPLEMENTADO em 2026-08-10 (commit `fba43c0`):** os dois arquivos entraram
+em `ARQUIVOS_PUBLICAR` (`atualizar-arquivos.js`) e o refresh
+(`render-semanal.js`) passou a buscá-los e mesclá-los, no mesmo formato que
+o build já usava -- pendentes de sondagem viram linhas no grid de Avanços
+antes do parse; pendentes de lab entram direto no array de ensaios. As duas
+são opcionais (404 não derruba o resto do refresh).
 
 ---
 
@@ -172,7 +178,7 @@ modo que as 18.306 unidades apareçam na tabela nos dois caminhos.
 
 ### Previsto — CORRETO
 
-### Realizado — ERRADO nos meses fechados
+### Realizado — RESOLVIDO (2026-08-10)
 
 - **Mês vigente:** como está hoje (eventos do Avanço Sond × ticket médio).
   Correto.
