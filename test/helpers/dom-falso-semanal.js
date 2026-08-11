@@ -84,13 +84,59 @@ function criarDocumentoFalso() {
     return elementos[id];
   }
 
+  // --- Elementos de ARRASTO da aba Alocação (2026-08-11) ---------------------
+  //
+  // destacarCelulasCompativeis/limparDestaquesAlocacao (render-semanal.js)
+  // varrem o DOCUMENTO por classe. Sem estes stubs, querySelectorAll devolveria
+  // [] e querySelector devolveria null, as duas funções virariam no-op, e um
+  // teste sobre elas passaria VAZIO -- pior que não existir, porque daria a
+  // impressão de cobertura. É exatamente o destaque preso na tela que a
+  // Decisão 3 do spec quer travar.
+  //
+  // Os testes registram as células que querem com registrarCelulasAlocacao().
+  const celulasAlocacao = [];
+  let poolAlocacao = null;
+
+  function comClassList(extra) {
+    const classes = new Set();
+    return Object.assign({
+      classList: {
+        add: (c) => classes.add(c),
+        remove: (c) => classes.delete(c),
+        contains: (c) => classes.has(c),
+        toggle: (c, forcar) => {
+          const presente = forcar === undefined ? !classes.has(c) : !!forcar;
+          if (presente) classes.add(c); else classes.delete(c);
+          return presente;
+        },
+      },
+      classes,
+    }, extra || {});
+  }
+
   return {
     elementos,
     getElementById: elemento,
+
+    // colunas: ['SP', 'ST', ...] -- uma célula por entrada, com data-coluna.
+    registrarCelulasAlocacao(colunas) {
+      celulasAlocacao.length = 0;
+      (colunas || []).forEach((coluna) => {
+        celulasAlocacao.push(comClassList({
+          getAttribute: (attr) => (attr === 'data-coluna' ? coluna : null),
+        }));
+      });
+      return celulasAlocacao;
+    },
+    poolAlocacao() {
+      if (!poolAlocacao) poolAlocacao = comClassList({});
+      return poolAlocacao;
+    },
     // document.querySelector só é chamado como '#algum-id .filtro-multi-trigger'
     // ou '#algum-id .filtro-multi-painel' (ver atualizarRotuloFiltro/montarFiltroMulti
     // em scriptFiltros()) -- resolve pro mesmo elemento(id) e delega.
     querySelector(sel) {
+      if (sel === '.pool-alocacao') return this.poolAlocacao();
       const m = /^#([\w-]+) (\.filtro-multi-(?:trigger|painel))$/.exec(sel);
       return m ? elemento(m[1]).querySelector(m[2]) : null;
     },
@@ -104,6 +150,7 @@ function criarDocumentoFalso() {
     // Os demais (.filtro-multi-trigger, .filtro-multi.aberto) continuam
     // vazios de propósito: nenhum teste depende de achar outro filtro aberto.
     querySelectorAll(sel) {
+      if (sel === '.celula-alocacao') return celulasAlocacao;
       if (sel !== '#tabela-alertas tbody tr') return [];
       const corpo = elemento('corpo-alertas');
       const cache = linhasPorTabela.get(corpo);

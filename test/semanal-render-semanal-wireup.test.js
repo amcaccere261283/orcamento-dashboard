@@ -2084,3 +2084,119 @@ test('trocar de semana enquanto um carregamento anterior está em voo não deixa
   resolversGet[1]({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
   await promessaSemana1;
 });
+
+// --- Devolução ao pool (2026-08-11, Decisões 1/2/3 do spec) ------------------
+//
+// Os gestos não passam por dispatchEvent: test/helpers/dom-falso-semanal.js não
+// o implementa (ver os comentários espalhados acima). Os testes chamam as
+// funções do sandbox direto, que é como o resto deste arquivo já faz.
+
+function sandboxAlocacao() {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
+    equipesPeriodo: { ano: 2026, mes: 8 },
+    osParaSup: { '16925-25': 'SUP-0001-24' },
+  });
+  const html = renderSemanal({
+    registros, baseline: [], demandas, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-08-01T00:00:00Z'),
+  });
+  return montarSandbox(html);
+}
+
+// closest() dos elementos do DOM falso devolve sempre o próprio elemento,
+// ignorando o seletor -- inútil para provar que resolverAlvoAlocacao distingue
+// célula de pool. Estes stubs respeitam o seletor, que é o ponto do teste.
+function alvoStub(classe, attrs) {
+  const el = {
+    closest: (sel) => (sel === classe ? el : null),
+    getAttribute: (a) => (attrs || {})[a] || null,
+  };
+  return el;
+}
+
+test('resolverAlvoAlocacao distingue célula, pool e vazio', async () => {
+  const { sandbox, documentoFalso } = sandboxAlocacao();
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  assert.strictEqual(typeof sandbox.resolverAlvoAlocacao, 'function');
+
+  const celula = alvoStub('.celula-alocacao', { 'data-sup': 'SUP-0001-24', 'data-coluna': 'ST' });
+  const alvoCelula = sandbox.resolverAlvoAlocacao({ target: celula });
+  assert.strictEqual(alvoCelula.tipo, 'celula');
+  assert.strictEqual(alvoCelula.el.getAttribute('data-sup'), 'SUP-0001-24');
+
+  assert.strictEqual(sandbox.resolverAlvoAlocacao({ target: alvoStub('.pool-alocacao') }).tipo, 'pool');
+
+  const nada = { closest: () => null };
+  assert.strictEqual(sandbox.resolverAlvoAlocacao({ target: nada }), null,
+    'fora de célula e de pool não é alvo nenhum -- soltar no vazio não pode devolver');
+});
+
+test('devolver apaga a alocação; soltar no vazio a preserva', async () => {
+  const { sandbox, documentoFalso } = sandboxAlocacao();
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await sandbox.selecionarSemanaAlocacao(0);
+
+  assert.strictEqual(sandbox.aplicarMovimento('4', 'SUP-0001-24', 'ST'), true);
+  assert.ok(sandbox.ESTADO_ALOCACAO.alocacao['4'], 'pré-condição: alocada');
+
+  // Soltar no vazio: resolverAlvoAlocacao devolve null, ninguém chama
+  // aplicarMovimento, e a alocação sobrevive.
+  assert.strictEqual(sandbox.resolverAlvoAlocacao({ target: { closest: () => null } }), null);
+  assert.ok(sandbox.ESTADO_ALOCACAO.alocacao['4'], 'soltar no vazio não pode desfazer');
+
+  // Soltar no pool: devolve.
+  sandbox.aplicarMovimento('4', '', '');
+  assert.strictEqual(sandbox.ESTADO_ALOCACAO.alocacao['4'], undefined);
+});
+
+test('o destaque do pool acende só para equipe ALOCADA, e morre na limpeza', async () => {
+  const { sandbox, documentoFalso } = sandboxAlocacao();
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  documentoFalso.registrarCelulasAlocacao(['SP', 'ST']);
+  const pool = documentoFalso.poolAlocacao();
+
+  // Equipe no pool: devolver seria no-op, então o pool não acende.
+  sandbox.destacarCelulasCompativeis(['ST'], false);
+  assert.strictEqual(pool.classes.has('pool-alvo'), false);
+  sandbox.limparDestaquesAlocacao();
+
+  // Equipe alocada: acende.
+  sandbox.destacarCelulasCompativeis(['ST'], true);
+  assert.strictEqual(pool.classes.has('pool-alvo'), true);
+  const celulas = documentoFalso.querySelectorAll('.celula-alocacao');
+  assert.strictEqual(celulas.filter((c) => c.classes.has('celula-alvo')).length, 1, 'só a coluna ST');
+  assert.strictEqual(celulas.filter((c) => c.classes.has('celula-inerte')).length, 1);
+
+  // E a limpeza tem que apagar TUDO -- é o modo de falha da Decisão 3: limpar o
+  // pool em outro lugar o deixaria aceso para sempre em um dos quatro caminhos
+  // de saída do arrasto.
+  sandbox.limparDestaquesAlocacao();
+  assert.strictEqual(pool.classes.has('pool-alvo'), false, 'o destaque do pool tem que morrer junto');
+  assert.strictEqual(celulas.filter((c) => c.classes.has('celula-alvo')).length, 0);
+  assert.strictEqual(celulas.filter((c) => c.classes.has('celula-inerte')).length, 0);
+});
+
+test('em somenteLeitura nenhum cartão é arrastável -- nem alocar nem devolver começam', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
+    // Espelho de JULHO com a página em agosto dispara somenteLeitura.
+    equipesPeriodo: { ano: 2026, mes: 7 },
+    osParaSup: { '16925-25': 'SUP-0001-24' },
+  });
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-08-01T00:00:00Z') });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const secao = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  assert.match(secao, /Somente leitura/);
+  assert.doesNotMatch(secao, /data-arrastavel="sim"/);
+});

@@ -489,6 +489,9 @@ const CSS_SEMANAL = `
     border: 1px dashed var(--border); border-radius: 8px;
   }
   .pool-cartoes { display: flex; flex-wrap: wrap; gap: 8px; min-height: 44px; }
+  /* O pool como alvo de DEVOLUÇÃO, só enquanto se arrasta uma equipe que já
+     está alocada. Some em limparDestaquesAlocacao, junto com o das células. */
+  .pool-alvo { outline: 2px dashed #4f8ff0; outline-offset: 3px; }
   .pool-vazio { font-size: 12px; color: var(--muted); font-style: italic; margin: 0; }
   .fora-do-quadro { font-size: 12px; color: var(--text-secondary); }
   .fora-do-quadro summary { cursor: pointer; color: var(--text-secondary); }
@@ -1593,21 +1596,35 @@ function equipeAlocavelPeloId(id) {
 // demais (celula-inerte). Limpa sempre pelo par abaixo -- em TODO caminho de
 // saída do arrasto, inclusive recusa, senão o quadro fica preso num estado de
 // "arrastando" que nunca existiu de verdade.
-function destacarCelulasCompativeis(colunas) {
+// podeDevolver: só acende o POOL quando a equipe arrastada já está alocada.
+// Arrastando uma que já está no pool, devolver é no-op -- acender sugeriria uma
+// ação que não existe.
+function destacarCelulasCompativeis(colunas, podeDevolver) {
   var celulas = document.querySelectorAll('.celula-alocacao');
   for (var i = 0; i < celulas.length; i++) {
     var coluna = celulas[i].getAttribute ? celulas[i].getAttribute('data-coluna') : null;
     if (colunas.indexOf(coluna) !== -1) celulas[i].classList.add('celula-alvo');
     else celulas[i].classList.add('celula-inerte');
   }
+  if (!podeDevolver) return;
+  var pool = document.querySelector('.pool-alocacao');
+  if (pool) pool.classList.add('pool-alvo');
 }
 
-function limparDestaqueCelulas() {
+// Chamava-se limparDestaqueCelulas, e o nome virou mentira em 2026-08-11,
+// quando o pool passou a acender junto. É chamada dos CINCO pontos que encerram
+// um gesto, e todos querem a limpeza COMPLETA -- limpar o pool em qualquer
+// outro lugar o deixaria aceso para sempre em pelo menos um dos quatro caminhos
+// de saída do arrasto (soltura aceita, recusada, pointercancel, ou solta fora
+// de tudo). Ver o comentário de encerrarArrastoAlocacao.
+function limparDestaquesAlocacao() {
   var celulas = document.querySelectorAll('.celula-alocacao');
   for (var i = 0; i < celulas.length; i++) {
     celulas[i].classList.remove('celula-alvo');
     celulas[i].classList.remove('celula-inerte');
   }
+  var pool = document.querySelector('.pool-alocacao');
+  if (pool) pool.classList.remove('pool-alvo');
 }
 
 function criarFantasmaArrasto(equipeId) {
@@ -1645,7 +1662,7 @@ function encerrarArrastoAlocacao() {
   ARRASTO_ALOCACAO.cartao = null;
   ARRASTO_ALOCACAO.equipeId = null;
   ARRASTO_ALOCACAO.moveu = false;
-  limparDestaqueCelulas();
+  limparDestaquesAlocacao();
 }
 
 // Resolve a .celula-alocacao sob o ponto do soltar.
@@ -1660,13 +1677,26 @@ function encerrarArrastoAlocacao() {
 // destino. elementFromPoint continua funcionando porque lê a posição real na
 // tela, ignorando quem capturou o quê. Cai para e.target.closest só em
 // ambiente sem elementFromPoint (não deveria acontecer em navegador real).
-function resolverCelulaAlocacao(e) {
-  if (typeof document.elementFromPoint === 'function') {
-    var sob = document.elementFromPoint(e.clientX, e.clientY);
-    var viaPonto = sob && sob.closest ? sob.closest('.celula-alocacao') : null;
-    if (viaPonto) return viaPonto;
+// Resolve o ALVO do soltar: uma célula, o pool, ou nada.
+//
+// Era resolverCelulaAlocacao, que só conhecia célula e devolvia null para todo
+// o resto -- por isso soltar no pool não fazia nada. A devolução (2026-08-11)
+// precisa distinguir "soltou no pool" de "soltou no vazio": o primeiro devolve
+// a equipe ao pool, o segundo não faz NADA, de propósito. Alocar é trabalho do
+// usuário; um solte impreciso não pode desfazê-lo.
+function resolverAlvoAlocacao(e) {
+  var sob = null;
+  if (typeof document.elementFromPoint === 'function' && typeof e.clientX === 'number') {
+    sob = document.elementFromPoint(e.clientX, e.clientY);
   }
-  return e.target && e.target.closest ? e.target.closest('.celula-alocacao') : null;
+  if (!sob) sob = e.target;
+  if (!sob || !sob.closest) return null;
+  // A célula ganha prioridade: se por layout as duas casarem, o destino
+  // específico vence o genérico.
+  var celula = sob.closest('.celula-alocacao');
+  if (celula) return { tipo: 'celula', el: celula };
+  if (sob.closest('.pool-alocacao')) return { tipo: 'pool', el: null };
+  return null;
 }
 
 // Um único listener delegado em #secao-alocacao, montado UMA VEZ (a seção
@@ -1694,7 +1724,7 @@ function inicializarInteracaoAlocacao() {
     // abandonada (clicou numa equipe e apertou outra sem soltar) deixaria o
     // destaque da primeira somado ao da segunda, senão.
     SELECAO_ALOCACAO.equipeId = null;
-    limparDestaqueCelulas();
+    limparDestaquesAlocacao();
 
     ARRASTO_ALOCACAO.pointerId = e.pointerId;
     ARRASTO_ALOCACAO.cartao = cartao;
@@ -1702,7 +1732,7 @@ function inicializarInteracaoAlocacao() {
     ARRASTO_ALOCACAO.moveu = false;
     ARRASTO_ALOCACAO.fantasma = criarFantasmaArrasto(equipeId);
     posicionarFantasmaArrasto(ARRASTO_ALOCACAO.fantasma, e.clientX, e.clientY);
-    destacarCelulasCompativeis(equipe.colunas || []);
+    destacarCelulasCompativeis(equipe.colunas || [], !!ESTADO_ALOCACAO.alocacao[equipeId]);
 
     // FIX (revisão do Task 9, achado Critical 2): captura o ponteiro no
     // cartão -- garante que pointermove/pointerup/pointercancel CONTINUAM
@@ -1739,8 +1769,13 @@ function inicializarInteracaoAlocacao() {
     // não há célula sob o ponto (soltou fora da grade) ou quando
     // aplicarMovimento recusa. O destaque/fantasma já foram limpos por
     // encerrarArrastoAlocacao() acima.
-    var celula = resolverCelulaAlocacao(e);
-    if (celula) aplicarMovimento(equipeId, celula.getAttribute('data-sup'), celula.getAttribute('data-coluna'));
+    // Célula aloca; pool DEVOLVE; vazio não faz nada.
+    var alvo = resolverAlvoAlocacao(e);
+    if (alvo && alvo.tipo === 'celula') {
+      aplicarMovimento(equipeId, alvo.el.getAttribute('data-sup'), alvo.el.getAttribute('data-coluna'));
+    } else if (alvo && alvo.tipo === 'pool') {
+      aplicarMovimento(equipeId, '', '');
+    }
     // O 'click' que o navegador dispara logo depois, para este MESMO gesto de
     // arrasto, já foi resolvido aqui -- suprime esse click específico (ver o
     // handler de 'click' abaixo) para não reaplicar nem tentar selecionar.
@@ -1798,9 +1833,15 @@ function inicializarInteracaoAlocacao() {
     if (SELECAO_ALOCACAO.equipeId) {
       var equipeIdSelecionado = SELECAO_ALOCACAO.equipeId;
       SELECAO_ALOCACAO.equipeId = null;
-      limparDestaqueCelulas();
-      var celula = e.target && e.target.closest ? e.target.closest('.celula-alocacao') : null;
-      if (celula) aplicarMovimento(equipeIdSelecionado, celula.getAttribute('data-sup'), celula.getAttribute('data-coluna'));
+      limparDestaquesAlocacao();
+      // Mesmo alvo do arrasto: clicar no pool com uma equipe selecionada
+      // devolve, exatamente como soltá-la ali.
+      var alvoClique = resolverAlvoAlocacao(e);
+      if (alvoClique && alvoClique.tipo === 'celula') {
+        aplicarMovimento(equipeIdSelecionado, alvoClique.el.getAttribute('data-sup'), alvoClique.el.getAttribute('data-coluna'));
+      } else if (alvoClique && alvoClique.tipo === 'pool') {
+        aplicarMovimento(equipeIdSelecionado, '', '');
+      }
       return;
     }
 
@@ -1814,7 +1855,7 @@ function inicializarInteracaoAlocacao() {
     var equipeClicada = equipeAlocavelPeloId(equipeIdClicado);
     if (!equipeClicada) return;
     SELECAO_ALOCACAO.equipeId = equipeIdClicado;
-    destacarCelulasCompativeis(equipeClicada.colunas || []);
+    destacarCelulasCompativeis(equipeClicada.colunas || [], !!ESTADO_ALOCACAO.alocacao[equipeIdClicado]);
   });
 }
 
