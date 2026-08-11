@@ -1,4 +1,4 @@
-# Aba Alocação Equipes: devolução ao pool e pool agrupado por tipologia
+# Aba Alocação Equipes: devolução, pool por tipologia, filtro de SUP e busca de equipe
 
 Data: 2026-08-11
 Escopo: `tools/semanal/render-aba-alocacao.js` (o pool), `tools/semanal/compute-alocacao.js`
@@ -6,13 +6,14 @@ Escopo: `tools/semanal/render-aba-alocacao.js` (o pool), `tools/semanal/compute-
 (os gestos), e os testes correspondentes. Nada fora da aba Alocação Equipes.
 
 Continuação de `2026-08-10-semanal-alocacao-equipes-design.md`, que desenhou a aba. Este
-documento cobre três pedidos do dono do projeto feitos em 2026-08-11, depois de o modo
+documento cobre quatro pedidos do dono do projeto feitos em 2026-08-11, depois de o modo
 Sheet entrar no ar:
 
 1. um arrasto de **devolução** — tirar uma equipe de um contrato e mandá-la de volta ao pool;
 2. **organizar o pool por tipologia**, que hoje é uma lista plana;
 3. **o filtro de SUP não filtra a grade** — bug relatado depois dos dois primeiros, e que
-   por tocar nos mesmos arquivos entra aqui em vez de num documento à parte (Decisão 7).
+   por tocar nos mesmos arquivos entra aqui em vez de num documento à parte (Decisão 7);
+4. um **campo para achar equipe** por id ou líder (Decisão 8).
 
 ## O estado de hoje, medido
 
@@ -199,6 +200,47 @@ mais fácil de errar deste documento.
 Os totais da faixa saem de `resumirAlocacao(grade)` e passam a excluir as linhas podadas —
 consistente com a grade exibida, e é o que se espera de um filtro.
 
+## Decisão 8 — campo de busca de equipe, próprio da aba
+
+Pedido de 2026-08-11: um filtro por **id da equipe**, mostrando id + líder, com um campo
+para digitar. (O pedido original incluía "sondador"; **retirado pelo dono do projeto no
+mesmo dia**. Fica registrado que ele não era trivial: `sondador` não existe no registro da
+equipe — a aba EQ tem `Nome` (col. 1) e `Líderes` (col. 4), e "sondador" é a coluna Y do
+Avanço Sond, outra fonte. O popup do cartão, aliás, documenta a regra de que nome de
+pessoa do efetivo não entra nesta página, porque vive na aba PESSOAS, que o projeto não
+lê.)
+
+**O cartão já mostra os dois campos pedidos** — `cartao-medalhao` traz o id e `cartao-lider`
+o líder. Nada a acrescentar ali; o que falta é o campo de digitação.
+
+**Um `<input type="text">` próprio da aba**, junto dos controles de semana, e **não** na
+barra de filtros compartilhada. A barra compartilhada opera sobre `registros`
+(`indicesFiltrados`), e equipe não é registro — enfiar um filtro de equipe ali significaria
+um filtro que não faz nada em cinco das sete abas. Mesmo precedente do Balanço e do
+Consolidado, que têm controles próprios.
+
+**Casa contra id E líder**, por substring, insensível a maiúsculas e a acento, via
+`normalizarBusca` (`render-shell.js`) — a função já existe e já é a usada pela busca da aba
+Alertas. Digitar `37` acha `EQ-37`; digitar `silva` acha a equipe do líder Silva.
+
+**Escopo: o campo poda o POOL.** É onde está o problema real — são ~127 cartões depois do
+agrupamento da Decisão 4, e achar uma equipe entre eles a olho é o que motivou o pedido. Os
+grupos vazios pela poda somem, pela regra que a Decisão 4 já estabelece.
+
+**Equipe que casa a busca mas está ALOCADA não some calada.** Ela não está no pool (está
+numa célula), então a poda sozinha faria o campo responder "não achei" para uma equipe que
+existe — o modo de falha que este projeto evita. O pool passa a emitir, abaixo dos grupos,
+uma linha por equipe casada e alocada: `EQ-37 (Silva) — alocada em SUP-7133-24 · ST`. Texto,
+não cartão: arrastar se faz da célula, e um segundo cartão arrastável reintroduziria o risco
+de dupla alocação da Decisão 7.
+
+**O campo não mexe na grade.** Ele responde "onde está esta equipe?", não "mostre só esta
+equipe" — quem recorta a grade é o filtro de SUP (Decisão 7). Os dois eixos são
+independentes e podem valer ao mesmo tempo.
+
+**O texto digitado não é estado persistido** — vive só no DOM, como a busca da aba Alertas.
+Trocar de semana ou de mês não o preserva.
+
 ## Testes
 
 Novos, em `test/semanal-render-semanal-wireup.test.js` (gestos) e
@@ -230,6 +272,16 @@ Filtro (Decisão 7), o grupo que hoje não existe:
 - os totais da faixa excluem as linhas podadas;
 - limpar o filtro traz a linha e a equipe de volta, na mesma célula — a poda é de
   exibição, nunca de estado.
+
+Busca de equipe (Decisão 8):
+- digitar parte do id acha a equipe; digitar parte do líder também;
+- insensível a maiúsculas e a acento (é o que `normalizarBusca` promete);
+- equipe que casa mas está alocada aparece na linha de texto, com SUP e coluna, e **não**
+  como cartão arrastável;
+- campo vazio devolve o pool inteiro, idêntico ao de antes da busca;
+- busca sem nenhum resultado não deixa a área muda — diz que não achou;
+- a busca poda o pool mas **não** mexe nas linhas da grade;
+- busca e filtro de SUP valem ao mesmo tempo sem se atropelar.
 
 Regressão:
 - o `INVARIANTE: com a alocação vazia, a soma da tendência da grade bate com a Tabela
