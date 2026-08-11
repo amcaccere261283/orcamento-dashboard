@@ -148,13 +148,30 @@ function pendentesNaData(registros, indices, demandas, dataEpoch) {
 // registro, então 'achouAlgumaChave' fica false e a função devolve null
 // (sem dado) sozinha -- diaEpoch é uma contagem absoluta de dias, nunca
 // colide entre meses diferentes.
+// Dias da semana [inicioEpoch, fimEpoch] que NÃO são domingo -- domingo sai
+// da conta (2026-08-10, decisão do dono do projeto: semana cheia = segunda
+// a sábado, 6 dias). Se o recorte cair inteiro num domingo (acontece na
+// borda do mês, quando a "semana" do calendário real tem só esse dia),
+// esse domingo é contado sozinho em vez de dar denominador zero.
+function diasUteisNoIntervalo(inicioEpoch, fimEpoch) {
+  var dias = 0;
+  var apenasDomingo = 0;
+  for (var dia = inicioEpoch; dia <= fimEpoch; dia++) {
+    var diaSemana = new Date(dia * 86400000).getUTCDay(); // 0 = domingo
+    if (diaSemana === 0) { apenasDomingo++; continue; }
+    dias++;
+  }
+  return dias > 0 ? dias : apenasDomingo;
+}
+
 function somarEquipesNoIntervalo(registros, indices, demandas, inicioEpoch, fimEpoch) {
   var equipesPorDia = demandas && demandas.equipesPorDia;
   if (!equipesPorDia || fimEpoch < inicioEpoch) return null;
-  var totalDias = fimEpoch - inicioEpoch + 1;
+  var totalDias = diasUteisNoIntervalo(inicioEpoch, fimEpoch);
   var somaTotal = 0;
   var achouAlgumaChave = false;
   for (var dia = inicioEpoch; dia <= fimEpoch; dia++) {
+    if (new Date(dia * 86400000).getUTCDay() === 0 && totalDias > 0 && fimEpoch > inicioEpoch) continue; // domingo não soma quando há outro dia na semana
     (indices || []).forEach(function (i) {
       var registro = registros[i];
       if (!registro) return;

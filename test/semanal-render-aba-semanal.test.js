@@ -451,8 +451,8 @@ test('Realizado/Tendência aparecem em Volume E Financeiro (Financeiro pesado pe
 test('Realizado de Equipes: média diária por semana, cortada em d-1 -- S1 e S2 fechadas, S3 vigente truncada em 2 dias, S4/S5 futuras sem-dado. Tendência (2026-08-07) vem de registro.total.equipes, repetida nas semanas que ainda NÃO fecharam (2026-08-10: some nas encerradas -- S1/S2 aqui)', () => {
   const equipesPorDia = {
     'SUP-0001-24||ST': {
-      [diaJul(1)]: 3, [diaJul(3)]: 1,    // S1 (5 dias, só 2 com dado): soma 4 / 5 dias da semana = 0,8 -- ver teste seguinte pra denominador
-      [diaJul(8)]: 7,                     // S2 (7 dias, só 1 com dado): 7 / 7 dias = 1,00 -- ver teste seguinte
+      [diaJul(1)]: 3, [diaJul(3)]: 1,    // S1 (5 dias corridos, seg-dom, mas domingo dia5 sai da conta -- 4 dias úteis): soma 4 / 4 = 1,00 -- ver teste seguinte pra denominador
+      [diaJul(8)]: 7,                     // S2 (7 dias corridos, seg-dom, domingo dia12 sai da conta -- 6 dias úteis): 7 / 6 = 1,1667 -> Math.ceil = 2
       [diaJul(14)]: 3,                    // S3 (13-19, truncada em d-1=14 -> 2 dias: 13 e 14)
       [diaJul(22)]: 99,                   // S4 é futura (hoje=15) -- não deve entrar em nada
     },
@@ -468,17 +468,20 @@ test('Realizado de Equipes: média diária por semana, cortada em d-1 -- S1 e S2
     [registroComTendencia], [0], 'equipes', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
     true, indiceSemanaAtual(SEMANAS_JULHO, HOJE_15_JUL), demandas, HOJE_15_JUL
   );
-  // somarEquipesNoIntervalo divide pelo TAMANHO DA JANELA (dias corridos),
-  // não pelos dias com dado -- diferente de mediaEquipesNoIntervalo (a versão
-  // anterior, roster global): S1 = (3+1)/5 dias = 0,8 -> Math.ceil = 1; S2 =
-  // 7/7 dias = 1,00 -> 1.
+  // somarEquipesNoIntervalo divide pelos DIAS ÚTEIS DA JANELA (segunda a
+  // sábado -- domingo sai do denominador E da soma, decisão do dono do
+  // projeto em 2026-08-10), não pelos dias com dado nem pelos dias corridos
+  // -- diferente de mediaEquipesNoIntervalo (a versão anterior, roster
+  // global): S1 = (3+1)/4 dias úteis = 1,00 -> 1; S2 = 7/6 dias úteis =
+  // 1,1667 -> Math.ceil = 2.
   //
-  // S3 desde 2026-08-10: a janela para em d-1 (dia 14), não em hoje (15) --
-  // são 2 dias, não 3, então 3/2 = 1,5 -> Math.ceil = 2. O dia corrente está
-  // incompleto no Link 7 (as fotos chegam ao longo do dia) e incluí-lo
-  // diluía a média com um dia parcial.
-  assert.deepStrictEqual(series.semanasRealizado, [1, 1, 2, null, null]);
-  assert.ok(Math.abs(series.fechamentoRealizado - 4 / 3) < 1e-9, 'fechamento é a MÉDIA de [1,1,2], não a soma');
+  // S3 desde 2026-08-10 (corte em d-1): a janela para no dia 14, não no dia
+  // 15 (hoje) -- são 2 dias, ambos úteis (13=segunda, 14=terça), então
+  // 3/2 = 1,5 -> Math.ceil = 2. O dia corrente está incompleto no Link 7 (as
+  // fotos chegam ao longo do dia) e incluí-lo diluía a média com um dia
+  // parcial.
+  assert.deepStrictEqual(series.semanasRealizado, [1, 2, 2, null, null]);
+  assert.ok(Math.abs(series.fechamentoRealizado - 5 / 3) < 1e-9, 'fechamento é a MÉDIA de [1,2,2], não a soma');
   // 2026-08-10: Tendência de Equipes some nas semanas já ENCERRADAS (fim <
   // hoje) -- S1 e S2 fecharam antes de 15/07, ficam null. S3 (vigente),
   // S4/S5 (futuras) continuam mostrando o Total repetido, igual ao Previsto.
@@ -574,6 +577,58 @@ test('Realizado de Equipes: regressão -- replica S1=85 e S2=84 (83,75 arredonda
   assert.strictEqual(semanasAgosto[0].fim, diaAgo(2));
   assert.strictEqual(series.semanasRealizado[0], 85, '(85+85)/2 dias = 85,00');
   assert.strictEqual(series.semanasRealizado[1], 84, '(85+84+83+83)/4 dias = 83,75 -> Math.ceil = 84');
+});
+
+// 2026-08-10, decisão do dono do projeto: domingo sai do denominador E da
+// soma de "Realizado de Equipes" -- semana cheia passa a ser segunda a
+// sábado (6 dias), não os 7 dias corridos que somarEquipesNoIntervalo usava
+// até aqui. Semana usada: 03-09/08/2026 (segunda a domingo, semana inteira
+// dentro do mês, sem truncamento -- hoje é 11/08, depois do fim dela).
+// Valores DIFERENTES entre domingo e o resto de propósito (6 nos dias úteis,
+// 60 no domingo): se o domingo ainda entrasse na soma ou no denominador, o
+// resultado mudaria bastante -- com valor uniforme os dois cálculos dão o
+// mesmo número por coincidência (36/6 = 42/7 = 6), o que não provaria nada
+// (é o alerta do próprio brief desta tarefa).
+test('Realizado de Equipes: domingo sai do denominador E da soma -- semana cheia (seg-sáb) vira 6 dias, não 7', () => {
+  const semanasAgosto = semanasDoMes(2026, 7); // mesIndex 0-based -- 7 = agosto
+  const semanaCheia = semanasAgosto[1]; // 03-09/08: segunda a domingo, inteira dentro do mês
+  assert.strictEqual(new Date(semanaCheia.inicio * 86400000).getUTCDay(), 1, 'início é segunda-feira');
+  assert.strictEqual(new Date(semanaCheia.fim * 86400000).getUTCDay(), 0, 'fim é domingo');
+  const equipesPorDia = { 'SUP-0001-24||ST': {} };
+  for (let dia = semanaCheia.inicio; dia <= semanaCheia.fim; dia++) {
+    const domingo = new Date(dia * 86400000).getUTCDay() === 0;
+    equipesPorDia['SUP-0001-24||ST'][dia] = domingo ? 60 : 6;
+  }
+  const demandas = { porRegistroEventos: {}, equipesPorDia };
+  const hojeDepoisDaSemana = diaEpoch(new Date(Date.UTC(2026, 7, 11))); // 11/08, depois do fim da semana (09/08)
+  const series = calcularSeriesSemanaisDimensao(
+    [registro(0)], [0], 'equipes', 7, semanasAgosto, semanasAgosto.length,
+    true, indiceSemanaAtual(semanasAgosto, hojeDepoisDaSemana), demandas, hojeDepoisDaSemana
+  );
+  // Novo: soma seg-sáb (6*6=36) / 6 dias = 6. Se o domingo ainda entrasse
+  // (soma antiga 36+60=96, denominador 7), daria Math.ceil(96/7) = 14 --
+  // bem diferente de 6, prova que a mudança realmente pega os dois lugares.
+  assert.strictEqual(series.semanasRealizado[1], 6, 'domingo (60) não soma nem conta no denominador -- 36/6 = 6, não Math.ceil(96/7) = 14');
+});
+
+// Caso de borda documentado no próprio código (diasUteisNoIntervalo,
+// render-aba-semanal.js): quando o recorte cai INTEIRO num domingo --
+// acontece na borda do mês, quando a semana do calendário real (segunda a
+// domingo, corte sempre dentro do mês) tem só esse dia. Fevereiro/2026
+// começa num domingo (01/02), então S1 é só esse dia sozinho.
+test('Realizado de Equipes: recorte que é só um domingo (borda de mês) conta esse domingo sozinho, não vira "sem dado"', () => {
+  const semanasFevereiro = semanasDoMes(2026, 1); // mesIndex 0-based -- 1 = fevereiro
+  const s1 = semanasFevereiro[0];
+  assert.strictEqual(s1.inicio, s1.fim, 'S1 de fevereiro/2026 é um único dia');
+  assert.strictEqual(new Date(s1.inicio * 86400000).getUTCDay(), 0, 'esse único dia é domingo');
+  const equipesPorDia = { 'SUP-0001-24||ST': { [s1.inicio]: 9 } };
+  const demandas = { porRegistroEventos: {}, equipesPorDia };
+  const hojeDepoisDeS1 = diaEpoch(new Date(Date.UTC(2026, 1, 5))); // depois de S1, dentro do mês
+  const series = calcularSeriesSemanaisDimensao(
+    [registro(0)], [0], 'equipes', 1, semanasFevereiro, semanasFevereiro.length,
+    true, indiceSemanaAtual(semanasFevereiro, hojeDepoisDeS1), demandas, hojeDepoisDeS1
+  );
+  assert.strictEqual(series.semanasRealizado[0], 9, 'domingo sozinho conta ele mesmo (9/1 = 9), não fica sem-dado por denominador zero');
 });
 
 test('Tendência não fabrica projeção quando hoje está depois do último dia do mês vigente (contrato defensivo)', () => {

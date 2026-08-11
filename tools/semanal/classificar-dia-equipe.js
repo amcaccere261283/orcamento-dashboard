@@ -59,7 +59,15 @@ var RE_OS = /\(\s*(\d{3,6}-\d{2})\s*\)/;
 // carregar equipamento" é sobre alguém que virou auxiliar, não uma equipe
 // carregando equipamento.
 var REGRAS = [
-  { estado: 'fora', re: /baixada|f[ée]rias|folga|falta|atestado|afasta|licen[çc]a|inss|acidente|desmobiliz|n[ãa]o atuou|sem atua[çc]/i },
+  { estado: 'fora', re: /baixada|f[ée]rias|folga|falta|atestado|afasta|licen[çc]a|inss|acidente|n[ãa]o atuou|sem atua[çc]/i },
+  // Exceção antes da regra geral de naoEquipe (2026-08-11, pedido do dono do
+  // projeto): "auxiliar" sozinho é gente fora de equipe (contratação/
+  // hospitalizado/etc, cai na regra abaixo), mas "voltam com ele"/"volta a
+  // ser auxiliar" descreve alguém VOLTANDO a apoiar uma equipe em campo --
+  // conta como ativa (campoSemFuro), não como naoEquipe. "Desmobilização"
+  // saiu do balde 'fora' pelo mesmo pedido -- cai sozinha na regra de
+  // campoSemFuro logo abaixo, via o radical 'mobiliza' que já existia ali.
+  { estado: 'campoSemFuro', re: /volta.*auxiliar|auxiliar.*volta/i },
   { estado: 'naoEquipe', re: /contrata|admiss|integra[çc]|\baso\b|auxiliar|encarregado|assumir equipe|pediu desligamento|desligad|sem previs|indicar|tratativa|verificando nomes/i },
   // Formas JÁ CATALOGADAS de "equipe em campo sem furo". Não mudam o
   // resultado (o default classifica igual), mas tiram esses textos do
