@@ -205,10 +205,23 @@ consistente com a grade exibida, e é o que se espera de um filtro.
 Pedido de 2026-08-11: um filtro por **id da equipe**, mostrando id + líder, com um campo
 para digitar. (O pedido original incluía "sondador"; **retirado pelo dono do projeto no
 mesmo dia**. Fica registrado que ele não era trivial: `sondador` não existe no registro da
-equipe — a aba EQ tem `Nome` (col. 1) e `Líderes` (col. 4), e "sondador" é a coluna Y do
+equipe — a aba EQ tem `Equipe` (col. 1) e `Líderes` (col. 4), e "Sondador" é a coluna Y do
 Avanço Sond, outra fonte. O popup do cartão, aliás, documenta a regra de que nome de
 pessoa do efetivo não entra nesta página, porque vive na aba PESSOAS, que o projeto não
 lê.)
+
+**As colunas 1 e 4 são a MESMA pessoa em duas formas**, e isso decide contra o que a busca
+casa. Cabeçalhos e dados reais, lidos da Sheet em 2026-08-11:
+
+| col 0 `ID` | col 1 `Equipe` | col 4 `Líderes` |
+|---|---|---|
+| `4` | `José I. Amaral` | `Amaral` |
+| `59` | `Paulo S. Lima` | `Paulo S.` |
+| `79` | `Leonardo D. Marques` | `Leonardo` |
+
+A col. 1 traz o nome completo (o código a chama de `nome`, apesar de o cabeçalho dizer
+"Equipe"); a col. 4, o apelido — e é o apelido que o cartão mostra, porque
+`equipesDoQuadro` monta `lider` da col. 4 com `|| bruta.nome` de reserva.
 
 **O cartão já mostra os dois campos pedidos** — `cartao-medalhao` traz o id e `cartao-lider`
 o líder. Nada a acrescentar ali; o que falta é o campo de digitação.
@@ -219,9 +232,19 @@ barra de filtros compartilhada. A barra compartilhada opera sobre `registros`
 um filtro que não faz nada em cinco das sete abas. Mesmo precedente do Balanço e do
 Consolidado, que têm controles próprios.
 
-**Casa contra id E líder**, por substring, insensível a maiúsculas e a acento, via
-`normalizarBusca` (`render-shell.js`) — a função já existe e já é a usada pela busca da aba
-Alertas. Digitar `37` acha `EQ-37`; digitar `silva` acha a equipe do líder Silva.
+**Casa contra id, líder E nome completo** — os TRÊS —, por substring, insensível a
+maiúsculas e a acento, via `normalizarBusca` (`render-shell.js`), a mesma função que a
+busca da aba Alertas já usa.
+
+Incluir o nome completo não é zelo: pela tabela acima, casar só contra o que o cartão
+MOSTRA deixaria `josé` sem achar a equipe 4 e `marques` sem achar a 79, porque o cartão só
+tem o apelido. Quem digita procura pela pessoa, não pela forma abreviada que a planilha
+escolheu. Digitar `4` acha a equipe 4; `amaral` e `josé` acham a mesma.
+
+Efeito colateral aceito: um resultado pode não conter visivelmente o texto digitado (busque
+`josé`, apareça um cartão escrito `Amaral`). Por isso, quando o casamento vier SÓ do nome
+completo, o cartão exibe o nome completo abaixo do apelido — senão o resultado parece
+aleatório.
 
 **Escopo: o campo poda o POOL.** É onde está o problema real — são ~127 cartões depois do
 agrupamento da Decisão 4, e achar uma equipe entre eles a olho é o que motivou o pedido. Os
@@ -274,8 +297,12 @@ Filtro (Decisão 7), o grupo que hoje não existe:
   exibição, nunca de estado.
 
 Busca de equipe (Decisão 8):
-- digitar parte do id acha a equipe; digitar parte do líder também;
-- insensível a maiúsculas e a acento (é o que `normalizarBusca` promete);
+- digitar parte do id acha a equipe; parte do líder também; **e parte do nome completo
+  também** — com dado real: `josé` tem que achar a equipe 4, cujo cartão diz `Amaral`;
+- casando só pelo nome completo, o cartão passa a exibi-lo (senão o resultado parece
+  aleatório);
+- insensível a maiúsculas e a acento (é o que `normalizarBusca` promete) — `jose` sem
+  acento acha `José`;
 - equipe que casa mas está alocada aparece na linha de texto, com SUP e coluna, e **não**
   como cartão arrastável;
 - campo vazio devolve o pool inteiro, idêntico ao de antes da busca;
