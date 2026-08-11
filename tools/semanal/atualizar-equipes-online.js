@@ -1,15 +1,196 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { agregarEquipesProdutivas } = require('./compute-equipes-produtivas-link7.js');
 const { diaEpoch } = require('./compute-semanal.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const { linhaExcluida } = require('../comum/exclusoes.js');
 const { hojeNoFusoProjeto, diaEpochDeOntem } = require('../comum/datas.js');
 const cdp = require('./cdp-client.js');
+const { parseAbaEq } = require('./compute-equipes-ativas.js');
+const { classificarDiaEquipe } = require('./classificar-dia-equipe.js');
+const { buscarListaDeAbas, mesesEqDoAno } = require('../comum/descobrir-abas-planilha.js');
 
 const SITE_ORIGIN = 'https://sond.com.br';
 const OUT_PATH = path.join(__dirname, '..', '..', 'dist', 'equipes-online.csv');
+const ID_PLANILHA_EQUIPES = '1Mgj87eSKMO4Gh2aHQWChNl5YCH2vatMDC2fCNuxB8TU';
+const OUT_PATH_ROSTER = path.join(__dirname, '..', '..', 'dist', 'equipes-roster-online.csv');
+
+// COLUNAS DO ROSTER (ampliadas em 2026-08-10, rodada de correção da Tarefa 5)
+// ============================================================================
+// O formato original só levava (IdEquipe, DiaEpoch, Estado) e JOGAVA FORA o
+// resto do que classificarDiaEquipe/parseAbaEq já tinham em mãos aqui. Isso
+// quebrou os dois consumidores do roster no build, em silêncio:
+//
+//   1. classe.noDefault descartado -> a ponte em build-dashboard.js sintetizava
+//      TODO campoSemFuro como 'Mobilização' (que é CATALOGADO), e
+//      agregarEquipesNaoProdutivas -- que descarta de propósito o campoSemFuro
+//      que caiu no default -- passava a contar como NÃO PRODUTIVOS os ~572
+//      equipe-dia/mês de texto livre que descrevem trabalho REAL ("CCR RioSP",
+//      "Via Mineira"). Número errado, sem aviso.
+//   2. equipe.nome/equipe.servicos e classe.os descartados -> agregarEquipesAtivas
+//      não tinha nem tipologia (vem de Serviços/casarSondador) nem OS do dia
+//      (ultimoSup só é setado a partir de uma OS), então NENHUM equipe-dia
+//      podia ser apropriado a um par (SUP, tipologia).
+//
+// A classificação é capturada UMA vez, aqui, sobre o texto ORIGINAL -- nunca
+// reconstruída depois a partir de um texto sintético.
+//
+// IdEquipe,DiaEpoch,Estado ficam nas MESMAS posições (0,1,2) de antes de
+// propósito: lerRosterExistente e a ordenação de gravarRoster continuam lendo
+// o dia na coluna 1, e parseRosterOnlineCsvBruto (build) segue igual nas três
+// primeiras. Nome/Servicos se repetem em toda linha da equipe -- mesma
+// convenção dos outros CSVs planos deste projeto (equipes-online.csv).
+const CABECALHO_ROSTER = 'IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos';
+
+// Produção crua do Link 7 (dist/equipes-online.csv). Era 'SUP,Tipo,DiaEpoch,
+// Fracao' (pré-agregado) até 2026-08-10 -- o dia mudou de posição junto, de
+// [2] para [3]. Constante em vez de literal justamente para que o leitor e o
+// gravador não possam divergir.
+const CABECALHO_PRODUCAO = 'IdEquipe,SUP,Tipo,DiaEpoch';
+
+// Trava de versão de formato, compartilhada pelos DOIS CSVs que este fetcher
+// publica (roster e produção).
+//
+// Os dois arquivos são lidos posicionalmente (`split(',')[n]`), então um
+// arquivo gravado por uma versão anterior do formato não é "parcialmente
+// aproveitável": as colunas simplesmente significam outra coisa. Sem esta
+// trava, o CSV velho seria lido como se fosse novo e o resultado voltaria
+// gravado no arquivo publicado -- corrupção silenciosa e permanente (dias
+// presos num mês bogus tipo '1970-01', que nenhum re-fetch alcança porque
+// mesesPendentes/buscarRoster só olham o ano corrente).
+//
+// Cabeçalho diferente = descarta TUDO e devolve null; quem chama trata como
+// arquivo inexistente, e o backfill normal repopula do zero no formato novo.
+function lerLinhasComCabecalho(caminho, cabecalhoEsperado, rotulo) {
+  if (!fs.existsSync(caminho)) return null;
+  const todas = fs.readFileSync(caminho, 'utf8').trim().split('\n');
+  if ((todas[0] || '').trim() !== cabecalhoEsperado) {
+    console.warn(`${rotulo}: ${caminho} está no formato antigo (${JSON.stringify((todas[0] || '').trim())}) -- descartando e rebuscando no formato novo (${cabecalhoEsperado}).`);
+    return null;
+  }
+  return todas.slice(1);
+}
+
+// Nome/Servicos são texto de planilha e vão para um CSV lido por split(',')
+// simples nas duas pontas. Uma vírgula em "Serviços" ou no nome do líder
+// deslocaria todas as colunas seguintes. Trocar por espaço é seguro para os
+// dois usos reais: tipologiaDireta compara valores catalogados (nenhum tem
+// vírgula) e casarSondador tokeniza só letras.
+function campoCsvSeguro(valor) {
+  return String(valor === null || valor === undefined ? '' : valor).replace(/[\r\n,]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// csvTexto é o export CSV de UMA aba "(EQ)" (mesmo layout que
+// compute-equipes-ativas.js's parseAbaEq já lê -- é a MESMA planilha,
+// só buscada direto em vez de via espelho Apps Script). ano/mes vêm do
+// NOME da aba (descoberto por mesesEqDoAno), não do cabeçalho: o export
+// direto do Google não carrega o ano na coluna de dia ("1-Ago", sem
+// "/2026"), diferente do que o espelho antigo produzia via getValues().
+function linhasRosterDoMes(csvTexto, ano, mes) {
+  const equipes = parseAbaEq(csvTexto);
+  const saida = [];
+  for (const equipe of equipes) {
+    if (!equipe.id) continue;
+    const nome = campoCsvSeguro(equipe.nome);
+    const servicos = campoCsvSeguro(equipe.servicos);
+    for (const d of equipe.dias) {
+      const classe = classificarDiaEquipe(d.texto);
+      if (!classe) continue;
+      const dia = diaEpoch(new Date(Date.UTC(ano, mes - 1, d.dia)));
+      // 'os' passa pelo mesmo saneamento de nome/servicos: também é texto
+      // extraído da célula da planilha (o classificador tira a OS de dentro
+      // de "CCR RioSP (17851-26)"), e uma vírgula ali deslocaria as duas
+      // colunas seguintes exatamente do mesmo jeito.
+      saida.push(`${equipe.id},${dia},${classe.estado},${classe.noDefault ? '1' : '0'},${campoCsvSeguro(classe.os)},${nome},${servicos}`);
+    }
+  }
+  return saida;
+}
+
+// Lê o roster já gravado, como { dia -> [linha...] } -- mesmo padrão de
+// lerCsvExistente (produção), mas o dia é a coluna 1 (ver CABECALHO_ROSTER).
+//
+// Cabeçalho de outra versão do formato descarta tudo (ver
+// lerLinhasComCabecalho): preservar linhas de 3 colunas ao lado das de 7
+// produziria dias sem noDefault/OS/Serviços -- exatamente o silêncio que a
+// rodada de 2026-08-10 existe para eliminar.
+function lerRosterExistente(caminho) {
+  const linhas = lerLinhasComCabecalho(caminho, CABECALHO_ROSTER, 'Roster');
+  if (!linhas) return { porDia: {} };
+  const porDia = {};
+  for (const linha of linhas) {
+    if (!linha.trim()) continue;
+    const dia = Number(linha.split(',')[1]);
+    if (!Number.isFinite(dia)) continue;
+    (porDia[dia] = porDia[dia] || []).push(linha);
+  }
+  return { porDia };
+}
+
+// Backfill incremental do roster, mesmo espírito do Link 7: mês corrente
+// SEMPRE rebuscado (ainda sendo preenchido), meses passados só se faltando.
+// Substitui por completo o espelho Apps Script (apps-script-espelho-eq.gs),
+// que só publicava o mês corrente -- ver a spec
+// docs/superpowers/specs/2026-08-10-equipes-realizado-roster-link6-link7-design.md.
+async function buscarRoster(ano, mesCorrente) {
+  const { porDia: jaTemos } = lerRosterExistente(OUT_PATH_ROSTER);
+  // Chave 'AAAA-MM' (mesDoDia, mesmo padrão do Link 7 -- ver mais abaixo neste
+  // arquivo) -- não bastam meses 1-12 crus: uma vez que o roster acumule mais
+  // de um ano, um mês bare colidiria com o mesmo mês de qualquer outro ano.
+  const mesesComDado = new Set(Object.keys(jaTemos).map((dia) => mesDoDia(Number(dia))));
+
+  console.log('Roster: descobrindo abas (EQ) da planilha de equipes...');
+  const abas = await buscarListaDeAbas(ID_PLANILHA_EQUIPES);
+  const mesesDisponiveis = mesesEqDoAno(abas, ano);
+  if (!mesesDisponiveis.length) {
+    console.warn('Roster: nenhuma aba "(EQ)" encontrada pro ano corrente -- Ativas/Não-produtivas/Realizado ficam sem dado de roster.');
+    return { linhasNovas: [], mesesBuscados: new Set() };
+  }
+
+  const pendentes = mesesDisponiveis.filter((m) => m.mes === mesCorrente || !mesesComDado.has(`${ano}-${String(m.mes).padStart(2, '0')}`));
+  if (!pendentes.length) {
+    console.log('Roster: todos os meses do ano já têm dado, e o mês corrente já foi buscado.');
+    return { linhasNovas: [], mesesBuscados: new Set() };
+  }
+
+  const linhasNovas = [];
+  const mesesBuscados = new Set();
+  for (const { mes, gid } of pendentes) {
+    const url = `https://docs.google.com/spreadsheets/d/${ID_PLANILHA_EQUIPES}/export?format=csv&gid=${gid}`;
+    try {
+      const resposta = await fetch(url, { redirect: 'follow' });
+      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+      const csv = await resposta.text();
+      const linhas = linhasRosterDoMes(csv, ano, mes);
+      console.log(`  Roster ${String(mes).padStart(2, '0')}/${ano}: ${linhas.length} linha(s) de equipe-dia.`);
+      linhasNovas.push(...linhas);
+      mesesBuscados.add(`${ano}-${String(mes).padStart(2, '0')}`);
+    } catch (err) {
+      console.warn(`  Roster ${String(mes).padStart(2, '0')}/${ano}: FALHOU -- ${err.message}`);
+    }
+  }
+  return { linhasNovas, mesesBuscados, jaTemos };
+}
+
+// Grava dist/equipes-roster-online.csv juntando o novo com o preservado --
+// mesma idempotência do Link 7 (meses buscados são substituídos inteiros).
+// 'caminho' só é passado pelo teste (destino temporário); a produção usa o
+// arquivo publicado de sempre.
+function gravarRoster({ linhasNovas, mesesBuscados, jaTemos }, caminho = OUT_PATH_ROSTER) {
+  if (!mesesBuscados || !mesesBuscados.size) return;
+  const linhasSaida = [...linhasNovas];
+  let diasPreservados = 0;
+  for (const [dia, linhas] of Object.entries(jaTemos || {})) {
+    const mesDoRegistro = mesDoDia(Number(dia));
+    if (mesesBuscados.has(mesDoRegistro)) continue;
+    linhasSaida.push(...linhas);
+    diasPreservados++;
+  }
+  linhasSaida.sort((a, b) => Number(a.split(',')[1]) - Number(b.split(',')[1]));
+  fs.mkdirSync(path.dirname(caminho), { recursive: true });
+  fs.writeFileSync(caminho, [CABECALHO_ROSTER, ...linhasSaida].join('\n') + '\n', 'utf8');
+  console.log(`Roster: ${linhasNovas.length} linha(s) nova(s) + ${diasPreservados} dia(s) preservado(s), gravado em ${caminho}.`);
+}
 
 // Acha o valor de uma coluna comparando o rótulo ignorando variação de
 // espaçamento (a planilha real usa espaço duplo em algumas colunas, ex.
@@ -143,17 +324,22 @@ const fmtData = (d) => d.toISOString().slice(0, 10);
 const dataDoDiaEpoch = (dia) => new Date(dia * 86400000);
 
 // As linhas já gravadas, como { dia -> [linhaCsv...] }. O CSV de saída é
-// pré-agregado por (SUP, tipologia, dia), então um dia já buscado nunca
-// precisa ser rebuscado: a produção daquele dia não muda depois que ele
-// fecha. É o que torna o backfill incremental barato.
+// cru por (equipe, dia, contrato) desde 2026-08-10 -- uma linha por
+// (IdEquipe, SUP, Tipo, DiaEpoch), sem agregação -- então um dia já buscado
+// nunca precisa ser rebuscado: a produção daquele dia não muda depois que
+// ele fecha. É o que torna o backfill incremental barato.
+//
+// Mesma trava de formato do roster (ver lerLinhasComCabecalho): os arquivos
+// publicados em dist/ e docs/ ainda estavam no formato pré-2026-08-10
+// ('SUP,Tipo,DiaEpoch,Fracao'), onde a coluna [3] é a FRAÇÃO, não o dia.
 function lerCsvExistente(caminho) {
-  if (!fs.existsSync(caminho)) return { porDia: {}, ultimoDia: null };
-  const linhas = fs.readFileSync(caminho, 'utf8').trim().split('\n').slice(1);
+  const linhas = lerLinhasComCabecalho(caminho, CABECALHO_PRODUCAO, 'Produção');
+  if (!linhas) return { porDia: {}, ultimoDia: null };
   const porDia = {};
   let ultimoDia = null;
   for (const linha of linhas) {
     if (!linha.trim()) continue;
-    const dia = Number(linha.split(',')[2]);
+    const dia = Number(linha.split(',')[3]); // ver CABECALHO_PRODUCAO
     if (!Number.isFinite(dia)) continue;
     (porDia[dia] = porDia[dia] || []).push(linha);
     if (ultimoDia === null || dia > ultimoDia) ultimoDia = dia;
@@ -233,6 +419,18 @@ async function main() {
 
   // UTC-3, igual às demais fontes -- ver hojeNoFusoProjeto.
   const { ano, mes: mesCorrente } = hojeNoFusoProjeto();
+
+  // Roster (Link 6) e produção (Link 7) são fontes INDEPENDENTES -- planilha
+  // do Google contra tabela do sond.com.br. Uma falha na descoberta de gid ou
+  // no download das abas "(EQ)" não pode abortar a busca de produção, mesma
+  // regra de resiliência que o laço por mês do Link 7 (abaixo) e
+  // atualizar-arquivos.js já seguem.
+  try {
+    gravarRoster(await buscarRoster(ano, mesCorrente));
+  } catch (err) {
+    console.warn(`Roster: FALHOU por completo -- ${err.message}. O arquivo anterior fica como estava; seguindo para a produção (Link 7).`);
+  }
+
   const diaFim = diaEpochDeOntem();
   const { porDia: jaTemos } = lerCsvExistente(OUT_PATH);
 
@@ -295,23 +493,18 @@ async function main() {
     throw new Error('Todas as linhas do Link 7 ficaram fora do intervalo depois do filtro -- abortando sem gravar (não é o caso normal, confira antes de aceitar um CSV vazio).');
   }
 
-  const { porDia } = agregarEquipesProdutivas(linhasLink7);
-  console.log(`  ${Object.keys(porDia).length} par(es) (SUP, tipologia) com equipe produtiva no período buscado.`);
+  console.log(`  ${linhasLink7.length} linha(s) de produção (equipe, dia, contrato) no período buscado.`);
 
-  // Junta o que já estava gravado (dias anteriores a diaInicio) com o que
-  // acabou de ser agregado. Os dois conjuntos são disjuntos por construção --
-  // diaInicio é ultimoDia + 1 -- então não há risco de contar duas vezes.
-  const linhasSaida = [];
-  for (const [chave, porDiaChave] of Object.entries(porDia)) {
-    const [sup, tipo] = chave.split('||');
-    for (const [dia, fracao] of Object.entries(porDiaChave)) {
-      linhasSaida.push(`${sup},${tipo},${dia},${fracao}`);
-    }
-  }
-  // Preserva os dias dos meses que NÃO foram rebuscados agora. Os meses
-  // buscados são substituídos inteiros pela versão nova -- é o que torna a
-  // execução idempotente: rodar duas vezes seguidas dá o mesmo arquivo, em
-  // vez de duplicar linhas.
+  // Formato cru desde 2026-08-10: IdEquipe,SUP,Tipo,DiaEpoch, uma linha por
+  // (equipe, dia, contrato) -- a fração/alocação por roster passou a ser
+  // calculada no cruzamento (build/refresh), não mais aqui. Ver
+  // compute-equipes-realizado-alocado.js e a spec
+  // docs/superpowers/specs/2026-08-10-equipes-realizado-roster-link6-link7-design.md.
+  const linhasSaida = linhasLink7.map((l) => `${l.idEquipe},${l.sup},${l.tipo},${l.diaEpoch}`);
+
+  // Preserva os dias dos meses que NÃO foram rebuscados agora -- mesma
+  // idempotência de sempre (diaInicio é ultimoDia + 1, os dois conjuntos são
+  // disjuntos por construção).
   let diasPreservados = 0;
   for (const [dia, linhas] of Object.entries(jaTemos)) {
     if (mesesBuscados.has(mesDoDia(Number(dia)))) continue;
@@ -319,12 +512,10 @@ async function main() {
     diasPreservados++;
   }
 
-  // Ordena por dia pra que parseEquipesFracaoCsv (build-dashboard.js) derive
-  // equipesPeriodo do dia mais antigo sem depender da ordem de escrita.
-  linhasSaida.sort((a, b) => Number(a.split(',')[2]) - Number(b.split(',')[2]));
+  linhasSaida.sort((a, b) => Number(a.split(',')[3]) - Number(b.split(',')[3]));
 
   fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
-  fs.writeFileSync(OUT_PATH, ['SUP,Tipo,DiaEpoch,Fracao', ...linhasSaida].join('\n') + '\n', 'utf8');
+  fs.writeFileSync(OUT_PATH, [CABECALHO_PRODUCAO, ...linhasSaida].join('\n') + '\n', 'utf8');
   const diasNovos = new Set(linhasLink7.map((l) => l.diaEpoch)).size;
   if (falhas.length) console.warn(`${falhas.length} mês(es) falharam e ficaram como estavam: ${falhas.join(', ')}`);
   console.log(`Pronto: ${diasNovos} dia(s) novo(s) + ${diasPreservados} dia(s) preservado(s) do CSV anterior, gravado em ${OUT_PATH}.`);
@@ -334,4 +525,8 @@ if (require.main === module) {
   main().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { parseLinhasLink7, lerCsvExistente, janelasMensais, mesesPendentes, mesDoDia, main };
+module.exports = {
+  parseLinhasLink7, lerCsvExistente, janelasMensais, mesesPendentes, mesDoDia, main,
+  linhasRosterDoMes, lerRosterExistente, buscarRoster, gravarRoster,
+  CABECALHO_ROSTER, CABECALHO_PRODUCAO,
+};

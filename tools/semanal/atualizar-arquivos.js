@@ -58,6 +58,7 @@ const ARQUIVOS_PUBLICAR = [
   'avancos-online.csv',
   'lab-online.csv',
   'equipes-online.csv',
+  'equipes-roster-online.csv',
   'demandas-sondagem-online.csv',
   'demandas-lab-online.json',
 ];

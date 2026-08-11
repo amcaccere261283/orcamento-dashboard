@@ -58,6 +58,12 @@ const PARES = [
     publicado: path.join(RAIZ, 'docs', 'equipes-online.csv'),
     comando: 'cp dist/equipes-online.csv docs/equipes-online.csv',
   },
+  {
+    nome: 'CSV de Roster de Equipes',
+    origem: path.join(RAIZ, 'dist', 'equipes-roster-online.csv'),
+    publicado: path.join(RAIZ, 'docs', 'equipes-roster-online.csv'),
+    comando: 'cp dist/equipes-roster-online.csv docs/equipes-roster-online.csv',
+  },
   // Entraram em 2026-08-10: até então só alimentavam o build a partir de
   // dist/, e o botão "Atualizar dados" nunca os buscava -- o refresh
   // recalculava Demandas Pendentes sem o backlog (5.493 furos + 12.781
