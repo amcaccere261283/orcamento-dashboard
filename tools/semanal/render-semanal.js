@@ -18,7 +18,9 @@ const { fonteParaCliente: fonteParaClienteLinhaBase } = require('../comum/linha-
 // DENTRO do blob cifrado (ver renderSemanal), não em texto puro no HTML: só
 // quem destrava a página a enxerga -- mesmo raciocínio de registros/baseline/
 // demandas, mas aqui é uma URL de escrita, não dado protegido por senha.
-const URL_ALOCACAO = 'PENDENTE-publicar-o-apps-script-de-alocacao';
+// Publicado em 2026-08-11. Reimplantar o .gs mantém esta URL (Gerenciar
+// implantações > Nova versão); só uma implantação NOVA do zero a trocaria.
+const URL_ALOCACAO = 'https://script.google.com/macros/s/AKfycby3jOFa1eOZ9Rtu7mRq8iZWtZdKdg-7ATqzbU-fBba5eLuV5_U69nAe7-Md_3-l_ciB/exec';
 
 // Página da spec com as duas abas (Semanal / Balanço de massa), agora com a
 // barra de filtros compartilhada (markupFiltros()/scriptFiltros() da casca,

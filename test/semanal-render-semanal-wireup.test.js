@@ -1911,14 +1911,21 @@ test('window.__ALOCACAO_URL__ vem do blob cifrado (URL_ALOCACAO) -- nunca em tex
     registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
     senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
   });
-  assert.doesNotMatch(html, /publicar-o-apps-script-de-alocacao/,
-    'a URL real (URL_ALOCACAO) só pode existir dentro do blob cifrado');
-
   const { sandbox, documentoFalso } = montarSandbox(html);
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
 
-  assert.strictEqual(sandbox.window.__ALOCACAO_URL__, 'PENDENTE-publicar-o-apps-script-de-alocacao');
+  const url = sandbox.window.__ALOCACAO_URL__;
+  assert.ok(url, 'a URL tem que chegar ao cliente depois do desbloqueio');
+
+  // Aferido contra o VALOR QUE CHEGOU, e não contra um literal fixo: assim o
+  // teste continua verdadeiro quando a URL mudar (o Apps Script foi publicado
+  // em 2026-08-11, e a versão anterior deste assert prendia o literal
+  // 'PENDENTE-...'). O que importa aqui nunca foi qual é a URL -- é ela não
+  // vazar em texto puro, porque é uma URL de ESCRITA: quem a lê pode gravar na
+  // planilha, mesmo sem a senha do dashboard.
+  assert.ok(!html.includes(url),
+    'a URL de alocação só pode existir dentro do blob cifrado, nunca no HTML cru');
 });
 
 // --- Correção pré-publicação do Apps Script (2026-08-11): a corrida entre
@@ -1946,12 +1953,32 @@ function fetchMockAlocacaoSheet(resolversGet) {
   // POSTs (gravar -- o aplicarMovimento do teste também tenta persistir em
   // paralelo) resolvem na hora, sem travar: não são o alvo destes testes.
   // Só o GET de carregar() fica em voo, sob controle do teste.
-  return function (url, opcoes) {
+  //
+  // DUAS FASES, e a primeira passou a ser necessária em 2026-08-11, quando o
+  // Apps Script foi publicado e URL_ALOCACAO deixou de ser 'PENDENTE-...'.
+  // Antes disso o desbloqueio rodava a aba em modo LOCAL e não tocava a rede,
+  // então segurar todo GET era inofensivo. Com a URL real, o primeiro
+  // montarAbaAlocacao (lá dentro de tentarDesbloquear) já BUSCA -- e um mock
+  // que segura todo GET pendura o próprio desbloqueio, antes de o teste ter a
+  // chance de resolver coisa nenhuma. O sintoma é feio de diagnosticar: os
+  // testes que já rodaram passam, e o ARQUIVO estoura o timeout sem apontar
+  // para nenhum deles.
+  //
+  //   fase 1 (setup) ..... GET resolve na hora, com a Sheet vazia
+  //   fase 2 (a corrida).. o teste chama segurar(), e a partir daí os GETs
+  //                        ficam em voo, sob controle dele
+  let segurando = false;
+  const mock = function (url, opcoes) {
     if (opcoes && opcoes.method === 'POST') {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
     }
+    if (!segurando) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+    }
     return new Promise((resolve) => { resolversGet.push(resolve); });
   };
+  mock.segurar = () => { segurando = true; };
+  return mock;
 }
 
 test('um arrasto que aterrissa ENQUANTO carregarAlocacaoDaSemana está em voo sobrevive -- a resposta tardia da rede não pode desfazê-lo', async () => {
@@ -1964,16 +1991,20 @@ test('um arrasto que aterrissa ENQUANTO carregarAlocacaoDaSemana está em voo so
   });
 
   const resolversGet = [];
+  const fetchMock = fetchMockAlocacaoSheet(resolversGet);
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
-  const { sandbox, documentoFalso } = montarSandbox(html, fetchMockAlocacaoSheet(resolversGet));
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
 
-  // Assenta a semana S1 em modo LOCAL primeiro (determinístico, sem depender
-  // do relógio real da máquina que roda a suíte) -- a equipe 4 nasce
-  // semeada aqui, prova de que o roster está pronto.
+  // Assenta a semana S1 primeiro (determinístico, sem depender do relógio
+  // real da máquina que roda a suíte) -- a equipe 4 nasce semeada aqui,
+  // prova de que o roster está pronto.
   await sandbox.selecionarSemanaAlocacao(0);
-  assert.ok(sandbox.ESTADO_ALOCACAO.alocacao['4'], 'pré-condição: a semana abriu semeada em modo local');
+  assert.ok(sandbox.ESTADO_ALOCACAO.alocacao['4'], 'pré-condição: a semana abriu semeada');
+
+  // Daqui pra frente os GETs ficam em voo, sob controle do teste.
+  fetchMock.segurar();
 
   // Troca para modo SHEET -- simula o Apps Script recém-publicado.
   sandbox.ESTADO_ALOCACAO.cliente = null;
@@ -2013,13 +2044,15 @@ test('trocar de semana enquanto um carregamento anterior está em voo não deixa
   });
 
   const resolversGet = [];
+  const fetchMock = fetchMockAlocacaoSheet(resolversGet);
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
-  const { sandbox, documentoFalso } = montarSandbox(html, fetchMockAlocacaoSheet(resolversGet));
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
 
-  await sandbox.selecionarSemanaAlocacao(0); // assenta em modo local, determinístico
+  await sandbox.selecionarSemanaAlocacao(0); // assenta a semana, determinístico
 
+  fetchMock.segurar(); // daqui pra frente os GETs ficam em voo
   sandbox.ESTADO_ALOCACAO.cliente = null;
   sandbox.window.__ALOCACAO_URL__ = 'https://exemplo.com/exec-alocacao-teste';
 
