@@ -309,18 +309,114 @@ test('equipe que casa a busca mas está ALOCADA vira linha de texto, não cartã
     'arrastar se faz da célula; um 2º cartão arrastável reintroduziria a dupla alocação');
 });
 
-test('a busca poda o POOL e não mexe nas linhas da grade', () => {
+test('a busca poda a GRADE junto com o pool', () => {
+  // Este teste dizia o CONTRARIO ate 2026-08-11 ("a grade fica identica"),
+  // porque a Decisao 8 do spec mandava a busca podar so o pool. Na pratica a
+  // semana nasce semeada do realizado: quase toda equipe ja esta alocada, o
+  // pool fica vazio, e podar so ele fazia a busca nao mudar nada visivel.
+  // A especificacao e' que estava errada, nao o codigo.
+  const alocada = { 4: { sup: 'SUP-A', coluna: 'SP' } };
   const semBusca = renderAbaAlocacao(registros(), [0], opcoes({
-    equipes: equipesVariadas(), alocacao: {},
+    equipes: equipesVariadas(), alocacao: alocada,
   }));
   const comBusca = renderAbaAlocacao(registros(), [0], opcoes({
-    equipes: equipesVariadas(), alocacao: {}, buscaEquipe: 'zzzznaoexiste',
+    equipes: equipesVariadas(), alocacao: alocada, buscaEquipe: 'zzzznaoexiste',
   }));
   const linhasDe = (h) => (h.match(/data-sup="/g) || []).length;
-  assert.strictEqual(linhasDe(comBusca), linhasDe(semBusca));
+  assert.ok(linhasDe(semBusca) > 0, 'pre-condicao: sem busca ha linha na grade');
+  assert.strictEqual(linhasDe(comBusca), 0,
+    'busca sem resultado tem que esvaziar a grade, nao so o pool');
 });
 
 test('o campo de busca existe nos controles da aba', () => {
   const html = renderAbaAlocacao(registros(), [0], opcoes({ equipes: equipesVariadas() }));
   assert.match(html, /id="busca-equipe"/);
+});
+
+// --- A busca filtra TUDO, não só o pool (2026-08-11, correção) --------------
+//
+// A Decisão 8 do spec mandava a busca podar só o pool. Na prática a semana
+// nasce SEMEADA do realizado, então quase toda equipe já está alocada e o pool
+// fica vazio: digitar não mudava nada visível. Medido no sandbox: pool 0
+// cartões antes e depois, grade 1 antes e 1 depois.
+
+test('buscar uma equipe alocada deixa na grade só a célula dela', () => {
+  const equipes = equipesVariadas();
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes,
+    alocacao: { 4: { sup: 'SUP-A', coluna: 'SP' } },
+    buscaEquipe: 'amaral',
+  }));
+  assert.match(html, /data-equipe="4"/, 'a equipe buscada tem que aparecer');
+  assert.match(html, /data-sup="SUP-A"/, 'e a linha onde ela está, também');
+});
+
+test('buscar uma equipe esconde as linhas onde ela NÃO está', () => {
+  const regs = registros().concat([{
+    sup: 'SUP-Z', tomador: 'Tomador Z', tipologia: 'SP',
+    previsto: { volume: (() => { const a = new Array(12).fill(0); a[7] = 90; return a; })(),
+      equipesResumo: { prod: 1 } },
+  }]);
+  const o = opcoes({
+    equipes: equipesVariadas(),
+    alocacao: { 4: { sup: 'SUP-A', coluna: 'SP' } },
+    demandas: { porRegistroEventos: {
+      'SUP-A||SP': { chegada: [], sondagemRealizada: [], saidaEstoque: [] },
+      'SUP-Z||SP': { chegada: [], sondagemRealizada: [], saidaEstoque: [] },
+    } },
+    buscaEquipe: 'amaral',
+  });
+  const semBusca = renderAbaAlocacao(regs, [0, 1], Object.assign({}, o, { buscaEquipe: '' }));
+  const comBusca = renderAbaAlocacao(regs, [0, 1], o);
+
+  assert.match(semBusca, /data-sup="SUP-Z"/, 'pré-condição: sem busca, SUP-Z aparece');
+  assert.doesNotMatch(comBusca, /data-sup="SUP-Z"/,
+    'SUP-Z não tem a equipe buscada -- tem que sumir');
+});
+
+test('busca sem nenhum resultado esvazia a grade, com aviso', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(),
+    alocacao: { 4: { sup: 'SUP-A', coluna: 'SP' } },
+    buscaEquipe: 'zzzznaoexiste',
+  }));
+  assert.doesNotMatch(html, /data-equipe="4"/);
+  assert.match(html, /nenhuma equipe/i);
+});
+
+// --- Filtro por tipologia (2026-08-11) --------------------------------------
+
+test('o filtro de tipologia existe nos controles da aba', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({ equipes: equipesVariadas() }));
+  assert.match(html, /id="filtro-tipologia-alocacao"/);
+});
+
+test('filtrar por uma tipologia deixa só a coluna dela na grade', () => {
+  const regs = registros().concat([{
+    sup: 'SUP-A', tomador: 'Tomador A', tipologia: 'ST',
+    previsto: { volume: (() => { const a = new Array(12).fill(0); a[7] = 80; return a; })(),
+      equipesResumo: { prod: 8 } },
+  }]);
+  const o = opcoes({
+    equipes: equipesVariadas(), alocacao: {},
+    demandas: { porRegistroEventos: {
+      'SUP-A||SP': { chegada: [], sondagemRealizada: [], saidaEstoque: [] },
+      'SUP-A||ST': { chegada: [], sondagemRealizada: [], saidaEstoque: [] },
+    } },
+  });
+  const todas = renderAbaAlocacao(regs, [0, 1], o);
+  assert.match(todas, /data-coluna="SP"/);
+  assert.match(todas, /data-coluna="ST"/);
+
+  const soST = renderAbaAlocacao(regs, [0, 1], Object.assign({}, o, { tipologiaAlocacao: 'ST' }));
+  assert.match(soST, /data-coluna="ST"/);
+  assert.doesNotMatch(soST, /data-coluna="SP"/, 'a coluna SP tem que sumir');
+});
+
+test('o filtro de tipologia também poda os grupos do pool', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {}, tipologiaAlocacao: 'ST',
+  }));
+  assert.match(html, /data-grupo="ST"/);
+  assert.doesNotMatch(html, /data-grupo="SP"/);
 });

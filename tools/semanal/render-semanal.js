@@ -498,6 +498,7 @@ const CSS_SEMANAL = `
   .pool-grupo-contagem { font-weight: 400; opacity: .75; }
   .cartao-selo-poli { margin-left: 3px; font-size: 10px; opacity: .85; }
   .busca-equipe { padding: 5px 8px; font-size: 12px; min-width: 220px; }
+  .filtro-tipologia-alocacao { padding: 5px 8px; font-size: 12px; }
   /* Equipe que casa a busca mas está alocada: texto, nunca cartão arrastável. */
   .pool-alocadas { margin: 6px 0 0; padding-left: 18px; font-size: 11px; color: var(--muted); }
   .cartao-nome { display: block; font-size: 10px; opacity: .8; }
@@ -1245,7 +1246,7 @@ function montarAbaBalanco(registros, indices) {
 // Script ir ao ar").
 var ESTADO_ALOCACAO = {
   semanaIdx: -1, alocacao: {}, equipes: [], foraDoQuadro: [], cliente: null,
-  semanaCarregada: null, geracaoAlocacao: 0, busca: '',
+  semanaCarregada: null, geracaoAlocacao: 0, busca: '', tipologia: '',
 };
 
 // MARCADOR DE SEMANA JÁ VISTA (Decisão 9 do spec, correção pós-verificação em
@@ -1556,6 +1557,7 @@ function montarAbaAlocacao() {
       // Não é estado persistido -- vive só aqui e no DOM, como a busca da aba
       // Alertas. Trocar de semana ou de mês não o preserva.
       buscaEquipe: ESTADO_ALOCACAO.busca,
+      tipologiaAlocacao: ESTADO_ALOCACAO.tipologia,
       hojeEpoch: hojeEpochDoNavegador(),
       modoPersistencia: cliente.modo(),
       pendentes: cliente.pendentes().length,
@@ -1783,6 +1785,15 @@ function inicializarInteracaoAlocacao() {
         novo.setSelectionRange(novo.value.length, novo.value.length);
       }
     }
+  });
+
+  // O filtro de tipologia da aba. <select> dispara 'change'; o 'input' acima
+  // tambem o ve, mas sai fora porque o id nao bate.
+  secao.addEventListener('change', function (e) {
+    var sel = e.target && e.target.id === 'filtro-tipologia-alocacao' ? e.target : null;
+    if (!sel) return;
+    ESTADO_ALOCACAO.tipologia = sel.value || '';
+    montarAbaAlocacao();
   });
 
   secao.addEventListener('pointermove', function (e) {

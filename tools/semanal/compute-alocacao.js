@@ -262,6 +262,25 @@ function montarGradeAlocacao(registros, indices, opcoes) {
     // Célula sem tendência, sem carteira e sem equipe não existe.
     if (!tendencia && !carteira && !ids.length) return;
 
+    // Filtros de EXIBIÇÃO da aba (2026-08-11). Ficam aqui, e não no render,
+    // porque podar a célula poda a linha e a coluna de graça (supsComAlgo /
+    // colunasComAlgo logo abaixo), e o resumo/os totais saem da grade -- então
+    // a faixa do topo acompanha o que está na tela, sem conta paralela.
+    //
+    // `tipologia`: mostra só uma coluna.
+    if (o.tipologia && coluna !== o.tipologia) return;
+    // `equipesVisiveis`: a busca por equipe. Passou a podar a GRADE, e não só o
+    // pool, porque a semana nasce semeada do realizado -- quase toda equipe já
+    // está alocada, o pool fica vazio, e podar só ele fazia a busca não mudar
+    // nada visível (medido: pool 0 cartões antes e depois, grade intacta).
+    if (o.equipesVisiveis) {
+      var casaAlguma = false;
+      for (var q = 0; q < ids.length; q++) {
+        if (o.equipesVisiveis.indexOf(ids[q]) !== -1) { casaAlguma = true; break; }
+      }
+      if (!casaAlguma) return;
+    }
+
     celulas[chave] = {
       sup: sup, coluna: coluna, indices: indicesCelula,
       tendencia: tendencia, carteira: carteira,

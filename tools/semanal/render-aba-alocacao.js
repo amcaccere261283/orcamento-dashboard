@@ -166,6 +166,17 @@ function renderControles(o, somenteLeitura) {
     + '<input id="busca-equipe" type="text" class="busca-equipe"'
     + ' placeholder="Buscar equipe (id ou líder)..." autocomplete="off"'
     + ' value="' + escapeHtml(o.buscaEquipe || '') + '">'
+    // Filtro por tipologia PRÓPRIO da aba: as opções são os 6 grupos de
+    // COLUNAS_ALOCACAO, não as 10 tipologias cruas da MATRIZ que a barra
+    // compartilhada oferece -- aqui o vocabulário é o das colunas do quadro.
+    + '<select id="filtro-tipologia-alocacao" class="filtro-tipologia-alocacao">'
+    + '<option value="">Todas as tipologias</option>'
+    + COLUNAS_ALOCACAO.map(function (c) {
+      return '<option value="' + escapeHtml(c.id) + '"'
+        + (o.tipologiaAlocacao === c.id ? ' selected' : '') + '>'
+        + escapeHtml(c.rotulo) + '</option>';
+    }).join('')
+    + '</select>'
     + renderStatus(o.modoPersistencia, o.pendentes)
     + '</div>';
 }
@@ -273,7 +284,7 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura, mostrarNome) {
 // resumirAlocacao devolve sup: null para uma equipe que ESTÁ alocada -- decidir
 // por ele a traria de volta ao pool como se estivesse livre, e daria pra
 // alocá-la uma segunda vez, em dois SUPs ao mesmo tempo.
-function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocacao, buscaEquipe) {
+function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocacao, buscaEquipe, tipologia) {
   var lista = equipes || [];
   var aloc = alocacao || {};
   var termo = normalizarBusca(buscaEquipe || '');
@@ -306,6 +317,9 @@ function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocaca
   // resolve o cartão por e.target.closest, nunca por querySelector com
   // data-equipe.
   var grupos = COLUNAS_ALOCACAO.map(function (coluna) {
+    // O filtro de tipologia poda os grupos do pool junto com as colunas da
+    // grade -- as duas metades da tela têm que falar do mesmo recorte.
+    if (tipologia && coluna.id !== tipologia) return '';
     var doGrupo = noPool.filter(function (e) {
       return (e.colunas || []).indexOf(coluna.id) !== -1;
     });
@@ -501,7 +515,24 @@ function renderAbaAlocacao(registros, indices, opcoes) {
   var equipesPorId = {};
   equipes.forEach(function (e) { equipesPorId[e.id] = e; });
 
-  var grade = montarGradeAlocacao(registros, indices, o);
+  // A busca poda a GRADE também, não só o pool -- ver o comentário em
+  // montarGradeAlocacao. `equipesVisiveis` fica null quando não há busca, e
+  // null significa "não filtra", nunca "nenhuma".
+  var termoBusca = normalizarBusca(o.buscaEquipe || '');
+  var equipesVisiveis = null;
+  if (termoBusca) {
+    equipesVisiveis = [];
+    equipes.forEach(function (e) {
+      if (equipeCasaBusca(e, termoBusca)) equipesVisiveis.push(e.id);
+    });
+  }
+
+  var opcoesGrade = {};
+  Object.keys(o).forEach(function (k) { opcoesGrade[k] = o[k]; });
+  opcoesGrade.equipesVisiveis = equipesVisiveis;
+  opcoesGrade.tipologia = o.tipologiaAlocacao || null;
+
+  var grade = montarGradeAlocacao(registros, indices, opcoesGrade);
   var resumo = resumirAlocacao(grade, { equipes: equipes, mesIdx: o.mesIdx });
   var porEquipeMap = {};
   resumo.porEquipe.forEach(function (e) { porEquipeMap[e.id] = e; });
@@ -509,7 +540,7 @@ function renderAbaAlocacao(registros, indices, opcoes) {
   var html = renderControles(o, somenteLeitura);
   html += renderFaixaAlocacao(resumo.totais);
   if (somenteLeitura === 'mes-diferente') html += renderAvisoSomenteLeitura();
-  html += renderPool(equipes, o.foraDoQuadro, porEquipeMap, somenteLeitura, o.alocacao, o.buscaEquipe);
+  html += renderPool(equipes, o.foraDoQuadro, porEquipeMap, somenteLeitura, o.alocacao, o.buscaEquipe, o.tipologiaAlocacao || null);
   html += renderMatriz(grade, resumo, equipesPorId, somenteLeitura);
   html += renderResumoSup(resumo.porSup);
   html += renderResumoEquipe(resumo.porEquipe);

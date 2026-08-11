@@ -2218,3 +2218,71 @@ test('em somenteLeitura nenhum cartão é arrastável -- nem alocar nem devolver
   assert.match(secao, /Somente leitura/);
   assert.doesNotMatch(secao, /data-arrastavel="sim"/);
 });
+
+
+// --- A busca de equipe pelo caminho REAL do listener (2026-08-11) ------------
+//
+// Este grupo faltava, e a falta custou caro: a busca foi entregue filtrando só
+// o pool, e como a semana nasce SEMEADA do realizado o pool fica vazio -- na
+// tela, digitar não mudava nada. Os testes de render passavam porque exercitam
+// renderAbaAlocacao direto, com uma alocação vazia que a tela real nunca tem.
+//
+// O DOM falso não implementa dispatchEvent, mas guarda os listeners em
+// el.listeners[tipo] -- dá para invocar o handler REAL, que é o que importa.
+
+test('digitar no campo de busca poda a GRADE, não só o pool', async () => {
+  const { sandbox, documentoFalso } = sandboxAlocacao();
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await sandbox.selecionarSemanaAlocacao(0);
+
+  const secao = documentoFalso.getElementById('secao-alocacao');
+  const antes = secao.innerHTML;
+  const cartoes = (h) => (h.match(/data-equipe="/g) || []).length;
+  const linhas = (h) => (h.match(/data-sup="/g) || []).length;
+
+  assert.ok(cartoes(antes) > 0, 'pré-condição: a semana nasce semeada, com equipe no quadro');
+  assert.ok(linhas(antes) > 0, 'pré-condição: há linha na grade');
+
+  const handler = secao.listeners.input;
+  assert.strictEqual(typeof handler, 'function');
+  handler({ target: { id: 'busca-equipe', value: 'zzzznaoexiste' } });
+
+  const depois = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  assert.strictEqual(cartoes(depois), 0, 'nenhuma equipe casa -- nenhum cartão pode sobrar');
+  assert.strictEqual(linhas(depois), 0, 'e a grade tem que esvaziar junto');
+});
+
+test('limpar a busca traz o quadro inteiro de volta', async () => {
+  const { sandbox, documentoFalso } = sandboxAlocacao();
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await sandbox.selecionarSemanaAlocacao(0);
+
+  const secao = documentoFalso.getElementById('secao-alocacao');
+  const original = secao.innerHTML;
+  const handler = secao.listeners.input;
+
+  handler({ target: { id: 'busca-equipe', value: 'zzzznaoexiste' } });
+  handler({ target: { id: 'busca-equipe', value: '' } });
+
+  const voltou = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  assert.strictEqual(voltou, original, 'a poda é de exibição -- limpar restaura tudo');
+});
+
+test('o filtro de tipologia da aba recorta as colunas', async () => {
+  const { sandbox, documentoFalso } = sandboxAlocacao();
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await sandbox.selecionarSemanaAlocacao(0);
+
+  const secao = documentoFalso.getElementById('secao-alocacao');
+  assert.match(secao.innerHTML, /id="filtro-tipologia-alocacao"/);
+
+  const handler = secao.listeners.change;
+  assert.strictEqual(typeof handler, 'function', 'precisa haver listener de change');
+  handler({ target: { id: 'filtro-tipologia-alocacao', value: 'PI' } });
+
+  const depois = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  assert.doesNotMatch(depois, /data-coluna="ST"/, 'só a coluna escolhida sobrevive');
+});
