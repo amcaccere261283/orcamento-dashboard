@@ -175,3 +175,64 @@ test('equipe sem alocação nenhuma continua no pool', () => {
   const html = renderAbaAlocacao(registros(), [0], opcoes({ alocacao: {} }));
   assert.match(html, /data-equipe="4"/);
 });
+
+// --- Pool agrupado por tipologia (2026-08-11, Decisões 4/5 do spec) ---------
+
+function equipesVariadas() {
+  const base = { diasDisponiveis: 5, diasDaSemana: 7, disponivel: true,
+    supRealizado: null, colunaRealizada: null, popup: {} };
+  return [
+    Object.assign({ id: '4', lider: 'Amaral', nome: 'José I. Amaral', servicos: 'SP',
+      colunas: ['SP'], polivalente: false }, base),
+    Object.assign({ id: '7', lider: 'Alves', nome: 'Carlos Alves', servicos: 'ST | PI | BL',
+      colunas: ['ST', 'PI', 'BL'], polivalente: true }, base),
+  ];
+}
+
+test('o pool sai agrupado, na ordem canônica de COLUNAS_ALOCACAO', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {},
+  }));
+  const ordem = [...html.matchAll(/data-grupo="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepStrictEqual(ordem, ['SP', 'ST', 'PI', 'BL'],
+    'grupos vazios não são desenhados, e os que sobram seguem a ordem canônica');
+});
+
+test('a equipe polivalente aparece em CADA grupo que serve', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {},
+  }));
+  const ocorrencias = (html.match(/data-equipe="7"/g) || []).length;
+  assert.strictEqual(ocorrencias, 3, 'ST, PI e BL -- é o que faz o grupo BL ter candidato');
+});
+
+test('o grupo BL existe por causa da polivalente -- não há equipe só de BL', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {},
+  }));
+  assert.match(html, /data-grupo="BL"/);
+});
+
+test('o cartão polivalente leva selo; o de coluna única, não', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {},
+  }));
+  const selos = (html.match(/cartao-selo-poli/g) || []).length;
+  assert.strictEqual(selos, 3, 'um por cópia da equipe 7, nenhum na 4');
+});
+
+test('"fora do quadro" continua fora do agrupamento', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {},
+  }));
+  assert.match(html, /fora do quadro \(1\)/);
+});
+
+test('equipe alocada some de TODOS os grupos de uma vez', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: { 7: { sup: 'SUP-A', coluna: 'ST' } },
+  }));
+  // Só a cópia dentro da célula sobra -- nenhuma no pool.
+  const noPool = (html.split('<table')[0].match(/data-equipe="7"/g) || []).length;
+  assert.strictEqual(noPool, 0);
+});

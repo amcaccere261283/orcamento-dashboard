@@ -489,6 +489,14 @@ const CSS_SEMANAL = `
     border: 1px dashed var(--border); border-radius: 8px;
   }
   .pool-cartoes { display: flex; flex-wrap: wrap; gap: 8px; min-height: 44px; }
+  /* Um bloco por tipologia, na mesma ordem das colunas da grade. */
+  .pool-grupo { margin-bottom: 10px; }
+  .pool-grupo-titulo {
+    margin: 0 0 4px; font-size: 11px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .pool-grupo-contagem { font-weight: 400; opacity: .75; }
+  .cartao-selo-poli { margin-left: 3px; font-size: 10px; opacity: .85; }
   /* O pool como alvo de DEVOLUÇÃO, só enquanto se arrasta uma equipe que já
      está alocada. Some em limparDestaquesAlocacao, junto com o das células. */
   .pool-alvo { outline: 2px dashed #4f8ff0; outline-offset: 3px; }

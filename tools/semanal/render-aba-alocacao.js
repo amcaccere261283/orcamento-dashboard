@@ -193,6 +193,9 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura) {
     + ' data-arrastavel="' + (arrastavel ? 'sim' : 'nao') + '"'
     + '>'
     + '<span class="cartao-medalhao">' + escapeHtml(equipe.id) + '</span>'
+    // O selo avisa que este MESMO cartão aparece em outros grupos do pool --
+    // sem ele, a repetição da Decisão 4 leria como equipes diferentes.
+    + (equipe.polivalente ? '<span class="cartao-selo-poli" title="aparece em mais de um grupo">⇄</span>' : '')
     + '<span class="cartao-cor" style="background:' + corPrincipal + '"></span>'
     + '<span class="cartao-lider">' + escapeHtml(equipe.lider) + '</span>'
     + (equipe.disponivel ? '' : '<span class="cartao-motivo">sem dia disponível nesta semana</span>')
@@ -210,6 +213,9 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura) {
     + '<p class="popup-titulo">Equipe ' + escapeHtml(equipe.id) + ' — ' + escapeHtml(equipe.lider) + '</p>'
     + '<p>Habilitação: ' + escapeHtml(popup.habilitacao || '—') + '</p>'
     + '<p>Tipologia: ' + escapeHtml(colunas.join(', ') || '—') + '</p>'
+    + (equipe.polivalente
+      ? '<p class="popup-poli">Aparece nos grupos: ' + escapeHtml(colunas.join(', ')) + '</p>'
+      : '')
     + '<p>Veículo: ' + escapeHtml(popup.veiculo || '—') + ' · Proprietário: ' + escapeHtml(popup.proprietario || '—') + '</p>'
     + '<p>Equipamentos: ' + equipamentos + '</p>'
     + '<p>Tomador atual: ' + escapeHtml(popup.tomador || '—') + '</p>'
@@ -234,8 +240,33 @@ function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocaca
     return !(destino && destino.sup);
   });
 
-  var cartoes = noPool.map(function (e) {
-    return renderCartaoEquipe(e, porEquipeMap[e.id] || null, somenteLeitura);
+  // Um bloco por coluna, na ORDEM CANÔNICA de COLUNAS_ALOCACAO -- a mesma da
+  // grade, para o olho não ter que traduzir entre as duas metades da tela.
+  //
+  // A equipe aparece em TODOS os grupos que serve, e não num "Polivalentes"
+  // separado. Medido em 2026-08-11: não existe nenhuma equipe com serviço 'BL'
+  // sozinho -- as 6 de 'ST | PI | BL' são as únicas candidatas a BL que
+  // existem, e num pool que as isolasse o grupo BL nasceria sempre vazio,
+  // justamente a pergunta que o agrupamento deveria responder.
+  //
+  // O preço é a repetição (7 polivalentes viram 20 cartões, num pool de ~127
+  // para 114 equipes); o selo no cartão existe para ela não ser lida como
+  // equipes diferentes. A duplicação é segura para o arrasto: toda a máquina
+  // resolve o cartão por e.target.closest, nunca por querySelector com
+  // data-equipe.
+  var grupos = COLUNAS_ALOCACAO.map(function (coluna) {
+    var doGrupo = noPool.filter(function (e) {
+      return (e.colunas || []).indexOf(coluna.id) !== -1;
+    });
+    if (!doGrupo.length) return '';
+    var cartoesDoGrupo = doGrupo.map(function (e) {
+      return renderCartaoEquipe(e, porEquipeMap[e.id] || null, somenteLeitura);
+    }).join('');
+    return '<div class="pool-grupo" data-grupo="' + escapeHtml(coluna.id) + '">'
+      + '<h4 class="pool-grupo-titulo">' + escapeHtml(coluna.rotulo)
+      + ' <span class="pool-grupo-contagem">(' + doGrupo.length + ')</span></h4>'
+      + '<div class="pool-cartoes">' + cartoesDoGrupo + '</div>'
+      + '</div>';
   }).join('');
 
   var fora = foraDoQuadro || [];
@@ -245,7 +276,7 @@ function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocaca
   }).join('');
 
   return '<div class="pool-alocacao">'
-    + '<div class="pool-cartoes">' + (cartoes || '<p class="pool-vazio">nenhuma equipe livre</p>') + '</div>'
+    + (grupos || '<p class="pool-vazio">nenhuma equipe livre</p>')
     + '<details class="fora-do-quadro">'
     + '<summary>fora do quadro (' + fora.length + ')</summary>'
     + '<ul>' + itensFora + '</ul>'
