@@ -197,6 +197,14 @@ const ESTADOS_COBERTOS = {
   'metrica-alocacao': 'faixa de métricas do topo',
   'resumo-sup-alocacao': 'tabela resumo por SUP',
   'resumo-equipe-alocacao': 'tabela resumo por equipe',
+  // Os dois abaixo não são da aba -- são o CONTEXTO em que ela vive. Sem eles
+  // o snapshot não enxergaria nada de empilhamento: a marca d'água é
+  // position:fixed com z-index 0, o que a faz pintar ACIMA de todo conteúdo em
+  // fluxo normal, e é #secao-alocacao que precisa criar o contexto para
+  // escapar dela. Revisar a aba fora da seção é revisar uma tela que a página
+  // não tem.
+  'id="secao-alocacao"': 'a seção que embrulha a aba na página real',
+  'class="watermark"': "a marca d'água fixa do fundo",
 };
 
 // --- Montagem -----------------------------------------------------------------
@@ -264,11 +272,26 @@ function gerar() {
   .snapshot-aviso { max-width: 90ch; font-size: 12px; color: var(--muted); margin: 0 0 24px; }
 `;
 
-  const markup = '<h1>Planejamento Semanal — Alocação Equipes</h1>'
+  // A marca d'água é um PLACEHOLDER, não o logo da empresa: o que se revisa
+  // aqui é o empilhamento (ela cobre o quadro ou não), e isso independe do
+  // desenho. Mesma geometria e mesma opacidade -- quem manda nos dois é a
+  // regra .watermark de cssBase(), que o snapshot já carrega.
+  const marca = '<img class="watermark" alt="" src="data:image/svg+xml;utf8,'
+    + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">'
+      + '<circle cx="200" cy="200" r="180" fill="none" stroke="#ffffff" stroke-width="24"/>'
+      + '<text x="200" y="235" font-family="sans-serif" font-size="120" font-weight="700"'
+      + ' fill="#ffffff" text-anchor="middle">MD</text></svg>')
+    + '">';
+
+  const markup = marca
+    + '<h1>Planejamento Semanal — Alocação Equipes</h1>'
     + '<p class="snapshot-aviso">Snapshot estático para revisão de design. '
     + 'Todos os números, SUPs, equipes e tomadores são inventados. '
+    + "A marca d'água é um placeholder com a geometria e a opacidade da real. "
     + 'Gerado por tools/semanal/snapshot-alocacao.js.</p>'
-    + corpo;
+    // O mesmo id que render-semanal.js dá à seção da aba -- é nele que a
+    // regra de empilhamento pega.
+    + '<div id="secao-alocacao">' + corpo + '</div>';
 
   const html = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
     + '<meta name="viewport" content="width=device-width, initial-scale=1">'

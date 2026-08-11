@@ -454,6 +454,28 @@ const CSS_SEMANAL = `
      acento (#f6b53f) do resto da página -- table/th/td genéricos (também de
      cssBase()) já cobrem .matriz-alocacao/.resumo-sup-alocacao/
      .resumo-equipe-alocacao, então não são redeclarados aqui. */
+  /* A marca d'água (.watermark, cssBase()) é position:fixed com z-index 0 --
+     ou seja, um elemento POSICIONADO, que na ordem de pintura vem depois de
+     todo conteúdo em fluxo normal. Ela não fica atrás do quadro: atravessa
+     cartões, células e números, e num quadro denso como este isso vira ruído
+     em cima do dado.
+
+     São necessárias as DUAS metades, e é por isso que "só pôr fundo opaco"
+     não resolveria: sem position+z-index a seção não cria contexto de
+     empilhamento, e o fundo opaco continuaria sendo pintado por baixo da
+     marca. O z-index: 1 é a mesma receita já usada em #secao-balanco; o fundo
+     opaco é o que apaga a marca também nos VÃOS entre a faixa, o pool e as
+     tabelas, onde o z-index sozinho a deixaria aparecendo.
+
+     (Este comentário nasceu com crases em volta de position/z-index e derrubou
+     o require inteiro -- dentro deste template literal elas terminam a string.
+     Ver a armadilha documentada no CLAUDE.md.)
+
+     var(--page) é exatamente a cor que o body já tem, então nada muda de
+     aparência além do sumiço da marca -- as tabelas continuam em
+     rgba(26,26,25,0.68) sobre o mesmo #0d0d0d de antes. */
+  #secao-alocacao { position: relative; z-index: 1; background: var(--page); }
+
   .controles-alocacao { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
   .controles-alocacao button {
     padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px;
