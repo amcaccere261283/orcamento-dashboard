@@ -20,6 +20,7 @@ const { parseLab } = require('./parse-lab.js');
 const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, resolverSupConhecido } = require('./compute-demandas.js');
 const { agregarEquipesPorDia } = require('./compute-equipes-mobilizadas.js');
 const { parseAbaEq, agregarEquipesAtivas, mesDaAbaEq } = require('./compute-equipes-ativas.js');
+const { agregarEquipesRealizadoAlocado } = require('./compute-equipes-realizado-alocado.js');
 const { agregarEquipesAtivoPorDia } = require('./compute-equipes-ativo-matriz.js');
 const { agregarEquipesNaoProdutivas } = require('./compute-equipes-nao-produtivas.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
@@ -62,60 +63,78 @@ function baselineParaCliente(porChave, registros) {
   return Array.from(porChaveMatriz, ([chave, dados]) => ({ chave, ...dados }));
 }
 
-// Extraída de build() (revisão final de branch, 2026-08-08) pra ser
-// testável em isolamento, sem precisar montar a MATRIZ real (config.js lê de
-// G:\, indisponível fora da máquina do dono do projeto -- ver os testes que
-// já pulam com "G: não montado"). É EXATAMENTE o bloco que lê
-// equipes-online.csv (formato "SUP,Tipo,DiaEpoch,Fracao", já pré-agregado
-// por atualizar-equipes-online.js/agregarEquipesFracao) e monta
-// demandas.equipesPorDia/equipesPeriodo -- só puro texto CSV + registros da
-// MATRIZ entrando, sem tocar em fs/path. Devolve { equipesPorDia: null,
-// equipesPeriodo: null } quando o CSV não produz nenhum dia utilizável --
-// build() decide o que fazer com isso (manter a fonte de reserva).
-function parseEquipesFracaoCsv(csvTexto, registros) {
-  const linhasCsv = (csvTexto || '').trim().split('\n').slice(1);
-  const porDiaFracao = {};
-  const diasEncontrados = new Set();
-  // resolverSup construída UMA VEZ fora do loop -- resolverSupConhecido(registros)
-  // devolve uma função, e reconstruí-la a cada linha é trabalho repetido à toa
-  // (achado da revisão final de branch, 2026-08-08).
-  const resolverSup = resolverSupConhecido(registros);
-  for (const linha of linhasCsv) {
+// Roster publicado por atualizar-equipes-online.js (dist/equipes-roster-online.csv),
+// cabeçalho CABECALHO_ROSTER em atualizar-equipes-online.js
+// ("IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos") -- só as 3
+// primeiras colunas interessam aqui (agregarEquipesRealizadoAlocado só lê
+// idEquipe/diaEpoch/estado); as 4 seguintes existem para outros consumidores
+// (nenhum neste módulo) e são ignoradas por posição, não por nome -- mesmo
+// parser posicional simples que o resto do projeto usa pra CSV plano.
+function parseRosterOnlineCsvBruto(csvTexto) {
+  const linhas = (csvTexto || '').trim().split('\n').slice(1);
+  const saida = [];
+  for (const linha of linhas) {
     if (!linha) continue;
-    const [sup, tipo, diaStr, fracaoStr] = linha.split(',');
-    const supResolvido = resolverSup(sup, tipo);
-    const chave = supResolvido + '||' + tipo;
-    const dia = Number(diaStr);
-    if (!porDiaFracao[chave]) porDiaFracao[chave] = {};
-    porDiaFracao[chave][dia] = (porDiaFracao[chave][dia] || 0) + Number(fracaoStr);
-    diasEncontrados.add(dia);
+    const partes = linha.split(',');
+    const dia = Number(partes[1]);
+    if (!Number.isFinite(dia)) continue;
+    saida.push({ idEquipe: partes[0], diaEpoch: dia, estado: partes[2] });
   }
-  if (!Object.keys(porDiaFracao).length) {
-    return { equipesPorDia: null, equipesPeriodo: null };
+  return saida;
+}
+
+// Produção publicada por atualizar-equipes-online.js (dist/equipes-online.csv),
+// cru desde 2026-08-10: "IdEquipe,SUP,Tipo,DiaEpoch" -- substitui o antigo
+// pré-agregado "SUP,Tipo,DiaEpoch,Fracao" (a fração agora é calculada no
+// cruzamento com o roster, ver montarEquipesRealizado abaixo).
+function parseProducaoOnlineCsv(csvTexto) {
+  const linhas = (csvTexto || '').trim().split('\n').slice(1);
+  const saida = [];
+  for (const linha of linhas) {
+    if (!linha) continue;
+    const partes = linha.split(',');
+    const dia = Number(partes[3]);
+    if (!Number.isFinite(dia)) continue;
+    saida.push({ idEquipe: partes[0], sup: partes[1], tipo: partes[2], diaEpoch: dia });
   }
-  // equipesPeriodo é um contrato de UM mês (ou null = "sem restrição") --
-  // ver foraDaCoberturaDeEquipes em compute-balanco.js, que compara ano e mês
-  // exatos. Ele nasceu quando equipes-online.csv cobria só o mês corrente.
-  //
-  // Desde o backfill de 2026-08-10 o CSV cobre o ANO todo, e aí declarar um
-  // mês só seria pior que não declarar nada: o Balanço passaria a mostrar
-  // "sem dado" em TODOS os meses menos aquele -- regressão em relação ao
-  // comportamento anterior, em que pelo menos o mês corrente funcionava.
-  // Por isso: um mês só no CSV mantém o gate; vários meses devolvem null,
-  // que é exatamente o que as equipes MOBILIZADAS (cobertura anual) sempre
-  // usaram. Estender o gate para um INTERVALO é a correção de verdade, e
-  // fica para a rodada do Balanço -- ele está fora do escopo desta.
-  const diasArr = [...diasEncontrados];
-  const meses = new Set(diasArr.map((d) => {
-    const data = new Date(d * 86400000);
-    return `${data.getUTCFullYear()}-${data.getUTCMonth() + 1}`;
-  }));
-  let equipesPeriodo = null;
-  if (meses.size === 1) {
-    const diaRepresentativo = new Date(Math.min(...diasArr) * 86400000);
-    equipesPeriodo = { ano: diaRepresentativo.getUTCFullYear(), mes: diaRepresentativo.getUTCMonth() + 1 };
+  return saida;
+}
+
+// Substitui parseEquipesFracaoCsv (aposentada em 2026-08-10, recuperação de
+// branch em 2026-08-11 -- ver
+// docs/superpowers/specs/2026-08-10-equipes-realizado-roster-link6-link7-design.md
+// e docs/superpowers/plans/2026-08-10-equipes-realizado-roster-link6-link7.md).
+// Cruza roster (Link 6) + produção crua (Link 7) via
+// agregarEquipesRealizadoAlocado (compute-equipes-realizado-alocado.js, com
+// carry-forward de 45 dias) e resolve o SUP de cada linha de produção contra
+// a MATRIZ (resolverSupConhecido) -- mesmo redirecionamento pra "Diversos"
+// que furos/ensaios já levam. Extraída como função pura (mesmo espírito da
+// antecessora) pra ser testável sem tocar em fs/path/MATRIZ real -- ver
+// test/semanal-build-dashboard-fontes-novas.test.js.
+//
+// Devolve { equipesPorDia: null, ativos, foraDaJanela } quando o cruzamento
+// não produz nenhum par utilizável -- build() decide manter a fonte de
+// reserva (ativas/mobilizadas) nesse caso.
+function montarEquipesRealizado({ rosterCsv, producaoCsv, registros }) {
+  const roster = parseRosterOnlineCsvBruto(rosterCsv);
+  const producao = parseProducaoOnlineCsv(producaoCsv);
+  const resultado = agregarEquipesRealizadoAlocado({ roster, producao });
+  if (!Object.keys(resultado.porDia).length) {
+    return { equipesPorDia: null, ativos: resultado.ativos, foraDaJanela: resultado.foraDaJanela };
   }
-  return { equipesPorDia: porDiaFracao, equipesPeriodo };
+  // resolverSup construída UMA VEZ fora do loop -- mesmo achado da revisão
+  // final de branch, 2026-08-08 (ver o comentário simétrico na antecessora).
+  const resolverSup = resolverSupConhecido(registros || []);
+  const porDiaResolvido = {};
+  for (const [chave, mapa] of Object.entries(resultado.porDia)) {
+    const [sup, tipo] = chave.split('||');
+    const chaveResolvida = resolverSup(sup, tipo) + '||' + tipo;
+    if (!porDiaResolvido[chaveResolvida]) porDiaResolvido[chaveResolvida] = {};
+    for (const [dia, fracao] of Object.entries(mapa)) {
+      porDiaResolvido[chaveResolvida][dia] = (porDiaResolvido[chaveResolvida][dia] || 0) + fracao;
+    }
+  }
+  return { equipesPorDia: porDiaResolvido, ativos: resultado.ativos, foraDaJanela: resultado.foraDaJanela };
 }
 
 
@@ -381,32 +400,51 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   Object.assign(demandas, resultadoEquipesAtivas);
   if (demandas.equipesPeriodo) fonteEquipes = 'ATIVAS (aba EQ)';
 
-  // Δ equipes PRODUTIVAS (2026-08-09): fonte online, direto do Link 7
-  // (campo/produção, já agregado em atualizar-equipes-online.js via
-  // agregarEquipesProdutivas -- compute-equipes-produtivas-link7.js), no
-  // formato plano "SUP,Tipo,DiaEpoch,Fracao". Substitui a versão FRACIONADA
-  // de 2026-08-08 (Link 6 roster + Link 7, casamento por nome via
-  // compute-equipes-fracao.js) -- o link por nome só cobria ~20% do roster
-  // por causa da inconsistência de nomenclatura entre as duas fontes; o dono
-  // do projeto pediu pra usar só o Link 7 por enquanto, e revisitar Equipes
-  // ATIVAS (que precisa do roster completo, incluindo quem não produziu)
-  // depois. compute-equipes-fracao.js fica no repositório sem consumidor
-  // aqui, não removido -- ver comentário no topo dele. Continua sendo a
-  // PRIMEIRA prioridade pro Δ equipes -- ativas (aba EQ) e mobilizadas
-  // (furos) continuam como reserva se o CSV novo não existir ou não
-  // produzir nenhum dia utilizável.
-  const CAMINHO_EQUIPES_ONLINE = path.join(__dirname, '..', '..', 'dist', 'equipes-online.csv');
-  if (fs.existsSync(CAMINHO_EQUIPES_ONLINE)) {
-    const { equipesPorDia, equipesPeriodo } = parseEquipesFracaoCsv(fs.readFileSync(CAMINHO_EQUIPES_ONLINE, 'utf8'), registros);
+  // Δ equipes REALIZADO (2026-08-10, recuperado e reintegrado em 2026-08-11
+  // depois de um git reset --hard ter descartado esta branch -- ver
+  // docs/superpowers/specs/2026-08-10-equipes-realizado-roster-link6-link7-design.md
+  // e docs/superpowers/plans/2026-08-10-equipes-realizado-roster-link6-link7.md).
+  // Cruza roster (Link 6, dist/equipes-roster-online.csv, multi-mês) + produção
+  // CRUA (Link 7, dist/equipes-online.csv, "IdEquipe,SUP,Tipo,DiaEpoch" desde
+  // 2026-08-10) via montarEquipesRealizado, com carry-forward de 45 dias pra
+  // quem está ativo mas não produziu no dia. Substitui a versão "PRODUTIVAS
+  // (Link 7)" de 2026-08-09 (pré-agregada, "SUP,Tipo,DiaEpoch,Fracao" -- o
+  // parser antigo, parseEquipesFracaoCsv, não serve mais porque o fetcher
+  // mudou o formato do CSV). Continua sendo a PRIMEIRA prioridade pro Δ
+  // equipes -- ativas (aba EQ, montarEquipesAtivas acima) e mobilizadas
+  // (furos) continuam como reserva se qualquer um dos dois CSVs faltar ou não
+  // produzir nenhum par utilizável.
+  //
+  // NOTA DE INTEGRAÇÃO (2026-08-11): a spec original mandava também aposentar
+  // buscarEspelhoEq()/montarEquipesAtivas por completo, lendo Ativas/Não-
+  // produtivas do mesmo equipes-roster-online.csv. Essa parte NÃO foi
+  // reintegrada -- ela predata a aba Alocação Equipes (equipes-alocaveis.js),
+  // que precisa do CSV CRU inteiro da Sheet espelho (Líderes, Habilitação,
+  // Veículo, Equipamento, Tenda, Tomador, Sinalização -- colunas que
+  // equipes-roster-online.csv nunca carregou, nem na versão de 7 colunas) pra
+  // montar o quadro e o popup de cada equipe. buscarEspelhoEq/montarEquipesAtivas
+  // continuam EXATAMENTE como estavam antes desta rodada: única fonte de
+  // equipesCsv/osParaSup (consumidos pela aba Alocação) e fallback #2 de
+  // equipesPorDia/equipesPeriodo (ATIVAS aba EQ), logo acima.
+  const CAMINHO_PRODUCAO_ONLINE = path.join(__dirname, '..', '..', 'dist', 'equipes-online.csv');
+  const CAMINHO_ROSTER_ONLINE = path.join(__dirname, '..', '..', 'dist', 'equipes-roster-online.csv');
+  if (fs.existsSync(CAMINHO_PRODUCAO_ONLINE) && fs.existsSync(CAMINHO_ROSTER_ONLINE)) {
+    const rosterCsv = fs.readFileSync(CAMINHO_ROSTER_ONLINE, 'utf8');
+    const producaoCsv = fs.readFileSync(CAMINHO_PRODUCAO_ONLINE, 'utf8');
+    const { equipesPorDia, ativos, foraDaJanela } = montarEquipesRealizado({ rosterCsv, producaoCsv, registros });
     if (equipesPorDia) {
       demandas.equipesPorDia = equipesPorDia;
-      demandas.equipesPeriodo = equipesPeriodo;
-      fonteEquipes = 'PRODUTIVAS (Link 7)';
+      // Roster cobre múltiplos meses (backfill anual) -- declarar um mês só
+      // aqui apagaria o Δ equipes de todos os outros (mesmo raciocínio que
+      // parseEquipesFracaoCsv já documentava pra equipesPeriodo).
+      demandas.equipesPeriodo = null;
+      fonteEquipes = 'REALIZADO (roster Link 6 + produção Link 7)';
+      console.log(`Equipes REALIZADO: ${ativos} equipe-dia ativa(s), ${foraDaJanela} sem produção dentro de 45 dias (fora da conta, carry-forward esgotado).`);
     } else {
-      console.warn('Equipes fracionadas: CSV existe mas não produziu nenhum dia utilizável -- mantendo a fonte de reserva (ativas/mobilizadas).');
+      console.warn('Equipes REALIZADO: roster+produção não produziram nenhum par utilizável -- mantendo a fonte de reserva (ativas/mobilizadas).');
     }
   } else {
-    console.warn(`Equipes fracionadas: ${CAMINHO_EQUIPES_ONLINE} não existe -- rode "node tools/semanal/atualizar-equipes-online.js". Mantendo a fonte de reserva (ativas/mobilizadas).`);
+    console.warn(`Equipes REALIZADO: falta ${CAMINHO_PRODUCAO_ONLINE} ou ${CAMINHO_ROSTER_ONLINE} -- rode "node tools/semanal/atualizar-equipes-online.js". Mantendo a fonte de reserva (ativas/mobilizadas).`);
   }
 
   // Realizado de equipes para a Tabela Semanal (2026-08-06, recalibrado no
@@ -495,4 +533,7 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, baselineParaCliente, redirecionarSupsDesconhecidos, parseEquipesFracaoCsv, montarEquipesAtivas };
+module.exports = {
+  build, baselineParaCliente, redirecionarSupsDesconhecidos, montarEquipesAtivas,
+  montarEquipesRealizado, parseRosterOnlineCsvBruto, parseProducaoOnlineCsv,
+};
