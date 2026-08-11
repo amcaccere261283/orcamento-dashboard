@@ -164,9 +164,37 @@ function montarGradeAlocacao(registros, indices, opcoes) {
   var colunasComAlgo = {};
   var celulas = {};
 
+  // As células candidatas vêm de DUAS fontes, e até 2026-08-11 só uma respeitava
+  // o filtro: `porCelula` sai de indicesPorCelula(registros, indices) e obedece;
+  // `equipesNaCelula` sai de `alocacao` e não obedecia, então qualquer SUP com
+  // equipe alocada virava linha por cima do filtro. Como a semana nasce SEMEADA
+  // do realizado, esse era o caso normal -- filtrar um SUP devolvia todos os
+  // SUPs semeados junto (relatado com o SUP 7133, que trazia 6830, 7285 e 7593).
+  //
+  // A alocação continua entrando, porque uma equipe alocada numa coluna sem
+  // registro tem de aparecer -- mas não nos SUPs que o filtro EXCLUIU.
+  //
+  // "Excluído" é mais estreito que "não passou": um SUP que não existe em
+  // `registros` nenhum (o caso "antecipar carteira", célula hachurada -- SUP
+  // que aparece no Avanço Sond sem registro na MATRIZ; foram 6.195 furos em
+  // 2026-08-11) NUNCA foi filtrável, porque as opções do filtro saem de
+  // `registros`. Escondê-lo não seria filtrar, seria sumir com dado -- e foi
+  // exatamente isso que a primeira versão desta poda fez, derrubando dois
+  // testes que já existiam.
+  var supsPermitidos = {};
+  (indices || []).forEach(function (i) {
+    if (registros[i]) supsPermitidos[registros[i].sup] = true;
+  });
+  var supsConhecidos = {};
+  (registros || []).forEach(function (r) { if (r) supsConhecidos[r.sup] = true; });
+
   var chavesCandidatas = {};
   Object.keys(porCelula).forEach(function (k) { chavesCandidatas[k] = true; });
-  Object.keys(equipesNaCelula).forEach(function (k) { chavesCandidatas[k] = true; });
+  Object.keys(equipesNaCelula).forEach(function (k) {
+    var supDaChave = k.split('||')[0];
+    if (supsConhecidos[supDaChave] && !supsPermitidos[supDaChave]) return;
+    chavesCandidatas[k] = true;
+  });
 
   Object.keys(chavesCandidatas).forEach(function (chave) {
     var partes = chave.split('||');

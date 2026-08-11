@@ -97,13 +97,29 @@ test('movimentos na fila aparecem no status', () => {
 });
 
 test('leitura "sem-demanda" (equipe parada onde não há tendência nem carteira) ganha rótulo e classe próprios, não o id cru', () => {
-  // indices vazio: nenhum registro cai em 'SUP-A||SP', então a célula só
-  // existe porque a equipe '4' está alocada ali (via 'alocacao') -- tendência
-  // e carteira ficam em zero, o mesmo estado que compute-alocacao.js
-  // (commit de3a715) batizou de 'sem-demanda' em vez de cair, por engano,
-  // em 'absorvido' (verde).
-  const o = opcoes({ alocacao: { 4: { sup: 'SUP-A', coluna: 'SP' } } });
-  const html = renderAbaAlocacao(registros(), [], o);
+  // SUP-Z tem registro na MATRIZ mas volume ZERO: tendência e carteira ficam em
+  // zero, e a linha existe SÓ porque a equipe '4' está alocada nela. É o estado
+  // que compute-alocacao.js (commit de3a715) batizou de 'sem-demanda' em vez de
+  // cair, por engano, em 'absorvido' (verde).
+  //
+  // Este teste usava `indices: []` para produzir o mesmo estado, o que deixou
+  // de servir em 2026-08-11: `indices` é a saída do FILTRO, e esvaziá-lo passou
+  // a significar "o filtro excluiu este SUP" (Decisão 7), não "não há registro
+  // nesta célula" -- os dois sentidos eram indistinguíveis antes de a poda
+  // existir. O caso real deste teste (auto-seed sem filtro ativo) tem `indices`
+  // CHEIO, que é como está agora.
+  const regs = registros().concat([{
+    sup: 'SUP-Z', tomador: 'Tomador Z', tipologia: 'SP',
+    previsto: { volume: new Array(12).fill(0), equipesResumo: { prod: 2 } },
+  }]);
+  const o = opcoes({
+    alocacao: { 4: { sup: 'SUP-Z', coluna: 'SP' } },
+    demandas: { porRegistroEventos: {
+      'SUP-A||SP': { chegada: [], sondagemRealizada: [], saidaEstoque: [] },
+      'SUP-Z||SP': { chegada: [], sondagemRealizada: [], saidaEstoque: [] },
+    } },
+  });
+  const html = renderAbaAlocacao(regs, [0, 1], o);
   assert.match(html, /Sem demanda/);
   assert.match(html, /leitura-neutra/);
   // A falha que este teste travaria: sem rótulo próprio, o lookup cai no
@@ -137,4 +153,25 @@ test('"Livre" continua sendo o rótulo da EQUIPE no pool -- a chave é compartil
   const { ROTULO_SITUACAO } = require('../tools/semanal/render-aba-alocacao.js');
   assert.strictEqual(ROTULO_SITUACAO.livre, 'Livre');
   assert.strictEqual(ROTULO_SITUACAO['sem-equipe'], 'Sem equipe');
+});
+
+// --- O pool decide pela alocação CRUA (2026-08-11, Decisão 7 do spec) --------
+
+test('equipe alocada num SUP podado pelo filtro NÃO volta ao pool como livre', () => {
+  // A armadilha da Decisão 7: com a linha podada, resumirAlocacao devolve
+  // sup: null para a equipe, e um pool que decidisse pelo RESUMO a desenharia
+  // como livre -- dando pra alocá-la uma segunda vez, em dois SUPs ao mesmo
+  // tempo. O pool tem que decidir pela alocação crua.
+  //
+  // indices [] = o filtro excluiu SUP-A, que é conhecido (está em registros).
+  const html = renderAbaAlocacao(registros(), [], opcoes({
+    alocacao: { 4: { sup: 'SUP-A', coluna: 'SP' } },
+  }));
+  assert.doesNotMatch(html, /data-equipe="4"/,
+    'a equipe alocada não pode reaparecer como cartão enquanto o filtro esconde o SUP dela');
+});
+
+test('equipe sem alocação nenhuma continua no pool', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({ alocacao: {} }));
+  assert.match(html, /data-equipe="4"/);
 });

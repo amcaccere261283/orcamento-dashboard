@@ -221,11 +221,17 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura) {
 
 // O pool: cartões das equipes SEM destino nesta semana, mais a lista
 // recolhida "fora do quadro (N)" -- Lab/TST/SN, que nunca somem calados.
-function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura) {
+// `alocacao` é a alocação CRUA, e não o resumo da grade, de propósito
+// (Decisão 7 do spec de 2026-08-11). Com o filtro de SUP podando a linha,
+// resumirAlocacao devolve sup: null para uma equipe que ESTÁ alocada -- decidir
+// por ele a traria de volta ao pool como se estivesse livre, e daria pra
+// alocá-la uma segunda vez, em dois SUPs ao mesmo tempo.
+function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocacao) {
   var lista = equipes || [];
+  var aloc = alocacao || {};
   var noPool = lista.filter(function (e) {
-    var r = porEquipeMap[e.id];
-    return !r || !r.sup;
+    var destino = aloc[e.id];
+    return !(destino && destino.sup);
   });
 
   var cartoes = noPool.map(function (e) {
@@ -410,7 +416,7 @@ function renderAbaAlocacao(registros, indices, opcoes) {
   var html = renderControles(o, somenteLeitura);
   html += renderFaixaAlocacao(resumo.totais);
   if (somenteLeitura === 'mes-diferente') html += renderAvisoSomenteLeitura();
-  html += renderPool(equipes, o.foraDoQuadro, porEquipeMap, somenteLeitura);
+  html += renderPool(equipes, o.foraDoQuadro, porEquipeMap, somenteLeitura, o.alocacao);
   html += renderMatriz(grade, resumo, equipesPorId, somenteLeitura);
   html += renderResumoSup(resumo.porSup);
   html += renderResumoEquipe(resumo.porEquipe);

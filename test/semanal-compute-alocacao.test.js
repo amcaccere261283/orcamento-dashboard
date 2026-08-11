@@ -442,3 +442,68 @@ test('PROPRIEDADE: o status da célula nunca contradiz o sinal do saldo', () => 
     }
   }
 });
+
+// --- O filtro de SUP poda a grade (2026-08-11, Decisão 7 do spec) ------------
+
+function registrosFiltro() {
+  const z = () => new Array(12).fill(0);
+  return ['SUP-A', 'SUP-B'].map((sup) => ({
+    sup, tomador: 'T', tipologia: 'ST',
+    previsto: { volume: (() => { const a = z(); a[7] = 100; return a; })(),
+      equipesResumo: { prod: 2 } },
+  }));
+}
+
+function opcoesFiltro(alocacao) {
+  return {
+    mesIdx: 7, ano: 2026, semanas: SEMANAS_AGOSTO, semana: SEMANAS_AGOSTO[1],
+    hojeEpoch: SEMANAS_AGOSTO[1].inicio + 2,
+    equipes: [{ id: 'EQ-1', lider: 'L', diasDisponiveis: 5, diasDaSemana: 7,
+      disponivel: true, colunas: ['ST'] }],
+    demandas: { porRegistroEventos: {
+      'SUP-A||ST': { chegada: [], sondagemRealizada: [], saidaEstoque: [] },
+      'SUP-B||ST': { chegada: [], sondagemRealizada: [], saidaEstoque: [] },
+    } },
+    alocacao: alocacao,
+  };
+}
+
+test('o filtro de SUP poda a grade mesmo com equipe alocada no SUP excluído', () => {
+  // O bug relatado em 2026-08-11: filtrar por um SUP devolvia também os SUPs
+  // com equipe alocada -- e a semana nasce semeada do realizado, então esse é
+  // o caso NORMAL, não uma borda.
+  const grade = montarGradeAlocacao(registrosFiltro(), [0],
+    opcoesFiltro({ 'EQ-1': { sup: 'SUP-B', coluna: 'ST' } }));
+  assert.deepStrictEqual(grade.linhas.map((l) => l.sup), ['SUP-A']);
+});
+
+test('controle: sem alocação nenhuma o filtro já funcionava, e continua', () => {
+  const grade = montarGradeAlocacao(registrosFiltro(), [0], opcoesFiltro({}));
+  assert.deepStrictEqual(grade.linhas.map((l) => l.sup), ['SUP-A']);
+});
+
+test('equipe alocada num SUP que PASSA no filtro continua desenhando a célula', () => {
+  // A poda não pode jogar fora alocação legítima.
+  const grade = montarGradeAlocacao(registrosFiltro(), [0],
+    opcoesFiltro({ 'EQ-1': { sup: 'SUP-A', coluna: 'ST' } }));
+  assert.deepStrictEqual(grade.linhas.map((l) => l.sup), ['SUP-A']);
+  assert.deepStrictEqual(grade.linhas[0].celulas.ST.equipes, ['EQ-1']);
+});
+
+test('os totais da faixa excluem as linhas podadas pelo filtro', () => {
+  const o = opcoesFiltro({ 'EQ-1': { sup: 'SUP-B', coluna: 'ST' } });
+  const grade = montarGradeAlocacao(registrosFiltro(), [0], o);
+  const resumo = resumirAlocacao(grade, { equipes: o.equipes, mesIdx: 7 });
+  assert.strictEqual(resumo.totais.tendencia, grade.linhas[0].tendencia,
+    'a faixa não pode somar um SUP que a grade não mostra');
+});
+
+test('limpar o filtro traz a linha de volta -- a poda é de exibição, não de estado', () => {
+  const alocacao = { 'EQ-1': { sup: 'SUP-B', coluna: 'ST' } };
+  const comFiltro = montarGradeAlocacao(registrosFiltro(), [0], opcoesFiltro(alocacao));
+  const semFiltro = montarGradeAlocacao(registrosFiltro(), [0, 1], opcoesFiltro(alocacao));
+  assert.deepStrictEqual(comFiltro.linhas.map((l) => l.sup), ['SUP-A']);
+  assert.deepStrictEqual(semFiltro.linhas.map((l) => l.sup).sort(), ['SUP-A', 'SUP-B']);
+  assert.deepStrictEqual(semFiltro.linhas.find((l) => l.sup === 'SUP-B').celulas.ST.equipes,
+    ['EQ-1'], 'a alocação nunca foi apagada, só escondida');
+});
