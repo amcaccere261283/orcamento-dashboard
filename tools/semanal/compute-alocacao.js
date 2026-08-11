@@ -2,7 +2,6 @@
 const { DIAS_PREMISSA_MES } = require('../comum/calculo-equipes.js');
 const { COLUNAS_ALOCACAO } = require('./equipes-alocaveis.js');
 const { calcularSeriesSemanaisDimensao, pendentesNaData } = require('./render-aba-semanal.js');
-const { premissaProdutividadeDoGrupo } = require('./render-alertas-tendencia.js');
 const { diasNaSemana, indiceSemanaAtual } = require('./compute-semanal.js');
 
 // Módulo dual (Node + navegador). O require de '../comum/' acima é REMOVIDO
@@ -16,6 +15,37 @@ const { diasNaSemana, indiceSemanaAtual } = require('./compute-semanal.js');
 // Decisão 3.
 
 var FAIXA_OCUPACAO = { folga: 0.85, sobrecarga: 1.05 };
+
+// Produtividade de campo por TIPOLOGIA, em furos por equipe-DIA. Decisão do
+// dono do projeto em 2026-08-11, e ela substitui a leitura por contrato.
+//
+// POR QUE NÃO SEGUIR A MATRIZ CONTRATO A CONTRATO. A coluna `PROD.` já é
+// diária, e a aba a lia por contrato via premissaProdutividadeDoGrupo -- uma
+// média ponderada pelo volume. O problema é a dispersão: medido na MATRIZ em
+// 2026-08-11, SP vai de 0,80 a 2,00, com 25 dos 34 contratos em exatamente
+// 1,00. Os poucos contratos com 1,5 e 2,0 puxavam a média ponderada para 1,27,
+// e numa célula de contrato específico a capacidade saía com o DOBRO da
+// realidade de campo. O dono do projeto confirmou: equipe de SP faz 1 furo por
+// dia, não 2.
+//
+// Os valores abaixo são o mais comum da MATRIZ por tipologia, com UMA exceção
+// deliberada: PI entra como 3, e não os 4 que a planilha traz -- correção de
+// campo do dono do projeto, registrada aqui para não parecer erro de digitação.
+//
+// As chaves são os IDs de COLUNAS_ALOCACAO (grupos de tipologia), não as 10
+// tipologias cruas: 'Especiais' junta CPTu+SH+VT, que medem 1,00 as três.
+//
+// Isto NÃO mexe na Tendência (que vem do volume previsto), só na CAPACIDADE das
+// equipes. E não toca premissaProdutividadeDoGrupo, que continua sendo a
+// referência do Alerta B da aba Alertas -- ver o spec de 2026-08-04.
+var PRODUTIVIDADE_POR_COLUNA = {
+  SP: 1,
+  'SM / SM.F / SR': 0.3,
+  ST: 8,
+  PI: 3,
+  BL: 1,
+  Especiais: 1,
+};
 
 // A premissa de dias úteis do mês (30, ou 15 em Jan/Dez) recortada na fração
 // da semana que a equipe está disponível. Dias de CALENDÁRIO aqui fariam esta
@@ -89,17 +119,28 @@ function classificarCelula(tendencia, capacidadeAlocada) {
   return classificarOcupacao(t / c);
 }
 
-// A data-âncora da semana. Semana já começada: o INÍCIO dela -- é o que
-// congela a Tendência (calcularSeriesSemanaisDimensao recomputada com
-// hojeEpoch = semana.inicio faz aquela semana virar a vigente, devolvendo a
-// projeção que se fazia para ela inteira ao começar; mesmo mecanismo da aba
-// Consolidado). Semana futura: não há nada a congelar, usa hoje.
+// A data-âncora da semana, usada pela Tendência E pela carteira da célula --
+// as duas na MESMA âncora, senão o saldo somaria dois instantes diferentes.
 //
-// A CARTEIRA usa a MESMA âncora. Tendência de segunda-feira somada a carteira
-// de hoje daria um saldo que não fecha com nada.
+// MUDANÇA DE 2026-08-11: a âncora é HOJE, sempre.
+//
+// Até aqui ela travava no INÍCIO da semana já começada, congelando a Tendência
+// da célula na segunda-feira. A intenção era boa (a Tendência da semana virava
+// registro do que se projetava quando ela abriu, e a carteira usava a mesma
+// âncora para o saldo fechar), mas a Tabela Semanal SEMPRE calculou com hoje --
+// então as duas abas exibiam números diferentes para a mesma semana, e a
+// diferença crescia a cada dia. Medido numa reprodução: 64,3 contra 113,9 na
+// quinta-feira.
+//
+// O princípio da aba manda: ela só LÊ e organiza o que a Tabela Semanal
+// calcula. Divergir dela é o defeito, não a feature. A carteira continua usando
+// esta mesma âncora, então o saldo continua somando um instante só.
+//
+// A assinatura fica como está: `semana` deixou de ser lida, mas remover o
+// parâmetro obrigaria a mexer nas chamadas por um ganho nenhum, e mantê-lo
+// documenta o que a função já significou.
 function ancoraDaSemana(semana, hojeEpoch) {
-  if (!semana || typeof hojeEpoch !== 'number') return hojeEpoch;
-  return semana.inicio <= hojeEpoch ? semana.inicio : hojeEpoch;
+  return hojeEpoch;
 }
 
 function diasDoMesNasSemanas(semanas) {
@@ -205,8 +246,13 @@ function montarGradeAlocacao(registros, indices, opcoes) {
     var carteira = indicesCelula.length
       ? pendentesNaData(registros, indicesCelula, o.demandas, ancoraEpoch) : 0;
     var ids = equipesNaCelula[chave] || [];
+    // A produtividade sai da TIPOLOGIA, não do contrato (ver
+    // PRODUTIVIDADE_POR_COLUNA). Continua null quando a célula não tem nenhum
+    // registro na MATRIZ -- é o estado "hachurado", e o resto do arquivo
+    // (capacidadeDeReferencia, em resumirAlocacao) depende dessa distinção.
     var premissaProd = indicesCelula.length
-      ? premissaProdutividadeDoGrupo(registros, indicesCelula, o.mesIdx) : null;
+      ? (PRODUTIVIDADE_POR_COLUNA[coluna] === undefined ? null : PRODUTIVIDADE_POR_COLUNA[coluna])
+      : null;
 
     var capacidades = ids.map(function (id) {
       return capacidadeDaEquipe(equipesPorId[id] || { diasDisponiveis: 0 }, premissaProd, o.mesIdx, diasDoMes) || 0;
@@ -471,7 +517,7 @@ function capacidadeDeReferencia(grade, equipe, mesIdx, diasDoMes) {
 }
 
 module.exports = {
-  FAIXA_OCUPACAO, diasPremissaDaSemana, capacidadeDaEquipe, ratearCarga, classificarOcupacao,
+  FAIXA_OCUPACAO, PRODUTIVIDADE_POR_COLUNA, diasPremissaDaSemana, capacidadeDaEquipe, ratearCarga, classificarOcupacao,
   classificarCelula,
   montarGradeAlocacao, ancoraDaSemana,
   resumirAlocacao, leituraDoSup, LEITURAS_SUP,

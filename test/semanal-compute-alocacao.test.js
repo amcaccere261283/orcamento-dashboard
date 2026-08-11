@@ -111,9 +111,15 @@ function opcoesBase(extra) {
   }, extra || {});
 }
 
-test('a âncora é o início da semana quando ela já começou', () => {
+test('a âncora é HOJE, inclusive no meio de uma semana já começada', () => {
+  // MUDANÇA DE 2026-08-11: a âncora era o INÍCIO da semana já começada, o que
+  // congelava a Tendência da célula na segunda-feira. A Tabela Semanal sempre
+  // calculou com hoje, então as duas abas exibiam números diferentes para a
+  // mesma semana -- relatado pelo dono do projeto. Esta aba só organiza o que a
+  // Tabela Semanal calcula; divergir dela é o defeito, não a feature.
   const g = montarGradeAlocacao(registrosDeTeste(), [0, 1, 2], opcoesBase());
-  assert.strictEqual(g.ancoraEpoch, SEMANAS_AGOSTO[1].inicio);
+  assert.strictEqual(g.ancoraEpoch, SEMANAS_AGOSTO[1].inicio + 2,
+    'hojeEpoch de opcoesBase() é inicio + 2');
 });
 
 test('semana futura ainda não travou: a âncora é hoje', () => {
@@ -506,4 +512,90 @@ test('limpar o filtro traz a linha de volta -- a poda é de exibição, não de 
   assert.deepStrictEqual(semFiltro.linhas.map((l) => l.sup).sort(), ['SUP-A', 'SUP-B']);
   assert.deepStrictEqual(semFiltro.linhas.find((l) => l.sup === 'SUP-B').celulas.ST.equipes,
     ['EQ-1'], 'a alocação nunca foi apagada, só escondida');
+});
+
+// --- As duas abas mostram o MESMO número (2026-08-11) ------------------------
+
+// Fixture com realizado DENTRO da semana: sem isso a projeção não muda com a
+// âncora, e o teste passaria sem provar nada.
+function fixtureComRitmo() {
+  const semana = SEMANAS_AGOSTO[1];
+  const z = () => new Array(12).fill(0);
+  const vol = z(); vol[7] = 300;
+  const registros = [{
+    sup: 'SUP-A', tomador: 'T', tipologia: 'SP',
+    previsto: { volume: vol, equipesResumo: { prod: 1 } },
+  }];
+  const cheio = (n, d) => new Array(n).fill(d);
+  const demandas = { porRegistroEventos: { 'SUP-A||SP': {
+    chegada: cheio(80, semana.inicio - 5),
+    sondagemRealizada: cheio(40, semana.inicio).concat(cheio(40, semana.inicio + 1)),
+    saidaEstoque: [],
+  } } };
+  return { registros, demandas, semana };
+}
+
+test('INVARIANTE REAL: no MEIO da semana a grade bate com a Tabela Semanal', () => {
+  // O teste antigo passava grade.ancoraEpoch para os DOIS lados -- provava que
+  // a mesma função com a mesma âncora dá o mesmo número, o que é quase
+  // tautológico, e nunca comparou as duas ABAS. Aqui a Tabela Semanal é
+  // calculada com HOJE, que é como ela realmente calcula na página.
+  const { registros, demandas, semana } = fixtureComRitmo();
+  const hoje = semana.inicio + 3; // quinta-feira: o pior caso do bug relatado
+
+  const grade = montarGradeAlocacao(registros, [0], {
+    mesIdx: 7, ano: 2026, semanas: SEMANAS_AGOSTO, semana, hojeEpoch: hoje,
+    demandas, equipes: [], alocacao: {},
+  });
+  let somaGrade = 0;
+  grade.linhas.forEach((l) => Object.keys(l.celulas).forEach((k) => { somaGrade += l.celulas[k].tendencia; }));
+
+  const serie = calcularSeriesSemanaisDimensao(
+    registros, [0], 'volume', 7, SEMANAS_AGOSTO, SEMANAS_AGOSTO.length,
+    true, indiceSemanaAtual(SEMANAS_AGOSTO, hoje), demandas, hoje
+  );
+  const daTabela = serie.semanasTendenciaCompleta[SEMANAS_AGOSTO.indexOf(semana)] || 0;
+
+  assert.ok(daTabela > 0, 'pré-condição: a Tabela Semanal projeta algo nesta semana');
+  assert.ok(Math.abs(somaGrade - daTabela) < 1e-6,
+    `as duas abas têm que mostrar o mesmo número: grade ${somaGrade} != tabela ${daTabela}`);
+});
+
+// --- Produtividade por TIPOLOGIA (2026-08-11) -------------------------------
+
+test('a capacidade usa a produtividade da TIPOLOGIA, não a do contrato', () => {
+  // Decisão do dono do projeto: PROD. da MATRIZ varia por contrato (SP vai de
+  // 0,80 a 2,00), e a realidade de campo é 1 furo/dia para SP. A capacidade
+  // passa a sair de uma tabela por tipologia.
+  const { PRODUTIVIDADE_POR_COLUNA } = require('../tools/semanal/compute-alocacao.js');
+  assert.strictEqual(PRODUTIVIDADE_POR_COLUNA.SP, 1);
+  assert.strictEqual(PRODUTIVIDADE_POR_COLUNA.PI, 3, 'PI é 3 por decisão do dono do projeto, não os 4 da MATRIZ');
+  assert.strictEqual(PRODUTIVIDADE_POR_COLUNA.ST, 8);
+  assert.strictEqual(PRODUTIVIDADE_POR_COLUNA['SM / SM.F / SR'], 0.3);
+  assert.strictEqual(PRODUTIVIDADE_POR_COLUNA.BL, 1);
+  assert.strictEqual(PRODUTIVIDADE_POR_COLUNA.Especiais, 1);
+});
+
+test('contrato com PROD inflado na MATRIZ não infla mais a capacidade', () => {
+  const z = () => new Array(12).fill(0);
+  const vol = z(); vol[7] = 300;
+  const registros = [{
+    sup: 'SUP-A', tomador: 'T', tipologia: 'SP',
+    // A MATRIZ diz 2,0 para este contrato -- o dobro da realidade de campo.
+    previsto: { volume: vol, equipesResumo: { prod: 2 } },
+  }];
+  const semana = SEMANAS_AGOSTO[1];
+  const equipes = [{ id: 'EQ-1', lider: 'L', colunas: ['SP'],
+    diasDisponiveis: 5, diasDaSemana: 7, disponivel: true }];
+  const grade = montarGradeAlocacao(registros, [0], {
+    mesIdx: 7, ano: 2026, semanas: SEMANAS_AGOSTO, semana,
+    hojeEpoch: semana.inicio + 2,
+    demandas: { porRegistroEventos: { 'SUP-A||SP': { chegada: [], sondagemRealizada: [], saidaEstoque: [] } } },
+    equipes, alocacao: { 'EQ-1': { sup: 'SUP-A', coluna: 'SP' } },
+  });
+  const celula = grade.linhas[0].celulas.SP;
+  // 1 furo/dia × dias de premissa da semana -- e não 2.
+  const diasPremissa = diasPremissaDaSemana(7, 5, grade.diasDoMes);
+  assert.ok(Math.abs(celula.capacidadeAlocada - 1 * diasPremissa) < 1e-9,
+    `capacidade ${celula.capacidadeAlocada} devia ser ${diasPremissa} (prod 1), não o dobro`);
 });
