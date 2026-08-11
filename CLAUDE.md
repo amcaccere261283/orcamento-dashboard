@@ -785,6 +785,92 @@ contar Sondadores distintos ativos no mês, por (SUP, tipologia), como proxy de 
 equipes trabalharam". Ao retomar, pergunte a ele antes de implementar -- não assuma essa
 opção como decidida.
 
+### Aba Alocação Equipes (2026-08-10)
+
+Sétima aba do dashboard: um quadro SUP × tipologia onde equipes de campo são arrastadas
+para os contratos, com persistência opcional numa Sheet. Foi construída sobre uma base
+antiga; um esforço paralelo de outra pessoa levou `origin/master` ~90 commits à frente
+(novas fontes online, Tabela Semanal reescrita) enquanto esta aba era desenvolvida. O
+branch `semanal-alocacao-equipes-rebase` é o resultado de rebasear a aba sobre o master
+atual, mantendo **as contas e os dados dele**. Quem chega depois deve confiar na Tabela
+Semanal/Consolidado como fonte de verdade dos números — esta aba só lê e organiza o que
+elas já calculam. O teste `INVARIANTE: com a alocação vazia, a soma da tendência da
+grade bate com a Tabela Semanal` (`test/semanal-render-aba-alocacao.test.js`) é a prova
+disso: se um dia ele quebrar, o problema é a aba ter divergido da conta oficial, não o
+contrário.
+
+**As seis colunas** (`COLUNAS_ALOCACAO`, `tools/semanal/equipes-alocaveis.js`) são grupos
+de tipologia de equipe, não as 10 tipologias cruas da MATRIZ: `SP`, `SM / SM.F / SR`,
+`ST`, `PI`, `BL`, `Especiais` (`CPTu`+`SH`+`VT` juntos). `BL` fica em coluna própria em
+vez de entrar em `Especiais` porque quem atende BL são as equipes `ST | PI | BL` — juntar
+BL em `Especiais` criaria uma coluna que metade das equipes dela não consegue trabalhar.
+BL soma 17 furos no ano inteiro, então a coluna costuma sair podada da tela mesmo assim
+(só aparece com algo alocado ou com demanda).
+
+**Uma âncora para dois números.** A Tendência de cada célula é congelada no INÍCIO da
+semana — `ancoraDaSemana` (`compute-alocacao.js`) recomputa `calcularSeriesSemanaisDimensao`
+com `hojeEpoch = semana.inicio`, o MESMO mecanismo que a aba Consolidado usa para congelar
+a semana em curso. A carteira (Demandas Pendentes) da célula usa a MESMA âncora
+(`pendentesNaData(..., ancoraEpoch)`) — misturar uma Tendência congelada na segunda-feira
+com uma carteira medida em hoje produziria um saldo que não bate com nada, porque estaria
+somando dois instantes diferentes. **Congelar é recomputar, não é tirar uma foto**: um
+lançamento retroativo na planilha de origem muda o número congelado, porque a próxima
+recomputação com a mesma âncora passada enxerga o dado novo.
+
+**O bug do `Especiais` que este trabalho corrigiu**, em `compute-equipes-ativas.js`:
+`'Especiais'` já é um rótulo de DESTINO (`ORDEM_TIPOLOGIAS`), não um rótulo cru do Avanço
+Sond — passá-lo por `rotularTipologia()` lança, porque esse mapa só traduz rótulos crus.
+Um `try/catch` engolia a exceção e devolvia `null`, e as 7 equipes de `CPTu | VT | SH`
+contavam como `semTipologia` — somiam da contagem de equipes do Balanço sem erro, sem log,
+sem nada na tela. A correção (`JA_TRADUZIDAS`, lista de rótulos que passam direto sem
+tentar traduzir) **não existia no master antes deste branch** — foi encontrada e corrigida
+durante este trabalho, então este branch carrega uma correção que a base não tinha.
+
+**A aba não usa `filtro-ativos`** (ver comentário em `render-semanal.js`, função que monta
+`#secao-alocacao`): esse filtro esconderia exatamente as linhas "Parado c/ carteira", que
+são o motivo da aba existir — um SUP inativo em Volume ainda pode ter carteira parada
+esperando uma equipe.
+
+**O espelho da EQ só cobre o mês corrente.** `somenteLeitura` (`render-semanal.js`) fica
+`'mes-diferente'` quando a semana exibida não é do mês que `demandas.equipesPeriodo`
+descreve — a grade desenha normalmente, mas nada é arrastável, com o motivo escrito na
+tela. Não há roster fresco de outro mês para validar um arraste contra ele.
+
+**A premissa de produtividade vem de `premissaProdutividadeDoGrupo`, nunca de
+`produtividadeEsperada()`** — mesma armadilha já documentada acima para o Alerta B
+("Duas armadilhas que a revisão final pegou"): `produtividadeEsperada()` se cancela
+algebricamente e não serve de referência independente. Não repetir a álgebra aqui;
+seguir a explicação de lá.
+
+**Setup pendente do lado do dono do projeto:** `tools/semanal/apps-script-alocacao.gs`
+ainda não foi publicado como Web App. Enquanto isso, `RE_URL_ALOCACAO_PENDENTE`
+(`alocacao-sheet.js`) casa o literal `PENDENTE-...` de `URL_ALOCACAO` e a aba roda inteira
+em `localStorage` (`modo() === 'local'`), avisando isso no status. Uma vez publicado o
+Apps Script, qualquer pessoa com a senha do dashboard passa a poder ESCREVER na planilha
+— é um trade-off aceito, não um descuido: a senha já protege o dashboard inteiro, e o
+Apps Script não teria como autenticar o usuário sem uma segunda credencial.
+
+**Precisa ser corrigido ANTES desse Apps Script ir ao ar:** um arraste que aterrissa
+durante o carregamento assíncrono inicial da alocação pode ser sobrescrito quando a
+promise resolve. `carregarAlocacaoDaSemana` (`render-semanal.js`) faz
+`ESTADO_ALOCACAO.alocacao = mapa || {}` no `.then()` de `clienteAlocacao().carregar()` —
+uma ATRIBUIÇÃO, não um merge. Em modo local isso é inofensivo hoje: `carregar()` resolve
+numa microtask (leitura síncrona de `localStorage` embrulhada em `async`), tempo pequeno
+demais para um clique de usuário colidir. Em modo `sheet`, `carregar()` vira uma
+ida-e-volta de rede de verdade — a janela de corrida deixa de ser teórica.
+
+**Duas armadilhas para quem mexer aqui em seguida:**
+
+- **Um crase dentro dos template literals `SCRIPT_CLIENTE_SEMANAL`/`CSS_SEMANAL` trunca o
+  script do cliente inteiro, em silêncio.** O build não levanta erro nenhum; o sintoma
+  aparece longe, em teste de navegador falhando com `montarDashboard is not defined`.
+  Se esse erro aparecer do nada, procure uma crase solta introduzida nesses literais antes
+  de suspeitar de outra coisa.
+- **`core.autocrlf=true` sem `.gitattributes` nesta máquina** — restaurar só um de
+  `dist/`/`docs/` (`git checkout`, `git restore`) inverte a terminação de linha dele e
+  quebra o teste de sincronia byte a byte sem mudar o conteúdo. Nunca faça `checkout`/
+  `restore` de um dos dois isoladamente; regenere os dois com o build e copie de novo.
+
 ## Estilo de trabalho
 
 Vale o mesmo do repositório principal: decidir e implementar sem parar para perguntar
