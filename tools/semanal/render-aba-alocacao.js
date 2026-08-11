@@ -331,6 +331,19 @@ function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocaca
       return (e.colunas || []).indexOf(coluna.id) !== -1;
     });
     if (!doGrupo.length) return '';
+    // Disponíveis PRIMEIRO. O pool é uma lista de oferta: quem está nele é
+    // candidato a ser arrastado. A equipe sem dia disponível na semana não é
+    // candidata (cartão apagado, data-arrastavel="nao"), e misturada às
+    // outras ela faz o olho varrer opção que não é opção.
+    //
+    // Ordenar, nunca esconder: some do pool seria mentir sobre o tamanho da
+    // frota disponível, e a contagem do grupo continua somando as duas
+    // metades. O sort é ESTÁVEL (garantido desde a ES2019), então a ordem
+    // original sobrevive dentro de cada metade -- e `filter` já devolveu um
+    // array novo, então isto não reordena `equipes` para o resto da página.
+    doGrupo.sort(function (a, b) {
+      return (a.disponivel ? 0 : 1) - (b.disponivel ? 0 : 1);
+    });
     var cartoesDoGrupo = doGrupo.map(function (e) {
       return renderCartaoEquipe(e, porEquipeMap[e.id] || null, somenteLeitura,
         casouSoPeloNome(e, termo));

@@ -228,6 +228,56 @@ test('"fora do quadro" continua fora do agrupamento', () => {
   assert.match(html, /fora do quadro \(1\)/);
 });
 
+// --- Disponíveis primeiro dentro do grupo (2026-08-11) ----------------------
+
+// O pool é uma lista de OFERTA: quem está ali é candidato a ser arrastado. A
+// equipe sem dia disponível na semana não é candidata -- o cartão dela vem
+// apagado e não arrasta -- então deixá-la no meio das outras faz varrer com o
+// olho por cima de opção que não é opção. Elas continuam VISÍVEIS (some seria
+// mentir sobre o tamanho da frota); só vão para o fim do grupo.
+function equipesComIndisponivel() {
+  const base = { diasDisponiveis: 5, diasDaSemana: 7, disponivel: true,
+    supRealizado: null, colunaRealizada: null, popup: {} };
+  return [
+    // A ordem de ENTRADA põe a indisponível na frente de propósito: sem o
+    // ordenamento o HTML sai nessa mesma ordem, e o teste falha.
+    Object.assign({ id: '1', lider: 'Prado', nome: 'Ana Prado', servicos: 'SP',
+      colunas: ['SP'], polivalente: false }, base, { disponivel: false, diasDisponiveis: 0 }),
+    Object.assign({ id: '2', lider: 'Queiroz', nome: 'Bia Queiroz', servicos: 'SP',
+      colunas: ['SP'], polivalente: false }, base),
+    Object.assign({ id: '3', lider: 'Rocha', nome: 'Caio Rocha', servicos: 'SP',
+      colunas: ['SP'], polivalente: false }, base, { disponivel: false, diasDisponiveis: 0 }),
+    Object.assign({ id: '5', lider: 'Sales', nome: 'Duda Sales', servicos: 'SP',
+      colunas: ['SP'], polivalente: false }, base),
+  ];
+}
+
+test('no pool, os disponíveis vêm antes dos indisponíveis dentro do grupo', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesComIndisponivel(), alocacao: {},
+  }));
+  const grupo = html.split('<table')[0];
+  const ordem = [...grupo.matchAll(/data-equipe="(\d+)"/g)].map((m) => m[1]);
+  assert.deepStrictEqual(ordem, ['2', '5', '1', '3'],
+    'disponíveis primeiro, e a ordem original preservada dentro de cada metade');
+});
+
+test('a equipe indisponível continua no pool -- ordenar não é esconder', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesComIndisponivel(), alocacao: {},
+  }));
+  assert.match(html, /data-equipe="1"/, 'sumir mentiria sobre o tamanho da frota');
+  assert.match(html, /cartao-indisponivel/);
+});
+
+test('a contagem do grupo continua contando as duas metades', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesComIndisponivel(), alocacao: {},
+  }));
+  assert.match(html, /pool-grupo-contagem">\(4\)/,
+    'o grupo SP tem 4 equipes, 2 delas indisponíveis');
+});
+
 test('equipe alocada some de TODOS os grupos de uma vez', () => {
   const html = renderAbaAlocacao(registros(), [0], opcoes({
     equipes: equipesVariadas(), alocacao: { 7: { sup: 'SUP-A', coluna: 'ST' } },

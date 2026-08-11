@@ -78,6 +78,10 @@ const EQUIPES = [
   // Meio período: capacidade menor que a das outras da MESMA tipologia --
   // é o caso que a linha "Disponível: N de 7 dias" do popup existe para explicar.
   equipe('EQ-09', 'Irineu', 'Marcos Irineu', ['Especiais'], { diasDisponiveis: 2 }),
+  // Livre e disponível, e fica sem alocação de propósito: junto com a EQ-08
+  // (indisponível, também de SP) é ela que faz o grupo SP do pool ter as DUAS
+  // metades, e portanto ter uma ordem a ser conferida -- disponíveis primeiro.
+  equipe('EQ-10', 'Jucá', 'Renata Jucá', ['SP']),
 ];
 
 const FORA_DO_QUADRO = [
