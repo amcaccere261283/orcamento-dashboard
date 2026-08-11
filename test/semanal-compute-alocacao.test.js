@@ -599,3 +599,47 @@ test('contrato com PROD inflado na MATRIZ não infla mais a capacidade', () => {
   assert.ok(Math.abs(celula.capacidadeAlocada - 1 * diasPremissa) < 1e-9,
     `capacidade ${celula.capacidadeAlocada} devia ser ${diasPremissa} (prod 1), não o dobro`);
 });
+
+// --- A Tendência de um grupo é a SOMA das tipologias (2026-08-11) ------------
+//
+// Relatado pelo dono do projeto: filtrando duas tipologias juntas o total dava
+// 121, mas somando uma a uma dava 165 -- o mesmo 165 da aba Alocação. Não era
+// erro de aritmética: escolherRamo decide UM ramo por chamada, e com tipologias
+// em ramos opostos a projeção do agregado não é a soma das projeções.
+
+function regTip(tipologia, volumeMes) {
+  const z = () => new Array(12).fill(0);
+  const v = z(); v[7] = volumeMes;
+  return { sup: 'SUP-T', tomador: 'T', tipologia, grupo: 'G', origem: 'O',
+    previsto: { volume: v, equipesResumo: { prod: 1 } } };
+}
+
+test('a Tendência do grupo é a soma das tipologias, não uma projeção do agregado', () => {
+  const hoje = SEMANAS_AGOSTO[2].inicio + 2; // S1 e S2 encerradas
+  const cheio = (qtds) => {
+    const d = [];
+    qtds.forEach((n, i) => { for (let k = 0; k < n; k++) d.push(SEMANAS_AGOSTO[i].inicio + 1); });
+    return d;
+  };
+  const registros = [regTip('SP', 200), regTip('CPTu', 200)];
+  const demandas = { porRegistroEventos: {
+    // SP muito ACIMA do previsto; CPTu bem ABAIXO -- ramos opostos.
+    'SUP-T||SP': { chegada: [], sondagemRealizada: cheio([90, 90, 20]), saidaEstoque: [] },
+    'SUP-T||CPTu': { chegada: [], sondagemRealizada: cheio([5, 5, 2]), saidaEstoque: [] },
+  } };
+  const daSemana = (indices) => {
+    const s = calcularSeriesSemanaisDimensao(
+      registros, indices, 'volume', 7, SEMANAS_AGOSTO, SEMANAS_AGOSTO.length,
+      true, indiceSemanaAtual(SEMANAS_AGOSTO, hoje), demandas, hoje
+    );
+    return s.semanasTendenciaCompleta[2] || 0;
+  };
+
+  const so_sp = daSemana([0]);
+  const so_cptu = daSemana([1]);
+  const junto = daSemana([0, 1]);
+
+  assert.ok(so_sp > 0 && so_cptu > 0, 'pré-condição: as duas projetam algo');
+  assert.ok(Math.abs(junto - (so_sp + so_cptu)) < 1e-6,
+    `o total (${junto}) tem que ser a soma das tipologias (${so_sp} + ${so_cptu} = ${so_sp + so_cptu})`);
+});

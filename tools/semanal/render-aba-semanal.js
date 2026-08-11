@@ -272,7 +272,7 @@ function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento, casasOuForma
 // selecionado é um mês JÁ FECHADO" o passa (ver Financeiro/Realizado
 // abaixo); Consolidado e Alertas não passam, e o comportamento pra eles
 // fica idêntico ao de antes (undefined nunca é < vigenteIdx).
-function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx, semanas, numSemanas, temSemanasReais, indiceAtual, demandas, hojeEpoch, mesAtualReal) {
+function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx, semanas, numSemanas, temSemanasReais, indiceAtual, demandas, hojeEpoch, mesAtualReal, opcoesInternas) {
   // O REALIZADO para em d-1, nunca em hoje -- regra do dono do projeto,
   // 2026-08-10 ("realizado sempre considerar até o dia anterior ao atual").
   // O dia corrente está incompleto por construção: o extrato do sond.com.br
@@ -448,6 +448,70 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
       return semanas[i].fim < hojeEpoch ? null : v;
     });
     fechamentoTendencia = fecharMes(semanasTendencia, dimensao);
+  }
+
+  // A TENDÊNCIA DE UM GRUPO É A SOMA DAS TIPOLOGIAS (2026-08-11).
+  //
+  // escolherRamo (compute-tendencia-semanal.js) decide UM ramo por chamada --
+  // 'acima', 'abaixo' ou 'igual' -- comparando realizado e previsto acumulados.
+  // Isso torna a projeção NÃO-LINEAR: com duas tipologias em ramos opostos, a
+  // projeção do agregado não é a soma das projeções. Relatado pelo dono do
+  // projeto: filtrando duas tipologias juntas o total dava 121, e somando uma a
+  // uma dava 165. Medido numa reprodução: SP sozinho 100,0 (ramo 'acima') e
+  // CPTu sozinho 41,6 (ramo 'abaixo') somam 141,6, contra 106,4 do agregado.
+  //
+  // O ramo codifica realidade FÍSICA por tipologia -- uma rodando acima do
+  // plano tem ritmo, outra abaixo tem represamento. Um ramo só para as duas
+  // produz um número que não descreve nenhuma delas. Decisão do dono do
+  // projeto: somar por tipologia. É também o que a aba Alocação sempre fez
+  // (ela calcula célula a célula, SUP × tipologia), e era essa a origem da
+  // divergência entre as duas abas.
+  //
+  // SÓ A TENDÊNCIA muda. Previsto continua agregado de propósito:
+  // dividirEmSemanasInteiras também é não-linear (maior resto com Math.floor
+  // por chamada), e reparti-lo por tipologia mudaria um número que ninguém
+  // pediu -- o CLAUDE.md documenta esse arredondamento como deliberado.
+  // Realizado é linear (contagem de eventos), então tanto faz.
+  //
+  // ramoTendencia/diagnosticoTendencia continuam vindo do AGREGADO, intactos:
+  // quem os consome é a aba Alertas, que pergunta sobre o GRUPO ("este SUP está
+  // acima ou abaixo do plano?"), não sobre cada tipologia. Mexer neles mudaria
+  // em silêncio quais alertas disparam.
+  //
+  // opcoesInternas.umaTipologia é a guarda de recursão.
+  if (!opcoesInternas || !opcoesInternas.umaTipologia) {
+    var porTipologia = {};
+    (indices || []).forEach(function (i) {
+      var reg = registros[i];
+      if (!reg) return;
+      if (!porTipologia[reg.tipologia]) porTipologia[reg.tipologia] = [];
+      porTipologia[reg.tipologia].push(i);
+    });
+    var tipologiasDoGrupo = Object.keys(porTipologia);
+    if (tipologiasDoGrupo.length > 1) {
+      var somaSemanas = new Array(numSemanas).fill(null);
+      var somaCompleta = new Array(numSemanas).fill(null);
+      var somaFechamento = null;
+      tipologiasDoGrupo.forEach(function (t) {
+        var parcial = calcularSeriesSemanaisDimensao(
+          registros, porTipologia[t], dimensao, vigenteIdx, semanas, numSemanas,
+          temSemanasReais, indiceAtual, demandas, hojeEpoch, mesAtualReal,
+          { umaTipologia: true }
+        );
+        for (var k = 0; k < numSemanas; k++) {
+          var a = parcial.semanasTendencia[k];
+          if (a !== null && a !== undefined) somaSemanas[k] = (somaSemanas[k] || 0) + a;
+          var c = parcial.semanasTendenciaCompleta[k];
+          if (c !== null && c !== undefined) somaCompleta[k] = (somaCompleta[k] || 0) + c;
+        }
+        if (parcial.fechamentoTendencia !== null && parcial.fechamentoTendencia !== undefined) {
+          somaFechamento = (somaFechamento || 0) + parcial.fechamentoTendencia;
+        }
+      });
+      semanasTendencia = somaSemanas;
+      semanasTendenciaCompleta = somaCompleta;
+      fechamentoTendencia = somaFechamento;
+    }
   }
 
   return {
