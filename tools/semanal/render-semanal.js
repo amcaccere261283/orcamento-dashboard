@@ -552,7 +552,18 @@ const CSS_SEMANAL = `
     border-radius: 4px; background: rgba(255,255,255,0.08);
     font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
   }
-  .cartao-cor { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  /* O anel não muda matiz nenhum -- existe porque a paleta de tipologia veio
+     do matriz, onde estas cores são FUNDO de chip com texto branco, e foram
+     escurecidas de propósito para bater 4.5:1 com esse texto. Aqui o contexto
+     é o inverso: um ponto de 8px sobre o cartão escuro. PI (#606060) e BL
+     (#4a3aa7) ficam em ~2,8:1 e ~2,1:1 contra .cartao-equipe, abaixo dos 3:1
+     de gráfico não-textual. Escurecer ou clarear os matizes quebraria a
+     correspondência com o outro dashboard, que é o ponto da paleta; um anel
+     neutro levanta os seis igualmente sem tocar em nenhum deles. */
+  .cartao-cor {
+    width: 8px; height: 8px; border-radius: 50%; flex: none;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.25);
+  }
   .cartao-lider { white-space: nowrap; }
   .cartao-motivo { font-size: 10px; color: #e0684f; }
 

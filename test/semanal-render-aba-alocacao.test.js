@@ -1,7 +1,9 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { renderAbaAlocacao } = require('../tools/semanal/render-aba-alocacao.js');
+const { renderAbaAlocacao, corDaColuna } = require('../tools/semanal/render-aba-alocacao.js');
+const { tipologiaColor } = require('../tools/semanal/render-aba-consolidado.js');
+const { COLUNAS_ALOCACAO } = require('../tools/semanal/equipes-alocaveis.js');
 const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
 
 const SEMANAS = semanasDoMes(2026, 7);
@@ -226,6 +228,58 @@ test('"fora do quadro" continua fora do agrupamento', () => {
     equipes: equipesVariadas(), alocacao: {},
   }));
   assert.match(html, /fora do quadro \(1\)/);
+});
+
+// --- Cor da coluna: a paleta do matriz, não uma própria (2026-08-11) --------
+
+// As mesmas tipologias de sondagem aparecem nos dois dashboards. Duas paletas
+// para o mesmo vocabulário obrigam quem olha os dois a retraduzir cor toda vez,
+// e a paleta que vale é a do matriz -- foi ela que passou por contraste
+// (axe-core) e é a que a aba Consolidado desta MESMA página já usa nos chips.
+test('cada coluna do quadro usa a cor da tipologia do matriz', () => {
+  assert.deepStrictEqual(
+    COLUNAS_ALOCACAO.map((c) => corDaColuna(c.id)),
+    ['#3f851a', '#2f6ad0', '#8d6f00', '#606060', '#4a3aa7', '#db244e'],
+    'SP verde, SM azul, ST amarelo, PI cinza, BL violeta, Especiais vermelho',
+  );
+});
+
+test('a cor da coluna sai de tipologiaColor, não de uma cópia da paleta', () => {
+  // Se alguém acrescentar uma coluna a COLUNAS_ALOCACAO, ela pega a cor certa
+  // sozinha -- e nenhuma cópia da paleta pode divergir da do Consolidado.
+  COLUNAS_ALOCACAO.forEach((c) => {
+    assert.strictEqual(corDaColuna(c.id), tipologiaColor(c.id), c.id);
+  });
+});
+
+test('nenhuma coluna cai no cinza de fallback de tipologiaColor', () => {
+  // '#898781' é o "não sei que tipologia é essa". Uma coluna caindo nele
+  // significa que o id dela deixou de casar com a paleta, e o quadro perderia
+  // a distinção entre colunas sem nenhum aviso.
+  COLUNAS_ALOCACAO.forEach((c) => {
+    assert.notStrictEqual(corDaColuna(c.id), '#898781', c.id + ' perdeu a cor');
+  });
+});
+
+test('o ponto do cartão pega a cor do GRUPO em que ele está, não a da 1ª tipologia', () => {
+  // A equipe polivalente aparece em ST, PI e BL. Com a cor saindo de
+  // colunas[0] ela levava o amarelo de ST nos três, e o ponto contradizia o
+  // título do grupo -- invisível enquanto a paleta era arbitrária, gritante
+  // depois que a cor passou a significar tipologia.
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {},
+  }));
+  const pool = html.split('<table')[0];
+  const grupos = pool.split('data-grupo="').slice(1);
+  const corPorGrupo = {};
+  grupos.forEach((bloco) => {
+    const id = bloco.slice(0, bloco.indexOf('"'));
+    const m = bloco.match(/cartao-cor" style="background:([^"]+)"/);
+    if (m) corPorGrupo[id] = m[1];
+  });
+  assert.strictEqual(corPorGrupo.ST, tipologiaColor('ST'));
+  assert.strictEqual(corPorGrupo.PI, tipologiaColor('PI'));
+  assert.strictEqual(corPorGrupo.BL, tipologiaColor('BL'));
 });
 
 // --- Disponíveis primeiro dentro do grupo (2026-08-11) ----------------------

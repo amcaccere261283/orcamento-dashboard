@@ -9,6 +9,11 @@ const { formatarIntervaloSemana } = require('./render-aba-semanal.js');
 // Reimplementar a normalização aqui seria a terceira cópia, e duas
 // normalizações divergentes é bug garantido.
 const { normalizarBusca } = require('./render-aba-alertas.js');
+// Mesma história de normalizarBusca acima: a paleta de tipologia do matriz já
+// está neste bundle (render-aba-consolidado.js, que a copiou do orçamento, que
+// a copiou do matriz), e BUNDLE_ARQUIVOS já registra o consolidado antes desta
+// aba. Ver corDaColuna.
+const { tipologiaColor } = require('./render-aba-consolidado.js');
 
 // Módulo dual (Node + navegador) -- mesmo padrão de render-aba-balanco.js:
 // 'var'/'function', require no formato exato que transformaModulo
@@ -87,18 +92,32 @@ var CLASSE_SITUACAO = {
   sobrecarregada: 'situacao-sobrecarregada',
 };
 
-// Uma cor por coluna, na ORDEM CANÔNICA de COLUNAS_ALOCACAO (não na ordem
-// podada de grade.colunas) -- assim SP tem sempre a mesma cor, mesmo em meses
-// em que ela some da grade por falta de dado. Palette compartilhada com o
-// resto dos dois dashboards (verde/vermelho reservados para polaridade de
-// desvio, então esta é uma paleta própria, categórica).
-var CORES_COLUNA = ['#4f8ff0', '#f6b53f', '#7fd858', '#c084fc', '#38bdf8', '#e0684f'];
-var INDICE_COLUNA = {};
-COLUNAS_ALOCACAO.forEach(function (c, i) { INDICE_COLUNA[c.id] = i; });
-
+// A cor da coluna é a cor da TIPOLOGIA no dashboard Matriz de Equipes, e não
+// uma paleta própria desta aba.
+//
+// Até 2026-08-11 aqui vivia um array categórico indexado pela ordem de
+// COLUNAS_ALOCACAO. Ele tinha dois problemas. O primeiro: as mesmas tipologias
+// de sondagem aparecem nos DOIS dashboards, e duas paletas para o mesmo
+// vocabulário obrigam quem olha os dois a retraduzir cor toda vez. O segundo,
+// dentro desta própria página: ele usava #7fd858 e #e0684f -- exatamente o
+// verde e o vermelho que a aba reserva para 'equilibrada' e 'sobrecarregada'.
+// Um ponto verde no cartão não podia significar "coluna ST" numa tela onde
+// verde significa "está bem".
+//
+// A paleta não é copiada de novo: `tipologiaColor` já vive neste bundle, em
+// render-aba-consolidado.js (que por sua vez a copiou do matriz, via
+// orçamento), e a ordem de BUNDLE_ARQUIVOS já põe o consolidado antes desta
+// aba -- mesma razão pela qual normalizarBusca vem de render-aba-alertas.js
+// logo acima. Uma quarta cópia da paleta é uma divergência esperando
+// acontecer.
+//
+// Os seis ids de COLUNAS_ALOCACAO resolvem sozinhos: 'SP'/'ST'/'PI'/'BL' são
+// chaves diretas, 'Especiais' casa ESPECIAIS, e 'SM / SM.F / SR' cai no
+// primeiro token ('SM') pela última regra de tipologiaColor. Nenhum vai parar
+// no cinza de fallback -- há teste travando isso, porque uma coluna que caísse
+// nele perderia a distinção sem nenhum aviso na tela.
 function corDaColuna(colunaId) {
-  var i = INDICE_COLUNA[colunaId];
-  return CORES_COLUNA[(i === undefined ? 0 : i) % CORES_COLUNA.length];
+  return tipologiaColor(colunaId);
 }
 
 // --- Guardas, antes de qualquer grade -------------------------------------
@@ -230,9 +249,16 @@ function casouSoPeloNome(equipe, termoNormalizado) {
 // resumoEquipe: a linha correspondente de resumirAlocacao().porEquipe (pode
 // ser null quando a equipe nem chegou a entrar no resumo -- não deveria
 // acontecer no fluxo real, mas o card não pode quebrar por isso).
-function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura, mostrarNome) {
+// colunaContexto: a coluna EM QUE este cartão está sendo desenhado -- o grupo
+// do pool ou a coluna da célula. Só importa para a equipe polivalente, que
+// aparece em vários lugares: sem ele a cor saía de colunas[0] e a mesma equipe
+// levava o amarelo de ST nos grupos PI e BL, com o ponto contradizendo o
+// título logo acima. Ausente (chamada fora de um contexto de coluna), cai em
+// colunas[0], que para equipe de coluna única é a mesma coisa.
+function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura, mostrarNome, colunaContexto) {
   var colunas = equipe.colunas || [];
-  var corPrincipal = corDaColuna(colunas[0]);
+  var corPrincipal = corDaColuna(
+    colunaContexto && colunas.indexOf(colunaContexto) !== -1 ? colunaContexto : colunas[0]);
   var arrastavel = equipe.disponivel && !somenteLeitura;
   var popup = equipe.popup || {};
 
@@ -346,7 +372,7 @@ function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocaca
     });
     var cartoesDoGrupo = doGrupo.map(function (e) {
       return renderCartaoEquipe(e, porEquipeMap[e.id] || null, somenteLeitura,
-        casouSoPeloNome(e, termo));
+        casouSoPeloNome(e, termo), coluna.id);
     }).join('');
     return '<div class="pool-grupo" data-grupo="' + escapeHtml(coluna.id) + '">'
       + '<h4 class="pool-grupo-titulo">' + escapeHtml(coluna.rotulo)
@@ -403,7 +429,10 @@ function renderCelula(sup, coluna, celula, equipesPorId, resumoPorEquipe, aviso,
   var cartoes = (c.equipes || []).map(function (id) {
     var equipe = equipesPorId[id];
     if (!equipe) return '';
-    return renderCartaoEquipe(equipe, resumoPorEquipe[id] || null, somenteLeitura);
+    // A célula É de uma coluna -- o ponto da equipe polivalente aqui dentro
+    // tem que dizer a coluna em que ela está trabalhando, não a primeira que
+    // ela serve.
+    return renderCartaoEquipe(equipe, resumoPorEquipe[id] || null, somenteLeitura, false, coluna);
   }).join('');
 
   // A BARRA continua sendo cobertura (capacidade ÷ tendência): é o que ela
