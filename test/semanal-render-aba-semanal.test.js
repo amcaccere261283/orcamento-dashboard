@@ -853,3 +853,30 @@ test('Volume Realizado NUNCA usa a MATRIZ, mesmo em mês fechado -- só Financei
   const soma = series.semanasRealizado.reduce((a, b) => a + (b || 0), 0);
   assert.strictEqual(soma, 2, 'continua contando os 2 furos reais -- Volume não tem valor mensal único pra comparar com a MATRIZ');
 });
+
+// --- A unidade de projeção da Tendência (2026-08-11) ------------------------
+
+test('GRUPOS_TIPOLOGIA_TENDENCIA é idêntica a COLUNAS_ALOCACAO', () => {
+  // A tabela está duplicada em render-aba-semanal.js por causa da ordem de
+  // BUNDLE_ARQUIVOS (aquele módulo entra antes de equipes-alocaveis.js, então
+  // o require leria undefined no navegador). Este teste é o que impede a
+  // duplicata de virar divergência: se uma mudar e a outra não, quebra aqui.
+  const { GRUPOS_TIPOLOGIA_TENDENCIA } = require('../tools/semanal/render-aba-semanal.js');
+  const { COLUNAS_ALOCACAO } = require('../tools/semanal/equipes-alocaveis.js');
+  assert.deepStrictEqual(
+    GRUPOS_TIPOLOGIA_TENDENCIA.map((g) => ({ id: g.id, tipologias: g.tipologias })),
+    COLUNAS_ALOCACAO.map((c) => ({ id: c.id, tipologias: c.tipologias })),
+    'a unidade de projeção da Semanal tem que ser a mesma célula da Alocação'
+  );
+});
+
+test('a unidade agrupa CPTu, SH e VT numa só -- não são três unidades', () => {
+  const { chaveUnidadeTendencia } = require('../tools/semanal/render-aba-semanal.js');
+  const chave = (t) => chaveUnidadeTendencia({ sup: 'SUP-A', tipologia: t });
+  assert.strictEqual(chave('CPTu'), chave('SH'));
+  assert.strictEqual(chave('SH'), chave('VT'));
+  assert.notStrictEqual(chave('CPTu'), chave('SP'));
+  // SUPs diferentes são unidades diferentes -- a Alocação também separa por SUP.
+  assert.notStrictEqual(chaveUnidadeTendencia({ sup: 'SUP-A', tipologia: 'SP' }),
+    chaveUnidadeTendencia({ sup: 'SUP-B', tipologia: 'SP' }));
+});

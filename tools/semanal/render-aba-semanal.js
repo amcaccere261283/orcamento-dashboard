@@ -72,6 +72,41 @@ function chaveDemandas(sup, tipologia) {
   return sup + '||' + tipologia;
 }
 
+// A UNIDADE DE PROJEÇÃO da Tendência: (SUP, grupo de tipologia).
+//
+// É a MESMA célula que a aba Alocação usa (indicesPorCelula, compute-alocacao.js
+// -> COLUNAS_ALOCACAO), e é de propósito: as duas abas projetam nas mesmas
+// unidades, então o total de uma é a soma das células da outra por construção.
+//
+// Os grupos NÃO são as 10 tipologias cruas -- 'Especiais' junta CPTu+SH+VT numa
+// unidade só. Dividir mais do que isso decompõe demais e infla o total (cada
+// pedaço escolhe o próprio ramo): medido no SUP 7133-24, por tipologia crua dava
+// 210 contra os 165 da Alocação.
+//
+// A tabela está DUPLICADA aqui, e não importada de equipes-alocaveis.js, por
+// causa da ordem de BUNDLE_ARQUIVOS: este módulo entra na posição 711 e
+// equipes-alocaveis.js na 776, então o require leria undefined no navegador.
+// test/semanal-render-aba-semanal.test.js trava as duas juntas -- se
+// COLUNAS_ALOCACAO mudar e esta não, o teste quebra.
+var GRUPOS_TIPOLOGIA_TENDENCIA = [
+  { id: 'SP', tipologias: ['SP'] },
+  { id: 'SM / SM.F / SR', tipologias: ['SM / SM.F / SR'] },
+  { id: 'ST', tipologias: ['ST'] },
+  { id: 'PI', tipologias: ['PI'] },
+  { id: 'BL', tipologias: ['BL'] },
+  { id: 'Especiais', tipologias: ['CPTu', 'SH', 'VT'] },
+];
+
+function chaveUnidadeTendencia(registro) {
+  for (var i = 0; i < GRUPOS_TIPOLOGIA_TENDENCIA.length; i++) {
+    if (GRUPOS_TIPOLOGIA_TENDENCIA[i].tipologias.indexOf(registro.tipologia) !== -1) {
+      return registro.sup + '||' + GRUPOS_TIPOLOGIA_TENDENCIA[i].id;
+    }
+  }
+  // Tipologia fora dos grupos (LAB.C/LAB.E): unidade própria, pelo nome cru.
+  return registro.sup + '||' + registro.tipologia;
+}
+
 // Soma, através dos registros em 'indices', quantos eventos de uma série de
 // porRegistroEventos (compute-demandas.js) caem em [inicioEpoch, fimEpoch]
 // (inclusive nos dois extremos). Ausência de (sup, tipologia) em
@@ -480,21 +515,22 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
   //
   // opcoesInternas.umaTipologia é a guarda de recursão.
   if (!opcoesInternas || !opcoesInternas.umaTipologia) {
-    var porTipologia = {};
+    var porUnidade = {};
     (indices || []).forEach(function (i) {
       var reg = registros[i];
       if (!reg) return;
-      if (!porTipologia[reg.tipologia]) porTipologia[reg.tipologia] = [];
-      porTipologia[reg.tipologia].push(i);
+      var chave = chaveUnidadeTendencia(reg);
+      if (!porUnidade[chave]) porUnidade[chave] = [];
+      porUnidade[chave].push(i);
     });
-    var tipologiasDoGrupo = Object.keys(porTipologia);
-    if (tipologiasDoGrupo.length > 1) {
+    var unidades = Object.keys(porUnidade);
+    if (unidades.length > 1) {
       var somaSemanas = new Array(numSemanas).fill(null);
       var somaCompleta = new Array(numSemanas).fill(null);
       var somaFechamento = null;
-      tipologiasDoGrupo.forEach(function (t) {
+      unidades.forEach(function (t) {
         var parcial = calcularSeriesSemanaisDimensao(
-          registros, porTipologia[t], dimensao, vigenteIdx, semanas, numSemanas,
+          registros, porUnidade[t], dimensao, vigenteIdx, semanas, numSemanas,
           temSemanasReais, indiceAtual, demandas, hojeEpoch, mesAtualReal,
           { umaTipologia: true }
         );
@@ -636,6 +672,7 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
 }
 
 module.exports = {
+  GRUPOS_TIPOLOGIA_TENDENCIA, chaveUnidadeTendencia,
   renderAbaSemanal, rotuloColunaFechamento, calcularSeriesSemanaisDimensao, formatarIntervaloSemana, pendentesNaData,
   formatarFinanceiroMilhares,
 };
