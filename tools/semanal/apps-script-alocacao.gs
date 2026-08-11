@@ -35,8 +35,46 @@ function abaAlocacao() {
   if (!aba) {
     aba = planilha.insertSheet(ABA);
     aba.getRange(1, 1, 1, CABECALHO.length).setValues([CABECALHO]);
+    // Colunas em TEXTO PURO desde o nascimento -- ver normalizarDia abaixo
+    // para o motivo. Só vale para planilha nova; a de quem já implantou antes
+    // desta correção é curada linha a linha, no setNumberFormat do doPost.
+    aba.getRange(1, 1, aba.getMaxRows(), CABECALHO.length).setNumberFormat('@');
   }
   return aba;
+}
+
+// O Sheets COAGE '2026-08-10' para um valor de Data na gravação, e devolve um
+// objeto Date no getValues(). String(date) vira "Mon Aug 10 2026 00:00:00
+// GMT-0300 (...)", que nunca é igual a '2026-08-10' -- então a linha gravada
+// deixava de casar na releitura e a semana voltava VAZIA.
+//
+// O estrago era total e silencioso: chaveSemana() (alocacao-sheet.js) sempre
+// monta ano + '|' + YYYY-MM-DD, então TODO arrasto era gravado e sumia. A tela
+// não acusava nada, porque a gravação local acontece primeiro e sempre dá
+// certo; o quadro só voltava vazio ao recarregar, ou para qualquer outra
+// pessoa. Encontrado ao testar a escrita de ponta a ponta em 2026-08-11,
+// depois de a leitura sozinha ter passado.
+//
+// Dois cintos, de propósito: as colunas são gravadas como texto (não coage
+// mais) E a leitura normaliza (cura o que já foi gravado torto, inclusive na
+// planilha de quem implantou a versão anterior).
+//
+// getFullYear/getMonth/getDate, e NÃO os getUTC*: uma célula de data-sem-hora
+// volta como meia-noite no fuso da PLANILHA. Em fuso negativo (o nosso, GMT-3)
+// os dois dariam o mesmo dia, mas em fuso positivo o getUTC* cairia no dia
+// anterior -- e o erro só apareceria para quem mudasse o fuso da planilha.
+//
+// Object.prototype.toString em vez de instanceof: o Date pode vir de outro
+// contexto de execução, e aí instanceof devolve false sem avisar.
+function normalizarDia(valor) {
+  if (Object.prototype.toString.call(valor) === '[object Date]') {
+    var mes = valor.getMonth() + 1;
+    var dia = valor.getDate();
+    return valor.getFullYear()
+      + '-' + (mes < 10 ? '0' : '') + mes
+      + '-' + (dia < 10 ? '0' : '') + dia;
+  }
+  return String(valor === undefined || valor === null ? '' : valor);
 }
 
 // 'chaveSemana' chega como '2026|2026-08-10' e é gravada nas DUAS primeiras
@@ -53,7 +91,7 @@ function linhasDaSemana(chave) {
   var linhas = [];
   for (var i = 1; i < dados.length; i++) {
     if (String(dados[i][0]) !== p.ano) continue;
-    if (String(dados[i][1]) !== p.semanaInicio) continue;
+    if (normalizarDia(dados[i][1]) !== p.semanaInicio) continue;
     if (!dados[i][3]) continue;
     linhas.push({
       equipeId: String(dados[i][2]),
@@ -88,7 +126,7 @@ function doPost(e) {
   var alvo = -1;
   for (var i = 1; i < dados.length; i++) {
     if (String(dados[i][0]) !== p.ano) continue;
-    if (String(dados[i][1]) !== p.semanaInicio) continue;
+    if (normalizarDia(dados[i][1]) !== p.semanaInicio) continue;
     if (String(dados[i][2]) !== String(corpo.equipeId)) continue;
     alvo = i + 1;
     break;
@@ -97,8 +135,14 @@ function doPost(e) {
   var linha = [p.ano, p.semanaInicio, String(corpo.equipeId),
     corpo.sup || '', corpo.coluna || '', corpo.autor || '', corpo.atualizadoEm || ''];
 
-  if (alvo === -1) aba.appendRow(linha);
-  else aba.getRange(alvo, 1, 1, CABECALHO.length).setValues([linha]);
+  // appendRow saiu de propósito: ele não deixa formatar ANTES de escrever, e é
+  // o formato que impede o Sheets de coagir a data (ver normalizarDia). Aqui a
+  // faixa é formatada como texto e só então recebe o valor -- o que também
+  // cura, linha a linha, a planilha de quem implantou a versão anterior.
+  if (alvo === -1) alvo = Math.max(aba.getLastRow() + 1, 2);
+  var faixa = aba.getRange(alvo, 1, 1, CABECALHO.length);
+  faixa.setNumberFormat('@');
+  faixa.setValues([linha]);
 
   return resposta({ ok: true, linhas: linhasDaSemana(corpo.chaveSemana) });
 }
