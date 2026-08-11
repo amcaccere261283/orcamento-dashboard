@@ -271,6 +271,13 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura, mostrarNome) {
     + '<p>Veículo: ' + escapeHtml(popup.veiculo || '—') + ' · Proprietário: ' + escapeHtml(popup.proprietario || '—') + '</p>'
     + '<p>Equipamentos: ' + equipamentos + '</p>'
     + '<p>Tomador atual: ' + escapeHtml(popup.tomador || '—') + '</p>'
+    // Os dias explicam por que duas equipes da MESMA tipologia têm capacidades
+    // diferentes -- a produtividade é igual (tabela por tipologia), o que muda
+    // é quantos dias a equipe está ativa na semana. Sem esta linha, 6,8 e 3,9
+    // em duas equipes de SP leem como inconsistência de produtividade; foi
+    // exatamente assim que o dono do projeto leu em 2026-08-11.
+    + '<p>Disponível: ' + formatarNumero(equipe.diasDisponiveis, 0) + ' de '
+    + formatarNumero(equipe.diasDaSemana, 0) + ' dias da semana</p>'
     + '<p>Capacidade: ' + formatarNumero(capacidade) + ' · Ocupação: ' + formatarPercentual(ocupacao) + '</p>'
     + '</div>';
 

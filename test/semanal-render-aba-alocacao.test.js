@@ -420,3 +420,12 @@ test('o filtro de tipologia também poda os grupos do pool', () => {
   assert.match(html, /data-grupo="ST"/);
   assert.doesNotMatch(html, /data-grupo="SP"/);
 });
+
+test('o popup diz quantos dias a equipe está disponível na semana', () => {
+  // Sem isso, duas equipes da MESMA tipologia com capacidades diferentes (6,8 e
+  // 3,9) parecem inconsistência de produtividade -- foi exatamente como o dono
+  // do projeto leu, em 2026-08-11. A diferença é disponibilidade, e a tela não
+  // dizia isso em lugar nenhum.
+  const html = renderAbaAlocacao(registros(), [0], opcoes());
+  assert.match(html, /Disponível:\s*5 de 7 dias/);
+});
