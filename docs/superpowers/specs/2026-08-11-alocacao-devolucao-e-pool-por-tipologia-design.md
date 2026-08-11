@@ -1,4 +1,4 @@
-# Aba Alocação Equipes: devolução, pool por tipologia, filtro de SUP e busca de equipe
+# Aba Alocação Equipes: devolução, pool por tipologia, filtro, busca e status da célula
 
 Data: 2026-08-11
 Escopo: `tools/semanal/render-aba-alocacao.js` (o pool), `tools/semanal/compute-alocacao.js`
@@ -6,14 +6,16 @@ Escopo: `tools/semanal/render-aba-alocacao.js` (o pool), `tools/semanal/compute-
 (os gestos), e os testes correspondentes. Nada fora da aba Alocação Equipes.
 
 Continuação de `2026-08-10-semanal-alocacao-equipes-design.md`, que desenhou a aba. Este
-documento cobre quatro pedidos do dono do projeto feitos em 2026-08-11, depois de o modo
+documento cobre cinco pedidos do dono do projeto feitos em 2026-08-11, depois de o modo
 Sheet entrar no ar:
 
 1. um arrasto de **devolução** — tirar uma equipe de um contrato e mandá-la de volta ao pool;
 2. **organizar o pool por tipologia**, que hoje é uma lista plana;
 3. **o filtro de SUP não filtra a grade** — bug relatado depois dos dois primeiros, e que
    por tocar nos mesmos arquivos entra aqui em vez de num documento à parte (Decisão 7);
-4. um **campo para achar equipe** por id ou líder (Decisão 8).
+4. um **campo para achar equipe** por id ou líder (Decisão 8);
+5. avaliar os rótulos da célula — de onde saiu **um bug de status invertido** e um número
+   sem rótulo (Decisão 9).
 
 ## O estado de hoje, medido
 
@@ -264,6 +266,78 @@ independentes e podem valer ao mesmo tempo.
 **O texto digitado não é estado persistido** — vive só no DOM, como a busca da aba Alertas.
 Trocar de semana ou de mês não o preserva.
 
+## Decisão 9 — o status da célula está INVERTIDO (bug), e a Tendência não tem rótulo
+
+Dois achados de 2026-08-11, ao avaliar o título de cada SUP/tipologia a pedido do dono do
+projeto.
+
+### 9a — o número sem rótulo é a Tendência
+
+A célula imprime quatro coisas, e só a primeira não diz o que é:
+
+```js
+'<div class="celula-tendencia">' + formatarNumero(c.tendencia) + '</div>'   // <- sem rótulo
+'... · saldo ' + formatarNumero(c.saldo) + '</div>'
+renderBarraCobertura(cobertura)
+'<span class="carteira">carteira ' + formatarNumero(c.carteira, 0) + '</span>'
+```
+
+É a **Tendência congelada** daquele SUP × tipologia na semana (congelada em
+`ancoraDaSemana` — ver o spec de 2026-08-10). Ganha rótulo, no mesmo padrão de `saldo` e
+`carteira`.
+
+### 9b — folga e sobrecarregada estão trocadas na célula
+
+`classificarOcupacao` (`compute-alocacao.js`) tem limiares escritos para **ocupação**:
+
+```js
+FAIXA_OCUPACAO = { folga: 0.85, sobrecarga: 1.05 };   // ocupação = carga ÷ capacidade
+```
+
+Correto para uma equipe: pouca carga = folga, muita carga = sobrecarga. Mas `renderCelula`
+alimenta a MESMA função com `cobertura = capacidadeAlocada / tendencia` — a razão
+**recíproca**. Resultado medido:
+
+| tendência | capacidade | cobertura | rótulo exibido | saldo exibido |
+|---|---|---|---|---|
+| 100 | 50 | 0,50 | **Com folga** | **−50** |
+| 100 | 85 | 0,85 | Equilibrada | −15 |
+| 100 | 100 | 1,00 | Equilibrada | 0 |
+| 100 | 150 | 1,50 | **Sobrecarregada** | **+50** |
+
+A célula contradiz o número que ela mesma imprime ao lado. O par invertido é
+**folga ↔ sobrecarregada**; `equilibrada` (0,85–1,05) é quase simétrica em torno de 1 e por
+isso parece certa nos dois sentidos — que é o motivo de o bug ter sobrevivido.
+
+**Causa raiz:** o comentário em `render-aba-alocacao.js`, logo acima do cálculo, afirma que
+"Cobertura é a mesma noção de ocupação (carga ÷ capacidade), só que no nível da célula
+(capacidade alocada ÷ tendência)". As duas fórmulas escritas nessa mesma frase são
+recíprocas. A equivalência falsa é o que autorizou reaproveitar a função.
+
+**Alcance verificado: um único ponto de chamada.** O resumo por SUP usa `leituraDoSup`
+(outro classificador) e mostra `cobertura` como percentual cru, sem rótulo de faixa; o
+resumo por equipe usa a ocupação verdadeira (`carga ÷ capacidade`), vinda de
+`resumirAlocacao`. Nenhum dos dois está afetado, e nenhum dos dois muda.
+
+**Correção:** a célula passa a classificar pela ocupação dela — `tendencia ÷
+capacidadeAlocada` —, reaproveitando `classificarOcupacao` com os MESMOS limiares, agora
+com o argumento na orientação certa. Nada de faixas novas.
+
+**Célula com tendência e sem nenhuma equipe** é divisão por zero, e é o caso mais
+descoberto que existe — não o mais tranquilo. Hoje ela cai em `livre` e exibe "Livre", que
+lê como "tudo certo aqui" quando significa "tem demanda e ninguém designado". Passa a ser
+um estado próprio, **"Sem equipe"**, em tom de atenção.
+
+**Armadilha, e ela é do tipo que este repositório já foi mordido antes:**
+`ROTULO_SITUACAO`/`CLASSE_SITUACAO` são compartilhados entre a célula e o resumo por
+equipe, e `livre` tem significado legítimo do lado da equipe — "está no pool, sem
+alocação", que deve continuar dizendo "Livre". **Não renomear `livre`.** "Sem equipe" entra
+como CHAVE NOVA, usada só pela célula.
+
+Célula sem tendência nenhuma (existe por carteira ou por equipe alocada) continua num
+estado neutro, sem faixa — não há demanda para cobrir, e chamá-la de folga ou de sobrecarga
+seria inventar.
+
 ## Testes
 
 Novos, em `test/semanal-render-semanal-wireup.test.js` (gestos) e
@@ -309,6 +383,22 @@ Busca de equipe (Decisão 8):
 - busca sem nenhum resultado não deixa a área muda — diz que não achou;
 - a busca poda o pool mas **não** mexe nas linhas da grade;
 - busca e filtro de SUP valem ao mesmo tempo sem se atropelar.
+
+Status da célula (Decisão 9), e este grupo tem que falhar contra o código de hoje:
+- capacidade METADE da tendência mostra "Sobrecarregada", não "Com folga" (hoje mostra
+  "Com folga · saldo −50", que é a contradição relatada);
+- capacidade UMA VEZ E MEIA a tendência mostra "Com folga", não "Sobrecarregada";
+- capacidade igual à tendência continua "Equilibrada" — a faixa do meio não muda;
+- **o rótulo nunca contradiz o sinal do saldo**: saldo negativo jamais sai com "Com
+  folga"/"Livre", saldo positivo jamais com "Sobrecarregada". Vale como propriedade,
+  varrendo uma faixa de valores, e não como caso a caso — é a forma mais direta de
+  travar a classe inteira do bug;
+- tendência sem nenhuma equipe mostra "Sem equipe", em tom de atenção;
+- `livre` continua significando "no pool" no resumo por equipe, com o rótulo "Livre"
+  intacto — a chave compartilhada não pode ter sido renomeada;
+- a Tendência aparece rotulada na célula;
+- o resumo por SUP e o resumo por equipe não mudam nada (são o controle: a correção é de
+  um ponto só).
 
 Regressão:
 - o `INVARIANTE: com a alocação vazia, a soma da tendência da grade bate com a Tabela
