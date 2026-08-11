@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const {
   parseAbaEq, tokensDoNome, casarSondador, tipologiaDireta,
 } = require('../tools/semanal/compute-equipes-ativas.js');
+const { rotularTipologia } = require('../tools/comum/tipologias-avancos.js');
 
 // --- parseAbaEq ------------------------------------------------------------
 
@@ -230,4 +231,23 @@ test('juntarPorDia soma vários meses sem perder dia nenhum', () => {
     'SUP-X||SM': { 100: 3, 131: 3 },
     'SUP-Y||SP': { 131: 1 },
   });
+});
+
+test('equipe CPTu | VT | SH é apropriada, não cai em semTipologia', () => {
+  // Regressão de 2026-08-10: TIPOLOGIA_DIRETA devolvia 'Especiais',
+  // rotularTipologia lançava, o try/catch engolia, e as 7 equipes de Especiais
+  // sumiam da conta sem nenhum aviso.
+  const equipes = [{
+    id: '175', nome: 'João dos Santos', servicos: 'CPTu | VT | SH',
+    dias: [{ dia: 1, texto: 'CCR RioSP (16925-25)' }, { dia: 2, texto: 'OK' }],
+  }];
+  const r = agregarEquipesAtivas({
+    equipes, osParaSup: { '16925-25': 'SUP-7128-24' },
+    rotularTipologia, ano: 2026, mes: 8,
+  });
+  assert.strictEqual(r.semTipologia, 0, 'nenhuma equipe pode sobrar sem tipologia aqui');
+  const chaves = Object.keys(r.porDia);
+  assert.deepStrictEqual(chaves, ['SUP-7128-24||Especiais']);
+  const dias = r.porDia['SUP-7128-24||Especiais'];
+  assert.strictEqual(Object.values(dias).reduce((a, b) => a + b, 0), 2);
 });

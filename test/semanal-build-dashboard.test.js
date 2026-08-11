@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { renderSemanal } = require('../tools/semanal/render-semanal.js');
 const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
-const { baselineParaCliente, redirecionarSupsDesconhecidos } = require('../tools/semanal/build-dashboard.js');
+const { baselineParaCliente, redirecionarSupsDesconhecidos, montarEquipesAtivas } = require('../tools/semanal/build-dashboard.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
 
 // Os 12 meses da MATRIZ como datas -- em produção saem do cabeçalho da
@@ -235,4 +235,47 @@ test('função é agnóstica ao tipo de item -- funciona igual pra furos de Sond
   assert.strictEqual(saida[0].sup, 'Diversos');
   assert.strictEqual(saida[0].status, 'PENDENTE', 'campos que não são sup/tipologia sobrevivem intactos');
   assert.strictEqual(redirecionados, 1);
+});
+
+test('montarEquipesAtivas devolve o CSV cru da aba EQ para o cliente', () => {
+  const csv = [
+    'ID,Equipe,Habilitação,Serviços,Líderes,Veículo,Proprietário,Equipamento,Equipamento,Equipamento,Equipamento,Equipamento,Tenda,Tomador,sinalização 3P,01/08/2026',
+    ',,do condutor,-,-,-,-,-,-,-,-,-,-,-,,SÁBADO',
+    '4,José I. Amaral,D,SM,Amaral,-,-,N/A,N/A,N/A,N/A,N/A,,CCR RioSP,,OK',
+  ].join('\n');
+  const r = montarEquipesAtivas([], csv);
+  assert.strictEqual(r.equipesCsv, csv, 'sem o CSV o cliente não consegue montar o quadro');
+  assert.deepStrictEqual(r.equipesPeriodo, { ano: 2026, mes: 8 });
+});
+
+test('sem espelho, equipesCsv fica null -- nunca string vazia', () => {
+  // String vazia parseia para "zero equipes", indistinguível de "a planilha
+  // está vazia". null é o que a aba usa para dizer "sem fonte" na tela.
+  const r = montarEquipesAtivas([], null);
+  assert.strictEqual(r.equipesCsv, null);
+});
+
+// Task 10: montarEquipesAtivas já calculava osParaSup internamente (para
+// alimentar tipologiaPorSondador) e o descartava depois de usar -- a aba
+// Alocação Equipes (equipesDoQuadro, tools/semanal/equipes-alocaveis.js)
+// precisa do MESMO mapa para achar supRealizado/colunaRealizada a partir da
+// última OS vista. Sem ele viajar até o cliente, "Repor o realizado" não tem
+// o que semear numa página real.
+test('montarEquipesAtivas também devolve osParaSup, para a aba Alocação Equipes semear o realizado', () => {
+  const csv = [
+    'ID,Equipe,Habilitação,Serviços,Líderes,Veículo,Proprietário,Equipamento,Equipamento,Equipamento,Equipamento,Equipamento,Tenda,Tomador,sinalização 3P,01/08/2026',
+    ',,do condutor,-,-,-,-,-,-,-,-,-,-,-,,SÁBADO',
+    '4,José I. Amaral,D,SM,Amaral,-,-,N/A,N/A,N/A,N/A,N/A,,CCR RioSP,,OK',
+  ].join('\n');
+  const furos = [
+    { os: '16925-25', sup: 'SUP-0001-24', sondador: 'José I. Amaral', tipologia: 'SM' },
+    { os: '17000-25', sup: 'SUP-0002-24', sondador: 'José I. Amaral', tipologia: 'SM' },
+  ];
+  const r = montarEquipesAtivas(furos, csv);
+  assert.deepStrictEqual(r.osParaSup, { '16925-25': 'SUP-0001-24', '17000-25': 'SUP-0002-24' });
+});
+
+test('sem espelho, osParaSup também fica null -- mesma regra de equipesCsv', () => {
+  const r = montarEquipesAtivas([], null);
+  assert.strictEqual(r.osParaSup, null);
 });

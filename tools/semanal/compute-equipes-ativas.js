@@ -70,6 +70,23 @@ function parseAbaEq(csvTexto) {
   return equipes;
 }
 
+// A grade crua a partir da linha 2 (as duas primeiras são cabeçalho e
+// sub-cabeçalho), na MESMA ordem que parseAbaEq devolve as equipes -- inclusive
+// pulando as linhas sem ID, para que o índice de uma bata com o da outra.
+// Existe para equipes-alocaveis.js ler as colunas do popup sem duplicar o
+// parser de CSV nem inchar o retorno de parseAbaEq, que alimenta o Balanço.
+function linhasDaAbaEq(csvTexto) {
+  var grid = parseCsvGrid(csvTexto || '');
+  var linhas = [];
+  for (var r = 2; r < grid.length; r++) {
+    var linha = grid[r] || [];
+    var id = String(linha[COL_ID] === null || linha[COL_ID] === undefined ? '' : linha[COL_ID]).trim();
+    if (!id) continue;
+    linhas.push(linha);
+  }
+  return linhas;
+}
+
 // Normaliza nome de pessoa para comparação: sem acento, minúsculo, sem
 // pontuação, sem preposições e sem sufixos de geração.
 //
@@ -192,8 +209,17 @@ function agregarEquipesAtivas(opcoes) {
   // mapa que o Avanço Sond já usa, em vez de este módulo carregar um '../comum'
   // que o bundle removeria.
   var rotular = o.rotularTipologia || function (t) { return t; };
+  // 'Especiais' JÁ É um rótulo da MATRIZ (ORDEM_TIPOLOGIAS, tools/comum/
+  // tipologias-avancos.js) -- passá-lo por rotularTipologia LANÇA, porque o
+  // mapa traduz rótulos CRUS do Avanço Sond, e 'ESPECIAIS' não é um deles.
+  // Até 2026-08-10 o try/catch abaixo engolia essa exceção e devolvia null,
+  // e as 7 equipes de 'CPTu | VT | SH' contavam como semTipologia -- some da
+  // conta sem erro, sem log, sem nada na tela. Rótulo que já é de destino
+  // passa direto.
+  var JA_TRADUZIDAS = ['Especiais', 'SEG.A', 'SEG.V'];
   function traduzir(tipologia) {
     if (!tipologia) return null;
+    if (JA_TRADUZIDAS.indexOf(tipologia) !== -1) return tipologia;
     try { return rotular(tipologia); } catch (err) { return null; }
   }
 
@@ -253,7 +279,7 @@ function juntarPorDia(mapas) {
 }
 
 module.exports = {
-  parseAbaEq, tokensDoNome, casarSondador, tipologiaDireta,
+  parseAbaEq, linhasDaAbaEq, tokensDoNome, casarSondador, tipologiaDireta,
   agregarEquipesAtivas, juntarPorDia, mesDaAbaEq,
   RE_COLUNA_DIA, TIPOLOGIA_DIRETA,
 };

@@ -182,12 +182,20 @@ function montarEquipesAtivas(furos, csvEspelho) {
   const tipologiaPorSondador = {};
   Object.keys(melhor).forEach((s) => { tipologiaPorSondador[s] = melhor[s].tipologia; });
 
-  if (!csvEspelho) return { equipesPeriodo: null, tipologiaPorSondador };
+  // equipesCsv viaja para o cliente porque a aba Alocação Equipes recomputa o
+  // roster a cada troca de SEMANA (disponibilidade e última OS mudam com ela),
+  // e a semana muda sem novo build. São ~119 linhas -- cabe folgado no payload.
+  // null, e não '', quando não há espelho: string vazia parseia para "zero
+  // equipes", indistinguível de "a planilha está vazia". osParaSup segue a
+  // mesma regra: só viaja junto do CSV que ele ajudaria a interpretar.
+  if (!csvEspelho) return { equipesPeriodo: null, tipologiaPorSondador, equipesCsv: null, osParaSup: null };
 
   const periodo = mesDaAbaEq(csvEspelho);
   if (!periodo) {
     console.warn('Equipes ativas: a espelho não trouxe cabeçalho de data reconhecível -- Δ equipes fica sem dado.');
-    return { equipesPeriodo: null, tipologiaPorSondador };
+    // Sem {ano, mes} o cliente não sabe a que mês os dias do CSV pertencem --
+    // um roster sem calendário é pior que nenhum, então também vai null aqui.
+    return { equipesPeriodo: null, tipologiaPorSondador, equipesCsv: null, osParaSup: null };
   }
 
   const equipes = parseAbaEq(csvEspelho);
@@ -214,7 +222,12 @@ function montarEquipesAtivas(furos, csvEspelho) {
     console.log(`Equipes ATIVAS: ${textosNovos.length} texto(s) de dia não catalogados entraram como "em campo" pelo default -- revise se algum for ausência: ${amostra}${textosNovos.length > 5 ? ' ...' : ''}`);
   }
 
-  return { equipesPorDia: r.porDia, equipesPeriodo: periodo, tipologiaPorSondador };
+  // osParaSup viaja para o cliente pelo MESMO motivo de equipesCsv (comentário
+  // acima): a aba Alocação Equipes usa este mapa (equipesDoQuadro,
+  // tools/semanal/equipes-alocaveis.js) para achar supRealizado/colunaRealizada
+  // a partir da última OS vista nos furos -- sem ele "Repor o realizado" não
+  // tem o que semear. Medido: ~1.960 entradas, negligenciável no payload.
+  return { equipesPorDia: r.porDia, equipesPeriodo: periodo, tipologiaPorSondador, equipesCsv: csvEspelho, osParaSup };
 }
 
 async function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
@@ -482,4 +495,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, baselineParaCliente, redirecionarSupsDesconhecidos, parseEquipesFracaoCsv };
+module.exports = { build, baselineParaCliente, redirecionarSupsDesconhecidos, parseEquipesFracaoCsv, montarEquipesAtivas };

@@ -69,6 +69,23 @@ function registroSintetico(sup, tomador, financeiroMes) {
 // bundle de cliente) ter algo pra chamar dentro do vm.Context -- sem
 // fetchMock, qualquer teste que dispare o refresh rejeita imediatamente com
 // um erro claro, em vez de vazar pra uma tentativa de rede de verdade.
+//
+// localStorage (Task 10, rodada de correção 1): um objeto real sempre tem
+// window.localStorage -- um vm.Context sem ele simula um ambiente que não
+// existe de verdade, e é o marcador de "semana já vista"
+// (ESTADO_ALOCACAO.semanaCarregada/semanaJaVista, render-semanal.js) que
+// depende dele para distinguir "nunca teve alocação salva" de "foi
+// esvaziada de propósito". Mock mínimo em memória, isolado por chamada
+// (cada montarSandbox começa com um armazenamento vazio, como uma aba nova).
+function localStorageFalso() {
+  const dados = {};
+  return {
+    getItem: (k) => (Object.prototype.hasOwnProperty.call(dados, k) ? dados[k] : null),
+    setItem: (k, v) => { dados[k] = String(v); },
+    removeItem: (k) => { delete dados[k]; },
+  };
+}
+
 function montarSandbox(html, fetchMock) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
   assert.equal(blocos.length, 6, 'esperava exatamente 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
@@ -78,6 +95,7 @@ function montarSandbox(html, fetchMock) {
   const sandbox = {
     document: documentoFalso, atob, btoa, crypto, TextEncoder, TextDecoder, console,
     fetch: fetchMock || (() => Promise.reject(new Error('fetch não mockado neste teste'))),
+    localStorage: localStorageFalso(),
   };
   sandbox.window = sandbox; // window É o global object, como no navegador
   vm.createContext(sandbox);
@@ -1670,4 +1688,235 @@ test('atualizarDadosAoVivoSemanal: se o CSV de equipes produtivas dá 404, o ref
   assert.ok(periodoAtivas, 'equipesPeriodo tem de descrever a fonte que venceu (aba EQ), não ficar null');
   assert.strictEqual(periodoAtivas.ano, 2026);
   assert.strictEqual(periodoAtivas.mes, 3, 'o mês tem de ser o da aba EQ (03/2026)');
+});
+
+// --- Alocação Equipes: a sétima aba, o blob cifrado e o invariante (Task 10,
+// 2026-08-10) --------------------------------------------------------------
+// Task 9 deixou pronto o estado/montarAbaAlocacao/aplicarMovimento/etc, e o
+// bundle já registrado (o teste de wire-up destes módulos vive em
+// test/semanal-alocacao-interacao.test.js). O que falta provar aqui é a
+// INTEGRAÇÃO: a aba é alcançável de verdade, e osParaSup -- que Task 9 deixou
+// defaultando para {} -- agora sai do build/live-refresh, atravessa o blob
+// cifrado e chega em equipesDoQuadro.
+
+// CSV mínimo de uma equipe da aba EQ, com um único dia (01/08/2026) marcado
+// com uma OS entre parênteses -- é o texto que classificarDiaEquipe reconhece
+// como 'mobilizada' com aquela OS (RE_OS). Reaproveita a mesma estrutura de
+// colunas que test/semanal-build-dashboard.test.js já usa para este roster.
+function csvEqComOs(textoDoDia) {
+  return [
+    'ID,Equipe,Habilitação,Serviços,Líderes,Veículo,Proprietário,Equipamento,Equipamento,Equipamento,Equipamento,Equipamento,Tenda,Tomador,sinalização 3P,01/08/2026',
+    ',,do condutor,-,-,-,-,-,-,-,-,-,-,-,,SÁBADO',
+    '4,José I. Amaral,D,ST,Amaral,-,-,N/A,N/A,N/A,N/A,N/A,,CCR RioSP,,' + textoDoDia,
+  ].join('\n');
+}
+
+test('com sete abas, abrir Alocação Equipes esconde as outras seis -- alternarAba continua exclusiva', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  documentoFalso.getElementById('aba-alocacao').listeners.click();
+  assert.equal(documentoFalso.getElementById('secao-alocacao').style.display, '');
+  assert.equal(documentoFalso.getElementById('secao-semanal').style.display, 'none');
+  assert.equal(documentoFalso.getElementById('secao-grafico-semanal').style.display, 'none');
+  assert.equal(documentoFalso.getElementById('secao-balanco').style.display, 'none');
+  assert.equal(documentoFalso.getElementById('secao-demandas').style.display, 'none');
+  assert.equal(documentoFalso.getElementById('secao-alertas').style.display, 'none');
+  assert.equal(documentoFalso.getElementById('secao-consolidado').style.display, 'none');
+
+  documentoFalso.getElementById('aba-semanal').listeners.click();
+  assert.equal(documentoFalso.getElementById('secao-alocacao').style.display, 'none');
+  assert.equal(documentoFalso.getElementById('secao-semanal').style.display, '');
+});
+
+test('osParaSup viaja dentro do blob cifrado e chega em equipesDoQuadro -- supRealizado/colunaRealizada não ficam null numa página real', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)]; // tipologia 'ST' (registroSintetico)
+  const geradoEm = new Date('2026-08-01T00:00:00Z'); // vigenteIdx = 7 (agosto)
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
+    equipesPeriodo: { ano: 2026, mes: 8 },
+    osParaSup: { '16925-25': 'SUP-0001-24' },
+  });
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  assert.strictEqual(sandbox.window.__DEMANDAS__.osParaSup['16925-25'], 'SUP-0001-24',
+    'o mapa precisa sobreviver a serialização/cifragem/decifragem dentro do blob');
+
+  // Força a semana S1 (cobre 01-02/08/2026, onde a equipe tem a OS marcada)
+  // -- não depende do relógio real da máquina que roda o teste.
+  sandbox.ESTADO_ALOCACAO.semanaIdx = 0;
+  sandbox.montarAbaAlocacao();
+
+  const equipe = sandbox.ESTADO_ALOCACAO.equipes.find((e) => e.id === '4');
+  assert.ok(equipe, 'esperava a equipe 4 no roster');
+  assert.strictEqual(equipe.supRealizado, 'SUP-0001-24',
+    'sem osParaSup chegando de verdade, supRealizado ficaria sempre null -- o exato defeito que esta task fecha');
+  assert.strictEqual(equipe.colunaRealizada, 'ST');
+
+  // "Repor o realizado" prova a ponta a ponta: a equipe entra alocada no
+  // SUP/coluna reais, não no pool vazio de sugestão que {} produziria.
+  // Campo a campo, não deepStrictEqual: o objeto nasce dentro do vm.Context
+  // (outro Realm), e deepStrictEqual compara protótipo -- Object do sandbox
+  // não é === Object deste processo, mesmo com a MESMA estrutura de dados.
+  sandbox.semearDoRealizado();
+  const alocado = sandbox.ESTADO_ALOCACAO.alocacao['4'];
+  assert.ok(alocado, 'esperava a equipe 4 alocada depois de "Repor o realizado"');
+  assert.strictEqual(alocado.sup, 'SUP-0001-24');
+  assert.strictEqual(alocado.coluna, 'ST');
+});
+
+// --- Rodada de correção 1 (verificação em navegador real, 2026-08-10): o
+// quadro abria com 114 células vazias e 114 cartões no pool -- "Repor o
+// realizado" preenchia certo (provando que osParaSup/semearDoRealizado
+// funcionavam), mas nada disparava sozinho no primeiro desenho da semana.
+// Decisão 9 do spec: "ao abrir uma semana sem alocação salva, o quadro é
+// semeado com onde as equipes estão de fato". Os dois testes abaixo pinam o
+// contrato: abrir SEM nada salvo semeia sozinho; abrir uma semana ESVAZIADA
+// de propósito (Limpar alocação) NÃO volta a semear -- as duas situações são
+// {} na hora de ler, e é o marcador 'alocacao-equipes:vista:<chave>'
+// (ESTADO_ALOCACAO.semanaCarregada/semanaJaVista, render-semanal.js) que as
+// distingue.
+
+test('a semana abre semeada do realizado no PRIMEIRO desenho da aba, sem precisar clicar em "Repor o realizado" -- a regressão relatada', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-08-01T00:00:00Z');
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
+    equipesPeriodo: { ano: 2026, mes: 8 },
+    osParaSup: { '16925-25': 'SUP-0001-24' },
+  });
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  // tentarDesbloquear já roda montarDashboard -> recalcularSemanal ->
+  // montarAbaAlocacao sozinho -- nenhum botão de semana é clicado neste teste.
+  await sandbox.tentarDesbloquear();
+
+  // Força a semana S1 (a que o CSV cobre) chamando montarAbaAlocacao()
+  // direto -- a MESMA função que recalcularSemanal já chama sozinha a cada
+  // desenho, não o caminho de troca EXPLÍCITA de semana
+  // (selecionarSemanaAlocacao, coberto no teste seguinte). Sem isto o teste
+  // dependeria de qual semana o relógio real da máquina que roda a suíte
+  // classifica como "em curso" hoje.
+  sandbox.ESTADO_ALOCACAO.semanaIdx = 0;
+  sandbox.montarAbaAlocacao();
+  // carregarAlocacaoDaSemana é disparada de dentro de montarAbaAlocacao sem
+  // ser esperada (fire-and-forget, de propósito -- a tela não pode travar
+  // esperando storage/rede) -- um boundary de macrotask garante que a
+  // cadeia de microtasks (carregar -> then -> semear -> gravar) já
+  // assentou. Mesma técnica de chamarEsperarAtualizacao, mais acima.
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const alocado = sandbox.ESTADO_ALOCACAO.alocacao['4'];
+  assert.ok(alocado, 'esperava a equipe 4 já alocada sem clicar em "Repor o realizado" -- 114 células vazias e 114 cartões no pool era o defeito relatado');
+  assert.strictEqual(alocado.sup, 'SUP-0001-24');
+  assert.strictEqual(alocado.coluna, 'ST');
+});
+
+test('trocar para uma semana nunca vista (selecionarSemanaAlocacao) também semeia sozinha, não só o primeiro desenho da aba', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-08-01T00:00:00Z');
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
+    equipesPeriodo: { ano: 2026, mes: 8 },
+    osParaSup: { '16925-25': 'SUP-0001-24' },
+  });
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  await sandbox.selecionarSemanaAlocacao(0);
+
+  const alocado = sandbox.ESTADO_ALOCACAO.alocacao['4'];
+  assert.ok(alocado, 'trocar de semana (não só o primeiro desenho da aba) também precisa semear quando não há nada salvo');
+  assert.strictEqual(alocado.sup, 'SUP-0001-24');
+  assert.strictEqual(alocado.coluna, 'ST');
+});
+
+test('uma semana esvaziada de propósito ("Limpar alocação") NÃO volta a semear sozinha na próxima vez que é aberta', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-08-01T00:00:00Z');
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
+    equipesPeriodo: { ano: 2026, mes: 8 },
+    osParaSup: { '16925-25': 'SUP-0001-24' },
+  });
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  await sandbox.selecionarSemanaAlocacao(0);
+  assert.ok(sandbox.ESTADO_ALOCACAO.alocacao['4'], 'pré-condição: a primeira abertura semeou sozinha');
+
+  sandbox.limparAlocacao(); // ação explícita do usuário, "Limpar alocação"
+  // Object.keys(...).length, não deepStrictEqual(..., {}): o objeto nasce
+  // dentro do vm.Context (outro Realm), e deepStrictEqual compara protótipo
+  // -- {} deste processo não é === {} do sandbox, mesmo os dois vazios.
+  assert.strictEqual(Object.keys(sandbox.ESTADO_ALOCACAO.alocacao).length, 0, 'pré-condição: a limpeza esvaziou de fato');
+
+  // "Reabrir" a mesma semana -- o mesmo gesto de clicar de novo no botão da
+  // semana, ou recarregar a página com o mesmo cache local (o cliente de
+  // teste usa o MESMO armazenamento falso entre as duas chamadas, dentro do
+  // mesmo sandbox -- não é um novo processo, mas é a mesma leitura que uma
+  // nova carga de página faria).
+  await sandbox.selecionarSemanaAlocacao(0);
+
+  assert.strictEqual(Object.keys(sandbox.ESTADO_ALOCACAO.alocacao).length, 0,
+    'a semana esvaziada de propósito não pode ser reenchida sozinha -- reencheria atrás do usuário, o mesmo defeito trocado de lugar');
+});
+
+test('sem equipesCsv (Sheet espelho da EQ não respondeu), a aba mostra a guarda semRoster, nunca um quadro vazio', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-08-01T00:00:00Z');
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, { equipesCsv: null, equipesPeriodo: null, osParaSup: null });
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  assert.match(documentoFalso.getElementById('secao-alocacao').innerHTML, /Sheet espelho da aba EQ não respondeu/);
+});
+
+test('semana de um mês diferente do que o espelho da EQ cobre entra em somenteLeitura -- a grade desenha, mas nada é arrastável', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho) -- espelho cobre agosto
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('OK'),
+    equipesPeriodo: { ano: 2026, mes: 8 },
+    osParaSup: {},
+  });
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  assert.strictEqual(sandbox.mesSelecionadoIdx, 6, 'pré-condição: a página abre em julho, mês diferente do espelho');
+  assert.match(documentoFalso.getElementById('secao-alocacao').innerHTML, /Somente leitura: o espelho da/);
+});
+
+test('window.__ALOCACAO_URL__ vem do blob cifrado (URL_ALOCACAO) -- nunca em texto puro no HTML cru, mesmo padrão de window.__DEMANDAS__', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  assert.doesNotMatch(html, /publicar-o-apps-script-de-alocacao/,
+    'a URL real (URL_ALOCACAO) só pode existir dentro do blob cifrado');
+
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  assert.strictEqual(sandbox.window.__ALOCACAO_URL__, 'PENDENTE-publicar-o-apps-script-de-alocacao');
 });
