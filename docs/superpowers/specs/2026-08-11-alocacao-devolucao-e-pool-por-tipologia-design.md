@@ -1,7 +1,8 @@
 # Aba Alocação Equipes: devolução ao pool e pool agrupado por tipologia
 
 Data: 2026-08-11
-Escopo: `tools/semanal/render-aba-alocacao.js` (o pool), `tools/semanal/render-semanal.js`
+Escopo: `tools/semanal/render-aba-alocacao.js` (o pool), `tools/semanal/compute-alocacao.js`
+(a grade e o filtro), `tools/semanal/render-semanal.js`
 (os gestos), e os testes correspondentes. Nada fora da aba Alocação Equipes.
 
 Continuação de `2026-08-10-semanal-alocacao-equipes-design.md`, que desenhou a aba. Este
@@ -155,6 +156,45 @@ filtram por `[data-arrastavel="sim"]` no `closest`. A devolução deve herdar is
 novo — mas **com teste**, porque é uma proteção que se perde calada se alguém mudar o
 seletor.
 
+## Decisão 7 — o filtro de SUP não filtra a grade (bug relatado em 2026-08-11)
+
+O dono do projeto filtrou pelo SUP `7133` e a grade devolveu também `6830`, `7285` e
+`7593`.
+
+**Causa raiz**, em `montarGradeAlocacao` (`compute-alocacao.js`, l. 139-141): as células
+candidatas saem da união de duas fontes, e só uma respeita o filtro.
+
+```js
+Object.keys(porCelula).forEach(...);        // indicesPorCelula(registros, indices) -- FILTRADO
+Object.keys(equipesNaCelula).forEach(...);  // montado de `alocacao` -- NÃO FILTRADO
+```
+
+Qualquer SUP com equipe alocada vira linha. E como a semana **nasce semeada do realizado**,
+as equipes já entram alocadas nos SUPs onde trabalharam — daí os três SUPs extras.
+
+Reproduzido isoladamente, com controle: filtrando só `SUP-A` e com uma equipe alocada em
+`SUP-B`, a grade devolve `["SUP-A", "SUP-B"]`; com `alocacao: {}`, devolve `["SUP-A"]`.
+Não há teste cobrindo filtro nesta aba.
+
+**Decisão do dono do projeto:** a linha é podada E a equipe também não aparece no pool
+enquanto o filtro estiver ligado. O custo foi dito antes da escolha — a equipe fica
+invisível enquanto o filtro estiver ligado — e aceito.
+
+**A armadilha que essa poda cria, e que a implementação PRECISA evitar:** hoje `renderPool`
+inclui a equipe quando `!porEquipeMap[id] || !porEquipeMap[id].sup`, e `porEquipeMap` vem
+de `resumirAlocacao(grade)`. Podando a linha, `celulaPorEquipe[id]` nunca é preenchido, o
+resumo devolve `sup: null`, e a equipe **volta a aparecer no pool como livre** — podendo
+ser alocada uma segunda vez, em dois SUPs ao mesmo tempo. Foi medido: é o motivo provável
+de a união existir como está.
+
+Portanto: **o pool decide pela alocação CRUA (`ESTADO_ALOCACAO.alocacao`), não pelo resumo
+da grade.** Uma equipe com entrada em `alocacao` nunca entra no pool, tenha a linha dela
+sobrevivido ao filtro ou não. Esta é a única mudança que impede a regressão, e é o ponto
+mais fácil de errar deste documento.
+
+Os totais da faixa saem de `resumirAlocacao(grade)` e passam a excluir as linhas podadas —
+consistente com a grade exibida, e é o que se espera de um filtro.
+
 ## Testes
 
 Novos, em `test/semanal-render-semanal-wireup.test.js` (gestos) e
@@ -178,10 +218,21 @@ Pool agrupado:
   (a repetição é intencional, e o teste a fixa em vez de deixá-la parecer bug);
 - "fora do quadro" continua fora do agrupamento, com as 3 de sempre.
 
+Filtro (Decisão 7), o grupo que hoje não existe:
+- filtrando por um SUP, um SUP com equipe alocada que o filtro exclui **não** vira linha —
+  é o bug relatado, e o teste tem que falhar contra o código de hoje;
+- controle no mesmo teste: sem alocação nenhuma, o filtro já funcionava e continua;
+- a equipe alocada num SUP podado **não** aparece no pool (a armadilha da Decisão 7);
+- os totais da faixa excluem as linhas podadas;
+- limpar o filtro traz a linha e a equipe de volta, na mesma célula — a poda é de
+  exibição, nunca de estado.
+
 Regressão:
 - o `INVARIANTE: com a alocação vazia, a soma da tendência da grade bate com a Tabela
   Semanal` continua verde. Nada aqui toca em número, mas é a prova de que a aba não
   divergiu da conta oficial, e vale rodar.
+- alocar, filtrar, desfiltrar e devolver continua funcionando em sequência — a poda não
+  pode corromper `ESTADO_ALOCACAO.alocacao`.
 
 ## Fora de escopo
 
