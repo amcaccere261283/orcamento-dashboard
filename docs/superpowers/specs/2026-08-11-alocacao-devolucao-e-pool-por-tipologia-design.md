@@ -6,11 +6,13 @@ Escopo: `tools/semanal/render-aba-alocacao.js` (o pool), `tools/semanal/compute-
 (os gestos), e os testes correspondentes. Nada fora da aba Alocação Equipes.
 
 Continuação de `2026-08-10-semanal-alocacao-equipes-design.md`, que desenhou a aba. Este
-documento cobre dois pedidos do dono do projeto feitos em 2026-08-11, depois de o modo
+documento cobre três pedidos do dono do projeto feitos em 2026-08-11, depois de o modo
 Sheet entrar no ar:
 
 1. um arrasto de **devolução** — tirar uma equipe de um contrato e mandá-la de volta ao pool;
-2. **organizar o pool por tipologia**, que hoje é uma lista plana.
+2. **organizar o pool por tipologia**, que hoje é uma lista plana;
+3. **o filtro de SUP não filtra a grade** — bug relatado depois dos dois primeiros, e que
+   por tocar nos mesmos arquivos entra aqui em vez de num documento à parte (Decisão 7).
 
 ## O estado de hoje, medido
 
@@ -138,8 +140,10 @@ não existe nenhuma consulta desse tipo no repositório. Logo, dois cartões com
 leitura do código mostrou que não é.)
 
 O que a duplicação exige: quando a equipe é alocada, **todas** as cópias dela somem do
-pool. Isso já sai de graça — `renderPool` filtra por `porEquipeMap[e.id].sup` antes de
-agrupar, e `montarAbaAlocacao` redesenha a seção inteira a cada movimento.
+pool. Isso sai de graça do redesenho — `montarAbaAlocacao` refaz a seção inteira a cada
+movimento, e a equipe deixa de ser candidata a qualquer grupo de uma vez só. (O critério
+de "está alocada" muda na Decisão 7: passa a ser a alocação crua, não
+`porEquipeMap[e.id].sup`. Vale para as cópias exatamente como valia para o cartão único.)
 
 **Armadilha para quem escrever os testes novos:** hoje nenhum teste procura cartão por
 `querySelector('[data-equipe="X"]')` (verificado no repositório inteiro), mas os testes de
