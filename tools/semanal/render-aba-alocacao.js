@@ -557,5 +557,10 @@ function renderAbaAlocacao(registros, indices, opcoes) {
 module.exports = {
   renderAbaAlocacao, CLASSE_LEITURA, ROTULO_LEITURA, CLASSE_SITUACAO, ROTULO_SITUACAO,
   renderCartaoEquipe, renderCelula, renderMatriz, renderPool, renderFaixaAlocacao,
+  // Os dois resumos e as duas guardas saem para snapshot-alocacao.js montar a
+  // aba INTEIRA a partir de uma grade sintética, sem passar pelo pipeline de
+  // dados -- ver o cabeçalho daquele arquivo.
+  renderResumoSup, renderResumoEquipe, renderGuardaSemRoster, renderAvisoSomenteLeitura,
+  renderControles,
   escapeHtml, corDaColuna,
 };

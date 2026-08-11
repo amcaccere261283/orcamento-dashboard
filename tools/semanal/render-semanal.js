@@ -2815,4 +2815,9 @@ ${markupFiltros(FILTROS_ALERTAS_SEMANAL, { recuo: '      ', classes: 'filtros-al
 </html>`;
 }
 
-module.exports = { renderSemanal };
+// CSS_SEMANAL sai junto para tools/semanal/snapshot-alocacao.js poder montar o
+// snapshot de revisão de design com o MESMO CSS que a página real emite. Sem
+// isso o gerador teria que recortar o template literal do fonte por regex, e
+// uma revisão feita sobre um CSS ligeiramente diferente do de produção julga
+// uma tela que não existe.
+module.exports = { renderSemanal, CSS_SEMANAL };
