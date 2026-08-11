@@ -765,6 +765,12 @@ const BUNDLE_ARQUIVOS = [
   // URL_ESPELHO_EQUIPES_SEMANAL acima). O módulo continua no repositório,
   // sem consumidor aqui.
   'compute-equipes-nao-produtivas.js',
+  // Equipes REALIZADO (2026-08-10, recuperado e reintegrado em 2026-08-11):
+  // cruza roster (Link 6) + produção crua (Link 7) com carry-forward de 45
+  // dias -- ver compute-equipes-realizado-alocado.js. Sem require same-dir
+  // nenhum (só matemática pura sobre os dois arrays que o refresh já buscou),
+  // pode entrar em qualquer ponto do grupo de equipes.
+  'compute-equipes-realizado-alocado.js',
   // Equipes ATIVAS via Matriz (2026-08-06): também sem require same-dir.
   'compute-equipes-ativo-matriz.js',
   'compute-balanco.js', 'render-aba-balanco.js', 'render-aba-demandas.js',
@@ -861,6 +867,7 @@ var ComputeDemandas = MODULOS['compute-demandas.js'];
 var ComputeEquipes = MODULOS['compute-equipes-mobilizadas.js'];
 var ComputeEquipesAtivas = MODULOS['compute-equipes-ativas.js'];
 var ComputeEquipesNaoProdutivas = MODULOS['compute-equipes-nao-produtivas.js'];
+var ComputeEquipesRealizadoAlocado = MODULOS['compute-equipes-realizado-alocado.js'];
 var ComputeEquipesAtivoMatriz = MODULOS['compute-equipes-ativo-matriz.js'];
 var FiltroAtivos = MODULOS['filtro-ativos.js'];
 var EquipesAlocaveis = MODULOS['equipes-alocaveis.js'];
@@ -2271,15 +2278,19 @@ var URL_ESPELHO_EQ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ
 // junto com a própria página -- mesmo padrão de URL_ESPELHO_AVANCOS_SEMANAL.
 // Ver docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
 var URL_ESPELHO_LAB_SEMANAL = 'lab-online.csv';
-// 2026-08-08 (Task 12): equipes FRACIONADAS -- substitui o antigo
-// equipes-produtivas-online.csv. O CSV publicado já vem pré-agregado por
-// (SUP, tipologia, dia) no formato "SUP,Tipo,DiaEpoch,Fracao"
-// (atualizar-equipes-online.js, via agregarEquipesFracao em
-// compute-equipes-fracao.js), então o botão só faz parse+soma abaixo --
-// MESMA lógica que o bloco equivalente em build-dashboard.js (Task 12) --
-// em vez de rodar uma agregação própria sobre dado cru. Mesmo padrão de
-// publicação relativa dos outros dois.
+// 2026-08-10 (recuperado e reintegrado em 2026-08-11): produção CRUA do
+// Link 7 -- "IdEquipe,SUP,Tipo,DiaEpoch", uma linha por (equipe, dia,
+// contrato). Substitui o pré-agregado "SUP,Tipo,DiaEpoch,Fracao" de
+// 2026-08-08 (Task 12/equipes FRACIONADAS): a fração agora é calculada no
+// cruzamento com o roster (ComputeEquipesRealizadoAlocado.agregarEquipesRealizadoAlocado),
+// MESMA lógica que build-dashboard.js (montarEquipesRealizado) já faz --
+// os dois nunca podem divergir. Mesmo nome de arquivo/padrão de publicação
+// relativa dos outros dois -- só o formato do conteúdo mudou.
 var URL_ESPELHO_EQUIPES_SEMANAL = 'equipes-online.csv';
+// Roster (Link 6, multi-mês, já classificado por Estado) -- publicado junto
+// com equipes-online.csv por atualizar-equipes-online.js. Ver o comentário
+// acima e compute-equipes-realizado-alocado.js.
+var URL_ESPELHO_EQUIPES_ROSTER_SEMANAL = 'equipes-roster-online.csv';
 // 2026-08-10: os dois arquivos de BACKLOG (furos/ensaios ainda não
 // executados), que até então só alimentavam o build a partir de dist/ --
 // o botão nunca os buscava, e por isso zerava Demandas Pendentes a cada
@@ -2399,6 +2410,16 @@ function atualizarDadosAoVivoSemanal() {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       }).catch(function () { return null; })
+      : Promise.resolve(null),
+    // Roster (Link 6, textos[8]) -- entra por ÚLTIMO no array de propósito,
+    // pra não deslocar os índices textos[5..7] já em uso por baixo. Gated
+    // pelo MESMO avancosLabConfigurados dos demais de equipes: o cruzamento
+    // com a produção (textos[4]) só roda depois de furos/registros prontos.
+    // Falha sozinha, mesmo padrão de todos os outros CSVs opcionais deste
+    // Promise.all -- sem roster, o Δ equipes cai na fonte de reserva
+    // (ativas/mobilizadas), nunca derruba o botão inteiro.
+    avancosLabConfigurados
+      ? buscarCsvSemanal(URL_ESPELHO_EQUIPES_ROSTER_SEMANAL).catch(function () { return null; })
       : Promise.resolve(null),
   ]).then(function (textos) {
     var registrosNovos = ParseMatrizCliente.parseMatrizCliente(ParseMatrizCliente.parseCsvGrid(textos[0]));
@@ -2546,64 +2567,64 @@ function atualizarDadosAoVivoSemanal() {
         demandasNovas.osParaSup = osParaSup;
       }
 
-      // Equipes FRACIONADAS (2026-08-08, Task 12 -- antes "produtivas"):
-      // mesma prioridade que o build já dá -- se o CSV respondeu e produz
-      // pelo menos um dia utilizável, ela GANHA de ativas/mobilizadas
-      // (setadas acima). O CSV já chega PRÉ-AGREGADO por (SUP, tipologia,
-      // dia) no formato "SUP,Tipo,DiaEpoch,Fracao" (mesmo que
-      // atualizar-equipes-online.js grava em dist/) -- por isso este bloco
-      // só faz parse+soma, MESMA lógica do bloco Node equivalente em
-      // build-dashboard.js (Task 12), sem chamar nenhuma função de
-      // "agregar*": a agregação de verdade (Link 6 roster + Link 7
-      // campo/produção) já rodou fora do navegador, em
-      // atualizar-equipes-online.js.
-      if (textos[4]) {
-        var gridEquipesCliente = ParseMatrizCliente.parseCsvGrid(textos[4]);
-        var porDiaFracaoCliente = {};
-        var diasFracaoCliente = [];
-        // resolverSup construída UMA VEZ fora do loop, mesmo motivo do gêmeo
-        // em build-dashboard.js (achado da revisão final de branch, 2026-08-08).
-        var resolverSupFracionadas = ComputeDemandas.resolverSupConhecido(registrosNovos);
-        gridEquipesCliente.slice(1).forEach(function (linha) {
-          if (!linha || !linha.length) return;
-          var sup = linha[0];
-          var tipo = linha[1];
-          var dia = Number(linha[2]);
-          var fracao = Number(linha[3]);
+      // Δ equipes REALIZADO (2026-08-10, recuperado e reintegrado em
+      // 2026-08-11 depois de um git reset --hard ter descartado esta branch
+      // -- ver docs/superpowers/specs/2026-08-10-equipes-realizado-roster-link6-link7-design.md
+      // e docs/superpowers/plans/2026-08-10-equipes-realizado-roster-link6-link7.md).
+      // Mesma prioridade que o build já dá -- se roster (textos[8]) +
+      // produção (textos[4]) responderam e o cruzamento produz pelo menos um
+      // par utilizável, ele GANHA de ativas/mobilizadas (setadas acima).
+      // Substitui o bloco de equipes FRACIONADAS (2026-08-08): o CSV de
+      // produção deixou de vir pré-agregado ("SUP,Tipo,DiaEpoch,Fracao") --
+      // agora é CRU ("IdEquipe,SUP,Tipo,DiaEpoch") e precisa ser cruzado com
+      // o roster aqui, via ComputeEquipesRealizadoAlocado.agregarEquipesRealizadoAlocado
+      // (carry-forward de 45 dias) -- MESMA função pura que
+      // build-dashboard.js (montarEquipesRealizado) chama; os dois caminhos
+      // nunca podem divergir sobre o número.
+      if (textos[4] && textos[8]) {
+        var rosterOnlineCliente = [];
+        textos[8].trim().split('\\n').slice(1).forEach(function (linha) {
+          if (!linha) return;
+          var p = linha.split(',');
+          var d = Number(p[1]);
+          if (!isFinite(d)) return;
+          rosterOnlineCliente.push({ idEquipe: p[0], diaEpoch: d, estado: p[2] });
+        });
+        var producaoOnlineCliente = [];
+        textos[4].trim().split('\\n').slice(1).forEach(function (linha) {
+          if (!linha) return;
+          var p2 = linha.split(',');
+          var d2 = Number(p2[3]);
+          if (!isFinite(d2)) return;
+          producaoOnlineCliente.push({ idEquipe: p2[0], sup: p2[1], tipo: p2[2], diaEpoch: d2 });
+        });
+        var resultadoRealizadoCliente = ComputeEquipesRealizadoAlocado.agregarEquipesRealizadoAlocado({
+          roster: rosterOnlineCliente, producao: producaoOnlineCliente,
+        });
+        if (Object.keys(resultadoRealizadoCliente.porDia).length) {
           // MESMO redirecionamento que furos/ensaios levam nas duas linhas do
           // topo deste bloco: par (contrato, tipologia) que a MATRIZ não
           // conhece vira "Diversos" em vez de sumir do Δ equipes -- e
-          // fracionadas é a fonte PRIMÁRIA dele. Ver o gêmeo em
-          // build-dashboard.js.
-          var supResolvido = resolverSupFracionadas(sup, tipo);
-          var chave = supResolvido + '||' + tipo;
-          if (!porDiaFracaoCliente[chave]) porDiaFracaoCliente[chave] = {};
-          porDiaFracaoCliente[chave][dia] = (porDiaFracaoCliente[chave][dia] || 0) + fracao;
-          diasFracaoCliente.push(dia);
-        });
-        if (Object.keys(porDiaFracaoCliente).length) {
-          demandasNovas.equipesPorDia = porDiaFracaoCliente;
-          // JUNTO com equipesPorDia, sempre -- e pela MESMA regra que
-          // parseEquipesFracaoCsv aplica no build (build-dashboard.js): um
-          // mês só no CSV mantém o gate de cobertura; vários meses devolvem
-          // null ("sem restrição"), porque equipesPeriodo é um contrato de um
-          // mês só e declarar um deles apagaria o Δ equipes de todos os
-          // outros. Os dois caminhos TÊM que concordar: build e refresh
-          // desenham a mesma tela.
-          var mesesFracaoCliente = {};
-          for (var iF = 0; iF < diasFracaoCliente.length; iF++) {
-            var dF = new Date(diasFracaoCliente[iF] * 86400000);
-            mesesFracaoCliente[dF.getUTCFullYear() + '-' + (dF.getUTCMonth() + 1)] = true;
-          }
-          if (Object.keys(mesesFracaoCliente).length === 1) {
-            var diaRepresentativoCliente = new Date(Math.min.apply(null, diasFracaoCliente) * 86400000);
-            demandasNovas.equipesPeriodo = {
-              ano: diaRepresentativoCliente.getUTCFullYear(),
-              mes: diaRepresentativoCliente.getUTCMonth() + 1,
-            };
-          } else {
-            demandasNovas.equipesPeriodo = null;
-          }
+          // REALIZADO é a fonte PRIMÁRIA dele. Ver o gêmeo em
+          // build-dashboard.js (montarEquipesRealizado). resolverSup
+          // construída UMA VEZ fora do loop, mesmo achado da revisão final
+          // de branch, 2026-08-08.
+          var resolverSupRealizado = ComputeDemandas.resolverSupConhecido(registrosNovos);
+          var porDiaRealizadoCliente = {};
+          Object.keys(resultadoRealizadoCliente.porDia).forEach(function (chave) {
+            var partes = chave.split('||');
+            var chaveResolvida = resolverSupRealizado(partes[0], partes[1]) + '||' + partes[1];
+            if (!porDiaRealizadoCliente[chaveResolvida]) porDiaRealizadoCliente[chaveResolvida] = {};
+            var mapaDia = resultadoRealizadoCliente.porDia[chave];
+            Object.keys(mapaDia).forEach(function (dia) {
+              porDiaRealizadoCliente[chaveResolvida][dia] = (porDiaRealizadoCliente[chaveResolvida][dia] || 0) + mapaDia[dia];
+            });
+          });
+          demandasNovas.equipesPorDia = porDiaRealizadoCliente;
+          // Roster cobre múltiplos meses (backfill anual) -- declarar um mês
+          // só aqui apagaria o Δ equipes de todos os outros, mesma regra que
+          // build-dashboard.js (montarEquipesRealizado) já documenta.
+          demandasNovas.equipesPeriodo = null;
         }
       }
 

@@ -1500,17 +1500,21 @@ test('o indicador de status nao tem anel -- e identico ao do dashboard de orcame
 });
 
 // --- Cadeia de prioridade do Δ equipes no live-refresh (rodada de correção da
-// revisão final, 2026-08-05) ------------------------------------------------
+// revisão final, 2026-08-05; atualizado em 2026-08-11 pra REALIZADO --
+// roster+produção, recuperado de branch, ver
+// docs/superpowers/specs/2026-08-10-equipes-realizado-roster-link6-link7-design.md)
+// ------------------------------------------------------------------------
 //
 // São TRÊS fontes disputando window.__DEMANDAS__.equipesPorDia, em ordem:
-// produtivas (campo/fotos) > ativas (aba EQ) > mobilizadas (Avanço Sond). Os
-// dois testes abaixo prendem os dois modos de falha que a revisão final achou,
-// e cada um se identifica por um DIA diferente -- é isso que prova QUAL fonte
-// venceu, em vez de só "veio algum dado":
+// REALIZADO (roster Link 6 + produção Link 7, com carry-forward) > ativas
+// (aba EQ) > mobilizadas (Avanço Sond). Os dois testes abaixo prendem os dois
+// modos de falha que a revisão final achou, e cada um se identifica por um
+// DIA diferente -- é isso que prova QUAL fonte venceu, em vez de só "veio
+// algum dado":
 //
 //   mobilizadas -> 10..12/03/2026 (o intervalo Inicio..Termino do furo)
 //   ativas      -> 15/03/2026     (a única coluna de dia da aba EQ mockada)
-//   produtivas  -> 20/03/2026     (a única Data do CSV de fotos mockado)
+//   REALIZADO   -> 20/03/2026     (o único dia do roster+produção mockados)
 //
 // As CHAVES colidiriam ('Diversos||SP' nas três, porque o par (SUP-0002-25, SP)
 // não existe na MATRIZ mockada e cai no redirecionamento pra "Diversos" -- o
@@ -1548,12 +1552,18 @@ const DIA_MOBILIZADAS = Math.floor(Date.UTC(2026, 2, 10) / 86400000);
 const DIA_ATIVAS = Math.floor(Date.UTC(2026, 2, 15) / 86400000);
 const DIA_PRODUTIVAS = Math.floor(Date.UTC(2026, 2, 20) / 86400000);
 
-// Um dia de equipe fracionada (Link 6 + 7 já agregados, formato
-// "SUP,Tipo,DiaEpoch,Fracao" -- ver atualizar-equipes-online.js/
-// compute-equipes-fracao.js), num dia que nenhuma das outras duas fontes
-// produz. Fração 1 (equipe inteira num único par SUP/tipo naquele dia).
-const CSV_PRODUTIVAS_PRIORIDADE = 'SUP,Tipo,DiaEpoch,Fracao\n'
-  + `SUP-0002-25,SP,${DIA_PRODUTIVAS},1\n`;
+// REALIZADO (2026-08-10, recuperado em 2026-08-11): roster (Link 6, cru,
+// "IdEquipe,DiaEpoch,Estado") + produção (Link 7, cru,
+// "IdEquipe,SUP,Tipo,DiaEpoch") -- substitui o antigo pré-agregado
+// "SUP,Tipo,DiaEpoch,Fracao". A equipe '441' está 'mobilizada' no roster e
+// produziu em SUP-0002-25/SP no MESMO dia -- o cruzamento
+// (ComputeEquipesRealizadoAlocado.agregarEquipesRealizadoAlocado) fraciona
+// 1/N entre as combinações do dia; com uma só, fração 1. Um dia que nenhuma
+// das outras duas fontes produz.
+const CSV_ROSTER_PRIORIDADE = 'IdEquipe,DiaEpoch,Estado\n'
+  + `441,${DIA_PRODUTIVAS},mobilizada\n`;
+const CSV_PRODUTIVAS_PRIORIDADE = 'IdEquipe,SUP,Tipo,DiaEpoch\n'
+  + `441,SUP-0002-25,SP,${DIA_PRODUTIVAS}\n`;
 
 // Junta todos os dias presentes em equipesPorDia, de todas as chaves -- a
 // impressão digital de qual fonte alimentou o mapa.
@@ -1584,17 +1594,22 @@ async function prepararRefreshPrioridade(fetchMock) {
 
 // FIX 2: tipologiaPorSondador era declarada com 'var' DENTRO do
 // `if (periodoEq)` de atualizarDadosAoVivoSemanal(). 'var' é escopo de FUNÇÃO,
-// então com a aba EQ fora do ar ela chegava 'undefined' no bloco de produtivas,
-// agregarEquipesProdutivas caía no default {}, toda linha ia pra semTipologia,
-// porDia voltava vazio -- e o Δ equipes degradava pra mobilizadas em silêncio,
-// com o status verde dizendo "Atualizado".
-test('atualizarDadosAoVivoSemanal: com a aba EQ fora do ar mas o CSV de produtivas OK, o Δ equipes vem de PRODUTIVAS -- não degrada pra mobilizadas', async () => {
+// então com a aba EQ fora do ar ela chegava 'undefined' no bloco de produtivas
+// (hoje REALIZADO), agregarEquipesProdutivas caía no default {}, toda linha
+// ia pra semTipologia, porDia voltava vazio -- e o Δ equipes degradava pra
+// mobilizadas em silêncio, com o status verde dizendo "Atualizado". O bloco
+// REALIZADO atual (roster+produção, 2026-08-10/11) não depende mais de
+// tipologiaPorSondador -- o resolverSup vem de resolverSupConhecido, direto
+// da MATRIZ -- mas o teste continua valendo: aba EQ fora do ar não pode
+// derrubar nem degradar a fonte de maior prioridade.
+test('atualizarDadosAoVivoSemanal: com a aba EQ fora do ar mas o roster+produção OK, o Δ equipes vem de REALIZADO -- não degrada pra mobilizadas', async () => {
   const fetchMock = (url) => {
     if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
     if (url.indexOf('avancos-configurado-teste') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_PRIORIDADE) });
     if (url.indexOf('lab-configurado-teste') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_PRIORIDADE) });
     // A aba EQ cai -- é o cenário deste teste.
     if (url.indexOf('pub?gid=199381651') !== -1) return Promise.reject(new Error('espelho da aba EQ fora do ar'));
+    if (url.indexOf('equipes-roster-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_ROSTER_PRIORIDADE) });
     if (url.indexOf('equipes-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_PRODUTIVAS_PRIORIDADE) });
     return Promise.reject(new Error('URL inesperada no mock: ' + url));
   };
@@ -1611,7 +1626,7 @@ test('atualizarDadosAoVivoSemanal: com a aba EQ fora do ar mas o CSV de produtiv
   const dias = diasDe(equipesPorDia);
   assert.deepStrictEqual(
     dias, [DIA_PRODUTIVAS],
-    'com produtivas disponível o mapa tem que ser SÓ o dia dela (20/03); ver os dias de mobilizadas (10..12/03) aqui significa que tipologiaPorSondador voltou a ser undefined e a fonte primária se perdeu'
+    'com REALIZADO disponível o mapa tem que ser SÓ o dia dela (20/03); ver os dias de mobilizadas (10..12/03) aqui significa que a fonte primária se perdeu'
   );
   assert.ok(
     dias.indexOf(DIA_MOBILIZADAS) === -1,
@@ -1626,23 +1641,26 @@ test('atualizarDadosAoVivoSemanal: com a aba EQ fora do ar mas o CSV de produtiv
     'par (contrato, tipologia) que a MATRIZ não conhece tem de ir pra "Diversos", igual furos/ensaios'
   );
 
-  // Fix 5 no cliente: o período tem de acompanhar a fonte que venceu, senão o
-  // Balanço desenha Δ equipes num mês passado sem o aviso de "sem dado".
-  // Campo a campo, não deepStrictEqual: o objeto nasce DENTRO do vm.Context,
-  // então o prototype dele é o Object.prototype daquele realm e a comparação
-  // estrita falha mesmo com os valores idênticos.
-  const periodoProdutivas = sandbox.window.__DEMANDAS__.equipesPeriodo;
-  assert.ok(periodoProdutivas, 'equipesPeriodo não pode ficar null por a aba EQ ter caído -- produtivas cobre um mês e o gate depende dele');
-  assert.strictEqual(periodoProdutivas.ano, 2026);
-  assert.strictEqual(periodoProdutivas.mes, 3, 'o mês tem de ser o das FRACIONADAS (03/2026, o DiaEpoch do CSV de equipes-online.csv)');
+  // Diferente da antiga PRODUTIVAS/FRACIONADAS (que declarava um único mês a
+  // partir do dia mais antigo do CSV), REALIZADO cruza roster multi-mês e
+  // sempre devolve equipesPeriodo null ("sem restrição") -- mesma regra que
+  // as mobilizadas (cobertura anual) já seguiam, documentada em
+  // build-dashboard.js (montarEquipesRealizado).
+  assert.strictEqual(
+    sandbox.window.__DEMANDAS__.equipesPeriodo, null,
+    'REALIZADO cobre múltiplos meses -- equipesPeriodo tem que ficar null, não um mês só'
+  );
 });
 
-// FIX 3: a entrada de produtivas no Promise.all não tinha .catch, então um 404
+// FIX 3: a entrada de produção no Promise.all não tinha .catch, então um 404
 // nela (o modo de falha esperado: esquecer o
 // `cp dist/equipes-online.csv docs/`) rejeitava o Promise.all
 // INTEIRO e o botão morria com "Falha ao atualizar: HTTP 404", levando MATRIZ,
-// Avanços, Lab e EQ com ele.
-test('atualizarDadosAoVivoSemanal: se o CSV de equipes produtivas dá 404, o refresh AINDA conclui e as outras 4 fontes atualizam', async () => {
+// Avanços, Lab e EQ com ele. Este teste não mocka equipes-roster-online.csv
+// de propósito (rejeita -> .catch -> null): com produção também em 404,
+// REALIZADO exige os dois (textos[4] && textos[8]) e fica de fora --
+// exercitando o MESMO caminho de robustez para as duas metades da fonte.
+test('atualizarDadosAoVivoSemanal: se o CSV de produção (equipes-online.csv) dá 404, o refresh AINDA conclui e as outras 4 fontes atualizam', async () => {
   const fetchMock = (url) => {
     if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
     if (url.indexOf('avancos-configurado-teste') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_PRIORIDADE) });
@@ -1659,7 +1677,7 @@ test('atualizarDadosAoVivoSemanal: se o CSV de equipes produtivas dá 404, o ref
 
   assert.match(
     documentoFalso.getElementById('status-atualizacao').textContent, /^Atualizado às \d{2}:\d{2}$/,
-    'um 404 só em produtivas NÃO pode derrubar o botão inteiro -- sem o .catch isto virava "Falha ao atualizar: HTTP 404"'
+    'um 404 só em produção NÃO pode derrubar o botão inteiro -- sem o .catch isto virava "Falha ao atualizar: HTTP 404"'
   );
   assert.ok(
     !documentoFalso.getElementById('status-atualizacao').classList.contains('status-erro'),
@@ -1677,11 +1695,11 @@ test('atualizarDadosAoVivoSemanal: se o CSV de equipes produtivas dá 404, o ref
   assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 2, 'furo SP (Criação da OS) + ensaio LAB.C (Data Programada), ambos viram chegada');
   assert.ok(Object.keys(demandas.porRegistroEventos).length > 0, 'porRegistroEventos alimentado por furos + ensaios de Lab');
 
-  // E a aba EQ também: sem produtivas, o Δ equipes cai na RESERVA imediata
+  // E a aba EQ também: sem REALIZADO, o Δ equipes cai na RESERVA imediata
   // (ativas), não nas mobilizadas nem no dado velho do build.
   assert.deepStrictEqual(
     diasDe(demandas.equipesPorDia), [DIA_ATIVAS],
-    'com produtivas fora, quem manda é a aba EQ (15/03) -- exatamente a reserva que existia antes desta branch'
+    'com REALIZADO fora, quem manda é a aba EQ (15/03) -- exatamente a reserva que existia antes desta branch'
   );
   // Campo a campo -- ver o comentário sobre realm no teste acima.
   const periodoAtivas = demandas.equipesPeriodo;
