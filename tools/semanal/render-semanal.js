@@ -497,6 +497,10 @@ const CSS_SEMANAL = `
   }
   .pool-grupo-contagem { font-weight: 400; opacity: .75; }
   .cartao-selo-poli { margin-left: 3px; font-size: 10px; opacity: .85; }
+  .busca-equipe { padding: 5px 8px; font-size: 12px; min-width: 220px; }
+  /* Equipe que casa a busca mas está alocada: texto, nunca cartão arrastável. */
+  .pool-alocadas { margin: 6px 0 0; padding-left: 18px; font-size: 11px; color: var(--muted); }
+  .cartao-nome { display: block; font-size: 10px; opacity: .8; }
   /* O pool como alvo de DEVOLUÇÃO, só enquanto se arrasta uma equipe que já
      está alocada. Some em limparDestaquesAlocacao, junto com o das células. */
   .pool-alvo { outline: 2px dashed #4f8ff0; outline-offset: 3px; }
@@ -1234,7 +1238,7 @@ function montarAbaBalanco(registros, indices) {
 // Script ir ao ar").
 var ESTADO_ALOCACAO = {
   semanaIdx: -1, alocacao: {}, equipes: [], foraDoQuadro: [], cliente: null,
-  semanaCarregada: null, geracaoAlocacao: 0,
+  semanaCarregada: null, geracaoAlocacao: 0, busca: '',
 };
 
 // MARCADOR DE SEMANA JÁ VISTA (Decisão 9 do spec, correção pós-verificação em
@@ -1542,6 +1546,9 @@ function montarAbaAlocacao() {
       semRoster: semRoster, somenteLeitura: somenteLeitura,
       equipes: ESTADO_ALOCACAO.equipes, foraDoQuadro: ESTADO_ALOCACAO.foraDoQuadro,
       alocacao: ESTADO_ALOCACAO.alocacao,
+      // Não é estado persistido -- vive só aqui e no DOM, como a busca da aba
+      // Alertas. Trocar de semana ou de mês não o preserva.
+      buscaEquipe: ESTADO_ALOCACAO.busca,
       hojeEpoch: hojeEpochDoNavegador(),
       modoPersistencia: cliente.modo(),
       pendentes: cliente.pendentes().length,
@@ -1751,6 +1758,23 @@ function inicializarInteracaoAlocacao() {
     // fantasma/destaque ficam presos na tela para sempre.
     if (typeof cartao.setPointerCapture === 'function') {
       try { cartao.setPointerCapture(e.pointerId); } catch (err) { /* alvo removido entre o evento e a chamada -- sem problema */ }
+    }
+  });
+
+  // O campo de busca de equipe. montarAbaAlocacao refaz a seção inteira, então
+  // o input é OUTRO elemento a cada tecla -- sem devolver o foco e o cursor, só
+  // daria pra digitar um caractere por vez.
+  secao.addEventListener('input', function (e) {
+    var campo = e.target && e.target.id === 'busca-equipe' ? e.target : null;
+    if (!campo) return;
+    ESTADO_ALOCACAO.busca = campo.value || '';
+    montarAbaAlocacao();
+    var novo = document.getElementById('busca-equipe');
+    if (novo && typeof novo.focus === 'function') {
+      novo.focus();
+      if (typeof novo.setSelectionRange === 'function') {
+        novo.setSelectionRange(novo.value.length, novo.value.length);
+      }
     }
   });
 

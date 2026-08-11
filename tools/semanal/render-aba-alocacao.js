@@ -2,6 +2,13 @@
 const { montarGradeAlocacao, resumirAlocacao, classificarCelula } = require('./compute-alocacao.js');
 const { COLUNAS_ALOCACAO } = require('./equipes-alocaveis.js');
 const { formatarIntervaloSemana } = require('./render-aba-semanal.js');
+// normalizarBusca NÃO é exportada de tools/comum/render-shell.js -- lá ela vive
+// dentro de scriptFiltros(), inalcançável. render-aba-alertas.js tem uma cópia
+// própria (documentada lá como cópia deliberada) e a exporta; a ordem de
+// BUNDLE_ARQUIVOS já põe alertas antes desta aba, então o require resolve.
+// Reimplementar a normalização aqui seria a terceira cópia, e duas
+// normalizações divergentes é bug garantido.
+const { normalizarBusca } = require('./render-aba-alertas.js');
 
 // Módulo dual (Node + navegador) -- mesmo padrão de render-aba-balanco.js:
 // 'var'/'function', require no formato exato que transformaModulo
@@ -153,6 +160,12 @@ function renderControles(o, somenteLeitura) {
     + renderBotoesSemana(o.semanas, o.semana, desabilitado)
     + '<button type="button" data-acao="repor-realizado"' + (desabilitado ? ' disabled' : '') + '>Repor o realizado</button>'
     + '<button type="button" data-acao="limpar-alocacao"' + (desabilitado ? ' disabled' : '') + '>Limpar alocação</button>'
+    // Controle PRÓPRIO da aba, e não da barra de filtros compartilhada: aquela
+    // opera sobre `registros` (indicesFiltrados), e equipe não é registro --
+    // ali este campo não faria nada em cinco das sete abas.
+    + '<input id="busca-equipe" type="text" class="busca-equipe"'
+    + ' placeholder="Buscar equipe (id ou líder)..." autocomplete="off"'
+    + ' value="' + escapeHtml(o.buscaEquipe || '') + '">'
     + renderStatus(o.modoPersistencia, o.pendentes)
     + '</div>';
 }
@@ -175,12 +188,38 @@ function renderFaixaAlocacao(totais) {
     + '</div>';
 }
 
+// --- Busca de equipe ----------------------------------------------------------
+
+// Casa contra os TRÊS campos, e não só contra o que o cartão mostra. Medido na
+// Sheet em 2026-08-11: a coluna 1 ("Equipe") traz o nome completo e a 4
+// ("Líderes") traz o apelido -- "José I. Amaral" e "Amaral" são a MESMA pessoa,
+// e o cartão exibe só o apelido. Casar apenas o visível deixaria "josé" sem
+// achar ninguém, e quem digita procura pela pessoa, não pela abreviação que a
+// planilha escolheu.
+function equipeCasaBusca(equipe, termoNormalizado) {
+  if (!termoNormalizado) return true;
+  var campos = [equipe.id, equipe.lider, equipe.nome];
+  for (var i = 0; i < campos.length; i++) {
+    if (normalizarBusca(campos[i] || '').indexOf(termoNormalizado) !== -1) return true;
+  }
+  return false;
+}
+
+// Verdadeiro quando o casamento veio SÓ do nome completo. Aí o cartão passa a
+// exibi-lo, senão o resultado parece aleatório: busca "josé", aparece "Amaral".
+function casouSoPeloNome(equipe, termoNormalizado) {
+  if (!termoNormalizado) return false;
+  var visivel = normalizarBusca(equipe.id || '') + ' ' + normalizarBusca(equipe.lider || '');
+  if (visivel.indexOf(termoNormalizado) !== -1) return false;
+  return normalizarBusca(equipe.nome || '').indexOf(termoNormalizado) !== -1;
+}
+
 // --- Cartão + popup da equipe -------------------------------------------------
 
 // resumoEquipe: a linha correspondente de resumirAlocacao().porEquipe (pode
 // ser null quando a equipe nem chegou a entrar no resumo -- não deveria
 // acontecer no fluxo real, mas o card não pode quebrar por isso).
-function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura) {
+function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura, mostrarNome) {
   var colunas = equipe.colunas || [];
   var corPrincipal = corDaColuna(colunas[0]);
   var arrastavel = equipe.disponivel && !somenteLeitura;
@@ -198,6 +237,8 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura) {
     + (equipe.polivalente ? '<span class="cartao-selo-poli" title="aparece em mais de um grupo">⇄</span>' : '')
     + '<span class="cartao-cor" style="background:' + corPrincipal + '"></span>'
     + '<span class="cartao-lider">' + escapeHtml(equipe.lider) + '</span>'
+    // Só quando o casamento veio do nome completo -- ver casouSoPeloNome.
+    + (mostrarNome && equipe.nome ? '<span class="cartao-nome">' + escapeHtml(equipe.nome) + '</span>' : '')
     + (equipe.disponivel ? '' : '<span class="cartao-motivo">sem dia disponível nesta semana</span>')
     + '</div>';
 
@@ -232,13 +273,23 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura) {
 // resumirAlocacao devolve sup: null para uma equipe que ESTÁ alocada -- decidir
 // por ele a traria de volta ao pool como se estivesse livre, e daria pra
 // alocá-la uma segunda vez, em dois SUPs ao mesmo tempo.
-function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocacao) {
+function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocacao, buscaEquipe) {
   var lista = equipes || [];
   var aloc = alocacao || {};
-  var noPool = lista.filter(function (e) {
+  var termo = normalizarBusca(buscaEquipe || '');
+  var casam = lista.filter(function (e) { return equipeCasaBusca(e, termo); });
+  var noPool = casam.filter(function (e) {
     var destino = aloc[e.id];
     return !(destino && destino.sup);
   });
+  // Equipe que casa a busca mas ESTÁ alocada não some calada: a poda sozinha
+  // responderia "não achei" para uma equipe que existe. Vira TEXTO, não cartão
+  // -- arrastar se faz da célula, e um segundo cartão arrastável reintroduziria
+  // o risco de dupla alocação da Decisão 7.
+  var alocadasQueCasam = termo ? casam.filter(function (e) {
+    var destino = aloc[e.id];
+    return !!(destino && destino.sup);
+  }) : [];
 
   // Um bloco por coluna, na ORDEM CANÔNICA de COLUNAS_ALOCACAO -- a mesma da
   // grade, para o olho não ter que traduzir entre as duas metades da tela.
@@ -260,7 +311,8 @@ function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocaca
     });
     if (!doGrupo.length) return '';
     var cartoesDoGrupo = doGrupo.map(function (e) {
-      return renderCartaoEquipe(e, porEquipeMap[e.id] || null, somenteLeitura);
+      return renderCartaoEquipe(e, porEquipeMap[e.id] || null, somenteLeitura,
+        casouSoPeloNome(e, termo));
     }).join('');
     return '<div class="pool-grupo" data-grupo="' + escapeHtml(coluna.id) + '">'
       + '<h4 class="pool-grupo-titulo">' + escapeHtml(coluna.rotulo)
@@ -275,8 +327,18 @@ function renderPool(equipes, foraDoQuadro, porEquipeMap, somenteLeitura, alocaca
       + ' (' + escapeHtml(f.servicos) + ') — ' + escapeHtml(f.motivo) + '</li>';
   }).join('');
 
+  var linhasAlocadas = alocadasQueCasam.map(function (e) {
+    var d = aloc[e.id];
+    return '<li>' + escapeHtml(e.id) + ' (' + escapeHtml(e.lider) + ')'
+      + ' — alocada em ' + escapeHtml(d.sup) + ' · ' + escapeHtml(d.coluna) + '</li>';
+  }).join('');
+
+  var corpo = grupos || '<p class="pool-vazio">'
+    + (termo ? 'nenhuma equipe livre casa a busca' : 'nenhuma equipe livre') + '</p>';
+
   return '<div class="pool-alocacao">'
-    + (grupos || '<p class="pool-vazio">nenhuma equipe livre</p>')
+    + corpo
+    + (linhasAlocadas ? '<ul class="pool-alocadas">' + linhasAlocadas + '</ul>' : '')
     + '<details class="fora-do-quadro">'
     + '<summary>fora do quadro (' + fora.length + ')</summary>'
     + '<ul>' + itensFora + '</ul>'
@@ -447,7 +509,7 @@ function renderAbaAlocacao(registros, indices, opcoes) {
   var html = renderControles(o, somenteLeitura);
   html += renderFaixaAlocacao(resumo.totais);
   if (somenteLeitura === 'mes-diferente') html += renderAvisoSomenteLeitura();
-  html += renderPool(equipes, o.foraDoQuadro, porEquipeMap, somenteLeitura, o.alocacao);
+  html += renderPool(equipes, o.foraDoQuadro, porEquipeMap, somenteLeitura, o.alocacao, o.buscaEquipe);
   html += renderMatriz(grade, resumo, equipesPorId, somenteLeitura);
   html += renderResumoSup(resumo.porSup);
   html += renderResumoEquipe(resumo.porEquipe);

@@ -236,3 +236,91 @@ test('equipe alocada some de TODOS os grupos de uma vez', () => {
   const noPool = (html.split('<table')[0].match(/data-equipe="7"/g) || []).length;
   assert.strictEqual(noPool, 0);
 });
+
+// --- Busca de equipe (2026-08-11, Decisão 8 do spec) ------------------------
+
+test('a busca casa o id', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {}, buscaEquipe: '7',
+  }));
+  assert.match(html, /data-equipe="7"/);
+  assert.doesNotMatch(html, /data-equipe="4"/);
+});
+
+test('a busca casa o líder', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {}, buscaEquipe: 'amaral',
+  }));
+  assert.match(html, /data-equipe="4"/);
+  assert.doesNotMatch(html, /data-equipe="7"/);
+});
+
+test('a busca casa o NOME COMPLETO, que o cartão não mostra', () => {
+  // Medido na Sheet em 2026-08-11: a col. 1 tem "José I. Amaral" e a col. 4
+  // tem "Amaral". O cartão só mostra o apelido, então casar apenas o que ele
+  // exibe deixaria "josé" sem achar ninguém.
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {}, buscaEquipe: 'josé',
+  }));
+  assert.match(html, /data-equipe="4"/);
+});
+
+test('a busca ignora acento e caixa', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {}, buscaEquipe: 'JOSE',
+  }));
+  assert.match(html, /data-equipe="4"/);
+});
+
+test('casando só pelo nome completo, o cartão passa a exibi-lo', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {}, buscaEquipe: 'josé',
+  }));
+  assert.match(html, /José I\. Amaral/);
+});
+
+test('busca vazia devolve o pool inteiro', () => {
+  const comBusca = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {}, buscaEquipe: '',
+  }));
+  const semBusca = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {},
+  }));
+  assert.strictEqual(comBusca, semBusca);
+});
+
+test('busca sem resultado não deixa a área muda', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {}, buscaEquipe: 'zzzznaoexiste',
+  }));
+  assert.match(html, /nenhuma equipe/i);
+});
+
+test('equipe que casa a busca mas está ALOCADA vira linha de texto, não cartão', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), buscaEquipe: 'alves',
+    alocacao: { 7: { sup: 'SUP-A', coluna: 'ST' } },
+  }));
+  // Fora da grade (antes da <table>) ela aparece só como texto.
+  const antesDaGrade = html.split('<table')[0];
+  assert.match(antesDaGrade, /alocada em/i);
+  assert.match(antesDaGrade, /SUP-A/);
+  assert.doesNotMatch(antesDaGrade, /data-equipe="7"/,
+    'arrastar se faz da célula; um 2º cartão arrastável reintroduziria a dupla alocação');
+});
+
+test('a busca poda o POOL e não mexe nas linhas da grade', () => {
+  const semBusca = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {},
+  }));
+  const comBusca = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipesVariadas(), alocacao: {}, buscaEquipe: 'zzzznaoexiste',
+  }));
+  const linhasDe = (h) => (h.match(/data-sup="/g) || []).length;
+  assert.strictEqual(linhasDe(comBusca), linhasDe(semBusca));
+});
+
+test('o campo de busca existe nos controles da aba', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({ equipes: equipesVariadas() }));
+  assert.match(html, /id="busca-equipe"/);
+});
