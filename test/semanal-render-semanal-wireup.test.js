@@ -1920,3 +1920,134 @@ test('window.__ALOCACAO_URL__ vem do blob cifrado (URL_ALOCACAO) -- nunca em tex
 
   assert.strictEqual(sandbox.window.__ALOCACAO_URL__, 'PENDENTE-publicar-o-apps-script-de-alocacao');
 });
+
+// --- Correção pré-publicação do Apps Script (2026-08-11): a corrida entre
+// carregarAlocacaoDaSemana (assíncrona) e o redesenho (síncrono) --------
+//
+// Em modo local carregar() resolve numa microtask (leitura síncrona de
+// localStorage embrulhada em async) -- rápido demais para um clique de
+// usuário colidir, por isso "praticamente inalcançável" hoje. Assim que
+// URL_ALOCACAO deixar de ser 'PENDENTE-...', carregar() vira uma
+// ida-e-volta de rede de verdade (centenas de ms numa conexão lenta), e a
+// janela de corrida deixa de ser teórica. Os dois testes abaixo forçam modo
+// 'sheet' e SEGURAM a resposta do fetch aberta manualmente (o mock nunca
+// resolve sozinho) para provar que uma ação do usuário no meio do caminho
+// sobrevive -- sem a proteção de ESTADO_ALOCACAO.geracaoAlocacao
+// (carregarAlocacaoDaSemana, render-semanal.js) estes dois falhariam.
+//
+// clienteAlocacao() memoiza o cliente na PRIMEIRA chamada (dentro do
+// primeiro montarAbaAlocacao, que já roda em modo local durante
+// tentarDesbloquear -- a URL do payload cifrado é sempre 'PENDENTE-...',
+// URL_ALOCACAO é uma constante fixa em render-semanal.js). Por isso os dois
+// testes resetam ESTADO_ALOCACAO.cliente pra null DEPOIS de desbloquear,
+// simulando o momento em que o dono do projeto publica o Apps Script e a
+// página é recarregada com a URL nova.
+function fetchMockAlocacaoSheet(resolversGet) {
+  // POSTs (gravar -- o aplicarMovimento do teste também tenta persistir em
+  // paralelo) resolvem na hora, sem travar: não são o alvo destes testes.
+  // Só o GET de carregar() fica em voo, sob controle do teste.
+  return function (url, opcoes) {
+    if (opcoes && opcoes.method === 'POST') {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+    }
+    return new Promise((resolve) => { resolversGet.push(resolve); });
+  };
+}
+
+test('um arrasto que aterrissa ENQUANTO carregarAlocacaoDaSemana está em voo sobrevive -- a resposta tardia da rede não pode desfazê-lo', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)]; // tipologia 'ST'
+  const geradoEm = new Date('2026-08-01T00:00:00Z');
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
+    equipesPeriodo: { ano: 2026, mes: 8 },
+    osParaSup: { '16925-25': 'SUP-0001-24' },
+  });
+
+  const resolversGet = [];
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMockAlocacaoSheet(resolversGet));
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // Assenta a semana S1 em modo LOCAL primeiro (determinístico, sem depender
+  // do relógio real da máquina que roda a suíte) -- a equipe 4 nasce
+  // semeada aqui, prova de que o roster está pronto.
+  await sandbox.selecionarSemanaAlocacao(0);
+  assert.ok(sandbox.ESTADO_ALOCACAO.alocacao['4'], 'pré-condição: a semana abriu semeada em modo local');
+
+  // Troca para modo SHEET -- simula o Apps Script recém-publicado.
+  sandbox.ESTADO_ALOCACAO.cliente = null;
+  sandbox.window.__ALOCACAO_URL__ = 'https://exemplo.com/exec-alocacao-teste';
+
+  // Dispara um carregamento de verdade (reabrir a mesma semana) -- fica
+  // preso em voo até resolversGet[0](...) ser chamado.
+  const chave = sandbox.chaveSemanaAtual();
+  const promessaCarregamento = sandbox.carregarAlocacaoDaSemana(chave);
+  assert.strictEqual(resolversGet.length, 1, 'esperava que carregar() em modo sheet chamasse fetch() uma vez (GET)');
+
+  // O ARRASTO acontece ENQUANTO a busca está em voo.
+  const ok = sandbox.aplicarMovimento('4', 'SUP-B', 'ST');
+  assert.strictEqual(ok, true, 'pré-condição: o movimento durante o carregamento foi aceito');
+  assert.strictEqual(sandbox.ESTADO_ALOCACAO.alocacao['4'].sup, 'SUP-B', 'pré-condição: o arrasto aplicou de verdade, antes da rede responder');
+
+  // A resposta da rede finalmente chega -- de uma Sheet vazia (o caso mais
+  // comum de um Apps Script recém-publicado, sem nada salvo ainda).
+  resolversGet[0]({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  await promessaCarregamento;
+
+  // SEM a proteção de geracaoAlocacao, o .then() reatribuiria
+  // ESTADO_ALOCACAO.alocacao = {} (o que a Sheet vazia devolveu) por cima do
+  // arrasto -- a equipe 4 "pularia" de volta pro pool, sem erro nenhum na
+  // tela.
+  assert.ok(sandbox.ESTADO_ALOCACAO.alocacao['4'], 'o arrasto não pode ter sido desfeito pela resposta tardia da rede');
+  assert.strictEqual(sandbox.ESTADO_ALOCACAO.alocacao['4'].sup, 'SUP-B', 'o destino do arrasto precisa sobreviver, não o que a rede devolveu depois dele');
+});
+
+test('trocar de semana enquanto um carregamento anterior está em voo não deixa a resposta da semana ABANDONADA aterrissar no quadro da semana nova', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-08-01T00:00:00Z');
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
+    equipesPeriodo: { ano: 2026, mes: 8 },
+    osParaSup: { '16925-25': 'SUP-0001-24' },
+  });
+
+  const resolversGet = [];
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMockAlocacaoSheet(resolversGet));
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  await sandbox.selecionarSemanaAlocacao(0); // assenta em modo local, determinístico
+
+  sandbox.ESTADO_ALOCACAO.cliente = null;
+  sandbox.window.__ALOCACAO_URL__ = 'https://exemplo.com/exec-alocacao-teste';
+
+  // Dispara a busca da semana 0 (fica em voo) e troca IMEDIATAMENTE para a
+  // semana 1, antes dela resolver -- mesmo gesto de um clique duplo rápido
+  // num botão de semana, ou um clique seguido de arrependimento.
+  const promessaSemana0 = sandbox.selecionarSemanaAlocacao(0);
+  const promessaSemana1 = sandbox.selecionarSemanaAlocacao(1);
+  assert.strictEqual(resolversGet.length, 2, 'esperava uma busca de rede por troca de semana (GET)');
+
+  // A resposta da semana 0 (a ABANDONADA) chega DEPOIS que o usuário já
+  // está olhando a semana 1 -- traz uma equipe alocada num SUP que só fazia
+  // sentido pra semana 0.
+  resolversGet[0]({
+    ok: true,
+    json: () => Promise.resolve({
+      linhas: [{ equipeId: '4', sup: 'SUP-OLD-DA-SEMANA-0', coluna: 'ST', autor: 'x', atualizadoEm: 'y' }],
+    }),
+  });
+  await promessaSemana0;
+
+  assert.notStrictEqual(
+    sandbox.ESTADO_ALOCACAO.alocacao['4'] && sandbox.ESTADO_ALOCACAO.alocacao['4'].sup,
+    'SUP-OLD-DA-SEMANA-0',
+    'a resposta atrasada da semana ABANDONADA não pode pintar o quadro da semana atual -- é a mesma corrida, com consequência pior (dado de OUTRA semana na tela)'
+  );
+
+  // A resposta da semana 1 (a atual) chega por último e é a que deve valer.
+  resolversGet[1]({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  await promessaSemana1;
+});

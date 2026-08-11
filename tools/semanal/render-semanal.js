@@ -1201,9 +1201,19 @@ function montarAbaBalanco(registros, indices) {
 // abaixo. Sem isto, montarAbaAlocacao (chamada a cada recalcularSemanal, ou
 // seja, a cada troca de filtro/mês) buscaria a alocação de novo em toda
 // tecla, sobrescrevendo movimentos locais em trânsito.
+//
+// geracaoAlocacao: contador incrementado toda vez que a INTENÇÃO do usuário
+// muda -- um arrasto aplicado (aplicarMovimento), "Repor o realizado"
+// (semearDoRealizado), "Limpar alocação" (limparAlocacao), ou a própria troca
+// de semana (selecionarSemanaAlocacao / o gatilho automático em
+// montarAbaAlocacao). Existe para carregarAlocacaoDaSemana (logo abaixo)
+// poder descartar uma resposta que chegou TARDE DEMAIS -- ver o comentário
+// grande lá, é a correção do achado "arrasto sobrescrito pela promise que
+// resolve depois" (CLAUDE.md, "Precisa ser corrigido ANTES desse Apps
+// Script ir ao ar").
 var ESTADO_ALOCACAO = {
   semanaIdx: -1, alocacao: {}, equipes: [], foraDoQuadro: [], cliente: null,
-  semanaCarregada: null,
+  semanaCarregada: null, geracaoAlocacao: 0,
 };
 
 // MARCADOR DE SEMANA JÁ VISTA (Decisão 9 do spec, correção pós-verificação em
@@ -1307,6 +1317,11 @@ function aplicarMovimento(equipeId, sup, coluna) {
 
   if (!sup) delete ESTADO_ALOCACAO.alocacao[equipeId];
   else ESTADO_ALOCACAO.alocacao[equipeId] = { sup: sup, coluna: coluna };
+  // Invalida qualquer carregarAlocacaoDaSemana em voo -- ver o comentário
+  // grande em ESTADO_ALOCACAO. Este é o gesto que a correção protege: um
+  // arrasto não pode ser desfeito por uma resposta de rede que só chega
+  // depois dele.
+  ESTADO_ALOCACAO.geracaoAlocacao++;
 
   montarAbaAlocacao();
   // A gravação vem DEPOIS do redesenho, e não é esperada: a tela nunca trava
@@ -1333,6 +1348,10 @@ function semearDoRealizado() {
     }
   });
   ESTADO_ALOCACAO.alocacao = nova;
+  // Ver o comentário em aplicarMovimento -- mesmo raciocínio, "Repor o
+  // realizado" também é uma mudança de intenção que uma resposta tardia de
+  // carregarAlocacaoDaSemana não pode desfazer.
+  ESTADO_ALOCACAO.geracaoAlocacao++;
   montarAbaAlocacao();
   var chave = chaveSemanaAtual();
   Object.keys(nova).forEach(function (id) {
@@ -1352,6 +1371,8 @@ function semearDoRealizado() {
 function limparAlocacao() {
   var idsAlocados = Object.keys(ESTADO_ALOCACAO.alocacao);
   ESTADO_ALOCACAO.alocacao = {};
+  // Ver o comentário em aplicarMovimento -- mesmo raciocínio.
+  ESTADO_ALOCACAO.geracaoAlocacao++;
   montarAbaAlocacao();
   var chave = chaveSemanaAtual();
   marcarSemanaVista(chave);
@@ -1369,17 +1390,41 @@ function limparAlocacao() {
 // real -- antes disto NADA carregava a alocação salva no primeiro render,
 // só ao clicar num botão de semana).
 //
-// A ORDEM importa: desenha primeiro com o que veio salvo (ou vazio) -- é o
-// que popula ESTADO_ALOCACAO.equipes (o roster da semana), e semearDoRealizado
-// precisa dele pronto antes de rodar. Só semeia quando o mapa salvo veio
-// vazio E a semana nunca foi vista antes (semanaJaVista) -- uma semana
-// ESVAZIADA de propósito (Limpar alocação) também chega aqui com o mapa
-// vazio, mas o marcador já foi gravado da primeira vez que ela foi aberta,
-// e é isso que impede reencher o quadro atrás do usuário. marcarSemanaVista
-// no fim roda em QUALQUER ramo -- inclusive quando não havia nada para
-// semear -- para não insistir em buscar/semear de novo a cada redesenho.
+// CORREÇÃO (antes do Apps Script ir ao ar -- ver CLAUDE.md): esta busca é
+// ASSÍNCRONA (clienteAlocacao().carregar) e o redesenho é SÍNCRONO. Em modo
+// local carregar() resolve numa microtask -- rápido demais para um clique de
+// usuário colidir. Em modo 'sheet' vira uma ida-e-volta de rede de verdade
+// (centenas de ms), e QUALQUER coisa pode acontecer nesse intervalo: um
+// arrasto (aplicarMovimento), "Repor o realizado", "Limpar alocação", ou o
+// usuário trocando de semana de novo antes desta resposta chegar. Sem
+// proteção, ESTADO_ALOCACAO.alocacao = mapa || {} no .then() é uma
+// ATRIBUIÇÃO -- sobrescreveria qualquer uma dessas ações com uma resposta
+// que já está desatualizada (o arrasto "pula de volta" pro lugar antigo,
+// sem erro nenhum na tela), ou pior, aplicaria a resposta de UMA semana no
+// quadro de OUTRA (trocar de semana rápido demais). geracaoAlocacao
+// (ESTADO_ALOCACAO) é o token que resolve os dois: capturado no INÍCIO desta
+// função, comparado no fim -- se algo mudou a intenção do usuário nesse
+// meio-tempo (o contador só anda em aplicarMovimento/semearDoRealizado/
+// limparAlocacao/troca de semana), a resposta chegou tarde demais e é
+// descartada, silenciosa e inteiramente (nem redesenha, nem semeia, nem
+// marca a semana como vista -- quem bateu por cima já deixou a tela e o
+// armazenamento num estado consistente por conta própria).
+//
+// A ORDEM (quando a resposta AINDA é válida) importa: desenha primeiro com
+// o que veio salvo (ou vazio) -- é o que popula ESTADO_ALOCACAO.equipes (o
+// roster da semana), e semearDoRealizado precisa dele pronto antes de
+// rodar. Só semeia quando o mapa salvo veio vazio E a semana nunca foi
+// vista antes (semanaJaVista) -- uma semana ESVAZIADA de propósito (Limpar
+// alocação) também chega aqui com o mapa vazio, mas o marcador já foi
+// gravado da primeira vez que ela foi aberta, e é isso que impede reencher
+// o quadro atrás do usuário. marcarSemanaVista no fim roda em QUALQUER ramo
+// válido -- inclusive quando não havia nada para semear -- para não
+// insistir em buscar/semear de novo a cada redesenho.
 function carregarAlocacaoDaSemana(chave) {
+  var geracaoNoInicio = ESTADO_ALOCACAO.geracaoAlocacao;
   return clienteAlocacao().carregar(chave).then(function (mapa) {
+    if (ESTADO_ALOCACAO.geracaoAlocacao !== geracaoNoInicio) return;
+
     var vazio = !mapa || !Object.keys(mapa).length;
     ESTADO_ALOCACAO.alocacao = mapa || {};
     montarAbaAlocacao();
@@ -1400,11 +1445,16 @@ function carregarAlocacaoDaSemana(chave) {
 // ANTES de disparar a busca, não depois: o redesenho dentro de
 // carregarAlocacaoDaSemana chama montarAbaAlocacao(), que checaria de novo
 // se a semana já foi carregada -- sem marcar aqui primeiro, isso disparia
-// uma segunda busca redundante para a mesma semana.
+// uma segunda busca redundante para a mesma semana. geracaoAlocacao também
+// avança aqui: trocar de semana invalida qualquer carregarAlocacaoDaSemana
+// da semana ANTERIOR que ainda esteja em voo -- sem isto, a resposta atrasada
+// de uma semana já abandonada aterrissaria no quadro da semana nova (ver o
+// comentário grande em carregarAlocacaoDaSemana).
 function selecionarSemanaAlocacao(idx) {
   ESTADO_ALOCACAO.semanaIdx = idx;
   var chave = chaveSemanaAtual();
   ESTADO_ALOCACAO.semanaCarregada = chave;
+  ESTADO_ALOCACAO.geracaoAlocacao++;
   return carregarAlocacaoDaSemana(chave);
 }
 
@@ -1487,9 +1537,13 @@ function montarAbaAlocacao() {
   // isso repetiria a busca. Pulado quando semRoster: sem roster não há
   // equipe nenhuma para semear, e sem este corte o guard repetiria a busca
   // em todo redesenho enquanto a Sheet espelho da EQ não responder.
+  // geracaoAlocacao avança junto com semanaCarregada -- mesmo raciocínio de
+  // selecionarSemanaAlocacao: uma resposta em voo da semana ANTERIOR não
+  // pode aterrissar no quadro desta semana nova.
   var chaveDaSemana = semana ? AlocacaoSheet.chaveSemana(window.__ANO__, semana.inicio) : null;
   if (chaveDaSemana && chaveDaSemana !== ESTADO_ALOCACAO.semanaCarregada && !semRoster) {
     ESTADO_ALOCACAO.semanaCarregada = chaveDaSemana;
+    ESTADO_ALOCACAO.geracaoAlocacao++;
     carregarAlocacaoDaSemana(chaveDaSemana);
   }
 }
