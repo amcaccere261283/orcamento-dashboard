@@ -877,6 +877,47 @@ Apps Script, qualquer pessoa com a senha do dashboard passa a poder ESCREVER na 
 — é um trade-off aceito, não um descuido: a senha já protege o dashboard inteiro, e o
 Apps Script não teria como autenticar o usuário sem uma segunda credencial.
 
+**Cinco mudanças de 2026-08-11** (spec:
+`docs/superpowers/specs/2026-08-11-alocacao-devolucao-e-pool-por-tipologia-design.md`,
+plano: `docs/superpowers/plans/2026-08-11-alocacao-devolucao-pool-filtro-busca-status.md`):
+
+- **Devolução**: soltar a equipe sobre o pool a tira do contrato.
+  `resolverAlvoAlocacao` (ex-`resolverCelulaAlocacao`) devolve célula/pool/nada;
+  soltar no VAZIO continua não fazendo nada, de propósito. Vale para os dois
+  gestos (arrasto e clique-clique). Nenhuma mudança em persistência —
+  `aplicarMovimento` com `sup` vazio já apagava.
+- **O destaque do pool morre em `limparDestaquesAlocacao`** (ex-`limparDestaqueCelulas`),
+  o único ponto de saída do arrasto. Limpá-lo em outro lugar o deixaria aceso
+  para sempre em um dos quatro caminhos.
+- **Pool agrupado por tipologia**, com a equipe polivalente repetida em CADA
+  grupo que serve. Medido: não existe equipe com serviço `BL` sozinho — as 6 de
+  `ST | PI | BL` são as únicas candidatas a BL, e isolá-las num grupo
+  "Polivalentes" deixaria BL sempre vazio.
+- **O filtro de SUP passa a podar a grade.** `montarGradeAlocacao` unia as
+  células de `porCelula` (filtrado) com as de `alocacao` (não filtrado), e como
+  a semana nasce semeada do realizado isso devolvia todos os SUPs semeados
+  junto. **"Excluído pelo filtro" é mais estreito que "não passou"**: um SUP que
+  não existe em `registros` (célula hachurada, SUP sem registro na MATRIZ) nunca
+  foi filtrável e não pode ser podado. E o **pool decide pela alocação CRUA**,
+  nunca pelo resumo da grade — pelo resumo, a equipe de um SUP podado voltaria
+  ao pool como livre e daria para alocá-la duas vezes.
+- **O status da célula estava INVERTIDO.** `classificarOcupacao` tem faixas para
+  `carga ÷ capacidade`, e a célula a alimentava com `capacidade ÷ tendência`, a
+  razão recíproca: tendência 100 com capacidade 50 saía "Com folga · saldo −50".
+  Use `classificarCelula(tendencia, capacidadeAlocada)`. `ROTULO_SITUACAO` é
+  compartilhado com o resumo por equipe, onde `livre` significa "no pool" —
+  **nunca renomear `livre`**; "Sem equipe" entrou como chave nova.
+- **Busca de equipe** (campo próprio da aba) casa id, líder **e nome completo**:
+  a coluna 1 da aba EQ ("Equipe") traz o nome inteiro e a 4 ("Líderes") o
+  apelido, e o cartão só mostra o apelido — casar o visível deixaria "josé" sem
+  achar "José I. Amaral".
+
+**Ao mexer nos testes de arrasto:** `test/helpers/dom-falso-semanal.js` devolvia
+`[]` em `querySelectorAll` para tudo que não fosse a tabela de Alertas, e o
+`closest()` dos elementos ignora o seletor. Um teste de destaque escrito contra
+ele passaria VAZIO. O helper ganhou `registrarCelulasAlocacao()` e
+`poolAlocacao()` em 2026-08-11 justamente por isso.
+
 **Precisa ser corrigido ANTES desse Apps Script ir ao ar:** um arraste que aterrissa
 durante o carregamento assíncrono inicial da alocação pode ser sobrescrito quando a
 promise resolve. `carregarAlocacaoDaSemana` (`render-semanal.js`) faz
