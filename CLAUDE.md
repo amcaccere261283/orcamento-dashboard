@@ -381,6 +381,17 @@ explicitamente pelo dono do projeto; não recolocar numa revisão de design sem 
 
 ### Aba Demandas (base do Avanço Sond)
 
+**Fonte trocada — leia isto antes do resto da seção.** O `.xlsx` local descrito abaixo
+foi APOSENTADO em 2026-08-10 (ver "Regras de dados" acima): a fonte é o Link 1 online,
+`dist/avancos-online.csv`. As quatro observações desta seção continuam valendo como
+história da fonte antiga, mas **duas delas não descrevem mais o dado de hoje** — o Link 1
+não tem coluna `Cancelamento` nem `Conclusão`, então `cancelamento`/`conclusao`/
+`atualizado` saem sempre `null` do parser, e as séries de canceladas e de relatório
+concluído são zero por construção, não por acaso.
+
+`tools/semanal/config-demandas.js` só é usado pelo caminho velho e não alimenta mais o
+build.
+
 Terceira aba da página semanal, alimentada por
 `Dados e extratos\Extratos Sond\Avanço Sond.xlsx`, aba `Avanços` (51.819 linhas úteis em
 2026-08-03, uma por furo, já descontados 10.427 deslocamentos) — ver
@@ -685,6 +696,22 @@ dizia:**
   2.950, o regex acusava 7.735, concordando em 2.793 — o regex derrubava **4.942
   furos legítimos** e deixava passar 157. O Realizado subiu de 40.117 para 44.902
   furos (**+11,9%**).
+
+**O contador `deslocamentos` de `parseAvancos` expõe a UNIÃO dos três critérios de
+`foraDoRealizado`**, não a coluna `Deslocamento` sozinha. Medido em 2026-08-11:
+Deslocamento="Sim" 2.950 + Total (m)=0,01 1.498 + CANCELADO 29, com as interseções dando
+4.339 na união. O nome sugere só o primeiro, e comparar os 4.339 dele contra os 2.950
+documentados faz parecer que o parser ou a fonte divergiu quando nada divergiu.
+
+**`test/semanal-demandas-planilha-real.test.js` é a única prova de MAPEAMENTO contra a
+fonte de verdade** (todo o resto da suíte roda sobre fixture sintética, que não pegaria
+nome de coluna errado). Repontado em 2026-08-11 para `dist/avancos-online.csv` — ficou
+vermelho desde a migração de 2026-08-10 porque ainda lia o `.xlsx` do `G:`. **Ele trava
+invariantes de estrutura, não contagens**, e isso é deliberado: `atualizar-arquivos.js`
+reescreve o CSV e dá push sozinho, então qualquer assert de igualdade exata ficaria
+vermelho a cada atualização de rotina — foi o que já aconteceu duas vezes (`d3dafff`,
+`2d11cf6`). Se precisar de um número novo ali, ponha como comentário datado, não como
+assert. E, como os CSVs são rastreados no git, este arquivo **não depende mais do `G:`**.
 
 **Cuidado ao mexer no cache:** `dist/cache/*.csv` guarda o grid **já mapeado**.
 Mudou o conjunto de colunas, o cache velho tem que ser invalidado — senão os meses
