@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  diasPremissaDaSemana, capacidadeDaEquipe, ratearCarga, classificarOcupacao, montarGradeAlocacao,
-  resumirAlocacao, leituraDoSup,
+  diasPremissaDaSemana, capacidadeDaEquipe, ratearCarga, classificarOcupacao, classificarCelula,
+  montarGradeAlocacao, resumirAlocacao, leituraDoSup,
 } = require('../tools/semanal/compute-alocacao.js');
 const { semanasDoMes, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
 const { calcularSeriesSemanaisDimensao } = require('../tools/semanal/render-aba-semanal.js');
@@ -393,4 +393,52 @@ test('INVARIANTE: com a alocação vazia, a soma da tendência da grade bate com
 
   assert.ok(Math.abs(somaGrade - daTabela) < 1e-6,
     `grade ${somaGrade} != tabela ${daTabela}`);
+});
+
+// --- Situação da CÉLULA (2026-08-11) -----------------------------------------
+//
+// O dono do projeto relatou que "folga" e "equilibrada" pareciam invertidas na
+// célula. A inversão era real, e o par era outro: folga <-> sobrecarregada.
+// Ver a Decisão 9 do spec de 2026-08-11.
+
+test('classificarCelula: capacidade abaixo da tendência é SOBRECARREGADA, não folga', () => {
+  // O bug relatado: a célula mostrava "Com folga · saldo -50".
+  assert.strictEqual(classificarCelula(100, 50), 'sobrecarregada');
+});
+
+test('classificarCelula: capacidade acima da tendência é FOLGA, não sobrecarga', () => {
+  assert.strictEqual(classificarCelula(100, 150), 'folga');
+});
+
+test('classificarCelula: capacidade igual à tendência é equilibrada', () => {
+  assert.strictEqual(classificarCelula(100, 100), 'equilibrada');
+  // As bordas da faixa 0,85..1,05, vistas como tendência/capacidade.
+  assert.strictEqual(classificarCelula(100, 100 / 0.85), 'equilibrada');
+  assert.strictEqual(classificarCelula(100, 100 / 1.05), 'equilibrada');
+});
+
+test('classificarCelula: tendência sem nenhuma equipe é "sem-equipe"', () => {
+  assert.strictEqual(classificarCelula(100, 0), 'sem-equipe');
+  assert.strictEqual(classificarCelula(100, null), 'sem-equipe');
+});
+
+test('classificarCelula: sem tendência não há o que cobrir -- neutro', () => {
+  assert.strictEqual(classificarCelula(0, 50), 'livre');
+  assert.strictEqual(classificarCelula(null, 0), 'livre');
+});
+
+// Trava a CLASSE do bug, e não dois exemplos dele.
+test('PROPRIEDADE: o status da célula nunca contradiz o sinal do saldo', () => {
+  const tendencia = 100;
+  for (let cap = 1; cap <= 300; cap++) {
+    const s = classificarCelula(tendencia, cap);
+    const saldo = cap - tendencia;
+    if (saldo < 0) {
+      assert.notStrictEqual(s, 'folga', `cap=${cap}: saldo ${saldo} não pode ser "folga"`);
+      assert.notStrictEqual(s, 'livre', `cap=${cap}: saldo ${saldo} não pode ser "livre"`);
+    }
+    if (saldo > 0) {
+      assert.notStrictEqual(s, 'sobrecarregada', `cap=${cap}: saldo +${saldo} não pode ser "sobrecarregada"`);
+    }
+  }
 });

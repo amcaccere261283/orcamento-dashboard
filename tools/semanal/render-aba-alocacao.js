@@ -1,5 +1,5 @@
 'use strict';
-const { montarGradeAlocacao, resumirAlocacao, classificarOcupacao } = require('./compute-alocacao.js');
+const { montarGradeAlocacao, resumirAlocacao, classificarCelula } = require('./compute-alocacao.js');
 const { COLUNAS_ALOCACAO } = require('./equipes-alocaveis.js');
 const { formatarIntervaloSemana } = require('./render-aba-semanal.js');
 
@@ -57,9 +57,15 @@ var CLASSE_LEITURA = {
   'sem-demanda': 'leitura-neutra',
 };
 
+// Compartilhado entre a CÉLULA e o resumo por EQUIPE, e os dois significados de
+// `livre` são diferentes: na equipe é "está no pool, sem alocação" (e continua
+// assim); na célula, "não há demanda a cobrir". Por isso 'sem-equipe' entrou
+// como chave NOVA em 2026-08-11, em vez de renomear `livre` -- renomear
+// quebraria o resumo por equipe em silêncio.
 var ROTULO_SITUACAO = {
   fora: 'Fora da semana',
   livre: 'Livre',
+  'sem-equipe': 'Sem equipe',
   folga: 'Com folga',
   equilibrada: 'Equilibrada',
   sobrecarregada: 'Sobrecarregada',
@@ -68,6 +74,7 @@ var ROTULO_SITUACAO = {
 var CLASSE_SITUACAO = {
   fora: 'situacao-fora',
   livre: 'situacao-livre',
+  'sem-equipe': 'situacao-sem-equipe',
   folga: 'situacao-folga',
   equilibrada: 'situacao-equilibrada',
   sobrecarregada: 'situacao-sobrecarregada',
@@ -266,15 +273,20 @@ function renderCelula(sup, coluna, celula, equipesPorId, resumoPorEquipe, aviso,
     return renderCartaoEquipe(equipe, resumoPorEquipe[id] || null, somenteLeitura);
   }).join('');
 
-  // Cobertura é a mesma noção de ocupação (carga ÷ capacidade), só que no
-  // nível da célula (capacidade alocada ÷ tendência) -- por isso reaproveita
-  // classificarOcupacao (compute-alocacao.js) em vez de reimplementar as
-  // mesmas faixas de 85%/105% aqui.
+  // A BARRA continua sendo cobertura (capacidade ÷ tendência): é o que ela
+  // desenha, e cresce para a direita quando sobra capacidade. Já o STATUS sai
+  // de classificarCelula, que raciocina na orientação inversa. São coisas
+  // diferentes de propósito -- ver o comentário grande em compute-alocacao.js.
+  //
+  // Até 2026-08-11 as duas eram a MESMA conta, e o status saía invertido:
+  // classificarOcupacao recebia a cobertura, quando suas faixas foram escritas
+  // para ocupação. Tendência 100 com capacidade 50 exibia "Com folga · saldo
+  // -50" -- o rótulo contradizendo o número impresso ao lado dele.
   var cobertura = c.tendencia ? c.capacidadeAlocada / c.tendencia : null;
-  var situacaoCelula = classificarOcupacao(cobertura);
+  var situacaoCelula = classificarCelula(c.tendencia, c.capacidadeAlocada);
 
   return '<td class="' + classes.join(' ') + '" data-sup="' + escapeHtml(sup) + '" data-coluna="' + escapeHtml(coluna) + '">'
-    + '<div class="celula-tendencia">' + formatarNumero(c.tendencia) + '</div>'
+    + '<div class="celula-tendencia"><span class="celula-rotulo">tendência </span>' + formatarNumero(c.tendencia) + '</div>'
     + '<div class="celula-status ' + (CLASSE_SITUACAO[situacaoCelula] || '') + '">'
     + (ROTULO_SITUACAO[situacaoCelula] || situacaoCelula) + ' · saldo ' + formatarNumero(c.saldo) + '</div>'
     + renderBarraCobertura(cobertura)

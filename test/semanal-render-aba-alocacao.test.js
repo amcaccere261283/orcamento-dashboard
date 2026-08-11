@@ -110,3 +110,31 @@ test('leitura "sem-demanda" (equipe parada onde não há tendência nem carteira
   // fallback `ROTULO_LEITURA[s.leitura] || s.leitura` e imprime o id cru.
   assert.doesNotMatch(html, /sem-demanda/);
 });
+
+// --- Status da célula (2026-08-11, Decisão 9 do spec) ------------------------
+
+test('a célula mostra "Sobrecarregada" quando a capacidade não cobre a tendência', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    alocacao: { 4: { sup: 'SUP-A', coluna: 'SP' } },
+  }));
+  // Uma equipe de 5/7 dias com premissa 2 não cobre a fatia semanal de 120.
+  assert.match(html, /Sobrecarregada/);
+  assert.doesNotMatch(html, /Com folga/);
+});
+
+test('a célula com tendência e sem equipe diz "Sem equipe"', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({ alocacao: {} }));
+  assert.match(html, /Sem equipe/);
+  assert.match(html, /situacao-sem-equipe/);
+});
+
+test('a Tendência da célula aparece rotulada, não como número solto', () => {
+  const html = renderAbaAlocacao(registros(), [0], opcoes({ alocacao: {} }));
+  assert.match(html, /celula-rotulo/, 'era o único número da célula sem rótulo');
+});
+
+test('"Livre" continua sendo o rótulo da EQUIPE no pool -- a chave é compartilhada', () => {
+  const { ROTULO_SITUACAO } = require('../tools/semanal/render-aba-alocacao.js');
+  assert.strictEqual(ROTULO_SITUACAO.livre, 'Livre');
+  assert.strictEqual(ROTULO_SITUACAO['sem-equipe'], 'Sem equipe');
+});

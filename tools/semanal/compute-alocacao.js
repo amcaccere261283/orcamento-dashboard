@@ -61,6 +61,34 @@ function classificarOcupacao(ocupacao) {
   return 'sobrecarregada';
 }
 
+// A situação de uma CÉLULA, que não é a mesma conta da situação de uma EQUIPE.
+//
+// Bug corrigido em 2026-08-11: renderCelula alimentava classificarOcupacao com
+// `cobertura` = capacidadeAlocada / tendencia -- a razão RECÍPROCA da ocupação
+// (carga / capacidade) para a qual as faixas de FAIXA_OCUPACAO foram escritas.
+// O efeito era o rótulo contradizer o saldo impresso ao lado dele: tendência
+// 100 com capacidade 50 saía "Com folga · saldo -50", e tendência 100 com
+// capacidade 150 saía "Sobrecarregada · saldo +50". O comentário que autorizava
+// o reaproveitamento afirmava que as duas eram "a mesma noção", e as duas
+// fórmulas escritas nessa mesma frase são recíprocas.
+//
+// `equilibrada` (0,85..1,05) é quase simétrica em torno de 1 e por isso parecia
+// certa nos dois sentidos -- foi o que deixou o bug sobreviver.
+//
+// A correção não inventa faixa nova: usa as MESMAS, com o argumento na
+// orientação certa -- quanto da capacidade a demanda ocupa.
+function classificarCelula(tendencia, capacidadeAlocada) {
+  var t = tendencia || 0;
+  var c = capacidadeAlocada || 0;
+  // Sem demanda não há o que cobrir. A célula existe por carteira ou por equipe
+  // alocada; chamá-la de folga ou de sobrecarga seria inventar.
+  if (t <= 0) return 'livre';
+  // Demanda sem nenhuma equipe é divisão por zero, e é o caso MAIS descoberto
+  // que existe -- não o mais tranquilo. Estado próprio, em tom de atenção.
+  if (c <= 0) return 'sem-equipe';
+  return classificarOcupacao(t / c);
+}
+
 // A data-âncora da semana. Semana já começada: o INÍCIO dela -- é o que
 // congela a Tendência (calcularSeriesSemanaisDimensao recomputada com
 // hojeEpoch = semana.inicio faz aquela semana virar a vigente, devolvendo a
@@ -416,6 +444,7 @@ function capacidadeDeReferencia(grade, equipe, mesIdx, diasDoMes) {
 
 module.exports = {
   FAIXA_OCUPACAO, diasPremissaDaSemana, capacidadeDaEquipe, ratearCarga, classificarOcupacao,
+  classificarCelula,
   montarGradeAlocacao, ancoraDaSemana,
   resumirAlocacao, leituraDoSup, LEITURAS_SUP,
 };

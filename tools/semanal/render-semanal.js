@@ -575,8 +575,16 @@ const CSS_SEMANAL = `
   .celula-hachurada { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 6px, transparent 6px 12px); }
   .celula-falta { box-shadow: inset 3px 0 0 #e0684f; }
   .celula-tendencia { font-size: 15px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  /* A Tendência era o único número da célula sem dizer o que é (saldo e
+     carteira já diziam). O rótulo vem em peso e cor normais para o número
+     continuar sendo o que a vista pega primeiro. */
+  .celula-rotulo { font-size: 10px; font-weight: 400; color: var(--muted); }
   .celula-status { font-size: 11px; margin: 2px 0 6px; }
   .situacao-livre, .situacao-fora { color: var(--muted); }
+  /* Demanda sem ninguém designado: é o caso mais DESCOBERTO que existe, e até
+     2026-08-11 ele saía como "Livre", em cinza -- lendo como "tudo certo aqui".
+     Âmbar, o mesmo tom de atenção da barra de cobertura. */
+  .situacao-sem-equipe { color: #f6b53f; }
   .situacao-folga { color: #4f8ff0; }
   .situacao-equilibrada { color: #7fd858; }
   .situacao-sobrecarregada { color: #e0684f; }
