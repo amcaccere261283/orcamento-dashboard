@@ -31,10 +31,10 @@ const path = require('path');
 const {
   renderControles, renderFaixaAlocacao, renderPool, renderMatriz,
   renderResumoSup, renderResumoEquipe, renderGuardaSemRoster, renderAvisoSomenteLeitura,
+  marcarConflitos,
 } = require('./render-aba-alocacao.js');
 const { resumirAlocacao } = require('./compute-alocacao.js');
 const { COLUNAS_ALOCACAO } = require('./equipes-alocaveis.js');
-const { conflitosDeVeiculo } = require('./grupos-veiculo.js');
 const { cssBase } = require('../comum/render-shell.js');
 const { CSS_SEMANAL } = require('./render-semanal.js');
 
@@ -236,13 +236,11 @@ function gerar() {
   const porEquipeMap = {};
   resumo.porEquipe.forEach((e) => { porEquipeMap[e.id] = e; });
 
-  // Mesma marcação que renderAbaAlocacao faz sozinha a partir da alocação
-  // CRUA (Task 6) -- aqui o snapshot não passa por ela, então replica o
-  // mesmo passo à mão para o selo/conflito aparecerem no markup gerado.
-  const conflitosSnapshot = conflitosDeVeiculo(EQUIPES, ALOCACAO);
-  const EQUIPES_COM_CONFLITO = EQUIPES.map((e) => (
-    conflitosSnapshot[e.id] ? Object.assign({}, e, { conflitoVeiculo: conflitosSnapshot[e.id] }) : e
-  ));
+  // Mesma marcação que renderAbaAlocacao faz -- aqui o snapshot não passa por
+  // ela (monta a grade sintética direto), então chama a MESMA função
+  // exportada (marcarConflitos, achado Minor 2 da revisão final) em vez de
+  // duplicar o passo à mão, que já tinha divergido uma vez em silêncio.
+  const EQUIPES_COM_CONFLITO = marcarConflitos(EQUIPES, ALOCACAO);
   const EQUIPES_POR_ID_COM_CONFLITO = {};
   EQUIPES_COM_CONFLITO.forEach((e) => { EQUIPES_POR_ID_COM_CONFLITO[e.id] = e; });
 

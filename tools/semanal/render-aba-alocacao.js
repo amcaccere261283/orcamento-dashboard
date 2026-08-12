@@ -573,6 +573,32 @@ function renderResumoEquipe(porEquipe) {
 
 // --- A aba inteira -------------------------------------------------------------
 
+// O conflito herdado sai da alocação CRUA, nunca do resumo da grade: com o
+// filtro de SUP podando a linha, resumirAlocacao devolve sup: null para uma
+// equipe que ESTÁ alocada, e o conflito sumiria da tela sem ter sumido do
+// plano. Mesmo raciocínio da Decisão 7 de 2026-08-11 (o pool decide pela
+// alocação crua).
+//
+// A marca é anexada a uma CÓPIA rasa da equipe -- os objetos vêm de
+// ESTADO_ALOCACAO.equipes e não podem ser mutados por um render.
+//
+// Achado Minor 2 (revisão final de 2026-08-12): snapshot-alocacao.js repetia
+// este mesmo passo à mão, porque não passa por renderAbaAlocacao (monta a
+// grade sintética direto). Extraído e exportado para os dois lados chamarem a
+// MESMA implementação -- o snapshot existe para ser fiel ao render de
+// verdade, e uma cópia à mão diverge em silêncio.
+function marcarConflitos(equipes, alocacao) {
+  var lista = equipes || [];
+  var conflitos = conflitosDeVeiculo(lista, alocacao || {});
+  return lista.map(function (e) {
+    if (!conflitos[String(e.id)]) return e;
+    var copia = {};
+    Object.keys(e).forEach(function (k) { copia[k] = e[k]; });
+    copia.conflitoVeiculo = conflitos[String(e.id)];
+    return copia;
+  });
+}
+
 // registros/indices: os de sempre. opcoes:
 //   { mesIdx, ano, semanas, semana, demandas, equipes, foraDoQuadro, alocacao,
 //     hojeEpoch, modoPersistencia, pendentes, semRoster, somenteLeitura }
@@ -590,22 +616,7 @@ function renderAbaAlocacao(registros, indices, opcoes) {
 
   var somenteLeitura = o.somenteLeitura || null;
   var equipesBrutas = o.equipes || [];
-  // O conflito herdado sai da alocação CRUA, nunca do resumo da grade: com o
-  // filtro de SUP podando a linha, resumirAlocacao devolve sup: null para uma
-  // equipe que ESTÁ alocada, e o conflito sumiria da tela sem ter sumido do
-  // plano. Mesmo raciocínio da Decisão 7 de 2026-08-11 (o pool decide pela
-  // alocação crua).
-  //
-  // A marca é anexada a uma CÓPIA rasa da equipe -- os objetos vêm de
-  // ESTADO_ALOCACAO.equipes e não podem ser mutados por um render.
-  var conflitos = conflitosDeVeiculo(equipesBrutas, o.alocacao || {});
-  var equipes = equipesBrutas.map(function (e) {
-    if (!conflitos[String(e.id)]) return e;
-    var copia = {};
-    Object.keys(e).forEach(function (k) { copia[k] = e[k]; });
-    copia.conflitoVeiculo = conflitos[String(e.id)];
-    return copia;
-  });
+  var equipes = marcarConflitos(equipesBrutas, o.alocacao || {});
   var equipesPorId = {};
   equipes.forEach(function (e) { equipesPorId[e.id] = e; });
 
@@ -650,4 +661,7 @@ module.exports = {
   renderResumoSup, renderResumoEquipe, renderGuardaSemRoster, renderAvisoSomenteLeitura,
   renderControles,
   escapeHtml, corDaColuna,
+  // Achado Minor 2: exportada para snapshot-alocacao.js parar de duplicar essa
+  // marcação à mão -- ver o comentário grande em marcarConflitos.
+  marcarConflitos,
 };
