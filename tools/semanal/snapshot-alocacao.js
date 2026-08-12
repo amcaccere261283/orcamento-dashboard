@@ -34,6 +34,7 @@ const {
 } = require('./render-aba-alocacao.js');
 const { resumirAlocacao } = require('./compute-alocacao.js');
 const { COLUNAS_ALOCACAO } = require('./equipes-alocaveis.js');
+const { conflitosDeVeiculo } = require('./grupos-veiculo.js');
 const { cssBase } = require('../comum/render-shell.js');
 const { CSS_SEMANAL } = require('./render-semanal.js');
 
@@ -65,8 +66,15 @@ function equipe(id, lider, nome, colunas, extras) {
 }
 
 const EQUIPES = [
-  equipe('EQ-01', 'Andrade', 'Carlos Andrade Ribeiro', ['SP']),
-  equipe('EQ-02', 'Bittencourt', 'Marina Bittencourt', ['SP']),
+  // EQ-01/EQ-02 dividem o mesmo veículo (selo 🚐 2) e, como a grade abaixo as
+  // aloca em SUPs diferentes (SUP-1001 e SUP-1003), também nascem em conflito
+  // -- é exatamente o estado herdado da semeadura que a trava não corrige.
+  equipe('EQ-01', 'Andrade', 'Carlos Andrade Ribeiro', ['SP'], {
+    veiculoGrupo: 'PLACA:ABC1234', veiculoRotulo: 'ABC1234', companheiros: ['EQ-02'],
+  }),
+  equipe('EQ-02', 'Bittencourt', 'Marina Bittencourt', ['SP'], {
+    veiculoGrupo: 'PLACA:ABC1234', veiculoRotulo: 'ABC1234', companheiros: ['EQ-01'],
+  }),
   equipe('EQ-03', 'Colares', 'Rui Colares', ['SM / SM.F / SR']),
   // Polivalente: aparece em ST, PI e BL ao mesmo tempo (selo ⇄ no cartão).
   equipe('EQ-04', 'Dourado', 'Ana Dourado Lima', ['ST', 'PI', 'BL']),
@@ -192,6 +200,8 @@ const ESTADOS_COBERTOS = {
   'cartao-polivalente': 'cartão de equipe polivalente',
   'cartao-indisponivel': 'cartão de equipe sem dia disponível',
   'cartao-selo-poli': 'selo ⇄ da repetição no pool',
+  'cartao-selo-veiculo': 'selo de equipes que dividem veículo',
+  'cartao-conflito-veiculo': 'conflito herdado: mesmo veículo em SUPs diferentes',
   'pool-grupo': 'pool agrupado por tipologia',
   'fora-do-quadro': 'lista recolhida "fora do quadro"',
   'popup-equipe': 'popup de detalhe da equipe',
@@ -226,6 +236,16 @@ function gerar() {
   const porEquipeMap = {};
   resumo.porEquipe.forEach((e) => { porEquipeMap[e.id] = e; });
 
+  // Mesma marcação que renderAbaAlocacao faz sozinha a partir da alocação
+  // CRUA (Task 6) -- aqui o snapshot não passa por ela, então replica o
+  // mesmo passo à mão para o selo/conflito aparecerem no markup gerado.
+  const conflitosSnapshot = conflitosDeVeiculo(EQUIPES, ALOCACAO);
+  const EQUIPES_COM_CONFLITO = EQUIPES.map((e) => (
+    conflitosSnapshot[e.id] ? Object.assign({}, e, { conflitoVeiculo: conflitosSnapshot[e.id] }) : e
+  ));
+  const EQUIPES_POR_ID_COM_CONFLITO = {};
+  EQUIPES_COM_CONFLITO.forEach((e) => { EQUIPES_POR_ID_COM_CONFLITO[e.id] = e; });
+
   // inicio/fim são epoch em DIAS (formatarIntervaloSemana multiplica por
   // 86400000), não strings ISO nem epoch em segundos -- com string sai
   // "S1 (NaN/NaN a NaN/NaN)" nos botões, silenciosamente.
@@ -244,8 +264,8 @@ function gerar() {
     'Dados sintéticos, calibrados para todos os estados visuais aparecerem juntos.',
     renderControles(opcoesControles, null)
     + renderFaixaAlocacao(resumo.totais)
-    + renderPool(EQUIPES, FORA_DO_QUADRO, porEquipeMap, null, ALOCACAO, '', null)
-    + renderMatriz(GRADE, resumo, EQUIPES_POR_ID, null)
+    + renderPool(EQUIPES_COM_CONFLITO, FORA_DO_QUADRO, porEquipeMap, null, ALOCACAO, '', null)
+    + renderMatriz(GRADE, resumo, EQUIPES_POR_ID_COM_CONFLITO, null)
     + renderResumoSup(resumo.porSup)
     + renderResumoEquipe(resumo.porEquipe));
 

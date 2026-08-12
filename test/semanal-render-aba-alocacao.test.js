@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { renderAbaAlocacao, corDaColuna } = require('../tools/semanal/render-aba-alocacao.js');
+const { renderAbaAlocacao, renderCartaoEquipe, corDaColuna } = require('../tools/semanal/render-aba-alocacao.js');
 const { tipologiaColor } = require('../tools/semanal/render-aba-consolidado.js');
 const { COLUNAS_ALOCACAO } = require('../tools/semanal/equipes-alocaveis.js');
 const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
@@ -532,4 +532,66 @@ test('o popup diz quantos dias a equipe está disponível na semana', () => {
   // dizia isso em lugar nenhum.
   const html = renderAbaAlocacao(registros(), [0], opcoes());
   assert.match(html, /Disponível:\s*5 de 7 dias/);
+});
+
+// --- trava de veículo -------------------------------------------------------
+
+test('o cartão traz o selo do veículo com o tamanho do grupo', () => {
+  const equipe = {
+    id: '660', lider: 'Fulano', nome: 'Fulano de Tal', colunas: ['ST'],
+    polivalente: false, disponivel: true, diasDisponiveis: 5, diasDaSemana: 7,
+    popup: { veiculo: 'ELE-8E91 (9 p)' },
+    veiculoGrupo: 'PLACA:ELE8E91', veiculoRotulo: 'ELE8E91',
+    companheiros: ['644', '651', '656'],
+  };
+  const html = renderCartaoEquipe(equipe, null, null, false, 'ST');
+  assert.match(html, /cartao-selo-veiculo/);
+  assert.match(html, /ELE8E91/);
+  assert.match(html, /4/, 'o selo diz quantas equipes dividem o veículo');
+});
+
+test('equipe sem companheiras NÃO ganha selo de veículo', () => {
+  const equipe = {
+    id: '92', lider: 'Sozinha', nome: 'Sozinha', colunas: ['SP'],
+    polivalente: false, disponivel: true, diasDisponiveis: 5, diasDaSemana: 7,
+    popup: { veiculo: 'Próprio' }, veiculoGrupo: 'CARONA:92', veiculoRotulo: 'Carona ID 92',
+    companheiros: [],
+  };
+  assert.doesNotMatch(renderCartaoEquipe(equipe, null, null, false, 'SP'), /cartao-selo-veiculo/);
+});
+
+test('conflito herdado marca o cartão e nomeia quem está no outro SUP', () => {
+  const equipe = {
+    id: '479', lider: 'Beltrano', nome: 'Beltrano', colunas: ['SM / SM.F / SR'],
+    polivalente: false, disponivel: true, diasDisponiveis: 5, diasDaSemana: 7,
+    popup: { veiculo: 'UDU8J88 (D, 9p)' },
+    veiculoGrupo: 'PLACA:UDU8J88', veiculoRotulo: 'UDU8J88', companheiros: ['623'],
+    conflitoVeiculo: [{ id: '623', sup: 'SUP-DOIS' }],
+  };
+  const html = renderCartaoEquipe(equipe, null, null, false, 'SM / SM.F / SR');
+  assert.match(html, /cartao-conflito-veiculo/);
+  assert.match(html, /623/);
+  assert.match(html, /SUP-DOIS/);
+});
+
+test('renderAbaAlocacao calcula o conflito e ele chega ao cartão sem o chamador fazer nada', () => {
+  // Duas equipes do mesmo veículo alocadas em SUPs diferentes: é o estado
+  // herdado que a semeadura produz e que a trava NÃO corrige.
+  const equipes = [
+    {
+      id: '479', lider: 'A', nome: 'A', colunas: ['SP'], polivalente: false, disponivel: true,
+      diasDisponiveis: 5, diasDaSemana: 7, popup: {}, veiculoGrupo: 'PLACA:UDU8J88',
+      veiculoRotulo: 'UDU8J88', companheiros: ['623'],
+    },
+    {
+      id: '623', lider: 'B', nome: 'B', colunas: ['SP'], polivalente: false, disponivel: true,
+      diasDisponiveis: 5, diasDaSemana: 7, popup: {}, veiculoGrupo: 'PLACA:UDU8J88',
+      veiculoRotulo: 'UDU8J88', companheiros: ['479'],
+    },
+  ];
+  const html = renderAbaAlocacao(registros(), [0], opcoes({
+    equipes: equipes,
+    alocacao: { 479: { sup: 'SUP-A', coluna: 'SP' }, 623: { sup: 'SUP-B', coluna: 'SP' } },
+  }));
+  assert.match(html, /cartao-conflito-veiculo/);
 });

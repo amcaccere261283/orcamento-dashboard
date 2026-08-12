@@ -14,6 +14,10 @@ const { normalizarBusca } = require('./render-aba-alertas.js');
 // a copiou do matriz), e BUNDLE_ARQUIVOS já registra o consolidado antes desta
 // aba. Ver corDaColuna.
 const { tipologiaColor } = require('./render-aba-consolidado.js');
+// Trava de veículo (2026-08-12): grupos-veiculo.js não consome nada same-dir e
+// já vem ANTES desta aba em BUNDLE_ARQUIVOS (render-semanal.js) -- é a mesma
+// razão pela qual normalizarBusca/tipologiaColor acima também resolvem.
+const { conflitosDeVeiculo } = require('./grupos-veiculo.js');
 
 // Módulo dual (Node + navegador) -- mesmo padrão de render-aba-balanco.js:
 // 'var'/'function', require no formato exato que transformaModulo
@@ -262,8 +266,16 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura, mostrarNome, c
   var arrastavel = equipe.disponivel && !somenteLeitura;
   var popup = equipe.popup || {};
 
+  // Trava de veículo (2026-08-12): o selo só aparece quando há companheira de
+  // verdade -- grupo de uma equipe só é o caso comum (63 das 117), e um selo
+  // ali seria ruído puro.
+  var companheiros = equipe.companheiros || [];
+  var temGrupo = companheiros.length > 0;
+  var conflito = equipe.conflitoVeiculo || null;
+
   var cartao = '<div class="cartao-equipe' + (equipe.polivalente ? ' cartao-polivalente' : '')
-    + (equipe.disponivel ? '' : ' cartao-indisponivel') + '"'
+    + (equipe.disponivel ? '' : ' cartao-indisponivel')
+    + (conflito ? ' cartao-conflito-veiculo' : '') + '"'
     + ' data-equipe="' + escapeHtml(equipe.id) + '"'
     + ' data-colunas="' + escapeHtml(colunas.join(',')) + '"'
     + ' data-arrastavel="' + (arrastavel ? 'sim' : 'nao') + '"'
@@ -272,6 +284,13 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura, mostrarNome, c
     // O selo avisa que este MESMO cartão aparece em outros grupos do pool --
     // sem ele, a repetição da Decisão 4 leria como equipes diferentes.
     + (equipe.polivalente ? '<span class="cartao-selo-poli" title="aparece em mais de um grupo">⇄</span>' : '')
+    // Selo permanente (não confundir com .cartao-companheiro, o destaque
+    // efêmero do gesto): quantas equipes dividem este veículo.
+    + (temGrupo
+      ? '<span class="cartao-selo-veiculo" title="' + escapeHtml(String(companheiros.length + 1))
+        + ' equipes no veículo ' + escapeHtml(equipe.veiculoRotulo || '—') + '">🚐 '
+        + escapeHtml(String(companheiros.length + 1)) + '</span>'
+      : '')
     + '<span class="cartao-cor" style="background:' + corPrincipal + '"></span>'
     + '<span class="cartao-lider">' + escapeHtml(equipe.lider) + '</span>'
     // Só quando o casamento veio do nome completo -- ver casouSoPeloNome.
@@ -295,6 +314,16 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura, mostrarNome, c
       ? '<p class="popup-poli">Aparece nos grupos: ' + escapeHtml(colunas.join(', ')) + '</p>'
       : '')
     + '<p>Veículo: ' + escapeHtml(popup.veiculo || '—') + ' · Proprietário: ' + escapeHtml(popup.proprietario || '—') + '</p>'
+    + (temGrupo
+      ? '<p class="popup-veiculo-grupo">Mesmo veículo (' + escapeHtml(equipe.veiculoRotulo || '—')
+        + '): equipes ' + escapeHtml(companheiros.join(', '))
+        + ' — andam juntas: o quadro move o grupo inteiro de uma vez.</p>'
+      : '')
+    + (conflito
+      ? '<p class="popup-conflito-veiculo">Conflito: ' + conflito.map(function (c) {
+        return escapeHtml(c.id) + ' em ' + escapeHtml(c.sup);
+      }).join(', ') + '. Veio do realizado ou de uma alocação antiga — mova uma delas para resolver.</p>'
+      : '')
     + '<p>Equipamentos: ' + equipamentos + '</p>'
     + '<p>Tomador atual: ' + escapeHtml(popup.tomador || '—') + '</p>'
     // Os dias explicam por que duas equipes da MESMA tipologia têm capacidades
@@ -560,7 +589,23 @@ function renderAbaAlocacao(registros, indices, opcoes) {
   }
 
   var somenteLeitura = o.somenteLeitura || null;
-  var equipes = o.equipes || [];
+  var equipesBrutas = o.equipes || [];
+  // O conflito herdado sai da alocação CRUA, nunca do resumo da grade: com o
+  // filtro de SUP podando a linha, resumirAlocacao devolve sup: null para uma
+  // equipe que ESTÁ alocada, e o conflito sumiria da tela sem ter sumido do
+  // plano. Mesmo raciocínio da Decisão 7 de 2026-08-11 (o pool decide pela
+  // alocação crua).
+  //
+  // A marca é anexada a uma CÓPIA rasa da equipe -- os objetos vêm de
+  // ESTADO_ALOCACAO.equipes e não podem ser mutados por um render.
+  var conflitos = conflitosDeVeiculo(equipesBrutas, o.alocacao || {});
+  var equipes = equipesBrutas.map(function (e) {
+    if (!conflitos[String(e.id)]) return e;
+    var copia = {};
+    Object.keys(e).forEach(function (k) { copia[k] = e[k]; });
+    copia.conflitoVeiculo = conflitos[String(e.id)];
+    return copia;
+  });
   var equipesPorId = {};
   equipes.forEach(function (e) { equipesPorId[e.id] = e; });
 

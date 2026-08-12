@@ -519,6 +519,18 @@ const CSS_SEMANAL = `
   }
   .pool-grupo-contagem { font-weight: 400; opacity: .75; }
   .cartao-selo-poli { margin-left: 3px; font-size: 10px; opacity: .85; }
+  /* Trava de veículo (2026-08-12): o selo é informação PERMANENTE do cartão
+     (quantas equipes dividem o carro); .cartao-companheiro é o destaque
+     EFÊMERO do gesto, e morre em limparDestaquesAlocacao -- o mesmo ponto de
+     saída de .pool-alvo, cuja cor ele reaproveita para "alvo do gesto" ficar
+     numa cor só. .cartao-conflito-veiculo usa o vermelho canônico de
+     problema (#e0684f, já em .leitura-falta/.celula-falta/.cartao-motivo) --
+     não um tom novo. */
+  .cartao-selo-veiculo { margin-left: 3px; font-size: 10px; opacity: .85; font-variant-numeric: tabular-nums; }
+  .cartao-companheiro { outline: 2px dashed #4f8ff0; outline-offset: 2px; }
+  .cartao-conflito-veiculo { box-shadow: inset 0 0 0 1px #e0684f; }
+  .popup-veiculo-grupo { font-size: 11px; opacity: .9; }
+  .popup-conflito-veiculo { font-size: 11px; color: #e0684f; }
   .busca-equipe { padding: 5px 8px; font-size: 12px; min-width: 220px; }
   .filtro-tipologia-alocacao { padding: 5px 8px; font-size: 12px; }
   /* Equipe que casa a busca mas está alocada: texto, nunca cartão arrastável. */
