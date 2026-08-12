@@ -169,6 +169,12 @@ function criarDocumentoFalso() {
     querySelectorAll(sel) {
       if (sel === '.celula-alocacao') return celulasAlocacao;
       if (sel === '.cartao-companheiro') return cartoesAlocacao.filter((c) => c.classes.has('cartao-companheiro'));
+      // Achado Minor 4 (revisão final de 2026-08-12): destacarCelulasCompativeis
+      // parou de montar '[data-equipe="X"]' com id cru interpolado (risco de
+      // DOMException) e passou a buscar '[data-equipe]' (seletor de presença,
+      // sem valor) e filtrar em JS -- mantém o regex velho por compatibilidade
+      // com qualquer outro chamador que ainda monte o seletor com valor.
+      if (sel === '[data-equipe]') return cartoesAlocacao;
       var porEquipe = /^\[data-equipe="([^"]+)"\]$/.exec(sel);
       if (porEquipe) return cartoesAlocacao.filter((c) => c.equipeId === porEquipe[1]);
       if (sel !== '#tabela-alertas tbody tr') return [];

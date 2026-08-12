@@ -1681,13 +1681,28 @@ function equipeAlocavelPeloId(id) {
   return null;
 }
 
+// TRAVA DE VEÍCULO (2026-08-12): "devolver" move o GRUPO inteiro
+// (destinoDoGrupo), pool inclusive -- então soltar no pool tem efeito mesmo
+// quando a equipe ARRASTADA está no pool, desde que uma COMPANHEIRA esteja
+// alocada (ela seria puxada pro pool junto). Por isso o pool tem de acender
+// quando a arrastada OU qualquer companheira dela está alocada, não só a
+// arrastada -- achado da revisão final de 2026-08-12, o motivo desta rodada.
+function podeDevolverGrupo(equipeId, companheiros) {
+  if (ESTADO_ALOCACAO.alocacao[equipeId]) return true;
+  return (companheiros || []).some(function (id) {
+    return !!ESTADO_ALOCACAO.alocacao[id];
+  });
+}
+
 // Acende as células compatíveis com a equipe (celula-alvo) e esmaece as
 // demais (celula-inerte). Limpa sempre pelo par abaixo -- em TODO caminho de
 // saída do arrasto, inclusive recusa, senão o quadro fica preso num estado de
 // "arrastando" que nunca existiu de verdade.
-// podeDevolver: só acende o POOL quando a equipe arrastada já está alocada.
-// Arrastando uma que já está no pool, devolver é no-op -- acender sugeriria uma
-// ação que não existe.
+// podeDevolver: acende o POOL quando a equipe arrastada OU alguma companheira
+// de veículo dela já está alocada (ver podeDevolverGrupo acima) -- com a
+// trava no ar, arrastar uma equipe do POOL de volta pro pool ainda pode
+// devolver uma companheira que estava alocada, então "não faz nada" seria
+// mentira nesse caso.
 function destacarCelulasCompativeis(colunas, podeDevolver, companheiros) {
   var celulas = document.querySelectorAll('.celula-alocacao');
   for (var i = 0; i < celulas.length; i++) {
@@ -1698,9 +1713,18 @@ function destacarCelulasCompativeis(colunas, podeDevolver, companheiros) {
   // As companheiras de veículo (trava de 2026-08-12): quem vai junto tem de
   // aparecer ANTES da soltura, não depois. O cartão de uma equipe polivalente
   // se repete em cada grupo do pool, então acende TODAS as instâncias dele.
-  (companheiros || []).forEach(function (id) {
-    var cartoes = document.querySelectorAll('[data-equipe="' + id + '"]');
-    for (var j = 0; j < cartoes.length; j++) cartoes[j].classList.add('cartao-companheiro');
+  // Achado Minor 4 (revisão final): id interpolado cru dentro do seletor
+  // lançaria DOMException se algum dia carregasse aspas -- ANTES do
+  // setPointerCapture, matando o gesto inteiro. Em vez de montar seletor
+  // nenhum, busca todo cartão com data-equipe e compara o valor em JS.
+  var todosOsCartoes = document.querySelectorAll('[data-equipe]');
+  (companheiros || []).forEach(function (idBruto) {
+    var id = String(idBruto);
+    for (var j = 0; j < todosOsCartoes.length; j++) {
+      if (todosOsCartoes[j].getAttribute('data-equipe') === id) {
+        todosOsCartoes[j].classList.add('cartao-companheiro');
+      }
+    }
   });
   if (!podeDevolver) return;
   var pool = document.querySelector('.pool-alocacao');
@@ -1833,7 +1857,7 @@ function inicializarInteracaoAlocacao() {
     ARRASTO_ALOCACAO.moveu = false;
     ARRASTO_ALOCACAO.fantasma = criarFantasmaArrasto(equipeId);
     posicionarFantasmaArrasto(ARRASTO_ALOCACAO.fantasma, e.clientX, e.clientY);
-    destacarCelulasCompativeis(equipe.colunas || [], !!ESTADO_ALOCACAO.alocacao[equipeId], equipe.companheiros || []);
+    destacarCelulasCompativeis(equipe.colunas || [], podeDevolverGrupo(equipeId, equipe.companheiros), equipe.companheiros || []);
 
     // FIX (revisão do Task 9, achado Critical 2): captura o ponteiro no
     // cartão -- garante que pointermove/pointerup/pointercancel CONTINUAM
@@ -1982,7 +2006,7 @@ function inicializarInteracaoAlocacao() {
     var equipeClicada = equipeAlocavelPeloId(equipeIdClicado);
     if (!equipeClicada) return;
     SELECAO_ALOCACAO.equipeId = equipeIdClicado;
-    destacarCelulasCompativeis(equipeClicada.colunas || [], !!ESTADO_ALOCACAO.alocacao[equipeIdClicado], equipeClicada.companheiros || []);
+    destacarCelulasCompativeis(equipeClicada.colunas || [], podeDevolverGrupo(equipeIdClicado, equipeClicada.companheiros), equipeClicada.companheiros || []);
   });
 }
 
