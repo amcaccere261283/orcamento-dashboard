@@ -955,14 +955,22 @@ inteiro, **pool inclusive**, e a única exceção é a equipe indisponível, que
   equipes em silêncio.
 - **O fecho é transitivo e roda sobre o roster INTEIRO**, incluindo Lab/TST: duas
   equipes alocáveis podem se ligar pela carona numa terceira que não é alocável.
-  A ponte some de `companheiros`. Medido em 2026-08-12: **21 grupos, 54 das 117
-  equipes**; o maior é `{644, 651, 656, 660}`.
+  A ponte some de `companheiros`. **Os números abaixo são uma FOTO datada de
+  2026-08-12, não uma constante** — o agrupamento é recalculado a cada build a
+  partir da planilha viva, então eles se mexem sozinhos (medido de novo no
+  mesmo dia, já tinham caído para 20 grupos). Não persiga o dado vivo aqui; se
+  o número divergir de uma medição nova, é a planilha que mudou. Naquela
+  medição: **21 grupos, 54 das 117 equipes**; `{644, 651, 656, 660}` é um
+  EXEMPLO de cadeia de quatro (três caronas apontando pra equipe da placa),
+  não necessariamente o maior grupo do dia — o maior já mudou de um dia pro
+  outro.
 - **A trava vive em `aplicarMovimento`**, o funil dos dois gestos. `destinoDoGrupo`
   é pura e decide; `aplicarMovimento` só aplica. **`semearDoRealizado` e
   `limparAlocacao` não passam por ela**, de propósito — a semeadura é o retrato do
-  realizado, não um plano a validar, e **2 dos 21 grupos já nascem em SUPs
-  diferentes** (`{479, 604, 623}`, `{353, 513, 629}`). Esse conflito herdado é
-  MARCADO no cartão (`conflitosDeVeiculo`), nunca corrigido.
+  realizado, não um plano a validar, e **2 dos 21 grupos (mesma foto datada
+  acima) já nasciam em SUPs diferentes** (`{479, 604, 623}`, `{353, 513, 629}`,
+  exemplo datado, sujeito ao mesmo aviso). Esse conflito herdado é MARCADO no
+  cartão (`conflitosDeVeiculo`), nunca corrigido.
 - **O conflito sai da alocação CRUA, nunca do resumo da grade** — com o filtro de
   SUP podando a linha, `resumirAlocacao` devolve `sup: null` para equipe alocada, e
   o conflito sumiria da tela sem ter sumido do plano.

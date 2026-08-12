@@ -93,10 +93,14 @@ grupo. Não há deslocamento a coordenar com quem não vai a campo, e `aplicarMo
 recusa alocá-la individualmente — a trava não pode ser a porta dos fundos que contorna
 essa recusa.
 
-**A coluna de cada companheira é preservada** quando ela serve a mesma coluna no destino;
-senão, cai na primeira coluna que ela serve, na ordem canônica de `COLUNAS_ALOCACAO`.
-Uma equipe de ST em SUP-A vai para ST em SUP-B — a trava é sobre SUP, e mudar a tipologia
-de quem vai de carona seria uma decisão que ninguém pediu. (Isto reusa a intenção de
+**A coluna de cada companheira segue três preferências, nesta ordem:** a coluna em que
+ela JÁ estava, se serve o destino; senão a coluna do próprio GESTO (a coluna para onde a
+equipe arrastada está indo), se ela também a serve; senão a primeira coluna que ela serve,
+na ordem canônica de `COLUNAS_ALOCACAO`. Uma equipe de ST em SUP-A vai para ST em SUP-B —
+a trava é sobre SUP, e mudar a tipologia de quem vai de carona seria uma decisão que
+ninguém pediu. A preferência do meio é o que faz uma companheira que estava só no POOL
+(sem coluna atual) cair na MESMA coluna da arrastada quando as duas atendem a mesma
+tipologia, em vez de cair sempre na primeira da ordem canônica. (Isto reusa a intenção de
 `colunaSemeada`, mas sem `temDemanda`: `montarAbaAlocacao` não passa esse parâmetro para
 `equipesDoQuadro` hoje, e a trava não vai introduzir essa dependência.)
 
@@ -164,7 +168,7 @@ no topo), porque roda no build **e** no navegador.
 ```
 normalizarVeiculo(texto) -> { tipo: 'placa'|'carona'|'nenhum', chave }
 agruparPorVeiculo(linhasDoRoster) -> { grupoPorId, membrosDoGrupo, rotuloDoGrupo }
-conflitosDeVeiculo(alocacao, equipes) -> { [equipeId]: [{ id, sup }] }
+conflitosDeVeiculo(equipes, alocacao) -> { [equipeId]: [{ id, sup }] }
 destinoDoGrupo(equipes, alocacao, equipeId, sup, coluna) -> [{ id, sup, coluna }]
 ```
 
