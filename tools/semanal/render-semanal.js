@@ -908,6 +908,7 @@ var ComputeEquipesRealizadoAlocado = MODULOS['compute-equipes-realizado-alocado.
 var ComputeEquipesAtivoMatriz = MODULOS['compute-equipes-ativo-matriz.js'];
 var FiltroAtivos = MODULOS['filtro-ativos.js'];
 var EquipesAlocaveis = MODULOS['equipes-alocaveis.js'];
+var GruposVeiculo = MODULOS['grupos-veiculo.js'];
 var AlocacaoSheet = MODULOS['alocacao-sheet.js'];
 var RenderAbaAlocacao = MODULOS['render-aba-alocacao.js'];
 
@@ -1375,30 +1376,44 @@ function chaveSemanaAtual() {
 // redesenha ou mostra o motivo. Repare que NÃO consulta a grade/tendência: uma
 // célula hachurada (sem tendência), mas dentro do conjunto de colunas da
 // equipe, é aceita igual -- é o caso de "antecipar carteira" que a aba existe
-// para servir (Decisão 6 do spec).
+// para servir (Decisão 6 do spec de 2026-08-10).
+//
+// TRAVA DE VEÍCULO (2026-08-12): quem decide o que se move é destinoDoGrupo
+// (grupos-veiculo.js), função pura -- equipes que dividem veículo não podem
+// ficar em SUPs diferentes, então o destino do gesto vale para o grupo inteiro,
+// pool inclusive. Esta função virou o laço que APLICA a lista. As duas recusas
+// continuam existindo, agora dentro dela, e recusa move zero equipes.
+//
+// A trava mora aqui de propósito: é o funil por onde os DOIS gestos (arrasto e
+// clique-clique) já passam. Espalhá-la pelos handlers deixaria um caminho sem
+// ela. E semearDoRealizado/limparAlocacao NÃO passam por aqui, também de
+// propósito (Decisão 4 do spec): a semeadura é o retrato do realizado, não um
+// plano a validar.
 function aplicarMovimento(equipeId, sup, coluna) {
-  var equipe = null;
-  for (var i = 0; i < ESTADO_ALOCACAO.equipes.length; i++) {
-    if (ESTADO_ALOCACAO.equipes[i].id === equipeId) { equipe = ESTADO_ALOCACAO.equipes[i]; break; }
-  }
-  if (!equipe || !equipe.disponivel) return false;
-  if (sup && equipe.colunas.indexOf(coluna) === -1) return false;
+  var movimentos = GruposVeiculo.destinoDoGrupo(
+    ESTADO_ALOCACAO.equipes, ESTADO_ALOCACAO.alocacao, equipeId, sup, coluna);
+  if (!movimentos.length) return false;
 
-  if (!sup) delete ESTADO_ALOCACAO.alocacao[equipeId];
-  else ESTADO_ALOCACAO.alocacao[equipeId] = { sup: sup, coluna: coluna };
+  movimentos.forEach(function (m) {
+    if (!m.sup) delete ESTADO_ALOCACAO.alocacao[m.id];
+    else ESTADO_ALOCACAO.alocacao[m.id] = { sup: m.sup, coluna: m.coluna };
+  });
   // Invalida qualquer carregarAlocacaoDaSemana em voo -- ver o comentário
-  // grande em ESTADO_ALOCACAO. Este é o gesto que a correção protege: um
-  // arrasto não pode ser desfeito por uma resposta de rede que só chega
-  // depois dele.
+  // grande em ESTADO_ALOCACAO. UMA vez para o gesto inteiro, não uma por
+  // equipe: o grupo é um gesto só.
   ESTADO_ALOCACAO.geracaoAlocacao++;
 
   montarAbaAlocacao();
   // A gravação vem DEPOIS do redesenho, e não é esperada: a tela nunca trava
   // por causa da rede, e uma falha não desfaz o que o usuário acabou de ver.
-  clienteAlocacao().gravar({
-    chaveSemana: chaveSemanaAtual(), equipeId: equipeId,
-    sup: sup || null, coluna: coluna || null,
-  }).then(function () { montarAbaAlocacao(); });
+  // Uma gravação por equipe movida, mesmo laço de semearDoRealizado.
+  var chave = chaveSemanaAtual();
+  movimentos.forEach(function (m) {
+    clienteAlocacao().gravar({
+      chaveSemana: chave, equipeId: m.id,
+      sup: m.sup || null, coluna: m.coluna || null,
+    }).then(function () { montarAbaAlocacao(); });
+  });
   return true;
 }
 

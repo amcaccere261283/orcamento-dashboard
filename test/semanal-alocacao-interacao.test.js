@@ -68,10 +68,12 @@ const CSV_EQ_TESTE = [
     + 'Equipamento,Equipamento,Equipamento,Equipamento,Equipamento,Tenda,Tomador,sinalização 3P,'
     + DIAS_TESTE.map(formatarDataBr).join(','),
   ',,do condutor,-,-,-,-,-,-,-,-,-,-,-,,' + linhaDias(() => '-'),
-  '4,Equipe 4,D,SP,Amaral,VEIC-4,Suporte,N/A,N/A,N/A,N/A,N/A,,Tomador X,,'
+  '4,Equipe 4,D,SP,Amaral,SUH-6F44,Suporte,N/A,N/A,N/A,N/A,N/A,,Tomador X,,'
     + linhaDias((_e, i) => (i === 0 ? `RioSP (${OS_SUP_A})` : 'OK')),
   '59,Equipe 59,D,SP,Paulo,VEIC-59,Suporte,N/A,N/A,N/A,N/A,N/A,,Tomador X,,'
     + linhaDias(() => 'Férias'),
+  '77,Equipe 77,D,SP,Carona,Carona ID 4,Suporte,N/A,N/A,N/A,N/A,N/A,,Tomador X,,'
+    + linhaDias(() => 'OK'),
 ].join('\n');
 
 // registro mínimo comprovado suficiente para renderAbaAlocacao não quebrar
@@ -240,4 +242,53 @@ test('aplicarMovimento redesenha #secao-alocacao com o cartão no destino', asyn
   const html = cliente.document.getElementById('secao-alocacao').innerHTML;
   assert.match(html, /data-sup="SUP-A"[^>]*data-coluna="SP"/);
   assert.match(html, /data-equipe="4"/);
+});
+
+test('a trava leva a companheira de veículo junto', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  // A 4 e a 77 dividem o veículo. Mover a 4 para SUP-B move a 77 também.
+  assert.strictEqual(cliente.aplicarMovimento('4', 'SUP-B', 'SP'), true);
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['4']), { sup: 'SUP-B', coluna: 'SP' });
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['77']), { sup: 'SUP-B', coluna: 'SP' });
+});
+
+test('devolver ao pool devolve a companheira também', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  cliente.aplicarMovimento('4', 'SUP-B', 'SP');
+  assert.strictEqual(cliente.aplicarMovimento('4', '', ''), true);
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined);
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['77'], undefined);
+});
+
+test('a companheira INDISPONÍVEL não é arrastada pela trava', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  // A 59 está de férias o período inteiro. Forçamos ela para dentro do grupo
+  // da 4 no estado já montado -- é o caminho mais curto para provar a regra
+  // sem um terceiro CSV.
+  const equipes = cliente.ESTADO_ALOCACAO.equipes;
+  equipes.find((e) => e.id === '4').companheiros = ['77', '59'];
+  equipes.find((e) => e.id === '59').companheiros = ['4', '77'];
+  assert.strictEqual(equipes.find((e) => e.id === '59').disponivel, false, 'a 59 está de férias');
+
+  cliente.aplicarMovimento('4', 'SUP-B', 'SP');
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['59'], undefined,
+    'indisponível fica onde está -- a trava não é a porta dos fundos da recusa');
+});
+
+test('gesto recusado não move NINGUÉM do grupo', async () => {
+  const cliente = montarClienteAlocacao();
+  // Sem isto a semeadura automática já teria preenchido a equipe 4 em SUP-A
+  // antes da tentativa (mesmo motivo do teste 'soltar fora do conjunto de
+  // colunas da equipe é RECUSADO' acima) -- o que provaria a asserção errada:
+  // alocacao['4'] não seria undefined por causa da recusa, seria undefined
+  // (ou não) por causa da semeadura, e a recusa em si ficaria sem prova.
+  marcarSemanasVistas(cliente, 1);
+  await cliente.selecionarSemanaAlocacao(1);
+  // A 4 é SP: a coluna ST está fora do conjunto dela.
+  assert.strictEqual(cliente.aplicarMovimento('4', 'SUP-B', 'ST'), false);
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined);
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['77'], undefined);
 });
