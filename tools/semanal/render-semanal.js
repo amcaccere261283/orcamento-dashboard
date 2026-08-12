@@ -846,11 +846,13 @@ const BUNDLE_ARQUIVOS = [
   // (DIAS_PREMISSA_MES chega como global pelo <script> de fonteParaCliente(),
   // já injetado antes do bundle -- mesmo mecanismo que compute-balanco.js e
   // compute-alertas-tendencia.js já usam). alocacao-sheet.js não consome
-  // nada same-dir. render-aba-alocacao.js consome compute-alocacao.js e
-  // equipes-alocaveis.js -- por isso vem por último.
+  // nada same-dir. render-aba-alocacao.js consome compute-alocacao.js,
+  // equipes-alocaveis.js e, desde a trava de veículo (2026-08-12, Task 6),
+  // grupos-veiculo.js direto (conflitosDeVeiculo) -- por isso vem por último.
   // grupos-veiculo.js (2026-08-12) não consome nada same-dir (é matemática pura
-  // sobre a coluna Veículo da aba EQ), mas equipes-alocaveis.js o consome --
-  // por isso vem ANTES dele. A ordem desta lista é o contrato de dependência.
+  // sobre a coluna Veículo da aba EQ), mas equipes-alocaveis.js e
+  // render-aba-alocacao.js o consomem -- por isso vem ANTES dos dois. A ordem
+  // desta lista é o contrato de dependência.
   'grupos-veiculo.js', 'equipes-alocaveis.js', 'compute-alocacao.js', 'alocacao-sheet.js', 'render-aba-alocacao.js',
 ];
 
