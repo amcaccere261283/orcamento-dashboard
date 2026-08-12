@@ -939,6 +939,37 @@ ida-e-volta de rede de verdade — a janela de corrida deixa de ser teórica.
   quebra o teste de sincronia byte a byte sem mudar o conteúdo. Nunca faça `checkout`/
   `restore` de um dos dois isoladamente; regenere os dois com o build e copie de novo.
 
+**Trava de veículo (2026-08-12)** — spec:
+`docs/superpowers/specs/2026-08-12-alocacao-trava-veiculo-design.md`, plano:
+`docs/superpowers/plans/2026-08-12-alocacao-trava-veiculo.md`. Equipes que dividem
+veículo não podem ficar em SUPs diferentes: o destino do gesto vale para o grupo
+inteiro, **pool inclusive**, e a única exceção é a equipe indisponível, que nunca
+é tocada.
+
+- **O vínculo é lista de PERMISSÃO** (`tools/semanal/grupos-veiculo.js`): só placa
+  (`/^([A-Za-z]{3})[ -]?([0-9][A-Za-z0-9]{3})/`, normalizada — o descritivo entre
+  parênteses varia: `UDU8J88 (D, 9p)` vs `(D, 9 p)`, e **3 grupos reais só existem**
+  por causa disso) e `Carona ID N` apontando para um ID **presente no roster**.
+  `Próprio` (16 equipes), vazio (10), `afastado`, `D?`, `Suporte` não vinculam nada.
+  Com lista de exclusão, um texto novo digitado em duas linhas prenderia as duas
+  equipes em silêncio.
+- **O fecho é transitivo e roda sobre o roster INTEIRO**, incluindo Lab/TST: duas
+  equipes alocáveis podem se ligar pela carona numa terceira que não é alocável.
+  A ponte some de `companheiros`. Medido em 2026-08-12: **21 grupos, 54 das 117
+  equipes**; o maior é `{644, 651, 656, 660}`.
+- **A trava vive em `aplicarMovimento`**, o funil dos dois gestos. `destinoDoGrupo`
+  é pura e decide; `aplicarMovimento` só aplica. **`semearDoRealizado` e
+  `limparAlocacao` não passam por ela**, de propósito — a semeadura é o retrato do
+  realizado, não um plano a validar, e **2 dos 21 grupos já nascem em SUPs
+  diferentes** (`{479, 604, 623}`, `{353, 513, 629}`). Esse conflito herdado é
+  MARCADO no cartão (`conflitosDeVeiculo`), nunca corrigido.
+- **O conflito sai da alocação CRUA, nunca do resumo da grade** — com o filtro de
+  SUP podando a linha, `resumirAlocacao` devolve `sup: null` para equipe alocada, e
+  o conflito sumiria da tela sem ter sumido do plano.
+- **`.cartao-companheiro` morre em `limparDestaquesAlocacao`**, junto de
+  `celula-alvo`/`pool-alvo` — limpar em outro lugar deixaria o destaque preso em um
+  dos quatro caminhos de saída do arrasto.
+
 ## Estilo de trabalho
 
 Vale o mesmo do repositório principal: decidir e implementar sem parar para perguntar
