@@ -120,4 +120,91 @@ function agruparPorVeiculo(linhas) {
   return { grupoPorId: grupoPorId, membrosDoGrupo: membrosDoGrupo, rotuloDoGrupo: rotuloDoGrupo };
 }
 
-module.exports = { normalizarVeiculo, agruparPorVeiculo };
+// A coluna em que uma companheira aterrissa no SUP de destino. Preferência, em
+// ordem: a coluna em que ela JÁ estava (se serve), a coluna do gesto (se
+// serve), a primeira que ela serve. A trava é sobre SUP -- mudar a tipologia de
+// quem só está pegando carona seria uma decisão que ninguém pediu.
+function colunaDaCompanheira(equipe, atual, colunaDoGesto) {
+  var colunas = equipe.colunas || [];
+  if (atual && atual.coluna && colunas.indexOf(atual.coluna) !== -1) return atual.coluna;
+  if (colunas.indexOf(colunaDoGesto) !== -1) return colunaDoGesto;
+  return colunas[0];
+}
+
+// A TRAVA. Recebe o gesto (equipe arrastada + destino) e devolve a lista de
+// movimentos a aplicar, com o grupo do veículo junto. Não toca em estado nem no
+// DOM: quem aplica é aplicarMovimento (render-semanal.js).
+//
+// Lista VAZIA significa gesto RECUSADO -- e recusado move ZERO equipes, nem a
+// arrastada. As duas recusas são as mesmas de antes da trava (equipe
+// indisponível; coluna fora do conjunto dela), avaliadas antes de qualquer
+// efeito.
+//
+// sup vazio = devolução ao pool, e ela também vale para o grupo: 'andam juntas'
+// nos dois sentidos, senão tirar só uma do quadro recriaria o plano impossível
+// ao contrário.
+//
+// A companheira INDISPONÍVEL nunca entra na lista. Não há deslocamento a
+// coordenar com quem não vai a campo, e a trava não pode virar a porta dos
+// fundos que aloca quem aplicarMovimento recusaria individualmente.
+function destinoDoGrupo(equipes, alocacao, equipeId, sup, coluna) {
+  var lista = equipes || [];
+  var aloc = alocacao || {};
+  var porId = {};
+  lista.forEach(function (e) { porId[String(e.id)] = e; });
+
+  var alvo = porId[String(equipeId)];
+  if (!alvo || !alvo.disponivel) return [];
+  if (sup && (alvo.colunas || []).indexOf(coluna) === -1) return [];
+
+  var movimentos = [{
+    id: String(equipeId),
+    sup: sup || '',
+    coluna: sup ? coluna : '',
+  }];
+
+  (alvo.companheiros || []).forEach(function (idBruto) {
+    var id = String(idBruto);
+    var companheira = porId[id];
+    if (!companheira || !companheira.disponivel) return;
+    var atual = aloc[id];
+    if (!sup) {
+      if (atual && atual.sup) movimentos.push({ id: id, sup: '', coluna: '' });
+      return;
+    }
+    if (atual && atual.sup === sup) return;
+    movimentos.push({ id: id, sup: sup, coluna: colunaDaCompanheira(companheira, atual, coluna) });
+  });
+
+  return movimentos;
+}
+
+// Grupos que JÁ estão espalhados em mais de um SUP -- só podem ter entrado pela
+// semeadura do realizado ou por uma alocação salva antes desta versão, porque a
+// trava impede que um movimento crie um. Marcar, nunca corrigir: a semeadura é
+// o retrato de onde as equipes estiveram de fato (Decisão 4 do spec).
+//
+// Equipe no pool NUNCA é conflito: conflito é estar em SUPs diferentes, e pool
+// não é SUP. (Isto é independente da trava mover companheira do pool -- lá é
+// coordenar deslocamento, aqui é acusar um plano impossível.)
+function conflitosDeVeiculo(equipes, alocacao) {
+  var aloc = alocacao || {};
+  var conflitos = {};
+  (equipes || []).forEach(function (e) {
+    var meu = aloc[String(e.id)];
+    if (!meu || !meu.sup) return;
+    var outros = [];
+    (e.companheiros || []).forEach(function (idBruto) {
+      var destino = aloc[String(idBruto)];
+      if (destino && destino.sup && destino.sup !== meu.sup) {
+        outros.push({ id: String(idBruto), sup: destino.sup });
+      }
+    });
+    if (outros.length) conflitos[String(e.id)] = outros;
+  });
+  return conflitos;
+}
+
+module.exports = {
+  normalizarVeiculo, agruparPorVeiculo, destinoDoGrupo, conflitosDeVeiculo,
+};
