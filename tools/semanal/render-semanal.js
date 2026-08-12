@@ -836,7 +836,10 @@ const BUNDLE_ARQUIVOS = [
   // compute-alertas-tendencia.js já usam). alocacao-sheet.js não consome
   // nada same-dir. render-aba-alocacao.js consome compute-alocacao.js e
   // equipes-alocaveis.js -- por isso vem por último.
-  'equipes-alocaveis.js', 'compute-alocacao.js', 'alocacao-sheet.js', 'render-aba-alocacao.js',
+  // grupos-veiculo.js (2026-08-12) não consome nada same-dir (é matemática pura
+  // sobre a coluna Veículo da aba EQ), mas equipes-alocaveis.js o consome --
+  // por isso vem ANTES dele. A ordem desta lista é o contrato de dependência.
+  'grupos-veiculo.js', 'equipes-alocaveis.js', 'compute-alocacao.js', 'alocacao-sheet.js', 'render-aba-alocacao.js',
 ];
 
 // O gate de senha (scriptDesbloqueio, casca compartilhada) sempre chama

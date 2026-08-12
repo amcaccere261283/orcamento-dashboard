@@ -124,3 +124,47 @@ test('Lab sai do quadro e aparece em foraDoQuadro com o motivo', () => {
   assert.ok(fora, 'a equipe de Lab tem de aparecer na lista de fora');
   assert.match(fora.motivo, /[Ll]aborat/);
 });
+
+// --- grupos de veículo ------------------------------------------------------
+
+// Mesmo cabeçalho do CSV_EQ acima. A 4 tem placa; a 91 caroneia nela; a 92 tem
+// 'Próprio'; a 93 é Lab (fora do quadro) e a 94 caroneia NA 93 -- a ponte por
+// equipe não alocável.
+const CSV_EQ_VEICULO = [
+  'ID,Equipe,Habilitação,Serviços,Líderes,Veículo,Proprietário,Equipamento,Equipamento,Equipamento,Equipamento,Equipamento,Tenda - nova estrutura,Tomador,sinalização 3P,10/08/2026,11/08/2026,12/08/2026,13/08/2026,14/08/2026',
+  ',,do condutor,-,-,-,-,Kit Especiais,Kit BL e PI,Kit ST,Kit SP,Kit SR,Nova estrutura,-,,SEGUNDA,TERÇA,QUARTA,QUINTA,SEXTA',
+  '4,José I. Amaral,D,SM,Amaral,SUH-6F44 (D9p),Suporte,N/A,N/A,N/A,Próprio,Próprio,,CCR RioSP,RioSP,OK,OK,OK,OK,OK',
+  '91,Carona Um,D,SM,Um,Carona ID 4,Suporte,N/A,N/A,N/A,N/A,N/A,,-,,OK,OK,OK,OK,OK',
+  '92,Sozinha,D,SP,Sozinha,Próprio,Suporte,N/A,N/A,N/A,N/A,N/A,,-,,OK,OK,OK,OK,OK',
+  '93,Lab Ponte,D,Lab,Ponte,TKF3E96 (D9p),Suporte,N/A,N/A,N/A,N/A,N/A,,-,,OK,OK,OK,OK,OK',
+  '94,Carona Lab,D,SP,Lab Dois,carona ID 93,Suporte,N/A,N/A,N/A,N/A,N/A,,-,,OK,OK,OK,OK,OK',
+].join('\n');
+
+const OPCOES_VEICULO = {
+  ano: 2026, mes: 8, semana: { inicio: 20675, fim: 20679 }, osParaSup: {},
+};
+
+test('equipe com carona ganha companheiros, rótulo do grupo e chave', () => {
+  const { equipes } = equipesDoQuadro(CSV_EQ_VEICULO, OPCOES_VEICULO);
+  const quatro = equipes.find((e) => e.id === '4');
+  const noventaEUm = equipes.find((e) => e.id === '91');
+  assert.deepStrictEqual(quatro.companheiros, ['91']);
+  assert.deepStrictEqual(noventaEUm.companheiros, ['4']);
+  assert.strictEqual(quatro.veiculoGrupo, noventaEUm.veiculoGrupo);
+  assert.strictEqual(quatro.veiculoRotulo, 'SUH6F44');
+});
+
+test('equipe "Próprio" fica sem companheiros', () => {
+  const { equipes } = equipesDoQuadro(CSV_EQ_VEICULO, OPCOES_VEICULO);
+  assert.deepStrictEqual(equipes.find((e) => e.id === '92').companheiros, []);
+});
+
+test('a equipe FORA DO QUADRO serve de ponte mas não aparece em companheiros', () => {
+  // A 94 caroneia na 93 (Lab). O veículo é o mesmo, então o grupo existe -- mas
+  // a 93 não é alocável e não pode virar cartão arrastável nenhum.
+  const { equipes } = equipesDoQuadro(CSV_EQ_VEICULO, OPCOES_VEICULO);
+  const noventaEQuatro = equipes.find((e) => e.id === '94');
+  assert.ok(noventaEQuatro, '94 é SP, tem de estar no quadro');
+  assert.deepStrictEqual(noventaEQuatro.companheiros, []);
+  assert.strictEqual(noventaEQuatro.veiculoRotulo, 'TKF3E96');
+});

@@ -1,6 +1,7 @@
 'use strict';
 const { parseAbaEq, linhasDaAbaEq } = require('./compute-equipes-ativas.js');
 const { classificarDiaEquipe, contaComoAtiva } = require('./classificar-dia-equipe.js');
+const { agruparPorVeiculo } = require('./grupos-veiculo.js');
 
 // Este módulo roda no Node (build/testes) e no navegador (bundle) -- por isso
 // 'var'/'function' e os requires acima na forma EXATA que transformaModulo
@@ -125,6 +126,14 @@ function equipesDoQuadro(csvEq, opcoes) {
   var foraDoQuadro = [];
   var diasDaSemana = o.semana ? (o.semana.fim - o.semana.inicio + 1) : 0;
 
+  // Os grupos saem do roster INTEIRO -- incluindo o que vai para foraDoQuadro.
+  // Duas equipes alocáveis podem se ligar pela carona numa Lab, e o veículo é o
+  // mesmo. `roster` e `grade` são index-alinhados (é o que a leitura de
+  // camposDoPopup já assume logo abaixo).
+  var grupos = agruparPorVeiculo(roster.map(function (bruta, indice) {
+    return { id: bruta.id, veiculo: String((grade[indice] || [])[COL_VEICULO] || '').trim() };
+  }));
+
   roster.forEach(function (bruta, indice) {
     var resolvido = colunasDaEquipe(bruta.servicos);
     var linha = grade[indice] || [];
@@ -166,6 +175,20 @@ function equipesDoQuadro(csvEq, opcoes) {
       supRealizado: ultimoSup,
       colunaRealizada: ultimoSup ? colunaSemeada(resolvido.colunas, ultimoSup, o.temDemanda) : null,
       popup: camposDoPopup(linha),
+      veiculoGrupo: grupos.grupoPorId[String(bruta.id)] || null,
+      veiculoRotulo: grupos.rotuloDoGrupo[grupos.grupoPorId[String(bruta.id)]] || null,
+    });
+  });
+
+  // companheiros só pode ser calculado depois do laço: é o grupo do veículo
+  // podado para quem ficou ALOCÁVEL. A equipe que serviu de ponte (Lab, TST)
+  // some daqui de propósito -- ela não vira cartão em lugar nenhum.
+  var alocaveis = {};
+  equipes.forEach(function (e) { alocaveis[String(e.id)] = true; });
+  equipes.forEach(function (e) {
+    var membros = grupos.membrosDoGrupo[e.veiculoGrupo] || [];
+    e.companheiros = membros.filter(function (id) {
+      return id !== String(e.id) && alocaveis[id];
     });
   });
 
