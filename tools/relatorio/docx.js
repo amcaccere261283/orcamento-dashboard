@@ -114,8 +114,10 @@ function run(texto, o = {}) {
   if (o.negrito) props.push('<w:b/>');
   if (o.italico) props.push('<w:i/>');
   if (o.caixaAlta) props.push('<w:caps/>');
-  if (o.espacamento) props.push(`<w:spacing w:val="${o.espacamento}"/>`);
+  // Mesma exigência de ordem do pPr (ver paragrafo abaixo): no rPr a sequência
+  // é rFonts -> b -> i -> caps -> color -> spacing -> sz.
   if (o.cor) props.push(`<w:color w:val="${o.cor}"/>`);
+  if (o.espacamento) props.push(`<w:spacing w:val="${o.espacamento}"/>`);
   if (o.tamanho) props.push(`<w:sz w:val="${o.tamanho * 2}"/><w:szCs w:val="${o.tamanho * 2}"/>`);
   const rPr = props.length ? `<w:rPr>${props.join('')}</w:rPr>` : '';
   // xml:space="preserve" evita o Word comer espaço no início/fim do trecho.
@@ -126,12 +128,17 @@ function run(texto, o = {}) {
 }
 
 function paragrafo(runs, o = {}) {
+  // A ORDEM destes elementos não é livre: o esquema do OOXML fixa a sequência
+  // pStyle -> keepNext -> pageBreakBefore -> pBdr -> shd -> tabs -> spacing ->
+  // ind -> jc. O Word de mesa aceita fora de ordem, mas o Word Online (e é ele
+  // que abre o arquivo na pré-visualização do OneDrive) é mais rígido. Ao
+  // acrescentar uma propriedade nova, encaixe-a na posição certa da sequência.
   const props = [];
   if (o.estilo) props.push(`<w:pStyle w:val="${o.estilo}"/>`);
-  if (o.alinhamento) props.push(`<w:jc w:val="${o.alinhamento}"/>`);
-  if (o.fundo) props.push(`<w:shd w:val="clear" w:color="auto" w:fill="${o.fundo}"/>`);
+  if (o.manterProxima) props.push('<w:keepNext/>');
+  if (o.quebraAntes) props.push('<w:pageBreakBefore/>');
   if (o.bordaInferior) props.push(`<w:pBdr><w:bottom w:val="single" w:sz="${o.bordaInferior.espessura || 6}" w:space="2" w:color="${o.bordaInferior.cor}"/></w:pBdr>`);
-  if (o.recuo) props.push(`<w:ind w:left="${o.recuo}"${o.recuoPrimeira != null ? ` w:hanging="${o.recuoPrimeira}"` : ''}/>`);
+  if (o.fundo) props.push(`<w:shd w:val="clear" w:color="auto" w:fill="${o.fundo}"/>`);
   // Parada de tabulação explícita: num parágrafo justificado, separar o
   // marcador do texto com espaços faz a justificação ESTICAR esses espaços,
   // e cada item da lista sai com um recuo diferente. Tabulação não estica.
@@ -139,17 +146,18 @@ function paragrafo(runs, o = {}) {
   const antes = o.antes != null ? o.antes : 0;
   const depois = o.depois != null ? o.depois : 120;
   props.push(`<w:spacing w:before="${antes}" w:after="${depois}"${o.entreLinhas ? ` w:line="${o.entreLinhas}" w:lineRule="auto"` : ''}/>`);
-  if (o.manterProxima) props.push('<w:keepNext/>');
-  if (o.quebraAntes) props.unshift('<w:pageBreakBefore/>');
+  if (o.recuo) props.push(`<w:ind w:left="${o.recuo}"${o.recuoPrimeira != null ? ` w:hanging="${o.recuoPrimeira}"` : ''}/>`);
+  if (o.alinhamento) props.push(`<w:jc w:val="${o.alinhamento}"/>`);
   return `<w:p><w:pPr>${props.join('')}</w:pPr>${Array.isArray(runs) ? runs.join('') : runs}</w:p>`;
 }
 
 function celula(conteudo, o = {}) {
+  // Ordem do esquema no tcPr: tcW -> gridSpan -> shd -> tcMar -> vAlign.
   const props = [`<w:tcW w:w="${o.largura || 0}" w:type="${o.largura ? 'dxa' : 'auto'}"/>`];
-  if (o.fundo) props.push(`<w:shd w:val="clear" w:color="auto" w:fill="${o.fundo}"/>`);
   if (o.mesclarHorizontal) props.push(`<w:gridSpan w:val="${o.mesclarHorizontal}"/>`);
-  props.push('<w:vAlign w:val="center"/>');
+  if (o.fundo) props.push(`<w:shd w:val="clear" w:color="auto" w:fill="${o.fundo}"/>`);
   props.push(`<w:tcMar><w:top w:w="${o.margemV || 60}" w:type="dxa"/><w:bottom w:w="${o.margemV || 60}" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tcMar>`);
+  props.push('<w:vAlign w:val="center"/>');
   return `<w:tc><w:tcPr>${props.join('')}</w:tcPr>${conteudo}</w:tc>`;
 }
 
