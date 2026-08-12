@@ -95,6 +95,7 @@ function criarDocumentoFalso() {
   //
   // Os testes registram as células que querem com registrarCelulasAlocacao().
   const celulasAlocacao = [];
+  const cartoesAlocacao = [];
   let poolAlocacao = null;
 
   function comClassList(extra) {
@@ -132,6 +133,22 @@ function criarDocumentoFalso() {
       if (!poolAlocacao) poolAlocacao = comClassList({});
       return poolAlocacao;
     },
+    // Os cartões que os testes de destaque querem observar. Mesmo motivo de
+    // registrarCelulasAlocacao: sem isto querySelectorAll devolve [] e o teste
+    // de destaque das companheiras passaria VAZIO.
+    registrarCartoesAlocacao(ids) {
+      cartoesAlocacao.length = 0;
+      (ids || []).forEach((id) => {
+        cartoesAlocacao.push(comClassList({
+          getAttribute: (attr) => (attr === 'data-equipe' ? String(id) : null),
+          equipeId: String(id),
+        }));
+      });
+      return cartoesAlocacao;
+    },
+    cartaoAlocacao(id) {
+      return cartoesAlocacao.find((c) => c.equipeId === String(id)) || null;
+    },
     // document.querySelector só é chamado como '#algum-id .filtro-multi-trigger'
     // ou '#algum-id .filtro-multi-painel' (ver atualizarRotuloFiltro/montarFiltroMulti
     // em scriptFiltros()) -- resolve pro mesmo elemento(id) e delega.
@@ -151,6 +168,9 @@ function criarDocumentoFalso() {
     // vazios de propósito: nenhum teste depende de achar outro filtro aberto.
     querySelectorAll(sel) {
       if (sel === '.celula-alocacao') return celulasAlocacao;
+      if (sel === '.cartao-companheiro') return cartoesAlocacao.filter((c) => c.classes.has('cartao-companheiro'));
+      var porEquipe = /^\[data-equipe="([^"]+)"\]$/.exec(sel);
+      if (porEquipe) return cartoesAlocacao.filter((c) => c.equipeId === porEquipe[1]);
       if (sel !== '#tabela-alertas tbody tr') return [];
       const corpo = elemento('corpo-alertas');
       const cache = linhasPorTabela.get(corpo);

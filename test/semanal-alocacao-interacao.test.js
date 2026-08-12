@@ -292,3 +292,31 @@ test('gesto recusado não move NINGUÉM do grupo', async () => {
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined);
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['77'], undefined);
 });
+
+test('ao começar o gesto, os cartões das companheiras de veículo acendem', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  cliente.document.registrarCelulasAlocacao(['SP']);
+  cliente.document.registrarCartoesAlocacao(['4', '77', '59']);
+
+  const equipeQuatro = cliente.ESTADO_ALOCACAO.equipes.find((e) => e.id === '4');
+  cliente.destacarCelulasCompativeis(equipeQuatro.colunas, false, equipeQuatro.companheiros);
+
+  assert.ok(cliente.document.cartaoAlocacao('77').classList.contains('cartao-companheiro'),
+    'a 77 divide o veículo da 4');
+  assert.ok(!cliente.document.cartaoAlocacao('59').classList.contains('cartao-companheiro'),
+    'a 59 não é do grupo');
+});
+
+test('o destaque das companheiras morre em limparDestaquesAlocacao -- o único ponto de saída', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  cliente.document.registrarCelulasAlocacao(['SP']);
+  cliente.document.registrarCartoesAlocacao(['4', '77']);
+
+  const equipeQuatro = cliente.ESTADO_ALOCACAO.equipes.find((e) => e.id === '4');
+  cliente.destacarCelulasCompativeis(equipeQuatro.colunas, false, equipeQuatro.companheiros);
+  cliente.limparDestaquesAlocacao();
+
+  assert.ok(!cliente.document.cartaoAlocacao('77').classList.contains('cartao-companheiro'));
+});

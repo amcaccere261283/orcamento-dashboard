@@ -1674,29 +1674,41 @@ function equipeAlocavelPeloId(id) {
 // podeDevolver: só acende o POOL quando a equipe arrastada já está alocada.
 // Arrastando uma que já está no pool, devolver é no-op -- acender sugeriria uma
 // ação que não existe.
-function destacarCelulasCompativeis(colunas, podeDevolver) {
+function destacarCelulasCompativeis(colunas, podeDevolver, companheiros) {
   var celulas = document.querySelectorAll('.celula-alocacao');
   for (var i = 0; i < celulas.length; i++) {
     var coluna = celulas[i].getAttribute ? celulas[i].getAttribute('data-coluna') : null;
     if (colunas.indexOf(coluna) !== -1) celulas[i].classList.add('celula-alvo');
     else celulas[i].classList.add('celula-inerte');
   }
+  // As companheiras de veículo (trava de 2026-08-12): quem vai junto tem de
+  // aparecer ANTES da soltura, não depois. O cartão de uma equipe polivalente
+  // se repete em cada grupo do pool, então acende TODAS as instâncias dele.
+  (companheiros || []).forEach(function (id) {
+    var cartoes = document.querySelectorAll('[data-equipe="' + id + '"]');
+    for (var j = 0; j < cartoes.length; j++) cartoes[j].classList.add('cartao-companheiro');
+  });
   if (!podeDevolver) return;
   var pool = document.querySelector('.pool-alocacao');
   if (pool) pool.classList.add('pool-alvo');
 }
 
 // Chamava-se limparDestaqueCelulas, e o nome virou mentira em 2026-08-11,
-// quando o pool passou a acender junto. É chamada dos CINCO pontos que encerram
-// um gesto, e todos querem a limpeza COMPLETA -- limpar o pool em qualquer
-// outro lugar o deixaria aceso para sempre em pelo menos um dos quatro caminhos
-// de saída do arrasto (soltura aceita, recusada, pointercancel, ou solta fora
-// de tudo). Ver o comentário de encerrarArrastoAlocacao.
+// quando o pool passou a acender junto -- e mais ainda em 2026-08-12, com as
+// companheiras de veículo. É chamada dos CINCO pontos que encerram um gesto, e
+// todos querem a limpeza COMPLETA: limpar qualquer uma dessas marcas em outro
+// lugar a deixaria acesa para sempre em pelo menos um dos quatro caminhos de
+// saída do arrasto (soltura aceita, recusada, pointercancel, ou solta fora de
+// tudo). Ver o comentário de encerrarArrastoAlocacao.
 function limparDestaquesAlocacao() {
   var celulas = document.querySelectorAll('.celula-alocacao');
   for (var i = 0; i < celulas.length; i++) {
     celulas[i].classList.remove('celula-alvo');
     celulas[i].classList.remove('celula-inerte');
+  }
+  var companheiros = document.querySelectorAll('.cartao-companheiro');
+  for (var j = 0; j < companheiros.length; j++) {
+    companheiros[j].classList.remove('cartao-companheiro');
   }
   var pool = document.querySelector('.pool-alocacao');
   if (pool) pool.classList.remove('pool-alvo');
@@ -1807,7 +1819,7 @@ function inicializarInteracaoAlocacao() {
     ARRASTO_ALOCACAO.moveu = false;
     ARRASTO_ALOCACAO.fantasma = criarFantasmaArrasto(equipeId);
     posicionarFantasmaArrasto(ARRASTO_ALOCACAO.fantasma, e.clientX, e.clientY);
-    destacarCelulasCompativeis(equipe.colunas || [], !!ESTADO_ALOCACAO.alocacao[equipeId]);
+    destacarCelulasCompativeis(equipe.colunas || [], !!ESTADO_ALOCACAO.alocacao[equipeId], equipe.companheiros || []);
 
     // FIX (revisão do Task 9, achado Critical 2): captura o ponteiro no
     // cartão -- garante que pointermove/pointerup/pointercancel CONTINUAM
@@ -1956,7 +1968,7 @@ function inicializarInteracaoAlocacao() {
     var equipeClicada = equipeAlocavelPeloId(equipeIdClicado);
     if (!equipeClicada) return;
     SELECAO_ALOCACAO.equipeId = equipeIdClicado;
-    destacarCelulasCompativeis(equipeClicada.colunas || [], !!ESTADO_ALOCACAO.alocacao[equipeIdClicado]);
+    destacarCelulasCompativeis(equipeClicada.colunas || [], !!ESTADO_ALOCACAO.alocacao[equipeIdClicado], equipeClicada.companheiros || []);
   });
 }
 
