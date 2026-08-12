@@ -257,6 +257,15 @@ test('devolver ao pool devolve a companheira também', async () => {
   const cliente = montarClienteAlocacao();
   await cliente.selecionarSemanaAlocacao(1);
   cliente.aplicarMovimento('4', 'SUP-B', 'SP');
+  // Achado Minor 1 da revisão final: checar só `=== undefined` no final
+  // passaria até com a trava REMOVIDA (companheiros zerado -> a 77 nunca
+  // teria ido para SUP-B, e continuaria undefined pelo motivo errado). A
+  // asserção de PRESENÇA prova que a 77 estava mesmo lá, alocada, antes de
+  // ser devolvida -- é a devolução acontecendo de verdade, não uma ausência
+  // que já existia.
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['77']), { sup: 'SUP-B', coluna: 'SP' },
+    'pré-condição: a 77 tem que estar mesmo alocada em SUP-B antes da devolução');
+
   assert.strictEqual(cliente.aplicarMovimento('4', '', ''), true);
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined);
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['77'], undefined);
@@ -272,10 +281,25 @@ test('a companheira INDISPONÍVEL não é arrastada pela trava', async () => {
   equipes.find((e) => e.id === '4').companheiros = ['77', '59'];
   equipes.find((e) => e.id === '59').companheiros = ['4', '77'];
   assert.strictEqual(equipes.find((e) => e.id === '59').disponivel, false, 'a 59 está de férias');
+  // Pré-aloca a 59 num SUP -- como se a semeadura (que não passa pela trava)
+  // já tivesse posto ela ali antes de entrar de férias. Achado Minor 1: só
+  // `=== undefined` no final passaria também com companheiros zerado (ela
+  // nunca esteve no grupo, então nunca seria tocada de qualquer jeito) --
+  // POSITIVO (ela continua EXATAMENTE onde estava) prova que a trava a viu e
+  // decidiu não tocar, não que ela nunca apareceu no cálculo.
+  cliente.ESTADO_ALOCACAO.alocacao['59'] = { sup: 'SUP-Z', coluna: 'SP' };
 
   cliente.aplicarMovimento('4', 'SUP-B', 'SP');
-  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['59'], undefined,
-    'indisponível fica onde está -- a trava não é a porta dos fundos da recusa');
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['59']), { sup: 'SUP-Z', coluna: 'SP' },
+    'indisponível fica EXATAMENTE onde estava -- a trava não é a porta dos fundos da recusa');
+  // A 59 ficar parada também seria verdade com o GRUPO inteiro desativado
+  // (sem trava, ninguém além da 4 se move, então a 59 nunca seria tocada de
+  // qualquer forma -- exatamente a vacuidade que o achado Minor 1 aponta).
+  // A prova real de que a trava está ATIVA é a 77 (disponível, mesmo grupo)
+  // TER se movido para SUP-B -- sem isso o teste passaria com a trava
+  // inteiramente ausente.
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['77']), { sup: 'SUP-B', coluna: 'SP' },
+    'a 77 (disponível, mesmo grupo) tem que ter ido junto -- prova que a trava está de fato ativa');
 });
 
 test('gesto recusado não move NINGUÉM do grupo', async () => {
@@ -287,10 +311,103 @@ test('gesto recusado não move NINGUÉM do grupo', async () => {
   // (ou não) por causa da semeadura, e a recusa em si ficaria sem prova.
   marcarSemanasVistas(cliente, 1);
   await cliente.selecionarSemanaAlocacao(1);
+  // Pré-aloca a 77 (companheira) em SUP-A -- achado Minor 1: com companheiros
+  // zerado, `alocacao['77'] === undefined` passaria de qualquer forma (ela
+  // nunca teria sido tocada, porque nunca esteve no grupo). Pré-alocada,
+  // provar que ela CONTINUA em SUP-A depois da recusa é a prova de que a
+  // recusa parou o grupo inteiro, não só a arrastada.
+  cliente.ESTADO_ALOCACAO.alocacao['77'] = { sup: 'SUP-A', coluna: 'SP' };
   // A 4 é SP: a coluna ST está fora do conjunto dela.
   assert.strictEqual(cliente.aplicarMovimento('4', 'SUP-B', 'ST'), false);
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined);
-  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['77'], undefined);
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['77']), { sup: 'SUP-A', coluna: 'SP' },
+    'a companheira tem que continuar EXATAMENTE onde estava -- a recusa não pode ter mexido nela');
+});
+
+// Evento de clique falso pro handler DELEGADO de #secao-alocacao (clique-clique
+// -- o 2º call site de destacarCelulasCompativeis apontado pelo achado
+// Important 1). e.target.closest só precisa resolver o seletor do cartão; os
+// outros ([data-acao], [data-semana]) devolvem null, como um clique fora
+// deles faria de verdade.
+function eventoCliqueNoCartao(equipeId) {
+  return {
+    target: {
+      closest(sel) {
+        if (sel === '[data-equipe][data-arrastavel="sim"]') {
+          return { getAttribute: (attr) => (attr === 'data-equipe' ? equipeId : null) };
+        }
+        return null;
+      },
+    },
+  };
+}
+
+test('o pool acende ao arrastar (clique-clique) uma equipe do POOL que tem companheira de veículo ALOCADA', async () => {
+  const cliente = montarClienteAlocacao();
+  marcarSemanasVistas(cliente, 1); // sem isto a semeadura automática já alocaria a 4 em SUP-A (ela tem OS na semana)
+  await cliente.selecionarSemanaAlocacao(1);
+  // A 4 e a 77 dividem o veículo. aplicarMovimento NÃO serve para montar essa
+  // pré-condição -- com a trava no ar ele moveria as duas juntas. O jeito de
+  // uma ficar alocada e a outra no pool é exatamente como o spec descreve
+  // (Decisão 4/5): herdado da semeadura ou de uma gravação anterior a esta
+  // versão. Simula isso escrevendo direto no estado, como semearDoRealizado
+  // faria. Aloca só a 77 em SUP-A e deixa a 4 no pool -- cenário exato do
+  // achado Important 1 da revisão final: `podeDevolver` olhava só a equipe
+  // ARRASTADA (!!alocacao['4'] = false), então o pool não acendia -- mas
+  // soltar a 4 ainda no pool move o GRUPO (destinoDoGrupo), que TEM efeito
+  // porque devolveria a 77. A tela mentia que o gesto era no-op.
+  cliente.ESTADO_ALOCACAO.alocacao['77'] = { sup: 'SUP-A', coluna: 'SP' };
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined, 'pré-condição: a 4 está no pool');
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['77'].sup, 'SUP-A', 'pré-condição: a 77 está alocada');
+
+  cliente.document.registrarCelulasAlocacao(['SP']);
+  cliente.document.registrarCartoesAlocacao(['4', '77']);
+  // Dispara o handler de 'click' REAL de #secao-alocacao (não uma chamada
+  // isolada de destacarCelulasCompativeis) -- é o call site onde o achado
+  // achou o bug, e é ele que a prova por mutação abaixo precisa pegar.
+  cliente.document.getElementById('secao-alocacao').listeners.click(eventoCliqueNoCartao('4'));
+
+  assert.ok(cliente.document.poolAlocacao().classList.contains('pool-alvo'),
+    'a tela tem que dizer que soltar no pool TEM efeito -- devolveria a 77 junto');
+});
+
+test('o pool NÃO acende (clique-clique) quando nem a equipe arrastada nem a companheira estão alocadas -- devolver seria no-op de verdade', async () => {
+  const cliente = montarClienteAlocacao();
+  marcarSemanasVistas(cliente, 1); // sem isto a semeadura automática já alocaria a 4 em SUP-A (ela tem OS na semana)
+  await cliente.selecionarSemanaAlocacao(1);
+  // A 4 e a 77 no pool, as duas -- ninguém para devolver, então o pool
+  // continua apagado. Guarda contra uma correção exagerada do Important 1
+  // que acendesse o pool sempre.
+  cliente.document.registrarCelulasAlocacao(['SP']);
+  cliente.document.registrarCartoesAlocacao(['4', '77']);
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined, 'pré-condição: a 4 está no pool');
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['77'], undefined, 'pré-condição: a 77 também está no pool');
+
+  cliente.document.getElementById('secao-alocacao').listeners.click(eventoCliqueNoCartao('4'));
+
+  assert.ok(!cliente.document.poolAlocacao().classList.contains('pool-alvo'));
+});
+
+test('o arrasto de uma equipe de grupo grava UM movimento POR equipe do grupo, não só a arrastada', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  // A 4 e a 77 dividem o veículo (mesmo par de 'a trava leva a companheira de
+  // veículo junto', que já prova a TELA -- ESTADO_ALOCACAO). Este teste prova
+  // o ARMAZENAMENTO: aplicarLocal roda SÍNCRONO dentro de gravar, antes de
+  // qualquer await (ver o topo de alocacao-sheet.js), então o localStorage já
+  // reflete os movimentos assim que aplicarMovimento retorna -- sem precisar
+  // esperar a promise. Achado Important 3 da revisão final: trocar
+  // movimentos.forEach por [movimentos[0]].forEach em aplicarMovimento
+  // deixaria a TELA certa (o forEach de ESTADO_ALOCACAO continuaria intacto)
+  // e o ARMAZENAMENTO com o grupo partido -- só a próxima abertura da semana
+  // (que recarrega de lá) revelaria o plano impossível.
+  cliente.aplicarMovimento('4', 'SUP-B', 'SP');
+
+  const chave = cliente.AlocacaoSheet.chaveSemana(2026, SEMANAS_AGOSTO[1].inicio);
+  const salvo = JSON.parse(cliente.localStorage.getItem('alocacao-equipes:' + chave));
+  assert.deepStrictEqual(normalizar(salvo['4']), { sup: 'SUP-B', coluna: 'SP' });
+  assert.deepStrictEqual(normalizar(salvo['77']), { sup: 'SUP-B', coluna: 'SP' },
+    'a companheira de veículo tem que estar gravada, não só na tela');
 });
 
 test('ao começar o gesto, os cartões das companheiras de veículo acendem', async () => {

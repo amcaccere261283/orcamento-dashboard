@@ -140,12 +140,21 @@ test('companheira INDISPONÍVEL nunca é tocada, nem no pool nem no quadro', () 
   const alocacao = { D: { sup: 'SUP-9', coluna: 'SP' } };
   const movs = destinoDoGrupo(equipesDeTeste(), alocacao, 'A', 'SUP-1', 'SP');
   assert.ok(!movs.some((m) => m.id === 'D'), 'D está indisponível: fica onde está');
+  // Achado Minor 1 da revisão final: só checar AUSÊNCIA de D também passaria
+  // com a trava REMOVIDA (companheiros zerado -> movs = [A] -> D também não
+  // estaria lá, mas por um motivo errado). A lista COMPLETA prova que B e C
+  // vieram junto -- é a trava agindo, não a ausência de trava nenhuma.
+  assert.deepStrictEqual(movs.map((m) => m.id).sort(), ['A', 'B', 'C']);
 });
 
 test('companheira JÁ no SUP de destino não gera movimento redundante', () => {
   const alocacao = { C: { sup: 'SUP-1', coluna: 'SP' } };
   const movs = destinoDoGrupo(equipesDeTeste(), alocacao, 'A', 'SUP-1', 'SP');
   assert.ok(!movs.some((m) => m.id === 'C'));
+  // Achado Minor 1: idem -- a lista completa (A arrastada + B, que ainda
+  // estava no pool) prova que a trava trouxe quem precisava vir, não só que
+  // C ficou de fora.
+  assert.deepStrictEqual(movs.map((m) => m.id).sort(), ['A', 'B']);
 });
 
 test('a coluna da companheira é PRESERVADA quando ela serve a mesma no destino', () => {
