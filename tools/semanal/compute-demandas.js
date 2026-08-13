@@ -201,6 +201,45 @@ function computeDemandas(furos, periodos, ensaiosLab) {
   return { tipologias, totais, porRegistroEventos: Object.fromEntries(porRegistroEventos) };
 }
 
+// Bucketiza as chegadas (evento 'criacaoOS'/'criacao' -- o mesmo que
+// alimenta demandas.porRegistroEventos[chave].chegada dentro de
+// computeDemandas acima) por (sup, tipologia) em vez de por tipologia --
+// é o que o Gráfico do dashboard de ORÇAMENTO precisa pra recortar
+// Demandas pelos MESMOS filtros de SUP/tipologia/grupo/origem que já
+// recortam Previsto/Realizado/Tendência lá (ver
+// docs/superpowers/specs/2026-08-13-demandas-no-grafico-orcamento-design.md).
+// Roda no BUILD do orçamento (tools/orcamento/build-dashboard.js), sobre os
+// MESMOS furos/ensaiosLab (já redirecionados pra "Diversos" quando o SUP
+// não bate com a MATRIZ, ver redirecionarSupsDesconhecidos) que
+// computeDemandas usaria -- por isso a soma por mês, agregada de volta por
+// tipologia, tem que bater com demandas.totais.chegadas (ver o teste de
+// invariante em test/semanal-compute-demandas.test.js).
+function chegadasMensaisPorRegistro(furos, ensaiosLab, periodos) {
+  const n = periodos.length;
+  const porChave = new Map();
+
+  function bucket(chave) {
+    if (!porChave.has(chave)) porChave.set(chave, zeros12(n));
+    return porChave.get(chave);
+  }
+
+  for (const f of furos || []) {
+    if (!f.criacaoOS) continue;
+    const iChegada = indiceDoMes(f.criacaoOS, periodos);
+    if (iChegada < 0) continue;
+    bucket(chaveMatriz(f.sup, f.tipologia))[iChegada] += 1;
+  }
+
+  for (const e of ensaiosLab || []) {
+    if (!e.criacao) continue;
+    const iChegada = indiceDoMes(e.criacao, periodos);
+    if (iChegada < 0) continue;
+    bucket(chaveMatriz(e.sup, e.tipologia))[iChegada] += 1;
+  }
+
+  return Object.fromEntries(porChave);
+}
+
 // O agregado é por TIPOLOGIA, não por SUP -- mas nada é descartado por SUP:
 // os 36 SUPs do Avanços contribuem para a tipologia deles, inclusive os 13
 // que a MATRIZ não conhece. Esta função só RELATA o desencontro, para o build
@@ -253,4 +292,7 @@ function resolverSupConhecido(registros) {
   };
 }
 
-module.exports = { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, resolverSupConhecido, SERIES, SERIE_ESTOQUE };
+module.exports = {
+  computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, resolverSupConhecido, SERIES, SERIE_ESTOQUE,
+  chegadasMensaisPorRegistro,
+};

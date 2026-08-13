@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  computeDemandas, SERIES, SERIE_ESTOQUE, reconciliarSups,
+  computeDemandas, SERIES, SERIE_ESTOQUE, reconciliarSups, chegadasMensaisPorRegistro,
 } = require('../tools/semanal/compute-demandas.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
 
@@ -369,4 +369,49 @@ test('porRegistroEventos de LAB ganha chegada/saidaEstoque quando criacao está 
   const entrada = saida.porRegistroEventos['SUP-0001-24||LAB.C'];
   assert.strictEqual(entrada.chegada.length, 1);
   assert.strictEqual(entrada.saidaEstoque.length, 1, 'concluído também sai do estoque -- lab não tem "início" separado de "conclusão"');
+});
+
+test('chegadasMensaisPorRegistro: bucketiza por (sup,tipologia), não por tipologia -- dois SUPs da mesma tipologia ficam em chaves separadas', () => {
+  const furos = [
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2026, 1, 10) }),
+    furo({ sup: 'SUP-0002-24', tipologia: 'SP', criacaoOS: d(2026, 1, 15) }),
+  ];
+  const resultado = chegadasMensaisPorRegistro(furos, [], PERIODOS_2026);
+  assert.deepStrictEqual(Object.keys(resultado).sort(), ['SUP-0001-24||SP', 'SUP-0002-24||SP']);
+  assert.strictEqual(resultado['SUP-0001-24||SP'][0], 1);
+  assert.strictEqual(resultado['SUP-0002-24||SP'][0], 1);
+});
+
+test('chegadasMensaisPorRegistro: ensaios de laboratório também contam, pelo evento "criacao" (Data Programada)', () => {
+  const ensaios = [{ sup: 'SUP-0003-24', tipologia: 'LAB.C', criacao: d(2026, 3, 1), concluido: null }];
+  const resultado = chegadasMensaisPorRegistro([], ensaios, PERIODOS_2026);
+  assert.strictEqual(resultado['SUP-0003-24||LAB.C'][2], 1);
+});
+
+test('chegadasMensaisPorRegistro: furo sem criacaoOS não entra em nenhum mês, e não cria chave nenhuma', () => {
+  const furos = [furo({ criacaoOS: null })];
+  const resultado = chegadasMensaisPorRegistro(furos, [], PERIODOS_2026);
+  assert.deepStrictEqual(resultado, {});
+});
+
+test('chegadasMensaisPorRegistro: sem furos nem ensaios devolve objeto vazio, não lança', () => {
+  assert.deepStrictEqual(chegadasMensaisPorRegistro([], [], PERIODOS_2026), {});
+  assert.deepStrictEqual(chegadasMensaisPorRegistro(undefined, undefined, PERIODOS_2026), {});
+});
+
+test('chegadasMensaisPorRegistro: a soma por mês, agregada de novo por tipologia, bate com demandas.totais.chegadas de computeDemandas -- duas leituras do MESMO conjunto de furos (por registro vs. por tipologia) não podem divergir', () => {
+  const furos = [
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2026, 1, 10) }),
+    furo({ sup: 'SUP-0002-24', tipologia: 'SP', criacaoOS: d(2026, 2, 5) }),
+    furo({ sup: 'SUP-0001-24', tipologia: 'ST', criacaoOS: d(2026, 1, 20) }),
+  ];
+  const porRegistro = chegadasMensaisPorRegistro(furos, [], PERIODOS_2026);
+  const porTipologia = computeDemandas(furos, PERIODOS_2026, []);
+
+  const somaSP = new Array(12).fill(0);
+  ['SUP-0001-24||SP', 'SUP-0002-24||SP'].forEach((chave) => {
+    (porRegistro[chave] || new Array(12).fill(0)).forEach((v, i) => { somaSP[i] += v; });
+  });
+  const blocoSP = porTipologia.tipologias.find((t) => t.tipologia === 'SP');
+  assert.deepStrictEqual(somaSP, blocoSP.series.chegadas);
 });
