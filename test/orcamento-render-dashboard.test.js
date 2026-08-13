@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const { renderDashboard } = require('../tools/orcamento/render-dashboard.js');
 const { decifrarComSenha } = require('../tools/comum/criptografia.js');
 const { excelSerialParaData } = require('../tools/comum/datas.js');
+const { construirHtmlGolden } = require('./helpers/golden-orcamento.js');
 
 const SENHA_TESTE = 'senha-fake-de-teste-abc';
 
@@ -70,7 +71,7 @@ test('renderDashboard embeds an encrypted blob (salt/iv/dados/iteracoes) that de
   const html = renderComSenha([registro]);
   const pacote = extrairPacoteCifrado(html);
   assert.ok(pacote.salt && pacote.iv && pacote.dados && pacote.iteracoes);
-  const registrosDecifrados = JSON.parse(decifrarComSenha(pacote, SENHA_TESTE));
+  const registrosDecifrados = JSON.parse(decifrarComSenha(pacote, SENHA_TESTE)).registros;
   assert.equal(registrosDecifrados[0].grupo, 'PÁTRIA');
   assert.equal(registrosDecifrados[0].sup, 'SUP-7133-24');
   assert.equal(registrosDecifrados[0].tomador, 'Via Araucária S.A');
@@ -173,6 +174,7 @@ function extrairFuncoesPuras(html) {
       ' this.campoAgrupamento = campoAgrupamento;' +
       ' this.agruparIndicesAlertas = agruparIndicesAlertas;' +
       ' this.construirPainelGraficoHtml = construirPainelGraficoHtml;' +
+      ' this.demandasMensaisPorIndices = demandasMensaisPorIndices;' +
       ' this.somarIntervaloMensal = somarIntervaloMensal; this.bucketPeriodo = bucketPeriodo;' +
       ' this.bucketIntervalo = bucketIntervalo;' +
       ' this.classificarSemaforo = classificarSemaforo;' +
@@ -208,6 +210,7 @@ function extrairFuncoesPuras(html) {
     campoAgrupamento: sandbox.campoAgrupamento,
     agruparIndicesAlertas: sandbox.agruparIndicesAlertas,
     construirPainelGraficoHtml: sandbox.construirPainelGraficoHtml,
+    demandasMensaisPorIndices: sandbox.demandasMensaisPorIndices,
     somarIntervaloMensal: sandbox.somarIntervaloMensal,
     bucketPeriodo: sandbox.bucketPeriodo,
     bucketIntervalo: sandbox.bucketIntervalo,
@@ -914,6 +917,77 @@ test('Tendência keeps correctly inheriting the real Realizado accumulated total
   assert.match(acumuladoMatch[0], /68\.000/, 'julho deveria ser 60.000 (Realizado acumulado até junho, mesmo não aparecendo no gráfico) + 8.000 (Tendência de julho) = 68.000 -- não 8.000 (o que aconteceria se Tendência tivesse esquecido o Realizado)');
 });
 
+test('demandasMensaisPorIndices: soma os arrays das chaves (sup||tipologia) dos registros filtrados, mês a mês', () => {
+  const html = construirHtmlGolden();
+  const { demandasMensaisPorIndices } = extrairFuncoesPuras(html);
+
+  const registros = [
+    { sup: 'SUP-A', tipologia: 'SP' },
+    { sup: 'SUP-B', tipologia: 'SP' },
+    { sup: 'SUP-C', tipologia: 'ST' }, // fora dos indices filtrados
+  ];
+  const demandasMensais = {
+    'SUP-A||SP': [1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    'SUP-B||SP': [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    'SUP-C||ST': [99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99],
+  };
+
+  const resultado = demandasMensaisPorIndices([0, 1], registros, demandasMensais);
+  // paraPlano: resultado é um array construído DENTRO do vm.Context (new
+  // Array(12) do realm do sandbox) -- deepStrictEqual é sensível a
+  // protótipo, então precisa normalizar antes de comparar com o literal
+  // deste realm (mesmo idiom já usado em todo o resto do arquivo, ver
+  // paraPlano acima).
+  assert.deepStrictEqual(paraPlano(resultado), [4, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+});
+
+test('demandasMensaisPorIndices: registro sem entrada em demandasMensais não quebra, conta como 12 zeros', () => {
+  const html = construirHtmlGolden();
+  const { demandasMensaisPorIndices } = extrairFuncoesPuras(html);
+  const registros = [{ sup: 'SUP-SEM-DADO', tipologia: 'SP' }];
+  const resultado = demandasMensaisPorIndices([0], registros, { 'SUP-OUTRO||SP': [5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
+  assert.deepStrictEqual(paraPlano(resultado), new Array(12).fill(0));
+});
+
+test('demandasMensaisPorIndices: sem demandasMensais (undefined) devolve 12 zeros, não lança', () => {
+  const html = construirHtmlGolden();
+  const { demandasMensaisPorIndices } = extrairFuncoesPuras(html);
+  assert.deepStrictEqual(paraPlano(demandasMensaisPorIndices([0], [{ sup: 'X', tipologia: 'Y' }], undefined)), new Array(12).fill(0));
+});
+
+test('construirPainelGraficoHtml: dimensão Volume inclui uma 5ª série "Demandas" (roxa, #9700DA) em dadosPorSerie, com acumulado em soma corrida', () => {
+  const html = construirHtmlGolden();
+  const { construirPainelGraficoHtml, window: sandboxWindow } = extrairFuncoesPuras(html);
+  sandboxWindow.__DEMANDAS_MENSAIS__ = { 'SUP-0002-24||SP': [3, 0, 5, 0, 0, 2, 0, 0, 0, 4, 0, 0] };
+
+  const registro = { sup: 'SUP-0002-24', tipologia: 'SP', previsto: null, previstoInicial: null, realizado: null, total: null };
+  const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(), 'volume');
+
+  assert.match(htmlPainel, /#9700DA/, 'a cor de Demandas precisa aparecer no SVG desenhado');
+  assert.match(htmlPainel, /Demandas/, 'o rótulo "Demandas" precisa aparecer (legenda/tooltip)');
+
+  // new Set() acima é "sem filtro ativo" (filtroExclui só exclui quando
+  // filtro.size > 0 -- ver tools/comum/render-shell.js), então a asserção
+  // anterior passaria igual mesmo se Demandas FOSSE filtrada por
+  // filtro-serie. Pra provar de verdade que Demandas ignora filtro-serie,
+  // usa um filtro RESTRITIVO (só 'realizado' passa), que esconde
+  // previsto/total/previstoInicial/realizadoPrevistoInicial do gráfico --
+  // e confere que #9700DA continua aparecendo mesmo assim.
+  const htmlPainelComFiltro = construirPainelGraficoHtml([registro], [0], new Set(['realizado']), 'volume');
+  assert.match(htmlPainelComFiltro, /#9700DA/, 'Demandas precisa continuar aparecendo mesmo com filtro-serie restritivo ativo (ela não faz parte de ORDEM_SERIES_GRAFICO)');
+});
+
+test('construirPainelGraficoHtml: dimensões que NÃO são Volume nunca ganham a série Demandas, mesmo com window.__DEMANDAS_MENSAIS__ preenchido', () => {
+  const html = construirHtmlGolden();
+  const { construirPainelGraficoHtml, window: sandboxWindow } = extrairFuncoesPuras(html);
+  sandboxWindow.__DEMANDAS_MENSAIS__ = { 'SUP-0002-24||SP': [3, 0, 5, 0, 0, 2, 0, 0, 0, 4, 0, 0] };
+
+  const registro = { sup: 'SUP-0002-24', tipologia: 'SP', previsto: null, previstoInicial: null, realizado: null, total: null };
+  const htmlFinanceiro = construirPainelGraficoHtml([registro], [0], new Set(), 'financeiro');
+
+  assert.doesNotMatch(htmlFinanceiro, /#9700DA/);
+});
+
 test('indicesFiltrados (extraído do HTML real gerado) returns every index when no filter is active', () => {
   const html = renderComSenha([registroExemplo()]);
   const { indicesFiltrados } = extrairFuncoesPuras(html);
@@ -1553,6 +1627,33 @@ test('fecharTendenciaVigente: um zero artificial de "mês ainda não reportado" 
   assert.equal(fechado.total.financeiro[4], 500, 'mês 4: Realizado tem 0 artificial -- usa a projeção real da linha T (500), não sobrescreve com 0');
   assert.equal(fechado.total.financeiro[5], 600, 'mês 5: mesmo caso (600)');
   assert.equal(fechado.total.financeiro[6], 200, 'mês vigente: Realizado tem 0 artificial (tratado como sem dado) -- fecha só com a projeção da linha T (0 + 200)');
+});
+
+test('fecharTendenciaVigente: desembrulha {registros, demandasChegadasMensais}, guarda demandas em window.__DEMANDAS_MENSAIS__ e devolve só o array de registros', () => {
+  const html = construirHtmlGolden();
+  const { fecharTendenciaVigente, window: sandboxWindow } = extrairFuncoesPuras(html);
+
+  const registro = { sup: 'SUP-X', tipologia: 'SP', total: null, realizado: null };
+  const resultado = fecharTendenciaVigente({ registros: [registro], demandasChegadasMensais: { 'SUP-X||SP': [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } }, 5);
+
+  assert.deepStrictEqual(resultado, [registro]);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_MENSAIS__, { 'SUP-X||SP': [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
+});
+
+test('fecharTendenciaVigente: chamada com um array puro (live-refresh, sem Demandas) preserva window.__DEMANDAS_MENSAIS__ já setado, em vez de apagar', () => {
+  const html = construirHtmlGolden();
+  const { fecharTendenciaVigente, window: sandboxWindow } = extrairFuncoesPuras(html);
+
+  const registro = { sup: 'SUP-X', tipologia: 'SP', total: null, realizado: null };
+  fecharTendenciaVigente({ registros: [registro], demandasChegadasMensais: { 'SUP-X||SP': [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } }, 5);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_MENSAIS__, { 'SUP-X||SP': [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
+
+  // live-refresh: registrosNovos é um ARRAY puro, sem demandasChegadasMensais.
+  const registrosNovos = [{ sup: 'SUP-Y', tipologia: 'ST', total: null, realizado: null }];
+  const resultado = fecharTendenciaVigente(registrosNovos, 5);
+
+  assert.deepStrictEqual(resultado, registrosNovos);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_MENSAIS__, { 'SUP-X||SP': [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, 'live-refresh não deve apagar as Demandas do build');
 });
 
 test('o gate de senha (tentarDesbloquear) fecha a Tendência com fecharTendenciaVigente logo após decifrar, antes de montarDashboard', () => {

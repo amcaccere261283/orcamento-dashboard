@@ -116,7 +116,17 @@ function fecharSerieMensal(totalMensal, realizadoMensal, vigenteIdx, fechar) {
 // Os 2 pontos de chamada reais sempre passam um array recém-atribuído
 // (JSON.parse ou o resultado de um novo fetch), nunca o retorno desta
 // própria função -- mantenha essa invariante se adicionar um 3º ponto.
-function fecharTendenciaVigente(registros, vigenteIdx) {
+// dados: o que o gate acabou de JSON.parse -- {registros, demandasChegadasMensais}
+// (ver renderDashboard). Guarda demandasChegadasMensais em
+// window.__DEMANDAS_MENSAIS__ SÓ quando presente -- atualizarDadosAoVivo
+// chama esta mesma função de novo com um array puro (a MATRIZ espelho não
+// tem Demandas), e sobrescrever incondicionalmente apagaria as Demandas do
+// build a cada "Atualizar dados ao vivo". Mesmo espírito de
+// window.__DEMANDAS__ em tools/semanal/render-semanal.js, com a exceção
+// condicional documentada acima.
+function fecharTendenciaVigente(dados, vigenteIdx) {
+  if (dados && dados.demandasChegadasMensais) window.__DEMANDAS_MENSAIS__ = dados.demandasChegadasMensais;
+  var registros = (dados && dados.registros) ? dados.registros : dados;
   if (vigenteIdx < 0 || vigenteIdx > 11) return registros; // fora do ano coberto -- nada a fechar
   return registros.map(function (registro) {
     if (!registro.total) return registro;
@@ -476,16 +486,19 @@ function cortarAcumuladoNoUltimoDado(acumulado, mensal) {
 }
 
 // Mesmo cinza claro usado na linha "Previsto Inicial" da tabela (.linha-previsto-inicial),
-// pra não inventar uma cor nova pra mesma série. Roxo é a 5ª cor
-// categórica (só do Gráfico, ver ORDEM_SERIES_GRAFICO) -- distinta das
-// outras 4 hues (cinza/azul/verde/âmbar).
-var SERIE_COR = { previstoInicial: '#8b8a82', previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f', realizadoPrevistoInicial: '#a78bfa' };
+// pra não inventar uma cor nova pra mesma série. 6 entradas ao todo (só do
+// Gráfico, ver ORDEM_SERIES_GRAFICO): 4 hues distintas (cinza/azul/verde/
+// âmbar) mais 2 roxos -- realizadoPrevistoInicial no lilás claro (#a78bfa) e
+// demandas, o mais novo, num roxo mais saturado (#9700DA) pra não se
+// confundir com o primeiro.
+var SERIE_COR = { previstoInicial: '#8b8a82', previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f', realizadoPrevistoInicial: '#a78bfa', demandas: '#9700DA' };
 // Tracejado por série além da cor -- segunda camada de identidade (não só
 // hue) pra sobreviver a daltonismo/impressão P&B: previsto inicial pontilhado
 // esparso (mais discreto, é a referência de fundo), previsto sólido,
 // realizado pontilhado fino, tendência tracejado longo, realizado+previsto
-// inicial dash-dot (distinto dos outros 4 traços).
-var SERIE_TRACEJADO = { previstoInicial: '2,4', previsto: '', realizado: '1,5', total: '9,5', realizadoPrevistoInicial: '6,3,1,3' };
+// inicial dash-dot (distinto dos outros 4 traços), demandas tracejado médio
+// (distinto dos outros 5).
+var SERIE_TRACEJADO = { previstoInicial: '2,4', previsto: '', realizado: '1,5', total: '9,5', realizadoPrevistoInicial: '6,3,1,3', demandas: '4,2' };
 var DIMENSOES_RAZAO = ['produtividade', 'ticketMedio'];
 var MESES_ABREVIADOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -775,6 +788,26 @@ function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
   return { svg: finalizarPainelSvg(svg, rotulos, altura), milhares: usarMilhares };
 }
 
+// Soma, mês a mês, os arrays de demandasMensais (window.__DEMANDAS_MENSAIS__,
+// {chaveMatriz: [12 chegadas]} montado no build -- ver
+// tools/orcamento/build-dashboard.js:montarDemandasChegadasMensais) das
+// chaves (sup||tipologia) dos registros que passaram no filtro atual.
+// Mesma chave de tools/comum/linha-base.js:chaveMatriz, reproduzida aqui
+// como concatenação simples (sem importar o módulo -- este código roda
+// embutido no <script> da página, sem require).
+function demandasMensaisPorIndices(indices, registros, demandasMensais) {
+  var mensal = new Array(12).fill(0);
+  if (!demandasMensais) return mensal;
+  indices.forEach(function (idx) {
+    var registro = registros[idx];
+    var chave = registro.sup + '||' + registro.tipologia;
+    var porMes = demandasMensais[chave];
+    if (!porMes) return;
+    for (var i = 0; i < 12; i++) mensal[i] += porMes[i] || 0;
+  });
+  return mensal;
+}
+
 // Monta o par Mensal + Acumulado de UMA dimensão (HTML pronto, não toca o
 // DOM diretamente) -- reaproveitado por montarGraficos pra cada dimensão
 // marcada, uma abaixo da outra. As dimensões nunca se somam entre si (não
@@ -863,6 +896,20 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
       : null;
     return { serie: serie, mensal: mensalParaDesenho, acumulado: acumulado, indiceConector: indiceConector };
   });
+
+  // Demandas (chegadas -- furos de sondagem + ensaios de laboratório) só
+  // faz sentido em Volume: é uma contagem física, sem equivalente em R$
+  // (Financeiro) nem headcount (Equipes), e Produtividade/Ticket médio são
+  // razões que não admitem uma 5ª série somada. Sempre visível quando a
+  // dimensão é Volume -- não passa pelo filtro-serie (Previsto Inicial/
+  // Previsto/Realizado/Total), decisão explícita do dono do projeto em
+  // 2026-08-13 (ver o spec). Acumulado por soma corrida (calcularAcumulado),
+  // igual às outras 3 séries de fluxo -- Demandas aqui é "chegadas", não
+  // "pendentes" (estoque), então soma normalmente.
+  if (dimensao === 'volume') {
+    var demandasMensal = demandasMensaisPorIndices(indices, registros, window.__DEMANDAS_MENSAIS__);
+    dadosPorSerie = dadosPorSerie.concat([{ serie: 'demandas', mensal: demandasMensal, acumulado: calcularAcumulado(demandasMensal), indiceConector: null }]);
+  }
 
   var rotuloDimensao = DIMENSOES_ROTULO[dimensao] || '';
   // Todo gráfico mostra número inteiro, sem casa decimal -- exceto
@@ -1106,7 +1153,7 @@ function tipologiaColor(tipologia) {
   return '#898781';
 }
 
-var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência', realizadoPrevistoInicial: 'Realizado + Previsto Inicial' };
+var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência', realizadoPrevistoInicial: 'Realizado + Previsto Inicial', demandas: 'Demandas' };
 // ORDEM_SERIES gera as linhas por registro da TABELA (renderBlocosDimensao)
 // -- fica só com as 4 séries originais de propósito. ORDEM_SERIES_GRAFICO
 // é a versão usada SÓ pelo Gráfico (construirPainelGraficoHtml), com a 5ª
@@ -1862,15 +1909,18 @@ ${markupAbas(ABAS_VISUALIZACAO, '        ')}
 
 const MARKUP_NOTA_PREMISSA = `      <div id="nota-premissa-produtividade" class="nota-premissa" style="display:none">Premissa: Produtividade = Volume ÷ (Equipes × dias do mês) — dias = 15 em Janeiro e Dezembro, 30 nos demais meses.</div>`;
 
-function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha }) {
+function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha, demandasChegadasMensais = {} }) {
   if (!senha) {
     throw new Error('renderDashboard requer "senha" -- o conteúdo (SUP/Grupo/Tomador/Tipologia/valores) é cifrado com ela antes de ir pro HTML.');
   }
   const vigenteIdx = calcularVigenteIdx(periodos, generatedAt);
-  const registrosJson = JSON.stringify(registros.map(r => ({
-    sup: r.sup, grupo: r.grupo, tomador: r.tomador, escopo: r.escopo, tipologia: r.tipologia, origem: r.origem,
-    previstoInicial: r.previstoInicial, previsto: r.previsto, realizado: r.realizado, total: r.total,
-  })));
+  const registrosJson = JSON.stringify({
+    registros: registros.map(r => ({
+      sup: r.sup, grupo: r.grupo, tomador: r.tomador, escopo: r.escopo, tipologia: r.tipologia, origem: r.origem,
+      previstoInicial: r.previstoInicial, previsto: r.previsto, realizado: r.realizado, total: r.total,
+    })),
+    demandasChegadasMensais,
+  });
   const dadosCifrados = cifrarComSenha(registrosJson, senha);
   const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');
 

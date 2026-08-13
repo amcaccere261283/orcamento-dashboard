@@ -147,9 +147,20 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
   delete require.cache[buildPath];
   const { build } = require(buildPath);
 
+  const avancosPath = path.join(os.tmpdir(), `avancos-online-e2e-${Date.now()}.csv`);
+  const labPath = path.join(os.tmpdir(), `lab-online-e2e-${Date.now()}.csv`);
+  fs.writeFileSync(avancosPath, 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n');
+  fs.writeFileSync(labPath, 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n');
+
   try {
     const senha = 'senha-e2e-de-teste';
-    build({ outPath, today: new Date(2026, 6, 21), senha });
+    build({
+      outPath, today: new Date(2026, 6, 21), senha,
+      caminhoAvancosOnline: avancosPath,
+      caminhoDemandasSondagemOnline: path.join(os.tmpdir(), 'inexistente-sondagem-e2e.csv'),
+      caminhoLabOnline: labPath,
+      caminhoDemandasLabOnline: path.join(os.tmpdir(), 'inexistente-lab-e2e.json'),
+    });
     const html = fs.readFileSync(outPath, 'utf8');
 
     // O conteúdo real (tipologia/grupo) fica cifrado no HTML -- decifra com
@@ -158,7 +169,9 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
     const { decifrarComSenha } = require('../tools/comum/criptografia.js');
     const match = html.match(/window\.__DADOS_CIFRADOS__\s*=\s*(\{[\s\S]*?\});/);
     assert.ok(match, 'window.__DADOS_CIFRADOS__ not found in the built HTML');
-    const registros = JSON.parse(decifrarComSenha(JSON.parse(match[1]), senha));
+    const dados = JSON.parse(decifrarComSenha(JSON.parse(match[1]), senha));
+    const registros = dados.registros;
+    assert.ok(dados.demandasChegadasMensais && typeof dados.demandasChegadasMensais === 'object', 'o blob decifrado tem que trazer demandasChegadasMensais, mesmo vazio');
     const tipologias = registros.map(r => r.tipologia);
     const grupos = registros.map(r => r.grupo);
     assert.ok(tipologias.includes('SP'));
@@ -180,8 +193,59 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
   } finally {
     fs.unlinkSync(xlsxPath);
     fs.unlinkSync(linhaBasePath);
+    fs.unlinkSync(avancosPath);
+    fs.unlinkSync(labPath);
     if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
     delete require.cache[configPath];
     delete require.cache[buildPath];
   }
+});
+
+test('montarDemandasChegadasMensais: lê avancos-online.csv + lab-online.csv (via parseCsvGrid) e devolve chegadas mensais por (sup,tipologia), redirecionando SUP desconhecido pra "Diversos"', () => {
+  const { montarDemandasChegadasMensais } = require('../tools/orcamento/build-dashboard.js');
+  const registros = [
+    { sup: 'SUP-0001-24', tipologia: 'SP' },
+    { sup: 'Diversos', tipologia: 'SP' },
+  ];
+  const periodos = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 1)));
+
+  // 46023 = 01/01/2026, 46054 = 01/02/2026 (mesma convenção de serial Excel
+  // usada em todo o resto do projeto).
+  const avancosCsv = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+    + 'SUP-0001-24,46023,SP,PENDENTE,,Não,10,,OS-1,\n'
+    + 'SUP-9999-24,46054,SP,PENDENTE,,Não,10,,OS-2,\n';
+
+  const avancosPath = path.join(os.tmpdir(), `avancos-online-teste-${Date.now()}.csv`);
+  const labPath = path.join(os.tmpdir(), `lab-online-teste-${Date.now()}.csv`);
+  fs.writeFileSync(avancosPath, avancosCsv);
+  fs.writeFileSync(labPath, 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n');
+
+  try {
+    const resultado = montarDemandasChegadasMensais({
+      registros, periodos,
+      caminhoAvancosOnline: avancosPath,
+      caminhoDemandasSondagemOnline: path.join(os.tmpdir(), 'inexistente-sondagem.csv'),
+      caminhoLabOnline: labPath,
+      caminhoDemandasLabOnline: path.join(os.tmpdir(), 'inexistente-lab.json'),
+    });
+    assert.strictEqual(resultado['SUP-0001-24||SP'][0], 1);
+    assert.strictEqual(resultado['Diversos||SP'][1], 1, 'furo de SUP desconhecido tem que redirecionar pra Diversos, não sumir');
+  } finally {
+    fs.unlinkSync(avancosPath);
+    fs.unlinkSync(labPath);
+  }
+});
+
+test('montarDemandasChegadasMensais: erro claro quando avancos-online.csv (obrigatório) não existe', () => {
+  const { montarDemandasChegadasMensais } = require('../tools/orcamento/build-dashboard.js');
+  assert.throws(
+    () => montarDemandasChegadasMensais({
+      registros: [], periodos: Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 1))),
+      caminhoAvancosOnline: path.join(os.tmpdir(), 'nunca-existiu.csv'),
+      caminhoDemandasSondagemOnline: path.join(os.tmpdir(), 'nunca-existiu-2.csv'),
+      caminhoLabOnline: path.join(os.tmpdir(), 'nunca-existiu-3.csv'),
+      caminhoDemandasLabOnline: path.join(os.tmpdir(), 'nunca-existiu-4.json'),
+    }),
+    /atualizar-avancos-online\.js/,
+  );
 });

@@ -10,12 +10,17 @@ const DATA_FIXA = new Date(Date.UTC(2026, 6, 15));
 const SENHA_FIXA = 'golden-fake';
 const PERIODOS = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 1)));
 
+const DEMANDAS_GOLDEN = {
+  'SUP-0002-24||SP': [3, 0, 5, 0, 0, 2, 0, 0, 0, 4, 0, 0],
+};
+
 function construirHtmlGolden() {
   return renderDashboard({
     registros: JSON.parse(fs.readFileSync(FIXTURE, 'utf8')),
     periodos: PERIODOS,
     generatedAt: DATA_FIXA,
     senha: SENHA_FIXA,
+    demandasChegadasMensais: DEMANDAS_GOLDEN,
     logoDataUri: 'data:image/png;base64,GOLDEN',
     iconDataUri: 'data:image/png;base64,GOLDEN',
   });

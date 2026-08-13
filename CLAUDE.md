@@ -45,6 +45,55 @@ site ficou servindo um build de dois commits antes. Ao verificar um deploy, não
 no status da API de builds — faça `curl` na URL ao vivo e confira se o "Gerado em" bate
 com o `dist/` recém-construído.
 
+## Demandas no Gráfico (dimensão Volume, 2026-08-13)
+
+A aba Gráfico ganhou uma 4ª série, "Demandas" (roxo `#9700DA`), visível só na
+dimensão Volume -- barra mensal de chegadas (furos de sondagem + ensaios de
+laboratório) + linha de acumulado por soma corrida. Ver
+`docs/superpowers/specs/2026-08-13-demandas-no-grafico-orcamento-design.md`
+pro design completo, incluindo a comparação contra o BI de referência que
+decidiu `chegadas` (fluxo) em vez de `pendentes` (estoque).
+
+**O build do orçamento passou a depender de 4 arquivos que antes só a página
+semanal usava** (`dist/avancos-online.csv` e `dist/lab-online.csv`,
+obrigatórios; `dist/demandas-sondagem-online.csv` e
+`dist/demandas-lab-online.json`, opcionais -- sem eles o build roda normal,
+só sem o backlog ainda não executado nas Demandas). Os 4 são versionados no
+git, então um clone novo já os tem e builda sem nenhum setup extra --
+rodar os fetchers (`node tools/semanal/atualizar-avancos-online.js` /
+`atualizar-lab-online.js` / `atualizar-demandas-sondagem-online.js` /
+`atualizar-demandas-lab-online.js`, documentados na seção "Planejamento
+Semanal" abaixo -- precisam do Chrome aberto com
+`--remote-debugging-port=9222`, logado em sond.com.br) só é necessário pra
+ATUALIZAR esses 4 arquivos com dado mais recente, não pra tornar o build
+possível. Se um dos dois obrigatórios estiver ausente ou ilegível, `node
+tools/orcamento/build-dashboard.js` falha com uma mensagem que já diz o
+comando pra gerar. **Risco não documentado até aqui:** não há aviso de
+"dado desatualizado" -- só de arquivo faltando/ilegível -- então se esses
+CSVs commitados ficarem velhos (ninguém rodar os fetchers por um tempo), o
+build continua funcionando normalmente e produz Demandas com números
+defasados, em silêncio.
+
+`tools/semanal/compute-demandas.js` ganhou `chegadasMensaisPorRegistro`
+(aditiva, não muda nada que a página semanal já consumia) -- é a função que
+bucketiza chegadas por (SUP, tipologia) × mês, em vez de só por tipologia.
+**Este arquivo continua em `tools/semanal/`, não foi movido pra
+`tools/comum/`** -- ver o comentário de "Riscos investigados" no plano de
+implementação (`docs/superpowers/plans/2026-08-13-demandas-no-grafico-orcamento.md`):
+mover quebraria o bundle do navegador da página semanal, que concatena o
+arquivo como texto e reescreve `require()`s por posição de diretório.
+`tools/orcamento/build-dashboard.js` importa direto de `tools/semanal/`
+(Node puro, nenhum bundle envolvido nesse lado).
+
+**O formato do blob cifrado mudou** de um array puro de registros para
+`{ registros, demandasChegadasMensais }` -- `window.__REGISTROS__` continua
+sendo só o array (o cliente desembrulha em `fecharTendenciaVigente`), e
+`window.__DEMANDAS_MENSAIS__` é o novo global com `{chaveMatriz: [12
+chegadas por mês]}`. **O botão "Atualizar dados ao vivo" não atualiza
+Demandas** -- ele só busca a Sheet espelho da MATRIZ, então
+`window.__DEMANDAS_MENSAIS__` fica com o valor do último build até uma
+rodada futura trazer isso pro live-refresh também.
+
 ## Pendência conhecida: aba Gerencial
 
 Uma 3ª aba (além de Tabela/Gráfico) foi investigada e **adiada** pelo usuário em
