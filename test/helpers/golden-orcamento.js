@@ -14,6 +14,12 @@ const DEMANDAS_GOLDEN = {
   'SUP-0002-24||SP': [3, 0, 5, 0, 0, 2, 0, 0, 0, 4, 0, 0],
 };
 
+// Saldo de abertura (31/12/2025) da mesma chave -- exercita o ponto de
+// partida do Acumulado de Demandas no golden, não só as chegadas do ano.
+const DEMANDAS_SALDO_ABERTURA_GOLDEN = {
+  'SUP-0002-24||SP': 20,
+};
+
 function construirHtmlGolden() {
   return renderDashboard({
     registros: JSON.parse(fs.readFileSync(FIXTURE, 'utf8')),
@@ -21,6 +27,7 @@ function construirHtmlGolden() {
     generatedAt: DATA_FIXA,
     senha: SENHA_FIXA,
     demandasChegadasMensais: DEMANDAS_GOLDEN,
+    demandasSaldoAbertura: DEMANDAS_SALDO_ABERTURA_GOLDEN,
     logoDataUri: 'data:image/png;base64,GOLDEN',
     iconDataUri: 'data:image/png;base64,GOLDEN',
   });

@@ -228,8 +228,39 @@ test('montarDemandasChegadasMensais: lê avancos-online.csv + lab-online.csv (vi
       caminhoLabOnline: labPath,
       caminhoDemandasLabOnline: path.join(os.tmpdir(), 'inexistente-lab.json'),
     });
-    assert.strictEqual(resultado['SUP-0001-24||SP'][0], 1);
-    assert.strictEqual(resultado['Diversos||SP'][1], 1, 'furo de SUP desconhecido tem que redirecionar pra Diversos, não sumir');
+    assert.strictEqual(resultado.chegadasMensais['SUP-0001-24||SP'][0], 1);
+    assert.strictEqual(resultado.chegadasMensais['Diversos||SP'][1], 1, 'furo de SUP desconhecido tem que redirecionar pra Diversos, não sumir');
+  } finally {
+    fs.unlinkSync(avancosPath);
+    fs.unlinkSync(labPath);
+  }
+});
+
+test('montarDemandasChegadasMensais: também devolve o saldo de abertura (estoque em 31/12 do ano anterior), separado das chegadas do ano -- furo de 2025 ainda pendente conta em saldoAbertura, não em chegadasMensais', () => {
+  const { montarDemandasChegadasMensais } = require('../tools/orcamento/build-dashboard.js');
+  const registros = [{ sup: 'SUP-0001-24', tipologia: 'SP' }];
+  const periodos = Array.from({ length: 12 }, (_, m) => new Date(Date.UTC(2026, m, 1)));
+
+  // 45658 = 01/01/2025 (furo que chegou no ano anterior e nunca foi executado
+  // -- entra no saldo de abertura de 2026, não nas chegadas de 2026).
+  const avancosCsv = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+    + 'SUP-0001-24,45658,SP,PENDENTE,,Não,10,,OS-1,\n';
+
+  const avancosPath = path.join(os.tmpdir(), `avancos-online-saldo-teste-${Date.now()}.csv`);
+  const labPath = path.join(os.tmpdir(), `lab-online-saldo-teste-${Date.now()}.csv`);
+  fs.writeFileSync(avancosPath, avancosCsv);
+  fs.writeFileSync(labPath, 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n');
+
+  try {
+    const resultado = montarDemandasChegadasMensais({
+      registros, periodos,
+      caminhoAvancosOnline: avancosPath,
+      caminhoDemandasSondagemOnline: path.join(os.tmpdir(), 'inexistente-sondagem-saldo.csv'),
+      caminhoLabOnline: labPath,
+      caminhoDemandasLabOnline: path.join(os.tmpdir(), 'inexistente-lab-saldo.json'),
+    });
+    assert.strictEqual(resultado.saldoAbertura['SUP-0001-24||SP'], 1);
+    assert.strictEqual(resultado.chegadasMensais['SUP-0001-24||SP'], undefined, 'furo de 2025 não é chegada de 2026');
   } finally {
     fs.unlinkSync(avancosPath);
     fs.unlinkSync(labPath);

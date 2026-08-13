@@ -94,6 +94,44 @@ Demandas** -- ele só busca a Sheet espelho da MATRIZ, então
 `window.__DEMANDAS_MENSAIS__` fica com o valor do último build até uma
 rodada futura trazer isso pro live-refresh também.
 
+### Saldo de abertura no Acumulado de Demandas (2026-08-13, mesmo dia)
+
+**Achado ao vivo pelo dono do projeto, filtrando SUP-8370-25 (Rota
+Sorocabana):** o Acumulado de Demandas aparecia ABAIXO do Acumulado de
+Realizado -- o que parece impossível (não dá pra executar mais do que
+chegou). Causa raiz: `chegadas` só conta furos/ensaios cujo evento de
+chegada (`Criação da OS`/`Data Programada`) cai DENTRO dos 12 meses do ano
+exibido -- sem conceito de saldo anterior. Medido nesse contrato: 1.344 dos
+2.438 furos executados em 2026 (55%) tinham chegado em 2025 ou antes.
+
+**Fix:** `tools/semanal/compute-demandas.js` ganhou
+`saldoAberturaPorRegistro` -- mesma regra de estoque que `pendentes` já usa
+dentro de `computeDemandas` (chegou até o corte E ainda não executado até o
+corte), só que aplicada UMA VEZ, no último instante de 31/12 do ano ANTERIOR
+ao exibido, em vez de mês a mês dentro do ano. Devolve um NÚMERO por chave
+(`{chaveMatriz: saldo}`), não um array de 12 -- é somado uma vez só ao
+Acumulado, nunca à barra Mensal (que continua mostrando só as chegadas de
+cada mês, sem o saldo).
+
+**Duas opções eram equivalentes e a escolha foi pela mais simples.**
+Cogitou-se computar o saldo "retroativamente" (saldo de hoje − chegadas do
+ano até hoje + executado do ano até hoje). Verificado ao vivo: os dois
+caminhos dão o MESMO número (1.357 pro SUP-8370-25) -- são a mesma
+identidade de conservação de fluxo, só chegando lá por lados diferentes.
+Ficou com o cálculo direto do histórico (`saldoAberturaPorRegistro`) porque
+não depende de "hoje" como referência móvel -- o build dá o mesmo resultado
+não importa que dia rodar.
+
+**Mudança de formato, de novo:** o blob cifrado ganhou um 3º campo,
+`demandasSaldoAbertura` (`{chaveMatriz: número}`), ao lado de `registros`/
+`demandasChegadasMensais`. `fecharTendenciaVigente` desembrulha os três, com
+a mesma regra condicional de sempre (`window.__DEMANDAS_SALDO_ABERTURA__` só
+é sobrescrito quando o campo está presente -- o live-refresh, que nunca traz
+Demandas, não apaga o saldo do build). `montarDemandasChegadasMensais`
+(`tools/orcamento/build-dashboard.js`) agora devolve `{chegadasMensais,
+saldoAbertura}` em vez de só o mapa de chegadas -- quem chama essa função
+precisa desestruturar os dois campos.
+
 ## Pendência conhecida: aba Gerencial
 
 Uma 3ª aba (além de Tabela/Gráfico) foi investigada e **adiada** pelo usuário em

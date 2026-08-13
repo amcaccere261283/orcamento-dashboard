@@ -116,16 +116,18 @@ function fecharSerieMensal(totalMensal, realizadoMensal, vigenteIdx, fechar) {
 // Os 2 pontos de chamada reais sempre passam um array recém-atribuído
 // (JSON.parse ou o resultado de um novo fetch), nunca o retorno desta
 // própria função -- mantenha essa invariante se adicionar um 3º ponto.
-// dados: o que o gate acabou de JSON.parse -- {registros, demandasChegadasMensais}
-// (ver renderDashboard). Guarda demandasChegadasMensais em
-// window.__DEMANDAS_MENSAIS__ SÓ quando presente -- atualizarDadosAoVivo
-// chama esta mesma função de novo com um array puro (a MATRIZ espelho não
-// tem Demandas), e sobrescrever incondicionalmente apagaria as Demandas do
-// build a cada "Atualizar dados ao vivo". Mesmo espírito de
-// window.__DEMANDAS__ em tools/semanal/render-semanal.js, com a exceção
-// condicional documentada acima.
+// dados: o que o gate acabou de JSON.parse -- {registros, demandasChegadasMensais,
+// demandasSaldoAbertura} (ver renderDashboard). Guarda os dois campos de
+// Demandas em window.__DEMANDAS_MENSAIS__/__DEMANDAS_SALDO_ABERTURA__ SÓ
+// quando presentes -- atualizarDadosAoVivo chama esta mesma função de novo
+// com um array puro (a MATRIZ espelho não tem Demandas), e sobrescrever
+// incondicionalmente apagaria as Demandas do build a cada "Atualizar dados
+// ao vivo". Mesmo espírito de window.__DEMANDAS__ em
+// tools/semanal/render-semanal.js, com a exceção condicional documentada
+// acima.
 function fecharTendenciaVigente(dados, vigenteIdx) {
   if (dados && dados.demandasChegadasMensais) window.__DEMANDAS_MENSAIS__ = dados.demandasChegadasMensais;
+  if (dados && dados.demandasSaldoAbertura) window.__DEMANDAS_SALDO_ABERTURA__ = dados.demandasSaldoAbertura;
   var registros = (dados && dados.registros) ? dados.registros : dados;
   if (vigenteIdx < 0 || vigenteIdx > 11) return registros; // fora do ano coberto -- nada a fechar
   return registros.map(function (registro) {
@@ -808,6 +810,23 @@ function demandasMensaisPorIndices(indices, registros, demandasMensais) {
   return mensal;
 }
 
+// Soma o saldo de demandas em aberto em 31/12 do ano ANTERIOR ao exibido
+// (window.__DEMANDAS_SALDO_ABERTURA__, montado no build -- ver
+// tools/semanal/compute-demandas.js:saldoAberturaPorRegistro) pelas chaves
+// (sup||tipologia) dos registros filtrados -- é UM NÚMERO, não um array de
+// 12: é o ponto de partida único da linha Acumulado de Demandas, somado uma
+// vez só, não repetido mês a mês.
+function demandasSaldoAberturaPorIndices(indices, registros, saldoAbertura) {
+  var soma = 0;
+  if (!saldoAbertura) return soma;
+  indices.forEach(function (idx) {
+    var registro = registros[idx];
+    var chave = registro.sup + '||' + registro.tipologia;
+    soma += saldoAbertura[chave] || 0;
+  });
+  return soma;
+}
+
 // Monta o par Mensal + Acumulado de UMA dimensão (HTML pronto, não toca o
 // DOM diretamente) -- reaproveitado por montarGraficos pra cada dimensão
 // marcada, uma abaixo da outra. As dimensões nunca se somam entre si (não
@@ -903,12 +922,23 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
   // razões que não admitem uma 5ª série somada. Sempre visível quando a
   // dimensão é Volume -- não passa pelo filtro-serie (Previsto Inicial/
   // Previsto/Realizado/Total), decisão explícita do dono do projeto em
-  // 2026-08-13 (ver o spec). Acumulado por soma corrida (calcularAcumulado),
-  // igual às outras 3 séries de fluxo -- Demandas aqui é "chegadas", não
-  // "pendentes" (estoque), então soma normalmente.
+  // 2026-08-13 (ver o spec).
+  //
+  // O Acumulado NÃO é só a soma corrida das chegadas do ano -- nasce do
+  // saldo de demandas que já estava em aberto em 31/12 do ano anterior
+  // (demandasSaldoAberturaPorIndices). Achado ao vivo em 2026-08-13
+  // filtrando SUP-8370-25 (Rota Sorocabana): sem esse saldo de abertura,
+  // 55% dos furos executados em 2026 (chegados em 2025 ou antes) ficavam de
+  // fora da contagem, e o Acumulado de Demandas aparecia ABAIXO do
+  // Acumulado de Realizado -- o que parece impossível (não dá pra executar
+  // mais do que chegou), mas era só a janela do ano escondendo o saldo
+  // anterior. A barra MENSAL continua mostrando só as chegadas de cada mês
+  // do ano exibido, sem o saldo -- só o Acumulado muda.
   if (dimensao === 'volume') {
     var demandasMensal = demandasMensaisPorIndices(indices, registros, window.__DEMANDAS_MENSAIS__);
-    dadosPorSerie = dadosPorSerie.concat([{ serie: 'demandas', mensal: demandasMensal, acumulado: calcularAcumulado(demandasMensal), indiceConector: null }]);
+    var demandasSaldoAbertura = demandasSaldoAberturaPorIndices(indices, registros, window.__DEMANDAS_SALDO_ABERTURA__);
+    var demandasAcumulado = calcularAcumulado(demandasMensal).map(function (v) { return v + demandasSaldoAbertura; });
+    dadosPorSerie = dadosPorSerie.concat([{ serie: 'demandas', mensal: demandasMensal, acumulado: demandasAcumulado, indiceConector: null }]);
   }
 
   var rotuloDimensao = DIMENSOES_ROTULO[dimensao] || '';
@@ -1909,7 +1939,7 @@ ${markupAbas(ABAS_VISUALIZACAO, '        ')}
 
 const MARKUP_NOTA_PREMISSA = `      <div id="nota-premissa-produtividade" class="nota-premissa" style="display:none">Premissa: Produtividade = Volume ÷ (Equipes × dias do mês) — dias = 15 em Janeiro e Dezembro, 30 nos demais meses.</div>`;
 
-function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha, demandasChegadasMensais = {} }) {
+function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha, demandasChegadasMensais = {}, demandasSaldoAbertura = {} }) {
   if (!senha) {
     throw new Error('renderDashboard requer "senha" -- o conteúdo (SUP/Grupo/Tomador/Tipologia/valores) é cifrado com ela antes de ir pro HTML.');
   }
@@ -1920,6 +1950,7 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
       previstoInicial: r.previstoInicial, previsto: r.previsto, realizado: r.realizado, total: r.total,
     })),
     demandasChegadasMensais,
+    demandasSaldoAbertura,
   });
   const dadosCifrados = cifrarComSenha(registrosJson, senha);
   const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');

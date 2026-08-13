@@ -240,6 +240,52 @@ function chegadasMensaisPorRegistro(furos, ensaiosLab, periodos) {
   return Object.fromEntries(porChave);
 }
 
+// Saldo de demandas em aberto no ÚLTIMO INSTANTE do ano anterior ao início de
+// 'periodos' (ex.: periodos começando em jan/2026 -> corte em 31/12/2025
+// 23:59:59), por (sup, tipologia) -- mesma regra de estoque que 'pendentes'
+// já usa dentro de computeDemandas (chegou até o corte E ainda não foi
+// executado até o corte), só aplicada UMA VEZ, no corte fixo anterior ao ano
+// exibido, em vez de mês a mês dentro dele.
+//
+// É o ponto de partida da curva Acumulado de Demandas do Gráfico do
+// orçamento (dimensão Volume): sem isso, um contrato cuja carteira em
+// execução veio majoritariamente de antes do ano exibido mostra "Demandas
+// acumulado" abaixo de "Realizado acumulado" -- o que parece impossível
+// (não dá pra executar mais do que chegou), mas é só a janela do ano
+// escondendo o saldo que já estava aberto antes dela. Achado ao vivo em
+// 2026-08-13 filtrando SUP-8370-25 (Rota Sorocabana): 1.344 dos 2.438 furos
+// executados em 2026 (55%) tinham "Criação da OS" em 2025 ou antes. Ver
+// docs/superpowers/specs/2026-08-13-demandas-no-grafico-orcamento-design.md.
+//
+// Devolve um NÚMERO por chave (não um array de 12 -- é um valor só, somado
+// uma vez ao acumulado de janeiro em diante), e nunca cria uma chave com
+// saldo zero: ausência de chave = sem saldo em aberto, mesma convenção que
+// chegadasMensaisPorRegistro já usa para "sem evento nenhum".
+function saldoAberturaPorRegistro(furos, ensaiosLab, periodos) {
+  const corte = new Date(Date.UTC(periodos[0].getUTCFullYear() - 1, 11, 31, 23, 59, 59));
+  const porChave = new Map();
+
+  function incrementa(chave) {
+    porChave.set(chave, (porChave.get(chave) || 0) + 1);
+  }
+
+  for (const f of furos || []) {
+    if (!f.criacaoOS || f.criacaoOS > corte) continue;
+    const executou = f.executadoDia && f.executadoDia <= corte;
+    if (executou) continue;
+    incrementa(chaveMatriz(f.sup, f.tipologia));
+  }
+
+  for (const e of ensaiosLab || []) {
+    if (!e.criacao || e.criacao > corte) continue;
+    const executou = e.concluido && e.concluido <= corte;
+    if (executou) continue;
+    incrementa(chaveMatriz(e.sup, e.tipologia));
+  }
+
+  return Object.fromEntries(porChave);
+}
+
 // O agregado é por TIPOLOGIA, não por SUP -- mas nada é descartado por SUP:
 // os 36 SUPs do Avanços contribuem para a tipologia deles, inclusive os 13
 // que a MATRIZ não conhece. Esta função só RELATA o desencontro, para o build
@@ -294,5 +340,5 @@ function resolverSupConhecido(registros) {
 
 module.exports = {
   computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, resolverSupConhecido, SERIES, SERIE_ESTOQUE,
-  chegadasMensaisPorRegistro,
+  chegadasMensaisPorRegistro, saldoAberturaPorRegistro,
 };

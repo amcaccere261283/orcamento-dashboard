@@ -78,6 +78,19 @@ test('renderDashboard embeds an encrypted blob (salt/iv/dados/iteracoes) that de
   assert.equal(registrosDecifrados[0].tipologia, 'SM');
 });
 
+test('renderDashboard embeds demandasSaldoAbertura in the same encrypted blob as registros/demandasChegadasMensais, defaulting to {} when omitted', () => {
+  const registro = registroExemplo();
+  const htmlComSaldo = renderComSenha([registro], { demandasSaldoAbertura: { 'SUP-7133-24||SM': 42 } });
+  const pacoteComSaldo = extrairPacoteCifrado(htmlComSaldo);
+  const dadosComSaldo = JSON.parse(decifrarComSenha(pacoteComSaldo, SENHA_TESTE));
+  assert.deepStrictEqual(dadosComSaldo.demandasSaldoAbertura, { 'SUP-7133-24||SM': 42 });
+
+  const htmlSemSaldo = renderComSenha([registro]);
+  const pacoteSemSaldo = extrairPacoteCifrado(htmlSemSaldo);
+  const dadosSemSaldo = JSON.parse(decifrarComSenha(pacoteSemSaldo, SENHA_TESTE));
+  assert.deepStrictEqual(dadosSemSaldo.demandasSaldoAbertura, {}, 'sem o parâmetro, o blob ainda tem que trazer demandasSaldoAbertura vazio, não undefined');
+});
+
 test('renderDashboard\'s encrypted blob fails to decrypt with the wrong senha (never silently returns garbage)', () => {
   const html = renderComSenha([registroExemplo()]);
   const pacote = extrairPacoteCifrado(html);
@@ -175,6 +188,7 @@ function extrairFuncoesPuras(html) {
       ' this.agruparIndicesAlertas = agruparIndicesAlertas;' +
       ' this.construirPainelGraficoHtml = construirPainelGraficoHtml;' +
       ' this.demandasMensaisPorIndices = demandasMensaisPorIndices;' +
+      ' this.demandasSaldoAberturaPorIndices = demandasSaldoAberturaPorIndices;' +
       ' this.somarIntervaloMensal = somarIntervaloMensal; this.bucketPeriodo = bucketPeriodo;' +
       ' this.bucketIntervalo = bucketIntervalo;' +
       ' this.classificarSemaforo = classificarSemaforo;' +
@@ -211,6 +225,7 @@ function extrairFuncoesPuras(html) {
     agruparIndicesAlertas: sandbox.agruparIndicesAlertas,
     construirPainelGraficoHtml: sandbox.construirPainelGraficoHtml,
     demandasMensaisPorIndices: sandbox.demandasMensaisPorIndices,
+    demandasSaldoAberturaPorIndices: sandbox.demandasSaldoAberturaPorIndices,
     somarIntervaloMensal: sandbox.somarIntervaloMensal,
     bucketPeriodo: sandbox.bucketPeriodo,
     bucketIntervalo: sandbox.bucketIntervalo,
@@ -955,13 +970,38 @@ test('demandasMensaisPorIndices: sem demandasMensais (undefined) devolve 12 zero
   assert.deepStrictEqual(paraPlano(demandasMensaisPorIndices([0], [{ sup: 'X', tipologia: 'Y' }], undefined)), new Array(12).fill(0));
 });
 
-test('construirPainelGraficoHtml: dimensão Volume inclui uma 5ª série "Demandas" (roxa, #9700DA) em dadosPorSerie, com acumulado em soma corrida', () => {
+test('demandasSaldoAberturaPorIndices: soma o saldo de abertura das chaves (sup||tipologia) dos registros filtrados -- é um número só, não um array', () => {
+  const html = construirHtmlGolden();
+  const { demandasSaldoAberturaPorIndices } = extrairFuncoesPuras(html);
+  const registros = [
+    { sup: 'SUP-A', tipologia: 'SP' },
+    { sup: 'SUP-B', tipologia: 'SP' },
+    { sup: 'SUP-C', tipologia: 'ST' }, // fora dos indices filtrados
+  ];
+  const saldoAbertura = { 'SUP-A||SP': 5, 'SUP-B||SP': 3, 'SUP-C||ST': 99 };
+  assert.strictEqual(demandasSaldoAberturaPorIndices([0, 1], registros, saldoAbertura), 8);
+});
+
+test('demandasSaldoAberturaPorIndices: registro sem entrada no saldo de abertura conta como 0, e sem saldoAbertura (undefined) devolve 0, não lança', () => {
+  const html = construirHtmlGolden();
+  const { demandasSaldoAberturaPorIndices } = extrairFuncoesPuras(html);
+  assert.strictEqual(demandasSaldoAberturaPorIndices([0], [{ sup: 'SUP-SEM-DADO', tipologia: 'SP' }], { 'SUP-OUTRO||SP': 10 }), 0);
+  assert.strictEqual(demandasSaldoAberturaPorIndices([0], [{ sup: 'X', tipologia: 'Y' }], undefined), 0);
+});
+
+test('construirPainelGraficoHtml: dimensão Volume inclui uma 5ª série "Demandas" (roxa, #9700DA) em dadosPorSerie -- barra mensal são só as chegadas do ano, acumulado nasce do saldo de abertura de 31/12 do ano anterior', () => {
   const html = construirHtmlGolden();
   const { construirPainelGraficoHtml, window: sandboxWindow } = extrairFuncoesPuras(html);
   sandboxWindow.__DEMANDAS_MENSAIS__ = { 'SUP-0002-24||SP': [3, 0, 5, 0, 0, 2, 0, 0, 0, 4, 0, 0] };
+  sandboxWindow.__DEMANDAS_SALDO_ABERTURA__ = { 'SUP-0002-24||SP': 100 };
 
   const registro = { sup: 'SUP-0002-24', tipologia: 'SP', previsto: null, previstoInicial: null, realizado: null, total: null };
   const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(), 'volume');
+  // Acumulado esperado: saldo de abertura (100) + soma corrida das chegadas
+  // -- jan=103, fev=103, mar=108, ..., dez=114. Confere o rótulo exato do
+  // ponto final (dezembro) num data-tooltip, não um "114" solto que também
+  // poderia vir de coordenada de pixel no SVG por coincidência.
+  assert.match(htmlPainel, /Dez · Demandas: 114(?!\d)/, 'o acumulado de dezembro tem que incluir os 100 de saldo de abertura (14 de chegadas + 100 = 114), não só a soma corrida das chegadas do ano (14)');
 
   assert.match(htmlPainel, /#9700DA/, 'a cor de Demandas precisa aparecer no SVG desenhado');
   assert.match(htmlPainel, /Demandas/, 'o rótulo "Demandas" precisa aparecer (legenda/tooltip)');
@@ -1654,6 +1694,25 @@ test('fecharTendenciaVigente: chamada com um array puro (live-refresh, sem Deman
 
   assert.deepStrictEqual(resultado, registrosNovos);
   assert.deepStrictEqual(sandboxWindow.__DEMANDAS_MENSAIS__, { 'SUP-X||SP': [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, 'live-refresh não deve apagar as Demandas do build');
+});
+
+test('fecharTendenciaVigente: também desembrulha demandasSaldoAbertura em window.__DEMANDAS_SALDO_ABERTURA__, mesma regra condicional de window.__DEMANDAS_MENSAIS__', () => {
+  const html = construirHtmlGolden();
+  const { fecharTendenciaVigente, window: sandboxWindow } = extrairFuncoesPuras(html);
+
+  const registro = { sup: 'SUP-X', tipologia: 'SP', total: null, realizado: null };
+  fecharTendenciaVigente({
+    registros: [registro],
+    demandasChegadasMensais: { 'SUP-X||SP': [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+    demandasSaldoAbertura: { 'SUP-X||SP': 7 },
+  }, 5);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_SALDO_ABERTURA__, { 'SUP-X||SP': 7 });
+
+  // live-refresh: array puro, sem demandasSaldoAbertura -- preserva o que já
+  // tinha sido setado no desbloqueio, mesma regra de __DEMANDAS_MENSAIS__.
+  const registrosNovos = [{ sup: 'SUP-Y', tipologia: 'ST', total: null, realizado: null }];
+  fecharTendenciaVigente(registrosNovos, 5);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_SALDO_ABERTURA__, { 'SUP-X||SP': 7 }, 'live-refresh não deve apagar o saldo de abertura do build');
 });
 
 test('o gate de senha (tentarDesbloquear) fecha a Tendência com fecharTendenciaVigente logo após decifrar, antes de montarDashboard', () => {

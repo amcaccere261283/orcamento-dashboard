@@ -17,7 +17,7 @@ const config = require('./config.js');
 const { parseCsvGrid } = require('../semanal/parse-matriz-cliente.js');
 const { parseAvancos } = require('../semanal/parse-avancos.js');
 const { parseLab } = require('../semanal/parse-lab.js');
-const { redirecionarSupsDesconhecidos, chegadasMensaisPorRegistro } = require('../semanal/compute-demandas.js');
+const { redirecionarSupsDesconhecidos, chegadasMensaisPorRegistro, saldoAberturaPorRegistro } = require('../semanal/compute-demandas.js');
 
 const RESUMO_ZERO = { pico: 0, media: 0, prod: 0, dias: 0 };
 
@@ -61,9 +61,15 @@ function anexarPrevistoInicial(registros, baseline) {
 // Lê as mesmas 4 fontes online que tools/semanal/build-dashboard.js já usa
 // pra Demandas (avancos-online.csv + lab-online.csv, obrigatórios; os dois
 // "pendentes" são opcionais -- sem eles o backlog ainda não executado fica
-// de fora, mas o build não quebra) e devolve {chaveMatriz: [12 chegadas por
-// mês]} pro Gráfico do orçamento, dimensão Volume -- ver
-// docs/superpowers/specs/2026-08-13-demandas-no-grafico-orcamento-design.md.
+// de fora, mas o build não quebra) e devolve os dois insumos que o Gráfico
+// do orçamento (dimensão Volume) precisa:
+// - chegadasMensais: {chaveMatriz: [12 chegadas por mês]} -- a barra mensal.
+// - saldoAbertura: {chaveMatriz: número} -- o estoque em aberto no fim do
+//   ano ANTERIOR ao exibido, ponto de partida da linha Acumulado. Sem isso,
+//   um contrato cuja carteira em execução veio majoritariamente de antes do
+//   ano exibido mostra "Demandas acumulado" abaixo de "Realizado acumulado"
+//   (achado ao vivo em 2026-08-13, SUP-8370-25/Rota Sorocabana -- ver
+//   docs/superpowers/specs/2026-08-13-demandas-no-grafico-orcamento-design.md).
 // Os dois pipelines (semanal e orçamento) leem a MESMA MATRIZ por parsers
 // diferentes, então redirecionarSupsDesconhecidos roda de novo aqui contra
 // os `registros` do ORÇAMENTO -- não reaproveita o resultado da semanal.
@@ -111,9 +117,10 @@ function montarDemandasChegadasMensais({
 
   const { itens: furosRedirecionados, redirecionados: furosRedirecionadosQtd } = redirecionarSupsDesconhecidos(furos, registros);
   const { itens: ensaiosRedirecionados, redirecionados: ensaiosRedirecionadosQtd } = redirecionarSupsDesconhecidos(ensaiosComPendentes, registros);
-  const resultado = chegadasMensaisPorRegistro(furosRedirecionados, ensaiosRedirecionados, periodos);
-  console.log(`Demandas do Gráfico: ${furos.length} furo(s) e ${ensaiosComPendentes.length} ensaio(s) lido(s), ${Object.keys(resultado).length} combinação(ões) SUP+tipologia geradas, ${furosRedirecionadosQtd} furo(s) e ${ensaiosRedirecionadosQtd} ensaio(s) redirecionado(s) pra "Diversos" (SUP sem registro na MATRIZ do orçamento).`);
-  return resultado;
+  const chegadasMensais = chegadasMensaisPorRegistro(furosRedirecionados, ensaiosRedirecionados, periodos);
+  const saldoAbertura = saldoAberturaPorRegistro(furosRedirecionados, ensaiosRedirecionados, periodos);
+  console.log(`Demandas do Gráfico: ${furos.length} furo(s) e ${ensaiosComPendentes.length} ensaio(s) lido(s), ${Object.keys(chegadasMensais).length} combinação(ões) SUP+tipologia com chegada em ${periodos[0].getUTCFullYear()}, ${Object.keys(saldoAbertura).length} combinação(ões) com saldo aberto em 31/12/${periodos[0].getUTCFullYear() - 1}, ${furosRedirecionadosQtd} furo(s) e ${ensaiosRedirecionadosQtd} ensaio(s) redirecionado(s) pra "Diversos" (SUP sem registro na MATRIZ do orçamento).`);
+  return { chegadasMensais, saldoAbertura };
 }
 
 const LOGO_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-suporte-infra-negativo.png');
@@ -156,12 +163,12 @@ function build({
     console.log(`Linha de base: ${chavesSemMatch} combinações SUP+tipologia (R$ ${somaSemMatch.toLocaleString('pt-BR')}) não casaram com nenhum registro da MATRIZ atual -- SUP renomeado/renovado desde o estudo original, ou nome descritivo em vez de código. Não aparecem na coluna Previsto Inicial da tabela.`);
   }
 
-  const demandasChegadasMensais = montarDemandasChegadasMensais({
+  const { chegadasMensais: demandasChegadasMensais, saldoAbertura: demandasSaldoAbertura } = montarDemandasChegadasMensais({
     registros, periodos, caminhoAvancosOnline, caminhoDemandasSondagemOnline, caminhoLabOnline, caminhoDemandasLabOnline,
   });
 
   const html = renderDashboard({
-    registros, periodos, generatedAt: today, senha, demandasChegadasMensais,
+    registros, periodos, generatedAt: today, senha, demandasChegadasMensais, demandasSaldoAbertura,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
   });
 

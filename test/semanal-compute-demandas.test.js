@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const {
   computeDemandas, SERIES, SERIE_ESTOQUE, reconciliarSups, chegadasMensaisPorRegistro,
+  saldoAberturaPorRegistro,
 } = require('../tools/semanal/compute-demandas.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
 
@@ -414,4 +415,74 @@ test('chegadasMensaisPorRegistro: a soma por mês, agregada de novo por tipologi
   });
   const blocoSP = porTipologia.tipologias.find((t) => t.tipologia === 'SP');
   assert.deepStrictEqual(somaSP, blocoSP.series.chegadas);
+});
+
+test('saldoAberturaPorRegistro: furo que chegou no ano anterior e ainda não foi executado até 31/12 conta no saldo de abertura', () => {
+  const furos = [
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2025, 6, 1), executadoDia: null, status: 'PENDENTE' }),
+  ];
+  const resultado = saldoAberturaPorRegistro(furos, [], PERIODOS_2026);
+  assert.strictEqual(resultado['SUP-0001-24||SP'], 1);
+});
+
+test('saldoAberturaPorRegistro: furo do ano anterior JÁ executado até 31/12 não conta -- já saiu do estoque antes do corte', () => {
+  const furos = [
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2025, 3, 1), executadoDia: d(2025, 5, 1), status: 'CONCLUIDO' }),
+  ];
+  const resultado = saldoAberturaPorRegistro(furos, [], PERIODOS_2026);
+  assert.strictEqual(resultado['SUP-0001-24||SP'], undefined, 'não deveria criar chave nenhuma para um SUP sem saldo em aberto');
+});
+
+test('saldoAberturaPorRegistro: furo que chegou DENTRO do ano exibido (2026) não conta -- isso é chegada do ano, não saldo de abertura', () => {
+  const furos = [
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2026, 1, 10), executadoDia: null, status: 'PENDENTE' }),
+  ];
+  const resultado = saldoAberturaPorRegistro(furos, [], PERIODOS_2026);
+  assert.strictEqual(resultado['SUP-0001-24||SP'], undefined);
+});
+
+test('saldoAberturaPorRegistro: executado EXATAMENTE no corte (31/12 23:59:59 do ano anterior) já saiu do estoque -- mesma regra de fronteira que pendentesNaData/saidaEstoque já usam', () => {
+  const furos = [
+    furo({
+      sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2025, 1, 1),
+      executadoDia: new Date(Date.UTC(2025, 11, 31, 23, 59, 59)), status: 'CONCLUIDO',
+    }),
+  ];
+  const resultado = saldoAberturaPorRegistro(furos, [], PERIODOS_2026);
+  assert.strictEqual(resultado['SUP-0001-24||SP'], undefined);
+});
+
+test('saldoAberturaPorRegistro: ensaios de laboratório também contam, pelo evento "criacao" -- mesma regra de furos', () => {
+  const ensaios = [ensaioLab({ sup: 'SUP-0003-24', tipologia: 'LAB.C', criacao: d(2025, 8, 1), concluido: null })];
+  const resultado = saldoAberturaPorRegistro([], ensaios, PERIODOS_2026);
+  assert.strictEqual(resultado['SUP-0003-24||LAB.C'], 1);
+});
+
+test('saldoAberturaPorRegistro: duas chaves diferentes somam separadamente, e várias ocorrências da mesma chave se acumulam', () => {
+  const furos = [
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2025, 1, 1), executadoDia: null, status: 'PENDENTE' }),
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2025, 2, 1), executadoDia: null, status: 'PENDENTE' }),
+    furo({ sup: 'SUP-0002-24', tipologia: 'ST', criacaoOS: d(2024, 1, 1), executadoDia: null, status: 'PENDENTE' }),
+  ];
+  const resultado = saldoAberturaPorRegistro(furos, [], PERIODOS_2026);
+  assert.strictEqual(resultado['SUP-0001-24||SP'], 2);
+  assert.strictEqual(resultado['SUP-0002-24||ST'], 1);
+});
+
+test('saldoAberturaPorRegistro: sem furos nem ensaios devolve objeto vazio, não lança', () => {
+  assert.deepStrictEqual(saldoAberturaPorRegistro([], [], PERIODOS_2026), {});
+  assert.deepStrictEqual(saldoAberturaPorRegistro(undefined, undefined, PERIODOS_2026), {});
+});
+
+test('saldoAberturaPorRegistro: bate com o cálculo equivalente de pendentesNaData (mesma regra de estoque, corte fixo em vez de mês a mês) para o mesmo conjunto de furos', () => {
+  const furos = [
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2024, 6, 1), executadoDia: null, status: 'PENDENTE' }),
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2025, 3, 1), executadoDia: d(2025, 4, 1), status: 'CONCLUIDO' }),
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2025, 11, 1), executadoDia: null, status: 'PENDENTE' }),
+    furo({ sup: 'SUP-0001-24', tipologia: 'SP', criacaoOS: d(2026, 1, 5), executadoDia: null, status: 'PENDENTE' }),
+  ];
+  // Só o 1º e o 3º furo (chegaram antes de 2026, ainda não executados até 31/12/2025)
+  // deveriam contar -- o 2º já saiu do estoque em 2025, o 4º chegou em 2026 (é chegada do ano).
+  const resultado = saldoAberturaPorRegistro(furos, [], PERIODOS_2026);
+  assert.strictEqual(resultado['SUP-0001-24||SP'], 2);
 });
