@@ -130,6 +130,22 @@ test('parseAbaEq aceita a coluna de dia no formato da Sheet ESPELHO ("01/08/2026
   ]);
 });
 
+test('parseAbaEq aceita a variante pt-BR com PONTO final ("1-ago.") -- achado ao vivo em 2026-08-13', () => {
+  // A aba "2026 - AGOSTO (EQ)" trocou de "1-Aug" pra "1-ago." (abreviação
+  // pt-BR com ponto) e RE_COLUNA_DIA original não aceitava o ponto -- 0
+  // colunas de dia reconhecidas, roster de agosto inteiro ficando de fora
+  // em silêncio (mesmo efeito mudo do formato ESPELHO acima).
+  const csv = [
+    ' ,,,Serviços,,,,,,,,,,,1-ago.,2-ago.',
+    ',,,,,,,,,,,,,,SÁBADO,DOMINGO',
+    '9,,,SP,,,,,,,,,,,OK,Férias',
+  ].join('\n');
+  const equipes = parseAbaEq(csv);
+  assert.deepStrictEqual(equipes[0].dias, [
+    { dia: 1, texto: 'OK' }, { dia: 2, texto: 'Férias' },
+  ]);
+});
+
 test('os dois formatos de cabeçalho de dia convivem no mesmo parser', () => {
   const comHifen = parseAbaEq([' ,,,Serviços,,,,,,,,,,,1-Aug', ',,,,,,,,,,,,,,x', '9,,,SP,,,,,,,,,,,OK'].join('\n'));
   const comBarra = parseAbaEq([' ,,,Serviços,,,,,,,,,,,01/08/2026', ',,,,,,,,,,,,,,x', '9,,,SP,,,,,,,,,,,OK'].join('\n'));
