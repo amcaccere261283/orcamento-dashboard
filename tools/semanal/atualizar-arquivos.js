@@ -89,6 +89,52 @@ function relatarResumo(resultadosBuscas) {
   });
 }
 
+// Publica HEAD como master no origin, não a branch local literal "master" --
+// este repositório roda de branches de trabalho (ex.:
+// semanal-alocacao-equipes-rebase) que ficam à frente de origin/master, e a
+// branch local "master" fica parada, muito atrás (ver CLAUDE.md do
+// orçamento, "Orçamento branch de publicação" nas memórias do projeto:
+// medido em 2026-08-13, 332 commits atrás). `git push origin master` nesse
+// cenário empurra o ref ERRADO e é rejeitado por non-fast-forward mesmo
+// quando HEAD está perfeitamente à frente de origin/master.
+//
+// Roda em até 3 máquinas agendadas no mesmo horário (ver
+// docs/setup-nova-maquina.md): se outra já publicou hoje, o push é rejeitado
+// por non-fast-forward genuíno (origin avançou de verdade) -- busca e
+// rebase em cima antes de tentar de novo, mesmo padrão de retry que
+// alertas-email.yml já usa para a mesma corrida. Rebase falhando de
+// verdade (conflito real, não só "origin andou") aborta com erro alto: gerar
+// e publicar de novo do zero não corrige um conflito de merge.
+function publicar() {
+  const TENTATIVAS = 3;
+  for (let tentativa = 1; tentativa <= TENTATIVAS; tentativa++) {
+    try {
+      git(['push', 'origin', 'HEAD:master']);
+      console.log('Publicado (git push origin HEAD:master).');
+      return;
+    } catch (err) {
+      if (tentativa === TENTATIVAS) {
+        throw new Error(`Não consegui publicar depois de ${TENTATIVAS} tentativas -- ${err.message}`);
+      }
+      console.warn(`Push rejeitado (tentativa ${tentativa}/${TENTATIVAS}) -- outra máquina deve ter publicado primeiro. Buscando e rebaseando...`);
+      git(['fetch', 'origin', 'master']);
+      try {
+        git(['rebase', 'origin/master']);
+      } catch (errRebase) {
+        // O rebase pode falhar por dois motivos bem diferentes: conflito de
+        // verdade (rebase EM ANDAMENTO, precisa de --abort) ou nem chegou a
+        // começar (ex.: "You have unstaged changes" -- working tree sujo por
+        // algo alheio a este script). 'rebase --abort' sem rebase em
+        // andamento falha com "no rebase in progress" e essa falha SUBSTITUÍA
+        // o erro original no throw, escondendo a causa real -- medido em
+        // 2026-08-13 com uma edição pendente de CLAUDE.md no working tree.
+        try { git(['rebase', '--abort']); } catch { /* nenhum rebase em andamento pra abortar -- ok */ }
+        throw new Error(`Rebase sobre origin/master falhou -- abortado se havia algo em andamento. Erro original: ${errRebase.message}`);
+      }
+    }
+  }
+}
+
 async function main() {
   if (!process.env.ORCAMENTO_SENHA) {
     throw new Error(
@@ -97,61 +143,80 @@ async function main() {
     );
   }
 
-  console.log('Buscando dados novos do sond.com.br -- exige Chrome aberto com --remote-debugging-port=9222, já logado.');
-  const resultadosBuscas = await rodarBuscas();
+  // Roda sem ninguém olhando (Task Scheduler, 8h) -- qualquer coisa alheia
+  // já modificada no working tree (uma edição de doc em andamento, por
+  // exemplo) bloquearia 'git rebase' mais adiante com "You have unstaged
+  // changes" e derrubaria a publicação de dados por causa de um arquivo que
+  // este script nem toca. Guarda de lado ANTES de mexer em qualquer coisa e
+  // devolve no fim, sucesso ou falha -- mesmo passo que uma sessão manual
+  // faria à mão (medido em 2026-08-13: CLAUDE.md com edição pendente).
+  const statusInicial = git(['status', '--porcelain']).trim();
+  const precisaGuardar = statusInicial.length > 0;
+  if (precisaGuardar) {
+    console.log('\nHá mudanças não commitadas alheias a este script -- guardando com git stash antes de operar.');
+    git(['stash', 'push', '-u', '-m', 'atualizar-arquivos.js: mudanças pendentes guardadas antes da publicação automática']);
+  }
+  try {
+    console.log('Buscando dados novos do sond.com.br -- exige Chrome aberto com --remote-debugging-port=9222, já logado.');
+    const resultadosBuscas = await rodarBuscas();
 
-  console.log('\n=== Reconstruindo a página (build-dashboard.js) ===');
-  const { build } = require('./build-dashboard.js');
-  await build();
+    console.log('\n=== Reconstruindo a página (build-dashboard.js) ===');
+    const { build } = require('./build-dashboard.js');
+    await build();
 
-  console.log('\n=== Publicando em docs/ ===');
-  let algumaCopia = false;
-  const arquivosParaGit = [];
-  for (const nome of ARQUIVOS_PUBLICAR) {
-    const origem = path.join(DIST, nome);
-    const alvo = path.join(DOCS, nome);
-    if (!fs.existsSync(origem)) {
-      console.warn(`Pulando ${nome}: não existe em dist/.`);
-      continue;
+    console.log('\n=== Publicando em docs/ ===');
+    let algumaCopia = false;
+    const arquivosParaGit = [];
+    for (const nome of ARQUIVOS_PUBLICAR) {
+      const origem = path.join(DIST, nome);
+      const alvo = path.join(DOCS, nome);
+      if (!fs.existsSync(origem)) {
+        console.warn(`Pulando ${nome}: não existe em dist/.`);
+        continue;
+      }
+      arquivosParaGit.push(path.join('dist', nome), path.join('docs', nome));
+      const bufOrigem = fs.readFileSync(origem);
+      const bufAlvo = fs.existsSync(alvo) ? fs.readFileSync(alvo) : null;
+      if (bufAlvo && bufOrigem.equals(bufAlvo)) {
+        console.log(`${nome}: já estava igual em docs/, nada a copiar.`);
+        continue;
+      }
+      fs.copyFileSync(origem, alvo);
+      algumaCopia = true;
+      console.log(`Copiado: dist/${nome} -> docs/${nome}`);
     }
-    arquivosParaGit.push(path.join('dist', nome), path.join('docs', nome));
-    const bufOrigem = fs.readFileSync(origem);
-    const bufAlvo = fs.existsSync(alvo) ? fs.readFileSync(alvo) : null;
-    if (bufAlvo && bufOrigem.equals(bufAlvo)) {
-      console.log(`${nome}: já estava igual em docs/, nada a copiar.`);
-      continue;
+
+    if (!algumaCopia) {
+      console.log('\nNada mudou -- docs/ já estava sincronizado com dist/. Não há o que commitar.');
+      relatarResumo(resultadosBuscas);
+      return;
     }
-    fs.copyFileSync(origem, alvo);
-    algumaCopia = true;
-    console.log(`Copiado: dist/${nome} -> docs/${nome}`);
-  }
 
-  if (!algumaCopia) {
-    console.log('\nNada mudou -- docs/ já estava sincronizado com dist/. Não há o que commitar.');
+    console.log('\n=== git add / commit / push ===');
+    git(['add', ...arquivosParaGit]);
+    const status = git(['status', '--porcelain', '--', ...arquivosParaGit]).trim();
+    if (!status) {
+      console.log('git: nada ficou staged (os arquivos copiados já estavam commitados) -- pulando commit/push.');
+      relatarResumo(resultadosBuscas);
+      return;
+    }
+
+    const horario = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const falhas = resultadosBuscas.filter((r) => !r.ok);
+    const mensagem = `Atualizar arquivos online (${horario})`
+      + (falhas.length ? `\n\nFalha na busca de: ${falhas.map((f) => `${f.nome} (${f.erro})`).join('; ')}` : '');
+    git(['commit', '-m', mensagem]);
+    console.log('Commit criado.');
+
+    publicar();
+
     relatarResumo(resultadosBuscas);
-    return;
+  } finally {
+    if (precisaGuardar) {
+      console.log('\nDevolvendo as mudanças pendentes guardadas no início (git stash pop).');
+      git(['stash', 'pop']);
+    }
   }
-
-  console.log('\n=== git add / commit / push ===');
-  git(['add', ...arquivosParaGit]);
-  const status = git(['status', '--porcelain', '--', ...arquivosParaGit]).trim();
-  if (!status) {
-    console.log('git: nada ficou staged (os arquivos copiados já estavam commitados) -- pulando commit/push.');
-    relatarResumo(resultadosBuscas);
-    return;
-  }
-
-  const horario = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-  const falhas = resultadosBuscas.filter((r) => !r.ok);
-  const mensagem = `Atualizar arquivos online (${horario})`
-    + (falhas.length ? `\n\nFalha na busca de: ${falhas.map((f) => `${f.nome} (${f.erro})`).join('; ')}` : '');
-  git(['commit', '-m', mensagem]);
-  console.log('Commit criado.');
-
-  git(['push', 'origin', 'master']);
-  console.log('Publicado (git push origin master).');
-
-  relatarResumo(resultadosBuscas);
 }
 
 if (require.main === module) {
