@@ -174,6 +174,7 @@ function extrairFuncoesPuras(html) {
       ' this.campoAgrupamento = campoAgrupamento;' +
       ' this.agruparIndicesAlertas = agruparIndicesAlertas;' +
       ' this.construirPainelGraficoHtml = construirPainelGraficoHtml;' +
+      ' this.demandasMensaisPorIndices = demandasMensaisPorIndices;' +
       ' this.somarIntervaloMensal = somarIntervaloMensal; this.bucketPeriodo = bucketPeriodo;' +
       ' this.bucketIntervalo = bucketIntervalo;' +
       ' this.classificarSemaforo = classificarSemaforo;' +
@@ -209,6 +210,7 @@ function extrairFuncoesPuras(html) {
     campoAgrupamento: sandbox.campoAgrupamento,
     agruparIndicesAlertas: sandbox.agruparIndicesAlertas,
     construirPainelGraficoHtml: sandbox.construirPainelGraficoHtml,
+    demandasMensaisPorIndices: sandbox.demandasMensaisPorIndices,
     somarIntervaloMensal: sandbox.somarIntervaloMensal,
     bucketPeriodo: sandbox.bucketPeriodo,
     bucketIntervalo: sandbox.bucketIntervalo,
@@ -913,6 +915,67 @@ test('Tendência keeps correctly inheriting the real Realizado accumulated total
   const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(['total']), 'financeiro');
   const acumuladoMatch = htmlPainel.match(/Acumulado no ano[\s\S]*$/);
   assert.match(acumuladoMatch[0], /68\.000/, 'julho deveria ser 60.000 (Realizado acumulado até junho, mesmo não aparecendo no gráfico) + 8.000 (Tendência de julho) = 68.000 -- não 8.000 (o que aconteceria se Tendência tivesse esquecido o Realizado)');
+});
+
+test('demandasMensaisPorIndices: soma os arrays das chaves (sup||tipologia) dos registros filtrados, mês a mês', () => {
+  const html = construirHtmlGolden();
+  const { demandasMensaisPorIndices } = extrairFuncoesPuras(html);
+
+  const registros = [
+    { sup: 'SUP-A', tipologia: 'SP' },
+    { sup: 'SUP-B', tipologia: 'SP' },
+    { sup: 'SUP-C', tipologia: 'ST' }, // fora dos indices filtrados
+  ];
+  const demandasMensais = {
+    'SUP-A||SP': [1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    'SUP-B||SP': [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    'SUP-C||ST': [99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99],
+  };
+
+  const resultado = demandasMensaisPorIndices([0, 1], registros, demandasMensais);
+  // paraPlano: resultado é um array construído DENTRO do vm.Context (new
+  // Array(12) do realm do sandbox) -- deepStrictEqual é sensível a
+  // protótipo, então precisa normalizar antes de comparar com o literal
+  // deste realm (mesmo idiom já usado em todo o resto do arquivo, ver
+  // paraPlano acima).
+  assert.deepStrictEqual(paraPlano(resultado), [4, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+});
+
+test('demandasMensaisPorIndices: registro sem entrada em demandasMensais não quebra, conta como 12 zeros', () => {
+  const html = construirHtmlGolden();
+  const { demandasMensaisPorIndices } = extrairFuncoesPuras(html);
+  const registros = [{ sup: 'SUP-SEM-DADO', tipologia: 'SP' }];
+  const resultado = demandasMensaisPorIndices([0], registros, { 'SUP-OUTRO||SP': [5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
+  assert.deepStrictEqual(paraPlano(resultado), new Array(12).fill(0));
+});
+
+test('demandasMensaisPorIndices: sem demandasMensais (undefined) devolve 12 zeros, não lança', () => {
+  const html = construirHtmlGolden();
+  const { demandasMensaisPorIndices } = extrairFuncoesPuras(html);
+  assert.deepStrictEqual(paraPlano(demandasMensaisPorIndices([0], [{ sup: 'X', tipologia: 'Y' }], undefined)), new Array(12).fill(0));
+});
+
+test('construirPainelGraficoHtml: dimensão Volume inclui uma 5ª série "Demandas" (roxa, #9700DA) em dadosPorSerie, com acumulado em soma corrida', () => {
+  const html = construirHtmlGolden();
+  const { construirPainelGraficoHtml, window: sandboxWindow } = extrairFuncoesPuras(html);
+  sandboxWindow.__DEMANDAS_MENSAIS__ = { 'SUP-0002-24||SP': [3, 0, 5, 0, 0, 2, 0, 0, 0, 4, 0, 0] };
+
+  const registro = { sup: 'SUP-0002-24', tipologia: 'SP', previsto: null, previstoInicial: null, realizado: null, total: null };
+  const htmlPainel = construirPainelGraficoHtml([registro], [0], new Set(), 'volume');
+
+  assert.match(htmlPainel, /#9700DA/, 'a cor de Demandas precisa aparecer no SVG desenhado');
+  assert.match(htmlPainel, /Demandas/, 'o rótulo "Demandas" precisa aparecer (legenda/tooltip)');
+});
+
+test('construirPainelGraficoHtml: dimensões que NÃO são Volume nunca ganham a série Demandas, mesmo com window.__DEMANDAS_MENSAIS__ preenchido', () => {
+  const html = construirHtmlGolden();
+  const { construirPainelGraficoHtml, window: sandboxWindow } = extrairFuncoesPuras(html);
+  sandboxWindow.__DEMANDAS_MENSAIS__ = { 'SUP-0002-24||SP': [3, 0, 5, 0, 0, 2, 0, 0, 0, 4, 0, 0] };
+
+  const registro = { sup: 'SUP-0002-24', tipologia: 'SP', previsto: null, previstoInicial: null, realizado: null, total: null };
+  const htmlFinanceiro = construirPainelGraficoHtml([registro], [0], new Set(), 'financeiro');
+
+  assert.doesNotMatch(htmlFinanceiro, /#9700DA/);
 });
 
 test('indicesFiltrados (extraído do HTML real gerado) returns every index when no filter is active', () => {

@@ -489,13 +489,14 @@ function cortarAcumuladoNoUltimoDado(acumulado, mensal) {
 // pra não inventar uma cor nova pra mesma série. Roxo é a 5ª cor
 // categórica (só do Gráfico, ver ORDEM_SERIES_GRAFICO) -- distinta das
 // outras 4 hues (cinza/azul/verde/âmbar).
-var SERIE_COR = { previstoInicial: '#8b8a82', previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f', realizadoPrevistoInicial: '#a78bfa' };
+var SERIE_COR = { previstoInicial: '#8b8a82', previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f', realizadoPrevistoInicial: '#a78bfa', demandas: '#9700DA' };
 // Tracejado por série além da cor -- segunda camada de identidade (não só
 // hue) pra sobreviver a daltonismo/impressão P&B: previsto inicial pontilhado
 // esparso (mais discreto, é a referência de fundo), previsto sólido,
 // realizado pontilhado fino, tendência tracejado longo, realizado+previsto
-// inicial dash-dot (distinto dos outros 4 traços).
-var SERIE_TRACEJADO = { previstoInicial: '2,4', previsto: '', realizado: '1,5', total: '9,5', realizadoPrevistoInicial: '6,3,1,3' };
+// inicial dash-dot (distinto dos outros 4 traços), demandas tracejado médio
+// (distinto dos outros 5).
+var SERIE_TRACEJADO = { previstoInicial: '2,4', previsto: '', realizado: '1,5', total: '9,5', realizadoPrevistoInicial: '6,3,1,3', demandas: '4,2' };
 var DIMENSOES_RAZAO = ['produtividade', 'ticketMedio'];
 var MESES_ABREVIADOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -785,6 +786,26 @@ function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
   return { svg: finalizarPainelSvg(svg, rotulos, altura), milhares: usarMilhares };
 }
 
+// Soma, mês a mês, os arrays de demandasMensais (window.__DEMANDAS_MENSAIS__,
+// {chaveMatriz: [12 chegadas]} montado no build -- ver
+// tools/orcamento/build-dashboard.js:montarDemandasChegadasMensais) das
+// chaves (sup||tipologia) dos registros que passaram no filtro atual.
+// Mesma chave de tools/comum/linha-base.js:chaveMatriz, reproduzida aqui
+// como concatenação simples (sem importar o módulo -- este código roda
+// embutido no <script> da página, sem require).
+function demandasMensaisPorIndices(indices, registros, demandasMensais) {
+  var mensal = new Array(12).fill(0);
+  if (!demandasMensais) return mensal;
+  indices.forEach(function (idx) {
+    var registro = registros[idx];
+    var chave = registro.sup + '||' + registro.tipologia;
+    var porMes = demandasMensais[chave];
+    if (!porMes) return;
+    for (var i = 0; i < 12; i++) mensal[i] += porMes[i] || 0;
+  });
+  return mensal;
+}
+
 // Monta o par Mensal + Acumulado de UMA dimensão (HTML pronto, não toca o
 // DOM diretamente) -- reaproveitado por montarGraficos pra cada dimensão
 // marcada, uma abaixo da outra. As dimensões nunca se somam entre si (não
@@ -873,6 +894,20 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
       : null;
     return { serie: serie, mensal: mensalParaDesenho, acumulado: acumulado, indiceConector: indiceConector };
   });
+
+  // Demandas (chegadas -- furos de sondagem + ensaios de laboratório) só
+  // faz sentido em Volume: é uma contagem física, sem equivalente em R$
+  // (Financeiro) nem headcount (Equipes), e Produtividade/Ticket médio são
+  // razões que não admitem uma 5ª série somada. Sempre visível quando a
+  // dimensão é Volume -- não passa pelo filtro-serie (Previsto Inicial/
+  // Previsto/Realizado/Total), decisão explícita do dono do projeto em
+  // 2026-08-13 (ver o spec). Acumulado por soma corrida (calcularAcumulado),
+  // igual às outras 3 séries de fluxo -- Demandas aqui é "chegadas", não
+  // "pendentes" (estoque), então soma normalmente.
+  if (dimensao === 'volume') {
+    var demandasMensal = demandasMensaisPorIndices(indices, registros, window.__DEMANDAS_MENSAIS__);
+    dadosPorSerie = dadosPorSerie.concat([{ serie: 'demandas', mensal: demandasMensal, acumulado: calcularAcumulado(demandasMensal), indiceConector: null }]);
+  }
 
   var rotuloDimensao = DIMENSOES_ROTULO[dimensao] || '';
   // Todo gráfico mostra número inteiro, sem casa decimal -- exceto
@@ -1116,7 +1151,7 @@ function tipologiaColor(tipologia) {
   return '#898781';
 }
 
-var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência', realizadoPrevistoInicial: 'Realizado + Previsto Inicial' };
+var SERIE_LABELS = { previstoInicial: 'Previsto Inicial', previsto: 'Previsto', realizado: 'Realizado', total: 'Tendência', realizadoPrevistoInicial: 'Realizado + Previsto Inicial', demandas: 'Demandas' };
 // ORDEM_SERIES gera as linhas por registro da TABELA (renderBlocosDimensao)
 // -- fica só com as 4 séries originais de propósito. ORDEM_SERIES_GRAFICO
 // é a versão usada SÓ pelo Gráfico (construirPainelGraficoHtml), com a 5ª
