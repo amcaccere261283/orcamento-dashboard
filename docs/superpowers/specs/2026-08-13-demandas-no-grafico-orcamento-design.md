@@ -294,3 +294,14 @@ Registrado para não reabrir a mesma investigação numa sessão futura:
    (filtro Via Araucária S.A, ano 2026): "Solicitados"/"Solicitado Acumulado" lá é
    estruturalmente `chegadas` + soma corrida, sem nenhuma linha de estoque. Decisão final,
    confirmada com o dono do projeto: `chegadas`, como na primeira versão.
+4. **Correção feita durante o planejamento (`writing-plans`), não neste spec:** a seção
+   "Pipeline de dados" acima propõe mover `computeDemandas`/`redirecionarSupsDesconhecidos`
+   para `tools/comum/compute-demandas.js`. Investigação mais profunda do bundle do navegador
+   da página semanal (`tools/comum/browser-bundle.js`) mostrou que isso quebraria o bundle
+   publicado — mover o arquivo muda qual regra de `transformaModulo` se aplica a cada um dos
+   seus 3 `require`s internos, e pelo menos um deles passaria a resolver errado sem nenhum
+   teste em Node acusando. **A implementação final NÃO move o arquivo** — mantém
+   `compute-demandas.js` em `tools/semanal/` e o orçamento consome via `require` cruzado
+   direto (Node puro). Ver a seção "Riscos investigados" do plano de implementação
+   (`docs/superpowers/plans/2026-08-13-demandas-no-grafico-orcamento.md`) para o raciocínio
+   completo.
