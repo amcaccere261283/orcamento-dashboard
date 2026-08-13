@@ -14,6 +14,10 @@ const { excelSerialParaData } = require('../comum/datas.js');
 // comentário de cabeçalho de lá.
 const { reconciliarLinhaBase, chaveMatriz } = require('../comum/linha-base.js');
 const config = require('./config.js');
+const { parseCsvGrid } = require('../semanal/parse-matriz-cliente.js');
+const { parseAvancos } = require('../semanal/parse-avancos.js');
+const { parseLab } = require('../semanal/parse-lab.js');
+const { redirecionarSupsDesconhecidos, chegadasMensaisPorRegistro } = require('../semanal/compute-demandas.js');
 
 const RESUMO_ZERO = { pico: 0, media: 0, prod: 0, dias: 0 };
 
@@ -54,6 +58,62 @@ function anexarPrevistoInicial(registros, baseline) {
   return { chavesSemMatch, somaSemMatch };
 }
 
+// Lê as mesmas 4 fontes online que tools/semanal/build-dashboard.js já usa
+// pra Demandas (avancos-online.csv + lab-online.csv, obrigatórios; os dois
+// "pendentes" são opcionais -- sem eles o backlog ainda não executado fica
+// de fora, mas o build não quebra) e devolve {chaveMatriz: [12 chegadas por
+// mês]} pro Gráfico do orçamento, dimensão Volume -- ver
+// docs/superpowers/specs/2026-08-13-demandas-no-grafico-orcamento-design.md.
+// Os dois pipelines (semanal e orçamento) leem a MESMA MATRIZ por parsers
+// diferentes, então redirecionarSupsDesconhecidos roda de novo aqui contra
+// os `registros` do ORÇAMENTO -- não reaproveita o resultado da semanal.
+function montarDemandasChegadasMensais({
+  registros, periodos, caminhoAvancosOnline, caminhoDemandasSondagemOnline, caminhoLabOnline, caminhoDemandasLabOnline,
+}) {
+  let gridAvancos;
+  try {
+    gridAvancos = parseCsvGrid(fs.readFileSync(caminhoAvancosOnline, 'utf8'));
+  } catch (err) {
+    throw new Error(
+      `Não consegui ler ${caminhoAvancosOnline}. Rode "node tools/semanal/atualizar-avancos-online.js" primeiro ` +
+      `(precisa do Chrome aberto com --remote-debugging-port=9222, logado em sond.com.br). Erro original: ${err.message}`
+    );
+  }
+  if (fs.existsSync(caminhoDemandasSondagemOnline)) {
+    const gridPendentes = parseCsvGrid(fs.readFileSync(caminhoDemandasSondagemOnline, 'utf8'));
+    for (let i = 1; i < gridPendentes.length; i++) gridAvancos.push(gridPendentes[i]);
+  } else {
+    console.warn(`AVISO: ${caminhoDemandasSondagemOnline} não encontrado -- Demandas do Gráfico não inclui furos ainda não executados. Rode "node tools/semanal/atualizar-demandas-sondagem-online.js".`);
+  }
+  gridAvancos.unshift(null);
+  const { furos } = parseAvancos(gridAvancos);
+
+  let gridLab;
+  try {
+    gridLab = parseCsvGrid(fs.readFileSync(caminhoLabOnline, 'utf8'));
+    gridLab.unshift(null);
+  } catch (err) {
+    throw new Error(
+      `Não consegui ler ${caminhoLabOnline}. Rode "node tools/semanal/atualizar-lab-online.js" primeiro ` +
+      `(precisa do Chrome aberto com --remote-debugging-port=9222, logado em sond.com.br). Erro original: ${err.message}`
+    );
+  }
+  const { ensaios: ensaiosLidos } = parseLab(gridLab);
+
+  let ensaiosComPendentes = ensaiosLidos;
+  if (fs.existsSync(caminhoDemandasLabOnline)) {
+    const pendentesLab = JSON.parse(fs.readFileSync(caminhoDemandasLabOnline, 'utf8'))
+      .map(e => ({ ...e, criacao: e.criacao ? new Date(e.criacao) : null, concluido: null }));
+    ensaiosComPendentes = ensaiosLidos.concat(pendentesLab);
+  } else {
+    console.warn(`AVISO: ${caminhoDemandasLabOnline} não encontrado -- Demandas do Gráfico não inclui backlog de LAB.C/LAB.E. Rode "node tools/semanal/atualizar-demandas-lab-online.js".`);
+  }
+
+  const { itens: furosRedirecionados } = redirecionarSupsDesconhecidos(furos, registros);
+  const { itens: ensaiosRedirecionados } = redirecionarSupsDesconhecidos(ensaiosComPendentes, registros);
+  return chegadasMensaisPorRegistro(furosRedirecionados, ensaiosRedirecionados, periodos);
+}
+
 const LOGO_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-suporte-infra-negativo.png');
 const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-alvo.png');
 
@@ -68,7 +128,13 @@ function loadDataUri(filePath) {
 // GitHub Pages) -- só de variável de ambiente, lida na hora do build e
 // descartada depois. Quem roda o build precisa saber a senha; ela nunca
 // fica escrita em nenhum lugar do código.
-function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
+function build({
+  outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA,
+  caminhoAvancosOnline = path.join(__dirname, '..', '..', 'dist', 'avancos-online.csv'),
+  caminhoDemandasSondagemOnline = path.join(__dirname, '..', '..', 'dist', 'demandas-sondagem-online.csv'),
+  caminhoLabOnline = path.join(__dirname, '..', '..', 'dist', 'lab-online.csv'),
+  caminhoDemandasLabOnline = path.join(__dirname, '..', '..', 'dist', 'demandas-lab-online.json'),
+} = {}) {
   if (!senha) {
     throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
   }
@@ -88,8 +154,12 @@ function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENH
     console.log(`Linha de base: ${chavesSemMatch} combinações SUP+tipologia (R$ ${somaSemMatch.toLocaleString('pt-BR')}) não casaram com nenhum registro da MATRIZ atual -- SUP renomeado/renovado desde o estudo original, ou nome descritivo em vez de código. Não aparecem na coluna Previsto Inicial da tabela.`);
   }
 
+  const demandasChegadasMensais = montarDemandasChegadasMensais({
+    registros, periodos, caminhoAvancosOnline, caminhoDemandasSondagemOnline, caminhoLabOnline, caminhoDemandasLabOnline,
+  });
+
   const html = renderDashboard({
-    registros, periodos, generatedAt: today, senha,
+    registros, periodos, generatedAt: today, senha, demandasChegadasMensais,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
   });
 
@@ -109,4 +179,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, anexarPrevistoInicial };
+module.exports = { build, anexarPrevistoInicial, montarDemandasChegadasMensais };
