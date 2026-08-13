@@ -48,7 +48,7 @@ function PortaResponde {
 Escrever "=== Atualizacao diaria -- $Carimbo ==="
 
 if (-not $env:ORCAMENTO_SENHA) {
-    Escrever "ERRO: ORCAMENTO_SENHA nao esta definida nesta sessao. Configure a variavel de ambiente persistente uma vez -- ver docs/setup-atualizacao-diaria.md."
+    Escrever "ERRO: ORCAMENTO_SENHA nao esta definida nesta sessao. Configure a variavel de ambiente persistente uma vez -- ver SETUP-ATUALIZACAO-DIARIA.md."
     exit 1
 }
 
@@ -81,6 +81,61 @@ if (-not (PortaResponde)) {
 } else {
     Escrever "Chrome de depuracao ja estava no ar."
 }
+
+# Heartbeat: registra que ESTA maquina conseguiu alcancar o Chrome hoje,
+# independente do resultado das buscas la na frente (uma pagina do
+# sond.com.br lenta pro mes corrente e um problema bem diferente de
+# "ninguem esta logado em lugar nenhum" -- medido em 2026-08-13, as
+# buscas falharam com Chrome aberto e logado o tempo todo). O workflow
+# de alerta (GitHub Actions) le esta linha pra decidir se avisa todo
+# mundo por e-mail: sem ela, tanto "commit aconteceu hoje" (o build
+# sempre gera um commit novo, cifra com nonce aleatorio, mesmo sem dado
+# novo) quanto "todas as 5 buscas falharam" (pode ser so o site lento)
+# dariam alarme falso ou silencio falso.
+#
+# Best-effort de proposito: se este push falhar (corrida com outra
+# maquina, rede) so avisa e segue -- perder UM heartbeat entre 3
+# maquinas raramente derruba o sinal agregado do dia, e nao vale travar
+# a atualizacao de dados por causa disso.
+function RegistrarHeartbeat {
+    $CaminhoCsv = Join-Path $Raiz 'docs\heartbeat-atualizacao-diaria.csv'
+    $DataHoje = Get-Date -Format 'yyyy-MM-dd'
+    $Linha = "$DataHoje,$env:COMPUTERNAME,true"
+    try {
+        Push-Location $Raiz
+        if (-not (Test-Path $CaminhoCsv)) {
+            Set-Content -Path $CaminhoCsv -Value 'data,maquina,chrome_ok' -ErrorAction Stop
+        }
+        Add-Content -Path $CaminhoCsv -Value $Linha -ErrorAction Stop
+        & git add docs/heartbeat-atualizacao-diaria.csv 2>&1 | Out-Null
+        $temMudanca = (& git status --porcelain -- docs/heartbeat-atualizacao-diaria.csv 2>&1)
+        if (-not $temMudanca) {
+            Escrever "Heartbeat: linha de hoje ja estava registrada, nada a commitar."
+            return
+        }
+        & git commit -m "Heartbeat: Chrome alcancavel em $env:COMPUTERNAME ($DataHoje)" 2>&1 | Out-Null
+        & git fetch origin master 2>&1 | Out-Null
+        & git rebase origin/master 2>&1 | Out-Null
+        $pushOk = $false
+        for ($t = 1; $t -le 3; $t++) {
+            & git push origin HEAD:master 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { $pushOk = $true; break }
+            & git fetch origin master 2>&1 | Out-Null
+            & git rebase origin/master 2>&1 | Out-Null
+        }
+        if ($pushOk) {
+            Escrever "Heartbeat registrado e publicado."
+        } else {
+            Escrever "AVISO: heartbeat nao conseguiu publicar depois de 3 tentativas -- seguindo mesmo assim (nao bloqueia a atualizacao de dados)."
+            & git rebase --abort 2>&1 | Out-Null
+        }
+    } catch {
+        Escrever "AVISO: heartbeat falhou ($($_.Exception.Message)) -- seguindo mesmo assim."
+    } finally {
+        Pop-Location
+    }
+}
+RegistrarHeartbeat
 
 Escrever "Rodando atualizar-arquivos.js (saida completa vai so para o log, nao para o console)..."
 

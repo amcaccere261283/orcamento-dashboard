@@ -1,0 +1,84 @@
+name: Alertar se a atualizacao diaria falhar nas 3 maquinas
+
+# As 3 maquinas (Americo, Kairo, Patrick) tentam atualizar a pagina semanal
+# todo dia as 8h, cada uma via Task Scheduler local (ver
+# SETUP-ATUALIZACAO-DIARIA.md e tools/semanal/atualizar-diario.ps1). Este
+# workflow roda depois, so pra checar se PELO MENOS UMA conseguiu alcancar
+# o Chrome hoje (heartbeat em docs/heartbeat-atualizacao-diaria.csv) -- se
+# nenhuma conseguiu, ninguem esta logado em sond.com.br em lugar nenhum, e
+# so um e-mail avisa. Deliberadamente SILENCIOSO no dia a dia: sem alerta
+# quando ao menos uma maquina funcionou, mesmo que os dados de hoje tenham
+# vindo parciais (isso e outro tipo de problema, sem alarme por e-mail).
+
+on:
+  schedule:
+    - cron: '45 11 * * *' # 08h45 de Brasilia -- ~45min de folga depois das 8h
+  workflow_dispatch: {}
+
+jobs:
+  checar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar codigo-fonte
+        uses: actions/checkout@v4
+
+      - name: Checar heartbeat de hoje
+        id: checar
+        run: |
+          node -e "
+            const fs = require('fs');
+            const caminho = 'docs/heartbeat-atualizacao-diaria.csv';
+            const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD
+            if (!fs.existsSync(caminho)) {
+              console.log('Sem arquivo de heartbeat ainda -- tratando como falha (nenhuma maquina configurada rodou até agora).');
+              process.exit(1);
+            }
+            const linhas = fs.readFileSync(caminho, 'utf8').trim().split('\n').slice(1);
+            const deHoje = linhas
+              .map((l) => l.split(','))
+              .filter(([data]) => data === hoje);
+            const algumaOk = deHoje.some(([, , ok]) => ok === 'true');
+            console.log('Hoje (Brasilia):', hoje);
+            console.log('Linhas de hoje:', deHoje.length, '-- alguma OK:', algumaOk);
+            process.exit(algumaOk ? 0 : 1);
+          "
+
+      - name: Enviar alerta por e-mail (so quando ninguem atualizou hoje)
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          node -e "
+            const destinatarios = [
+              'americo.caccere@suportesolos.com.br',
+              'kario.fracassi@suportesolos.com.br',
+              'patrick.oliveira@suportesolos.com.br',
+            ];
+            const html = [
+              '<p>Nenhuma das 3 maquinas conseguiu atualizar a pagina semanal hoje',
+              '(nenhum heartbeat de Chrome alcancavel em docs/heartbeat-atualizacao-diaria.csv).</p>',
+              '<p>Provavel causa: a sessao do sond.com.br expirou em todas -- abra o Chrome com o',
+              'perfil de depuracao dedicado e faca login de novo em qualquer uma das 3 maquinas',
+              '(ver SETUP-ATUALIZACAO-DIARIA.md, secao \"O que fazer quando falhar\").</p>',
+              '<p>Os dados publicados continuam sendo os do ultimo dia que funcionou -- nada foi',
+              'corrompido, so ficou parado.</p>',
+            ].join(' ');
+            fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: {
+                'Authorization': 'Bearer ' + process.env.RESEND_API_KEY,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                from: 'Suporte Infra <americo.caccere@suportesolos.com.br>',
+                to: destinatarios,
+                subject: 'Atualizacao diaria do orcamento-dashboard nao rodou hoje',
+                html,
+              }),
+            }).then(async (r) => {
+              const texto = await r.text();
+              console.log('Status:', r.status);
+              console.log(texto);
+              if (!r.ok) process.exit(1);
+            });
+          "
