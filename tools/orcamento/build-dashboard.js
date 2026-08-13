@@ -109,9 +109,11 @@ function montarDemandasChegadasMensais({
     console.warn(`AVISO: ${caminhoDemandasLabOnline} não encontrado -- Demandas do Gráfico não inclui backlog de LAB.C/LAB.E. Rode "node tools/semanal/atualizar-demandas-lab-online.js".`);
   }
 
-  const { itens: furosRedirecionados } = redirecionarSupsDesconhecidos(furos, registros);
-  const { itens: ensaiosRedirecionados } = redirecionarSupsDesconhecidos(ensaiosComPendentes, registros);
-  return chegadasMensaisPorRegistro(furosRedirecionados, ensaiosRedirecionados, periodos);
+  const { itens: furosRedirecionados, redirecionados: furosRedirecionadosQtd } = redirecionarSupsDesconhecidos(furos, registros);
+  const { itens: ensaiosRedirecionados, redirecionados: ensaiosRedirecionadosQtd } = redirecionarSupsDesconhecidos(ensaiosComPendentes, registros);
+  const resultado = chegadasMensaisPorRegistro(furosRedirecionados, ensaiosRedirecionados, periodos);
+  console.log(`Demandas do Gráfico: ${furos.length} furo(s) e ${ensaiosComPendentes.length} ensaio(s) lido(s), ${Object.keys(resultado).length} combinação(ões) SUP+tipologia geradas, ${furosRedirecionadosQtd} furo(s) e ${ensaiosRedirecionadosQtd} ensaio(s) redirecionado(s) pra "Diversos" (SUP sem registro na MATRIZ do orçamento).`);
+  return resultado;
 }
 
 const LOGO_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-suporte-infra-negativo.png');

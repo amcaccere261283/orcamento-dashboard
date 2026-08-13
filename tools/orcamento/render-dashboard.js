@@ -486,9 +486,11 @@ function cortarAcumuladoNoUltimoDado(acumulado, mensal) {
 }
 
 // Mesmo cinza claro usado na linha "Previsto Inicial" da tabela (.linha-previsto-inicial),
-// pra não inventar uma cor nova pra mesma série. Roxo é a 5ª cor
-// categórica (só do Gráfico, ver ORDEM_SERIES_GRAFICO) -- distinta das
-// outras 4 hues (cinza/azul/verde/âmbar).
+// pra não inventar uma cor nova pra mesma série. 6 entradas ao todo (só do
+// Gráfico, ver ORDEM_SERIES_GRAFICO): 4 hues distintas (cinza/azul/verde/
+// âmbar) mais 2 roxos -- realizadoPrevistoInicial no lilás claro (#a78bfa) e
+// demandas, o mais novo, num roxo mais saturado (#9700DA) pra não se
+// confundir com o primeiro.
 var SERIE_COR = { previstoInicial: '#8b8a82', previsto: '#2f6ad0', realizado: '#7fd858', total: '#f6b53f', realizadoPrevistoInicial: '#a78bfa', demandas: '#9700DA' };
 // Tracejado por série além da cor -- segunda camada de identidade (não só
 // hue) pra sobreviver a daltonismo/impressão P&B: previsto inicial pontilhado

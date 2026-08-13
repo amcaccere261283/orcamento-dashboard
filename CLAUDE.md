@@ -58,14 +58,21 @@ decidiu `chegadas` (fluxo) em vez de `pendentes` (estoque).
 semanal usava** (`dist/avancos-online.csv` e `dist/lab-online.csv`,
 obrigatórios; `dist/demandas-sondagem-online.csv` e
 `dist/demandas-lab-online.json`, opcionais -- sem eles o build roda normal,
-só sem o backlog ainda não executado nas Demandas). Se faltar um dos dois
-obrigatórios, `node tools/orcamento/build-dashboard.js` falha com uma
-mensagem que já diz o comando pra gerar (`node
-tools/semanal/atualizar-avancos-online.js` / `atualizar-lab-online.js`,
-documentados na seção "Planejamento Semanal" abaixo -- precisam do Chrome
-aberto com `--remote-debugging-port=9222`, logado em sond.com.br). Rodar só
-o build do orçamento numa máquina que nunca rodou a semanal exige rodar esses
-2 (ou 4) comandos pelo menos uma vez antes.
+só sem o backlog ainda não executado nas Demandas). Os 4 são versionados no
+git, então um clone novo já os tem e builda sem nenhum setup extra --
+rodar os fetchers (`node tools/semanal/atualizar-avancos-online.js` /
+`atualizar-lab-online.js` / `atualizar-demandas-sondagem-online.js` /
+`atualizar-demandas-lab-online.js`, documentados na seção "Planejamento
+Semanal" abaixo -- precisam do Chrome aberto com
+`--remote-debugging-port=9222`, logado em sond.com.br) só é necessário pra
+ATUALIZAR esses 4 arquivos com dado mais recente, não pra tornar o build
+possível. Se um dos dois obrigatórios estiver ausente ou ilegível, `node
+tools/orcamento/build-dashboard.js` falha com uma mensagem que já diz o
+comando pra gerar. **Risco não documentado até aqui:** não há aviso de
+"dado desatualizado" -- só de arquivo faltando/ilegível -- então se esses
+CSVs commitados ficarem velhos (ninguém rodar os fetchers por um tempo), o
+build continua funcionando normalmente e produz Demandas com números
+defasados, em silêncio.
 
 `tools/semanal/compute-demandas.js` ganhou `chegadasMensaisPorRegistro`
 (aditiva, não muda nada que a página semanal já consumia) -- é a função que

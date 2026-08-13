@@ -965,6 +965,16 @@ test('construirPainelGraficoHtml: dimensão Volume inclui uma 5ª série "Demand
 
   assert.match(htmlPainel, /#9700DA/, 'a cor de Demandas precisa aparecer no SVG desenhado');
   assert.match(htmlPainel, /Demandas/, 'o rótulo "Demandas" precisa aparecer (legenda/tooltip)');
+
+  // new Set() acima é "sem filtro ativo" (filtroExclui só exclui quando
+  // filtro.size > 0 -- ver tools/comum/render-shell.js), então a asserção
+  // anterior passaria igual mesmo se Demandas FOSSE filtrada por
+  // filtro-serie. Pra provar de verdade que Demandas ignora filtro-serie,
+  // usa um filtro RESTRITIVO (só 'realizado' passa), que esconde
+  // previsto/total/previstoInicial/realizadoPrevistoInicial do gráfico --
+  // e confere que #9700DA continua aparecendo mesmo assim.
+  const htmlPainelComFiltro = construirPainelGraficoHtml([registro], [0], new Set(['realizado']), 'volume');
+  assert.match(htmlPainelComFiltro, /#9700DA/, 'Demandas precisa continuar aparecendo mesmo com filtro-serie restritivo ativo (ela não faz parte de ORDEM_SERIES_GRAFICO)');
 });
 
 test('construirPainelGraficoHtml: dimensões que NÃO são Volume nunca ganham a série Demandas, mesmo com window.__DEMANDAS_MENSAIS__ preenchido', () => {
