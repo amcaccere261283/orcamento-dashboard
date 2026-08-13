@@ -1862,15 +1862,18 @@ ${markupAbas(ABAS_VISUALIZACAO, '        ')}
 
 const MARKUP_NOTA_PREMISSA = `      <div id="nota-premissa-produtividade" class="nota-premissa" style="display:none">Premissa: Produtividade = Volume ÷ (Equipes × dias do mês) — dias = 15 em Janeiro e Dezembro, 30 nos demais meses.</div>`;
 
-function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha }) {
+function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha, demandasChegadasMensais = {} }) {
   if (!senha) {
     throw new Error('renderDashboard requer "senha" -- o conteúdo (SUP/Grupo/Tomador/Tipologia/valores) é cifrado com ela antes de ir pro HTML.');
   }
   const vigenteIdx = calcularVigenteIdx(periodos, generatedAt);
-  const registrosJson = JSON.stringify(registros.map(r => ({
-    sup: r.sup, grupo: r.grupo, tomador: r.tomador, escopo: r.escopo, tipologia: r.tipologia, origem: r.origem,
-    previstoInicial: r.previstoInicial, previsto: r.previsto, realizado: r.realizado, total: r.total,
-  })));
+  const registrosJson = JSON.stringify({
+    registros: registros.map(r => ({
+      sup: r.sup, grupo: r.grupo, tomador: r.tomador, escopo: r.escopo, tipologia: r.tipologia, origem: r.origem,
+      previstoInicial: r.previstoInicial, previsto: r.previsto, realizado: r.realizado, total: r.total,
+    })),
+    demandasChegadasMensais,
+  });
   const dadosCifrados = cifrarComSenha(registrosJson, senha);
   const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');
 

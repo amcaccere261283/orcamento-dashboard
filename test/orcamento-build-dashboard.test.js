@@ -147,9 +147,20 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
   delete require.cache[buildPath];
   const { build } = require(buildPath);
 
+  const avancosPath = path.join(os.tmpdir(), `avancos-online-e2e-${Date.now()}.csv`);
+  const labPath = path.join(os.tmpdir(), `lab-online-e2e-${Date.now()}.csv`);
+  fs.writeFileSync(avancosPath, 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n');
+  fs.writeFileSync(labPath, 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n');
+
   try {
     const senha = 'senha-e2e-de-teste';
-    build({ outPath, today: new Date(2026, 6, 21), senha });
+    build({
+      outPath, today: new Date(2026, 6, 21), senha,
+      caminhoAvancosOnline: avancosPath,
+      caminhoDemandasSondagemOnline: path.join(os.tmpdir(), 'inexistente-sondagem-e2e.csv'),
+      caminhoLabOnline: labPath,
+      caminhoDemandasLabOnline: path.join(os.tmpdir(), 'inexistente-lab-e2e.json'),
+    });
     const html = fs.readFileSync(outPath, 'utf8');
 
     // O conteúdo real (tipologia/grupo) fica cifrado no HTML -- decifra com
@@ -182,6 +193,8 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
   } finally {
     fs.unlinkSync(xlsxPath);
     fs.unlinkSync(linhaBasePath);
+    fs.unlinkSync(avancosPath);
+    fs.unlinkSync(labPath);
     if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
     delete require.cache[configPath];
     delete require.cache[buildPath];

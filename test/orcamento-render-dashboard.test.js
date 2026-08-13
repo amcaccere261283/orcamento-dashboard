@@ -70,7 +70,7 @@ test('renderDashboard embeds an encrypted blob (salt/iv/dados/iteracoes) that de
   const html = renderComSenha([registro]);
   const pacote = extrairPacoteCifrado(html);
   assert.ok(pacote.salt && pacote.iv && pacote.dados && pacote.iteracoes);
-  const registrosDecifrados = JSON.parse(decifrarComSenha(pacote, SENHA_TESTE));
+  const registrosDecifrados = JSON.parse(decifrarComSenha(pacote, SENHA_TESTE)).registros;
   assert.equal(registrosDecifrados[0].grupo, 'PÁTRIA');
   assert.equal(registrosDecifrados[0].sup, 'SUP-7133-24');
   assert.equal(registrosDecifrados[0].tomador, 'Via Araucária S.A');
