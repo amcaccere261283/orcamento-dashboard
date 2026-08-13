@@ -75,6 +75,41 @@ test('carry-forward usa a produção mais RECENTE dentro da janela, não a mais 
   assert.equal(porDia['SUP-VELHO||SP'], undefined);
 });
 
+test('equipe sem SUP nenhum é redistribuída proporcionalmente entre as combinações do mesmo dia', () => {
+  const roster = [
+    { idEquipe: '1', diaEpoch: 100, estado: 'mobilizada' }, // SUP-A: 1
+    { idEquipe: '2', diaEpoch: 100, estado: 'mobilizada' }, // SUP-B: 3 (peso maior)
+    { idEquipe: '2b', diaEpoch: 100, estado: 'mobilizada' },
+    { idEquipe: '2c', diaEpoch: 100, estado: 'mobilizada' },
+    { idEquipe: '3', diaEpoch: 100, estado: 'mobilizada' }, // sem produção nenhuma
+  ];
+  const producao = [
+    { idEquipe: '1', sup: 'SUP-A', tipo: 'SP', diaEpoch: 100 },
+    { idEquipe: '2', sup: 'SUP-B', tipo: 'SM', diaEpoch: 100 },
+    { idEquipe: '2b', sup: 'SUP-B', tipo: 'SM', diaEpoch: 100 },
+    { idEquipe: '2c', sup: 'SUP-B', tipo: 'SM', diaEpoch: 100 },
+  ];
+  const { porDia, ativos, foraDaJanela } = agregarEquipesRealizadoAlocado({ roster, producao });
+  assert.equal(ativos, 5);
+  assert.equal(foraDaJanela, 1);
+  // falta = 1, dividida proporcionalmente entre SUP-A (peso 1/4) e SUP-B (peso 3/4)
+  assert.equal(porDia['SUP-A||SP'][100], 1 + 1 * (1 / 4));
+  assert.equal(porDia['SUP-B||SM'][100], 3 + 1 * (3 / 4));
+  // o total do dia fecha exatamente no total de ativas
+  const totalDia = porDia['SUP-A||SP'][100] + porDia['SUP-B||SM'][100];
+  assert.equal(totalDia, 5);
+});
+
+test('sem NENHUMA combinação alocada no dia, não há onde redistribuir: dia fica vazio (comportamento anterior)', () => {
+  const roster = [
+    { idEquipe: '1', diaEpoch: 100, estado: 'mobilizada' },
+    { idEquipe: '2', diaEpoch: 100, estado: 'mobilizada' },
+  ];
+  const { porDia, foraDaJanela } = agregarEquipesRealizadoAlocado({ roster, producao: [] });
+  assert.deepEqual(porDia, {});
+  assert.equal(foraDaJanela, 2);
+});
+
 test('janelaFallbackDias é configurável (default 45)', () => {
   const roster = [{ idEquipe: '1', diaEpoch: 130, estado: 'mobilizada' }];
   const producao = [{ idEquipe: '1', sup: 'SUP-A', tipo: 'SP', diaEpoch: 100 }]; // 30 dias antes

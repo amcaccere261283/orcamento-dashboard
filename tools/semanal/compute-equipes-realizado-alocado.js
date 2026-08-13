@@ -55,6 +55,16 @@ function ultimoDentroDaJanela(historico, diaAlvo, janelaDias) {
 //
 // Devolve { porDia, foraDaJanela, ativos }. porDia no MESMO formato que
 // demandas.equipesPorDia já usa hoje: 'SUP||Tipo' -> {diaEpoch: fração}.
+//
+// Equipe ativa sem SUP nenhum pra alocar (nem produção hoje, nem
+// carry-forward dentro da janela) NÃO é descartada: sua fração é
+// redistribuída, no MESMO dia, proporcionalmente entre as combinações
+// (SUP,tipo) que já têm alocação naquele dia -- decisão do dono do
+// projeto em 2026-08-13, pra que o total do dia feche exatamente no total
+// de ativas. Sem nenhuma combinação alocada naquele dia (todas as ativas do
+// dia caíram fora da janela), não há onde redistribuir -- o dia fica sem
+// registro nenhum, igual ao comportamento anterior. `foraDaJanela` continua
+// contando quantas equipe-dia passaram por essa redistribuição.
 function agregarEquipesRealizadoAlocado(opcoes) {
   var o = opcoes || {};
   var janela = typeof o.janelaFallbackDias === 'number' ? o.janelaFallbackDias : JANELA_FALLBACK_PADRAO;
@@ -69,6 +79,7 @@ function agregarEquipesRealizadoAlocado(opcoes) {
 
   var ativos = 0;
   var foraDaJanela = 0;
+  var semAlocacaoPorDia = new Map(); // diaEpoch -> quantidade de equipes sem SUP
 
   (o.roster || []).forEach(function (item) {
     if (!ativaNaDefinicaoNova(item.estado)) return;
@@ -92,7 +103,23 @@ function agregarEquipesRealizadoAlocado(opcoes) {
       somar(ultimo.sup, ultimo.tipo, item.diaEpoch, 1);
     } else {
       foraDaJanela++;
+      semAlocacaoPorDia.set(item.diaEpoch, (semAlocacaoPorDia.get(item.diaEpoch) || 0) + 1);
     }
+  });
+
+  semAlocacaoPorDia.forEach(function (falta, dia) {
+    var somaDia = 0;
+    var chavesDoDia = [];
+    Object.keys(porDia).forEach(function (chave) {
+      if (porDia[chave][dia]) {
+        somaDia += porDia[chave][dia];
+        chavesDoDia.push(chave);
+      }
+    });
+    if (somaDia <= 0) return; // nada alocado nesse dia -- nada onde redistribuir
+    chavesDoDia.forEach(function (chave) {
+      porDia[chave][dia] += falta * (porDia[chave][dia] / somaDia);
+    });
   });
 
   return { porDia: porDia, foraDaJanela: foraDaJanela, ativos: ativos };

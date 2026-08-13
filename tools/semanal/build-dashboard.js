@@ -439,7 +439,7 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
       // parseEquipesFracaoCsv já documentava pra equipesPeriodo).
       demandas.equipesPeriodo = null;
       fonteEquipes = 'REALIZADO (roster Link 6 + produção Link 7)';
-      console.log(`Equipes REALIZADO: ${ativos} equipe-dia ativa(s), ${foraDaJanela} sem produção dentro de 45 dias (fora da conta, carry-forward esgotado).`);
+      console.log(`Equipes REALIZADO: ${ativos} equipe-dia ativa(s), ${foraDaJanela} sem produção dentro de 45 dias (redistribuída(s) proporcionalmente entre os SUPs do mesmo dia; só ficam de fora nos dias em que NENHUMA equipe se alocou).`);
     } else {
       console.warn('Equipes REALIZADO: roster+produção não produziram nenhum par utilizável -- mantendo a fonte de reserva (ativas/mobilizadas).');
     }
