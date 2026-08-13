@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const { renderDashboard } = require('../tools/orcamento/render-dashboard.js');
 const { decifrarComSenha } = require('../tools/comum/criptografia.js');
 const { excelSerialParaData } = require('../tools/comum/datas.js');
+const { construirHtmlGolden } = require('./helpers/golden-orcamento.js');
 
 const SENHA_TESTE = 'senha-fake-de-teste-abc';
 
@@ -1553,6 +1554,33 @@ test('fecharTendenciaVigente: um zero artificial de "mês ainda não reportado" 
   assert.equal(fechado.total.financeiro[4], 500, 'mês 4: Realizado tem 0 artificial -- usa a projeção real da linha T (500), não sobrescreve com 0');
   assert.equal(fechado.total.financeiro[5], 600, 'mês 5: mesmo caso (600)');
   assert.equal(fechado.total.financeiro[6], 200, 'mês vigente: Realizado tem 0 artificial (tratado como sem dado) -- fecha só com a projeção da linha T (0 + 200)');
+});
+
+test('fecharTendenciaVigente: desembrulha {registros, demandasChegadasMensais}, guarda demandas em window.__DEMANDAS_MENSAIS__ e devolve só o array de registros', () => {
+  const html = construirHtmlGolden();
+  const { fecharTendenciaVigente, window: sandboxWindow } = extrairFuncoesPuras(html);
+
+  const registro = { sup: 'SUP-X', tipologia: 'SP', total: null, realizado: null };
+  const resultado = fecharTendenciaVigente({ registros: [registro], demandasChegadasMensais: { 'SUP-X||SP': [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } }, 5);
+
+  assert.deepStrictEqual(resultado, [registro]);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_MENSAIS__, { 'SUP-X||SP': [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
+});
+
+test('fecharTendenciaVigente: chamada com um array puro (live-refresh, sem Demandas) preserva window.__DEMANDAS_MENSAIS__ já setado, em vez de apagar', () => {
+  const html = construirHtmlGolden();
+  const { fecharTendenciaVigente, window: sandboxWindow } = extrairFuncoesPuras(html);
+
+  const registro = { sup: 'SUP-X', tipologia: 'SP', total: null, realizado: null };
+  fecharTendenciaVigente({ registros: [registro], demandasChegadasMensais: { 'SUP-X||SP': [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } }, 5);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_MENSAIS__, { 'SUP-X||SP': [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
+
+  // live-refresh: registrosNovos é um ARRAY puro, sem demandasChegadasMensais.
+  const registrosNovos = [{ sup: 'SUP-Y', tipologia: 'ST', total: null, realizado: null }];
+  const resultado = fecharTendenciaVigente(registrosNovos, 5);
+
+  assert.deepStrictEqual(resultado, registrosNovos);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_MENSAIS__, { 'SUP-X||SP': [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, 'live-refresh não deve apagar as Demandas do build');
 });
 
 test('o gate de senha (tentarDesbloquear) fecha a Tendência com fecharTendenciaVigente logo após decifrar, antes de montarDashboard', () => {

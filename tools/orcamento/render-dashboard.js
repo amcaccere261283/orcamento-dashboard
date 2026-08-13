@@ -116,7 +116,17 @@ function fecharSerieMensal(totalMensal, realizadoMensal, vigenteIdx, fechar) {
 // Os 2 pontos de chamada reais sempre passam um array recém-atribuído
 // (JSON.parse ou o resultado de um novo fetch), nunca o retorno desta
 // própria função -- mantenha essa invariante se adicionar um 3º ponto.
-function fecharTendenciaVigente(registros, vigenteIdx) {
+// dados: o que o gate acabou de JSON.parse -- {registros, demandasChegadasMensais}
+// (ver renderDashboard). Guarda demandasChegadasMensais em
+// window.__DEMANDAS_MENSAIS__ SÓ quando presente -- atualizarDadosAoVivo
+// chama esta mesma função de novo com um array puro (a MATRIZ espelho não
+// tem Demandas), e sobrescrever incondicionalmente apagaria as Demandas do
+// build a cada "Atualizar dados ao vivo". Mesmo espírito de
+// window.__DEMANDAS__ em tools/semanal/render-semanal.js, com a exceção
+// condicional documentada acima.
+function fecharTendenciaVigente(dados, vigenteIdx) {
+  if (dados && dados.demandasChegadasMensais) window.__DEMANDAS_MENSAIS__ = dados.demandasChegadasMensais;
+  var registros = (dados && dados.registros) ? dados.registros : dados;
   if (vigenteIdx < 0 || vigenteIdx > 11) return registros; // fora do ano coberto -- nada a fechar
   return registros.map(function (registro) {
     if (!registro.total) return registro;
