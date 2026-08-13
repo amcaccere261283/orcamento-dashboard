@@ -24,6 +24,14 @@ const { classificarDiaEquipe, contaComoAtiva } = require('./classificar-dia-equi
 //                          português e inglês de um mês para o outro (mesmo
 //                          achado de tools/matriz/parse-eq.js), por isso o DIA
 //                          sai do número capturado, nunca da comparação do mês.
+//   "1-ago.", "15-jul." -- variante pt-BR com PONTO final na abreviação do mês
+//                          (visto ao vivo em 2026-08-13: a aba "2026 - AGOSTO
+//                          (EQ)" trocou de "1-Aug" pra "1-ago." e o roster
+//                          daquele mês ficou de fora por completo -- 0 colunas
+//                          de dia reconhecidas, silenciosamente, mesmo bug de
+//                          "equipe sem dias" descrito abaixo). O ponto é
+//                          OPCIONAL nos dois idiomas: nada garante que a
+//                          formatação não volte a mudar mês a mês.
 //   "01/08/2026"        -- como sai da Sheet ESPELHO publicada. O Apps Script
 //                          copia valores (getValues), então o cabeçalho de data
 //                          chega como data de verdade e o CSV a serializa por
@@ -35,7 +43,7 @@ const { classificarDiaEquipe, contaComoAtiva } = require('./classificar-dia-equi
 //                          nenhum equipe-dia, não um erro.
 //
 // Em ambos o dia é o PRIMEIRO número, então uma captura só resolve os dois.
-var RE_COLUNA_DIA = /^\s*(\d{1,2})(?:-[A-Za-zÀ-ÿ]{3,4}|\/\d{1,2}\/\d{4})\s*$/;
+var RE_COLUNA_DIA = /^\s*(\d{1,2})(?:-[A-Za-zÀ-ÿ]{3,4}\.?|\/\d{1,2}\/\d{4})\s*$/;
 
 var COL_ID = 0;
 var COL_NOME = 1;
