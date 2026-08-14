@@ -823,9 +823,12 @@ function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais, semMilhares)
 // {chaveMatriz: [12 chegadas]} montado no build -- ver
 // tools/orcamento/build-dashboard.js:montarDemandasChegadasMensais) das
 // chaves (sup||tipologia) dos registros que passaram no filtro atual.
-// Mesma chave de tools/comum/linha-base.js:chaveMatriz, reproduzida aqui
-// como concatenação simples (sem importar o módulo -- este código roda
-// embutido no <script> da página, sem require).
+// Mesma chave de tools/comum/linha-base.js:chaveMatriz -- que, a partir
+// desta branch, JÁ é um global de verdade neste <script> (fonteParaCliente()
+// injeta a função inteira via fonteParaClienteLinhaBase(), ver renderDashboard
+// mais abaixo), mas a expressão aqui continua com a concatenação simples
+// equivalente em vez de chamar chaveMatriz(...) -- refatorar pra chamar o
+// global fica pra outra passada, não é necessário pra corrigir esta nota.
 function demandasMensaisPorIndices(indices, registros, demandasMensais) {
   var mensal = new Array(12).fill(0);
   if (!demandasMensais) return mensal;

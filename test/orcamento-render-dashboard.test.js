@@ -184,9 +184,17 @@ test('atualizarDadosAoVivo só recalcula Demandas quando avancos E lab vieram co
 // usa pro botão "Atualizar dados" da página Semanal. Diferente daquele
 // arquivo, aqui não existe (ainda) um dom-falso dedicado pra tabela do
 // Orçamento (linhas reais com data-serie/data-grupo/etc.) -- em vez de
-// construir um, o document abaixo é GENÉRICO: getElementById/querySelector
-// sempre devolvem um elemento-mock com o mesmo formato (style/classList/
-// innerHTML/textContent/etc.), e querySelectorAll sempre devolve [].
+// construir um, o document abaixo é GENÉRICO: getElementById devolve um
+// elemento-mock com o mesmo formato (style/classList/innerHTML/textContent/
+// etc.) para qualquer id, MAS memoizado por id (o mesmo id sempre devolve o
+// MESMO objeto, igual a test/helpers/dom-falso-semanal.js:criarDocumentoFalso)
+// -- sem isso, definirStatusAtualizacao (que escreve em
+// document.getElementById('status-atualizacao').textContent) escreveria num
+// objeto descartável que nenhuma asserção depois conseguiria ler de volta, e
+// um throw em qualquer chamada downstream (montarTodosFiltrosMulti/
+// renderCorpoTabela/recalcularTabela/recalcularAlertas) ficaria invisível,
+// engolido pelo .catch(erro) de atualizarDadosAoVivo. querySelector genérico
+// e querySelectorAll sempre [] continuam como antes.
 // recalcularTabela/recalcularAlertas leem e escrevem nesses elementos sem
 // erro, mas como as consultas por linha (#tabela-orcamento tbody tr,
 // #tabela-alertas tbody tr) voltam vazias, preencherLinha nunca é chamado
@@ -197,6 +205,7 @@ test('atualizarDadosAoVivo só recalcula Demandas quando avancos E lab vieram co
 // valores certos -- exatamente o contrato de degradação que esta task
 // existe pra proteger.
 function documentoGenericoOrcamento() {
+  const elementosPorId = new Map();
   function elementoGenerico() {
     const classes = new Set();
     const el = {
@@ -225,8 +234,12 @@ function documentoGenericoOrcamento() {
     };
     return el;
   }
+  function elementoPorId(id) {
+    if (!elementosPorId.has(id)) elementosPorId.set(id, elementoGenerico());
+    return elementosPorId.get(id);
+  }
   return {
-    getElementById: () => elementoGenerico(),
+    getElementById: elementoPorId,
     querySelector: () => elementoGenerico(),
     querySelectorAll: () => [],
     addEventListener: () => {},
@@ -302,7 +315,15 @@ test('atualizarDadosAoVivo (execução real via vm.Context, fetch mockado) recal
   const labCsv = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
 
   const fetchMock = (url) => {
-    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, status: 200, text: () => avancosCsv });
+    if (url.indexOf('avancos-online.csv') !== -1) {
+      // Achado 3 (revisão final): prova que buscarCsvOrcamento realmente
+      // anexa o cache-buster ('?_=' + Date.now()) na URL, não só que o mock
+      // aceita qualquer coisa contendo o nome do arquivo -- se o cache-buster
+      // sumisse do código de produção, este assert.match falharia aqui
+      // dentro do mock e o teste quebraria por um motivo claro.
+      assert.match(url, /avancos-online\.csv\?_=\d+$/, 'buscarCsvOrcamento precisa anexar o cache-buster ?_=<timestamp> na URL de avancos');
+      return Promise.resolve({ ok: true, status: 200, text: () => avancosCsv });
+    }
     if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, status: 200, text: () => labCsv });
     if (url.indexOf('demandas-sondagem-online.csv') !== -1) return Promise.resolve({ ok: false, status: 404 });
     if (url.indexOf('demandas-lab-online.json') !== -1) return Promise.resolve({ ok: false, status: 404 });
@@ -322,6 +343,18 @@ test('atualizarDadosAoVivo (execução real via vm.Context, fetch mockado) recal
   assert.notDeepEqual(sandbox.window.__DEMANDAS_MENSAIS__, { 'sentinela||antiga': [9] }, 'Demandas precisa ter sido recalculada de verdade, não continuar com o valor sentinela antigo');
   assert.ok(sandbox.window.__DEMANDAS_MENSAIS__['SUP-7133-24||SP'], 'chave SUP+tipologia do furo mockado precisa existir nas chegadas recalculadas');
   assert.strictEqual(sandbox.window.__DEMANDAS_MENSAIS__['SUP-7133-24||SP'][0], 1, 'o furo PENDENTE criado em 46023 (01/01/2026) chega no mês 0 (Janeiro)');
+  // Achado 1 (revisão final): sem isto, um throw em montarTodosFiltrosMulti/
+  // renderCorpoTabela/recalcularTabela/recalcularAlertas (depois que
+  // window.__REGISTROS__/__DEMANDAS_MENSAIS__ já foram setados) seria
+  // engolido pelo .catch() de atualizarDadosAoVivo e os asserts acima
+  // passariam mesmo assim -- só ler de volta o texto que
+  // definirStatusAtualizacao escreveu no elemento real (memoizado por id no
+  // document falso) prova que a função chegou ao fim sem lançar.
+  assert.match(
+    sandbox.document.getElementById('status-atualizacao').textContent,
+    /^Atualizado às \d{2}:\d{2}$/,
+    'o caminho de sucesso completo (até definirStatusAtualizacao no fim do .then) precisa ter rodado sem lançar'
+  );
 });
 
 test('atualizarDadosAoVivo (execução real via vm.Context) preserva window.__DEMANDAS_MENSAIS__ EXATAMENTE como estava quando o fetch de avancos falha de verdade (erro de rede, não só um 404 esperado) -- window.__REGISTROS__ (Previsto/Realizado/Tendência) continua atualizando normalmente a partir da MATRIZ, só Demandas fica intocado', async () => {
@@ -348,6 +381,54 @@ test('atualizarDadosAoVivo (execução real via vm.Context) preserva window.__DE
   assert.strictEqual(sandbox.window.__DEMANDAS_MENSAIS__, demandasSentinela, 'com avancos falhando, Demandas precisa continuar sendo o MESMO objeto de antes -- nunca recalculado nem apagado (identidade, não só valor)');
   assert.equal(sandbox.window.__REGISTROS__.length, 1, 'a MATRIZ, que não falhou, continua atualizando window.__REGISTROS__ normalmente mesmo com avancos fora do ar');
   assert.equal(sandbox.window.__REGISTROS__[0].sup, 'SUP-7133-24');
+  // Achado 1 (revisão final): mesmo motivo do teste anterior -- a MATRIZ não
+  // falhou aqui, então atualizarDadosAoVivo ainda percorre o caminho de
+  // sucesso completo (montarTodosFiltrosMulti/renderCorpoTabela/
+  // recalcularTabela/recalcularAlertas), só Demandas é que fica intocada.
+  assert.match(
+    sandbox.document.getElementById('status-atualizacao').textContent,
+    /^Atualizado às \d{2}:\d{2}$/,
+    'com só avancos falhando (Demandas degrada), o resto do fluxo ainda precisa terminar em sucesso, não em .catch'
+  );
+});
+
+test('atualizarDadosAoVivo (execução real via vm.Context) preserva window.__DEMANDAS_MENSAIS__ quando avancos responde com um HTTP não-ok (404), não só quando a promise de fetch rejeita de rede -- prova que o guard "if (!resposta.ok) throw" dentro de buscarCsvOrcamento realmente dispara', async () => {
+  const html = renderComSenha([registroExemplo()]);
+  const matrizCsv = construirMatrizCsvDeTesteDemandas();
+  // O corpo mockado (.text()) devolve um CSV de avanços VÁLIDO e reconhecível
+  // (mesmo formato/conteúdo do teste de sucesso, de propósito) mesmo com
+  // ok:false -- se o guard "if (!resposta.ok) throw" fosse removido, o texto
+  // seria lido e Demandas SERIA recalculada de verdade a partir dele (não
+  // ficaria intocada por acaso, só porque o mock não tem .text()). Assim o
+  // assert abaixo só passa se o guard de fato disparar antes de ler o corpo.
+  const avancosCsv = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+    + 'SUP-7133-24,46023,SP,PENDENTE,,Não,10,,OS-1,\n';
+  const labCsv = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
+
+  const fetchMock = (url) => {
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: false, status: 404, text: () => avancosCsv });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, status: 200, text: () => labCsv });
+    if (url.indexOf('demandas-sondagem-online.csv') !== -1) return Promise.resolve({ ok: false, status: 404 });
+    if (url.indexOf('demandas-lab-online.json') !== -1) return Promise.resolve({ ok: false, status: 404 });
+    return Promise.resolve({ ok: true, status: 200, text: () => matrizCsv });
+  };
+
+  const sandbox = montarSandboxOrcamento(html, fetchMock);
+  sandbox.window.__REGISTROS__ = [];
+  const demandasSentinela = { 'sentinela||antiga': [9] };
+  sandbox.window.__DEMANDAS_MENSAIS__ = demandasSentinela;
+
+  sandbox.atualizarDadosAoVivo();
+  await esperarMicrotarefas();
+
+  assert.strictEqual(sandbox.window.__DEMANDAS_MENSAIS__, demandasSentinela, 'um 404 (HTTP-level) em avancos precisa deixar Demandas intocada, do mesmo jeito que uma rejeição de rede -- prova que o throw dentro do .then(resposta => ...) de buscarCsvOrcamento é o que está protegendo, não só o .catch da promise');
+  assert.equal(sandbox.window.__REGISTROS__.length, 1, 'a MATRIZ, que não falhou, continua atualizando window.__REGISTROS__ normalmente mesmo com avancos em 404');
+  assert.equal(sandbox.window.__REGISTROS__[0].sup, 'SUP-7133-24');
+  assert.match(
+    sandbox.document.getElementById('status-atualizacao').textContent,
+    /^Atualizado às \d{2}:\d{2}$/,
+    'um 404 em avancos (arquivo opcional, com .catch(() => null) próprio) não pode derrubar o resto da atualização'
+  );
 });
 
 test('renderDashboard embeds demandasSaldoAbertura in the same encrypted blob as registros/demandasChegadasMensais, defaulting to {} when omitted', () => {
@@ -420,10 +501,19 @@ test('renderDashboard includes Tabela/Gráfico tab buttons and both view section
 });
 
 // Todas as funções de montagem da tabela (linhas, cores, agregação) rodam
-// só no navegador, DEPOIS de decifrar -- por isso vivem dentro do 4º
-// <script> da página (SCRIPT_CLIENTE_TABELA), não no 3º (o gate, que só
-// cuida da senha) nem nos anteriores (1º=vigenteIdx, 2º=dados cifrados). Extraídas via vm.Context
-// pros testes chamarem diretamente.
+// só no navegador, DEPOIS de decifrar -- por isso vivem dentro do 6º (e
+// último) <script> da página (SCRIPT_CLIENTE_TABELA), não no 3º (o gate,
+// que só cuida da senha) nem nos anteriores (1º=vigenteIdx+ano, 2º=dados
+// cifrados, 4º=fonteParaCliente -- trechos client-safe de tools/comum
+// injetados como texto, ver fonteParaClienteTipologiasAvancos/
+// fonteParaClienteTipologiasLab/fonteParaClienteDatas/
+// fonteParaClienteLinhaBase em renderDashboard, 5º=bundle -- ParseAvancos/
+// ParseLab/ComputeDemandas embutidos pro live-refresh recalcular Demandas
+// sem require). extrairFuncoesPuras junta TODOS os 6 blocos (não só o da
+// tabela) antes de rodar no vm.Context, porque funções do 6º script (como
+// recalcularDemandasAoVivo, Task 3) referenciam símbolos que só existem
+// depois que o 4º e o 5º já rodaram. Extraídas via vm.Context pros testes
+// chamarem diretamente.
 function extrairFuncoesPuras(html) {
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   assert.equal(scripts.length, 6, 'esperava exatamente 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, tabela)');
