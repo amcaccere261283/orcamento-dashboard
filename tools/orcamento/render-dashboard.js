@@ -739,7 +739,15 @@ function finalizarPainelSvg(svgMarcas, rotulos, altura) {
 // construirPainelGraficoHtml). ehRazao=true pras dimensões Produtividade/Ticket médio:
 // nesse caso não faz sentido "acumular" uma razão, então só a linha do
 // valor mensal aparece (painel único, sem colunas).
-function construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais) {
+// semMilhares (opcional): quando true, NUNCA divide por mil, mesmo que o
+// maior valor visível passe de GRAFICO_LIMIAR_MILHARES -- pedido do dono do
+// projeto em 2026-08-13 pra dimensão Volume, cujos valores são menores e
+// ficam difíceis de ler divididos (ainda mais com a série Demandas, que
+// tende a ser bem maior que Volume e empurrava o painel inteiro pra
+// milhares). Mesmo padrão já usado em tools/semanal/render-aba-grafico-semanal.js
+// (GRAFICO_LIMIAR_MILHARES lá também tem as duas atribuições de usarMilhares
+// hardcoded pra false, por pedido anterior do dono do projeto -- ver CLAUDE.md).
+function construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais, semMilhares) {
   var margem = ehRazao ? GRAFICO_MARGEM_LINHA : GRAFICO_MARGEM_BARRAS;
   var altura = ehRazao ? GRAFICO_ALTURA_LINHA : GRAFICO_ALTURA_BARRAS;
   var larguraPlot = GRAFICO_LARGURA - margem.esquerda - margem.direita;
@@ -749,7 +757,7 @@ function construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais) {
   var maxMensal = 0;
   dadosPorSerie.forEach(function (d) { d.mensal.forEach(function (v) { if (v > maxMensal) maxMensal = v; }); });
   var escala = calcularEscalaEixo(maxMensal);
-  var usarMilhares = maxMensal >= GRAFICO_LIMIAR_MILHARES;
+  var usarMilhares = !semMilhares && maxMensal >= GRAFICO_LIMIAR_MILHARES;
 
   var svg = '';
   svg += construirEixoYSvg(escala, alturaPlot, margem, false, usarMilhares, casasDecimais);
@@ -767,7 +775,7 @@ function construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais) {
 // Painel separado, eixo único, pro acumulado no ano -- mensal e acumulado
 // nunca compartilham escala (dezembro acumulado é ~12x um mês típico), um
 // eixo duplo no mesmo plot inventaria uma correlação visual que não existe.
-function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
+function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais, semMilhares) {
   var margem = GRAFICO_MARGEM_LINHA;
   var altura = GRAFICO_ALTURA_LINHA;
   var larguraPlot = GRAFICO_LARGURA - margem.esquerda - margem.direita;
@@ -777,7 +785,7 @@ function construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais) {
   var maxAcumulado = 0;
   dadosPorSerie.forEach(function (d) { d.acumulado.forEach(function (v) { if (v > maxAcumulado) maxAcumulado = v; }); });
   var escala = calcularEscalaEixo(maxAcumulado);
-  var usarMilhares = maxAcumulado >= GRAFICO_LIMIAR_MILHARES;
+  var usarMilhares = !semMilhares && maxAcumulado >= GRAFICO_LIMIAR_MILHARES;
 
   var svg = '';
   svg += construirEixoYSvg(escala, alturaPlot, margem, false, usarMilhares, casasDecimais);
@@ -947,7 +955,10 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
   // m³) e perderiam precisão útil arredondadas pra inteiro.
   var casasDecimais = ehRazao ? 2 : 0;
 
-  var mensalResultado = construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais);
+  // Volume nunca divide por mil -- ver o comentário de construirGraficoMensalSvg.
+  var semMilhares = dimensao === 'volume';
+
+  var mensalResultado = construirGraficoMensalSvg(dadosPorSerie, ehRazao, casasDecimais, semMilhares);
   var tituloMensal = (ehRazao ? 'Evolução mensal — ' : 'Mensal — ') + rotuloDimensao + (mensalResultado.milhares ? ' (em milhares)' : '');
   var html = '<div class="grafico-painel"><div class="grafico-titulo">' + escapeHtml(tituloMensal) + '</div><div>' + mensalResultado.svg + '</div></div>';
 
@@ -955,7 +966,7 @@ function construirPainelGraficoHtml(registros, indices, filtroSerie, dimensao) {
   // equipes acumulado no ano") -- some junto com as dimensões-razão, que já
   // não mostravam esse painel por um motivo parecido.
   if (!(ehRazao || dimensao === 'equipes')) {
-    var acumuladoResultado = construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais);
+    var acumuladoResultado = construirGraficoAcumuladoSvg(dadosPorSerie, casasDecimais, semMilhares);
     var tituloAcumulado = 'Acumulado no ano — ' + rotuloDimensao + (acumuladoResultado.milhares ? ' (em milhares)' : '');
     html += '<div class="grafico-painel"><div class="grafico-titulo">' + escapeHtml(tituloAcumulado) + '</div><div>' + acumuladoResultado.svg + '</div></div>';
   }

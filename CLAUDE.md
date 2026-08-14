@@ -132,6 +132,23 @@ Demandas, não apaga o saldo do build). `montarDemandasChegadasMensais`
 saldoAbertura}` em vez de só o mapa de chegadas -- quem chama essa função
 precisa desestruturar os dois campos.
 
+### Volume nunca mostra "(em milhares)" (2026-08-13, mesmo dia)
+
+Pedido do dono do projeto: valores de Volumetria são menores que Financeiro
+e ficam difíceis de ler divididos por mil -- ainda mais com a série Demandas
+(que tende a ser bem maior que o próprio Volume) empurrando o painel inteiro
+pra milhares, já que `GRAFICO_LIMIAR_MILHARES` olha o maior valor entre
+TODAS as séries visíveis do painel, não por série. `construirGraficoMensalSvg`/
+`construirGraficoAcumuladoSvg` ganharam um 4º parâmetro opcional,
+`semMilhares` -- quando true, `usarMilhares` nunca liga, não importa o
+valor máximo. `construirPainelGraficoHtml` passa `dimensao === 'volume'`;
+as outras 4 dimensões continuam com a regra de sempre (>= 1000 divide).
+Mesmo padrão que `tools/semanal/render-aba-grafico-semanal.js` já usa pra
+aba Gráficos da página semanal (duas atribuições de `usarMilhares`
+hardcoded pra `false`, por um pedido anterior do dono do projeto) -- aqui
+ficou parametrizado em vez de hardcoded porque só UMA dimensão (Volume)
+precisa da exceção, não o painel inteiro.
+
 ## Pendência conhecida: aba Gerencial
 
 Uma 3ª aba (além de Tabela/Gráfico) foi investigada e **adiada** pelo usuário em

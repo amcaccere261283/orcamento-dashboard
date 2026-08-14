@@ -1028,6 +1028,31 @@ test('construirPainelGraficoHtml: dimensões que NÃO são Volume nunca ganham a
   assert.doesNotMatch(htmlFinanceiro, /#9700DA/);
 });
 
+test('construirPainelGraficoHtml: dimensão Volume NUNCA mostra "(em milhares)" nem divide os valores, mesmo com números altos -- pedido do dono do projeto em 2026-08-13, valores de volumetria sempre em valor cheio', () => {
+  const registro = registroExemplo({
+    previsto: {
+      equipes: Array(12).fill(5), equipesResumo: { pico: 6, media: 5, prod: 1.5, dias: 25 },
+      volume: Array(12).fill(1500), volumeResumo: { total: 18000, totalInicial: 18000, ticket: 1885.65 },
+      financeiro: Array(12).fill(1000), financeiroResumo: { total: 12000, totalInicial: 10000 },
+    },
+  });
+  const html = renderComSenha([registro]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const htmlVolume = construirPainelGraficoHtml([registro], [0], new Set(), 'volume');
+
+  assert.doesNotMatch(htmlVolume, /em milhares/, 'o título do painel não pode dizer "(em milhares)" pra Volume');
+  assert.match(htmlVolume, />1\.500</, 'o valor mensal cheio (1.500) tem que aparecer, não "1,5"');
+});
+
+test('construirPainelGraficoHtml: outras dimensões (ex.: Financeiro) continuam usando milhares normalmente quando o valor máximo passa de 1000 -- a mudança é só pra Volume', () => {
+  const registro = registroExemplo(); // financeiro.volumeResumo acumulado (12.000) já passa de 1000
+  const html = renderComSenha([registro]);
+  const { construirPainelGraficoHtml } = extrairFuncoesPuras(html);
+  const htmlFinanceiro = construirPainelGraficoHtml([registro], [0], new Set(), 'financeiro');
+
+  assert.match(htmlFinanceiro, /em milhares/, 'Financeiro continua dividindo por mil quando o acumulado passa de 1000 -- só Volume mudou');
+});
+
 test('indicesFiltrados (extraído do HTML real gerado) returns every index when no filter is active', () => {
   const html = renderComSenha([registroExemplo()]);
   const { indicesFiltrados } = extrairFuncoesPuras(html);
@@ -1147,6 +1172,38 @@ test('construirGraficoMensalSvg draws 12 columns per série (soma dimension, ehR
   assert.equal((acumulado.svg.match(/<polyline class="grafico-linha"/g) || []).length, 2);
   assert.equal((acumulado.svg.match(/<path class="grafico-barra"/g) || []).length, 0);
   assert.match(acumulado.svg, /<svg viewBox="0 0 1000 280" class="grafico-svg">/);
+});
+
+test('construirGraficoMensalSvg: valor máximo >= 1000 usa milhares por padrão (comportamento existente, sem semMilhares)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoMensalSvg, calcularAcumulado } = extrairFuncoesPuras(html);
+  const mensal = Array(12).fill(1500);
+  const dados = [{ serie: 'previsto', mensal: mensal, acumulado: calcularAcumulado(mensal) }];
+  const resultado = construirGraficoMensalSvg(dados, false, 0);
+  assert.strictEqual(resultado.milhares, true);
+});
+
+test('construirGraficoMensalSvg: com semMilhares=true, NUNCA usa milhares, mesmo com valores >= 1000 -- é o pedido de Volumetria sempre em valor cheio', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoMensalSvg, calcularAcumulado } = extrairFuncoesPuras(html);
+  const mensal = Array(12).fill(1500);
+  const dados = [{ serie: 'previsto', mensal: mensal, acumulado: calcularAcumulado(mensal) }];
+  const resultado = construirGraficoMensalSvg(dados, false, 0, true);
+  assert.strictEqual(resultado.milhares, false);
+  assert.doesNotMatch(resultado.svg, />1,5</, 'não pode aparecer o valor dividido por mil');
+  assert.match(resultado.svg, />1\.500</, 'tem que aparecer o valor cheio, formatado em pt-BR');
+});
+
+test('construirGraficoAcumuladoSvg: com semMilhares=true, NUNCA usa milhares, mesmo com o acumulado passando de 1000', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { construirGraficoAcumuladoSvg, calcularAcumulado } = extrairFuncoesPuras(html);
+  const mensal = Array(12).fill(200); // acumulado de dezembro = 2400
+  const dados = [{ serie: 'previsto', mensal: mensal, acumulado: calcularAcumulado(mensal) }];
+  const semSemMilhares = construirGraficoAcumuladoSvg(dados, 0);
+  assert.strictEqual(semSemMilhares.milhares, true, 'sem o parâmetro, comportamento de hoje: acumulado de 2400 usa milhares');
+
+  const comSemMilhares = construirGraficoAcumuladoSvg(dados, 0, true);
+  assert.strictEqual(comSemMilhares.milhares, false);
 });
 
 test('construirGraficoMensalSvg draws NO columns for a razão dimension (ehRazao=true), only 1 line per série using the monthly value', () => {
