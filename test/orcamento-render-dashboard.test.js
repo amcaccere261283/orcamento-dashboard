@@ -101,6 +101,53 @@ test('renderDashboard embute o bundle de navegador (compute-semanal/parse-avanco
   assert.match(scriptBundle, /MODULOS\['compute-demandas\.js'\]/);
 });
 
+test('periodosDoAnoOrcamento (extraído do HTML real gerado) devolve os 12 primeiros dias do mês de window.__ANO_ORCAMENTO__, em UTC', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { periodosDoAnoOrcamento, window: sandboxWindow } = extrairFuncoesPuras(html);
+  sandboxWindow.__ANO_ORCAMENTO__ = 2026;
+  const periodos = periodosDoAnoOrcamento();
+  assert.equal(periodos.length, 12);
+  assert.equal(periodos[0].toISOString(), '2026-01-01T00:00:00.000Z');
+  assert.equal(periodos[11].toISOString(), '2026-12-01T00:00:00.000Z');
+});
+
+test('recalcularDemandasAoVivo (extraído do HTML real gerado) faz o MESMO pipeline que montarDemandasChegadasMensais (build-dashboard.js) roda no build: parseAvancos + parseLab + redirecionarSupsDesconhecidos + chegadasMensaisPorRegistro -- prova que live-refresh e build nunca podem divergir', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { recalcularDemandasAoVivo, window: sandboxWindow } = extrairFuncoesPuras(html);
+  sandboxWindow.__ANO_ORCAMENTO__ = 2026;
+
+  // Mesmo CSV e mesma asserção que
+  // test/orcamento-build-dashboard.test.js:204 usa pro lado servidor --
+  // prova que os dois caminhos concordam no mesmo furo.
+  const avancosCsv = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+    + 'SUP-7133-24,46023,SP,PENDENTE,,Não,10,,OS-1,\n'
+    + 'SUP-9999-24,46054,SP,PENDENTE,,Não,10,,OS-2,\n';
+  const labCsv = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
+  const registrosNovos = [{ sup: 'SUP-7133-24', tipologia: 'SP' }, { sup: 'Diversos', tipologia: 'SP' }];
+
+  const resultado = recalcularDemandasAoVivo(avancosCsv, labCsv, null, null, registrosNovos);
+  assert.strictEqual(resultado.chegadasMensais['SUP-7133-24||SP'][0], 1);
+  assert.strictEqual(resultado.chegadasMensais['Diversos||SP'][1], 1, 'SUP desconhecido redireciona pra Diversos, mesma regra do build');
+});
+
+test('recalcularDemandasAoVivo também devolve o saldo de abertura (estoque em 31/12 do ano anterior) -- mesma regra que saldoAberturaPorRegistro usa no build', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { recalcularDemandasAoVivo, window: sandboxWindow } = extrairFuncoesPuras(html);
+  sandboxWindow.__ANO_ORCAMENTO__ = 2026;
+
+  // 45658 = 01/01/2025 (furo pendente que chegou no ano anterior -- entra no
+  // saldo de abertura de 2026, não nas chegadas de 2026). Mesmo fixture que
+  // test/orcamento-build-dashboard.test.js:239 usa pro lado servidor.
+  const avancosCsv = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+    + 'SUP-7133-24,45658,SP,PENDENTE,,Não,10,,OS-1,\n';
+  const labCsv = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
+  const registrosNovos = [{ sup: 'SUP-7133-24', tipologia: 'SP' }];
+
+  const resultado = recalcularDemandasAoVivo(avancosCsv, labCsv, null, null, registrosNovos);
+  assert.strictEqual(resultado.saldoAbertura['SUP-7133-24||SP'], 1);
+  assert.strictEqual(resultado.chegadasMensais['SUP-7133-24||SP'], undefined, 'furo de 2025 não é chegada de 2026');
+});
+
 test('renderDashboard embeds demandasSaldoAbertura in the same encrypted blob as registros/demandasChegadasMensais, defaulting to {} when omitted', () => {
   const registro = registroExemplo();
   const htmlComSaldo = renderComSenha([registro], { demandasSaldoAbertura: { 'SUP-7133-24||SM': 42 } });
@@ -231,7 +278,8 @@ function extrairFuncoesPuras(html) {
       ' this.normalizarBusca = normalizarBusca;' +
       ' this.preencherLinha = preencherLinha;' +
       ' this.fecharTendenciaVigente = fecharTendenciaVigente;' +
-      ' this.mediaEquipesPonderada = mediaEquipesPonderada;',
+      ' this.mediaEquipesPonderada = mediaEquipesPonderada;' +
+      ' this.periodosDoAnoOrcamento = periodosDoAnoOrcamento; this.recalcularDemandasAoVivo = recalcularDemandasAoVivo;',
     sandbox
   );
   return {
@@ -271,6 +319,8 @@ function extrairFuncoesPuras(html) {
     tomadorDoGrupo: sandbox.tomadorDoGrupo,
     fecharTendenciaVigente: sandbox.fecharTendenciaVigente,
     mediaEquipesPonderada: sandbox.mediaEquipesPonderada,
+    periodosDoAnoOrcamento: sandbox.periodosDoAnoOrcamento,
+    recalcularDemandasAoVivo: sandbox.recalcularDemandasAoVivo,
     window: sandbox.window,
   };
 }
@@ -2189,7 +2239,11 @@ test('every filter change (recorte or Alertas-specific) recalculates BOTH recalc
 test('aplicarBuscaAlertas (extraído do HTML real gerado) hides rows whose data-search does not contain the normalized search term, and shows all rows when the term is empty', () => {
   const html = renderComSenha([registroExemplo()]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptTabela = scripts[5][1];
+  // Junta o bundle (índice 4, MODULOS['parse-avancos.js']/etc.) com a tabela
+  // (índice 5): desde a Task 3, o topo de SCRIPT_CLIENTE_TABELA lê
+  // MODULOS['parse-avancos.js']/etc., que só existe depois que o <script> do
+  // bundle rodou -- mesma junção que extrairFuncoesPuras já faz.
+  const scriptTabela = scripts[4][1] + '\n;\n' + scripts[5][1];
   const linhas = [
     { dataset: { search: 'sup-a realizado previsto total ano' }, style: {} },
     { dataset: { search: 'sup-b realizado previsto total ano' }, style: {} },

@@ -59,6 +59,9 @@ function renderCabecalhoMeses(periodos) {
 // servidor, esses nomes apareceriam em texto puro no código-fonte da
 // página mesmo sem a senha certa.
 const SCRIPT_CLIENTE_TABELA = `
+var ParseAvancos = MODULOS['parse-avancos.js'];
+var ParseLab = MODULOS['parse-lab.js'];
+var ComputeDemandas = MODULOS['compute-demandas.js'];
 
 // casasDecimais default 2 (mantém o comportamento de sempre pra quem já
 // chama sem o argumento) -- Equipes usa 0 (arredonda pra inteiro: "número
@@ -1663,6 +1666,86 @@ function montarDashboard(registros) {
 // apaga a cópia. O botão aqui só busca o CSV publicado dessa Sheet -- o
 // arquivo .xlsx que você edita nunca é tocado por este fluxo.
 var URL_ESPELHO_MATRIZ = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRaOjGxPYWKj-as9RwErptIND7PE_zxsND19PReV1MdOup1ZY3iAu_DGrQ0gatPyYFEy3hg-LWE2esw/pub?gid=609773455&single=true&output=csv';
+
+// Os 4 arquivos que o build já usa pra Demandas (ver
+// tools/orcamento/build-dashboard.js, montarDemandasChegadasMensais) --
+// publicados em texto puro junto com a própria página (mesmo domínio do
+// GitHub Pages, sem CORS), exatamente como a página semanal já busca os
+// mesmos 4 arquivos pro próprio live-refresh.
+var URL_ESPELHO_AVANCOS = 'avancos-online.csv';
+var URL_ESPELHO_LAB = 'lab-online.csv';
+var URL_ESPELHO_DEMANDAS_SONDAGEM = 'demandas-sondagem-online.csv';
+var URL_ESPELHO_DEMANDAS_LAB = 'demandas-lab-online.json';
+
+// Réplica cliente de periodosDoAnoSemanal() (tools/semanal/render-
+// semanal.js) -- chegadasMensaisPorRegistro/saldoAberturaPorRegistro só
+// precisam do ano de periodos[0] (12 meses janeiro-dezembro consecutivos),
+// baked em window.__ANO_ORCAMENTO__ pelo build (ver renderDashboard) em vez
+// de recalculado a partir do cabeçalho do espelho ao vivo -- evitaria um
+// parsing de data novo (serial Excel vs texto formatado do Google Sheets)
+// sem necessidade.
+function periodosDoAnoOrcamento() {
+  var periodos = [];
+  for (var i = 0; i < 12; i++) periodos.push(new Date(Date.UTC(window.__ANO_ORCAMENTO__, i, 1)));
+  return periodos;
+}
+
+function buscarCsvOrcamento(url) {
+  var comCacheBust = url + (url.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
+  return fetch(comCacheBust).then(function (resposta) {
+    if (!resposta.ok) throw new Error('HTTP ' + resposta.status + ' ao buscar ' + url);
+    return resposta.text();
+  });
+}
+
+function buscarJsonOrcamento(url) {
+  var comCacheBust = url + (url.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
+  return fetch(comCacheBust).then(function (resposta) {
+    if (!resposta.ok) throw new Error('HTTP ' + resposta.status + ' ao buscar ' + url);
+    return resposta.json();
+  });
+}
+
+// parseAvancos/parseLab consomem a grade 1-INDEXADA de readXlsxSheet:
+// grid[0] é um buraco vazio, grid[1] é o cabeçalho. parseCsvGrid devolve
+// 0-indexada (grid[0] = cabeçalho) -- mesmo deslocamento que
+// tools/semanal/render-semanal.js (gridCsvComoXlsx) já precisa fazer.
+function gridCsvComoXlsxOrcamento(texto) {
+  var g = parseCsvGrid(texto);
+  g.unshift(null);
+  return g;
+}
+
+// Mesmo pipeline que tools/orcamento/build-dashboard.js
+// (montarDemandasChegadasMensais) roda no build, rodando no cliente com o
+// bundle da Task 2 (ParseAvancos/ParseLab/ComputeDemandas, globals expostas
+// por ele) -- os dois NUNCA podem divergir, senão um live-refresh mostraria
+// um número diferente do que o próximo build vai gerar.
+// textoDemandasSondagem/demandasLabJson podem vir null (pendentes são
+// opcionais, mesma regra do build).
+function recalcularDemandasAoVivo(textoAvancos, textoLab, textoDemandasSondagem, demandasLabJson, registrosNovos) {
+  var gridAvancos = parseCsvGrid(textoAvancos);
+  if (textoDemandasSondagem) {
+    var gridPendentes = parseCsvGrid(textoDemandasSondagem);
+    for (var i = 1; i < gridPendentes.length; i++) gridAvancos.push(gridPendentes[i]);
+  }
+  gridAvancos.unshift(null);
+  var furosLidos = ParseAvancos.parseAvancos(gridAvancos).furos;
+  var ensaiosLidos = ParseLab.parseLab(gridCsvComoXlsxOrcamento(textoLab)).ensaios;
+  if (demandasLabJson) {
+    for (var j = 0; j < demandasLabJson.length; j++) {
+      var pend = demandasLabJson[j];
+      ensaiosLidos.push({ sup: pend.sup, tipologia: pend.tipologia, concluido: null, criacao: pend.criacao ? new Date(pend.criacao) : null });
+    }
+  }
+  var furos = ComputeDemandas.redirecionarSupsDesconhecidos(furosLidos, registrosNovos).itens;
+  var ensaios = ComputeDemandas.redirecionarSupsDesconhecidos(ensaiosLidos, registrosNovos).itens;
+  var periodos = periodosDoAnoOrcamento();
+  return {
+    chegadasMensais: ComputeDemandas.chegadasMensaisPorRegistro(furos, ensaios, periodos),
+    saldoAbertura: ComputeDemandas.saldoAberturaPorRegistro(furos, ensaios, periodos),
+  };
+}
 
 // Parser CSV RFC4180 simples (aspas duplicadas escapam aspas, vírgula/quebra
 // de linha dentro de aspas não terminam o campo) -- suficiente pro que o
