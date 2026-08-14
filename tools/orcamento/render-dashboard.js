@@ -1,10 +1,15 @@
 'use strict';
-const { formatarMesAno, calcularVigenteIdx } = require('../comum/datas.js');
+const path = require('node:path');
+const { formatarMesAno, calcularVigenteIdx, fonteParaCliente: fonteParaClienteDatas } = require('../comum/datas.js');
 const { cifrarComSenha } = require('../comum/criptografia.js');
 const {
   cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio, scriptFiltros,
 } = require('../comum/render-shell.js');
 const { trechosParaCliente } = require('../comum/calculo-equipes.js');
+const { buildBrowserBundle } = require('../comum/browser-bundle.js');
+const { fonteParaCliente: fonteParaClienteTipologiasAvancos } = require('../comum/tipologias-avancos.js');
+const { fonteParaCliente: fonteParaClienteTipologiasLab } = require('../comum/tipologias-lab.js');
+const { fonteParaCliente: fonteParaClienteLinhaBase } = require('../comum/linha-base.js');
 
 // O cálculo de equipes (DIAS_PREMISSA_MES, mediaEquipesPonderada e
 // somarIntervaloEquipeDias) mora em ../comum/calculo-equipes.js, onde é um
@@ -15,6 +20,19 @@ const { trechosParaCliente } = require('../comum/calculo-equipes.js');
 // (o HTML emitido continua byte-a-byte idêntico -- ver
 // test/orcamento-html-inalterado.test.js).
 const [TRECHO_DIAS_PREMISSA, TRECHO_EQUIPES] = trechosParaCliente();
+
+// Bundle de navegador (mesmo mecanismo que tools/semanal/render-semanal.js
+// já usa em produção) pro botão "Atualizar dados" poder recalcular Demandas
+// no cliente sem duplicar as regras de parse-avancos.js/parse-lab.js/
+// compute-demandas.js à mão -- ver
+// docs/superpowers/specs/2026-08-13-orcamento-atualizar-demandas-design.md.
+// compute-semanal.js entra só porque compute-demandas.js consome diaEpoch
+// dele via require('./compute-semanal.js'), same-dir -- precisa vir ANTES
+// dele na lista (mesma ordem que BUNDLE_ARQUIVOS usa na semanal).
+const BUNDLE_DEMANDAS = buildBrowserBundle(
+  path.join(__dirname, '..', 'semanal'),
+  ['compute-semanal.js', 'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js']
+);
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -2034,6 +2052,8 @@ ${markupFiltros(FILTROS_ALERTAS, { recuo: '      ', classes: 'filtros-alertas' }
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx}; window.__ANO_ORCAMENTO__ = ${periodos[0].getUTCFullYear()};</script>
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
   <script>${scriptDesbloqueio()}</script>
+  <script>${fonteParaClienteTipologiasAvancos()}${fonteParaClienteTipologiasLab()}${fonteParaClienteDatas()}${fonteParaClienteLinhaBase()}</script>
+  <script>${BUNDLE_DEMANDAS}</script>
   <script>${scriptFiltros()}${SCRIPT_CLIENTE_TABELA}</script>
 </body>
 </html>`;

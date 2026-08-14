@@ -83,6 +83,24 @@ test('renderDashboard embute window.__ANO_ORCAMENTO__ (ano de periodos[0]) num <
   assert.match(html, /window\.__ANO_ORCAMENTO__ = 2026;/);
 });
 
+test('renderDashboard embute o bundle de navegador (compute-semanal/parse-avancos/parse-lab/compute-demandas) e as 4 fontes fonteParaCliente que eles precisam, ANTES do script principal -- 6 <script> ao todo, mesmo layout que a página semanal já usa', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  assert.equal(scripts.length, 6, 'esperava exatamente 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, tabela)');
+
+  const scriptFontes = scripts[3][1];
+  assert.match(scriptFontes, /excelSerialParaData/);
+  assert.match(scriptFontes, /rotularTipologia/);
+  assert.match(scriptFontes, /classificarEnsaioLab/);
+  assert.match(scriptFontes, /chaveMatriz/);
+
+  const scriptBundle = scripts[4][1];
+  assert.match(scriptBundle, /MODULOS\['compute-semanal\.js'\]/);
+  assert.match(scriptBundle, /MODULOS\['parse-avancos\.js'\]/);
+  assert.match(scriptBundle, /MODULOS\['parse-lab\.js'\]/);
+  assert.match(scriptBundle, /MODULOS\['compute-demandas\.js'\]/);
+});
+
 test('renderDashboard embeds demandasSaldoAbertura in the same encrypted blob as registros/demandasChegadasMensais, defaulting to {} when omitted', () => {
   const registro = registroExemplo();
   const htmlComSaldo = renderComSenha([registro], { demandasSaldoAbertura: { 'SUP-7133-24||SM': 42 } });
@@ -159,18 +177,27 @@ test('renderDashboard includes Tabela/Gráfico tab buttons and both view section
 // pros testes chamarem diretamente.
 function extrairFuncoesPuras(html) {
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  assert.equal(scripts.length, 4, 'esperava exatamente 4 <script> (vigenteIdx, dados cifrados, gate, tabela)');
-  const scriptTabela = scripts[3][1];
+  assert.equal(scripts.length, 6, 'esperava exatamente 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, tabela)');
+  // Junta TODOS os blocos, não só o da tabela: a partir desta task, funções
+  // como recalcularDemandasAoVivo (Task 3) referenciam ParseAvancos/ParseLab/
+  // ComputeDemandas, que só existem depois que o <script> do bundle (índice
+  // 4) rodou -- mesma junção que test/semanal-render-semanal-wireup.test.js
+  // já faz (montarSandbox: blocos.join('\n;\n')).
+  const codigo = scripts.map(s => s[1]).join('\n;\n');
   const sandbox = {
     document: {
-      getElementById: () => ({ addEventListener: () => {}, value: '0', options: [{}] }),
+      // .focus() (Task 2): agora que codigo junta TODOS os <script>, o gate
+      // de senha (SCRIPT_CLIENTE_GATE em tools/comum/render-shell.js) roda
+      // também -- ele chama document.getElementById('campo-senha').focus()
+      // incondicionalmente no topo do script, fora de qualquer função.
+      getElementById: () => ({ addEventListener: () => {}, value: '0', options: [{}], focus: () => {} }),
       querySelectorAll: () => [],
     },
     window: {},
   };
   vm.createContext(sandbox);
   vm.runInContext(
-    scriptTabela +
+    codigo +
       '\nthis.calcularMensal = calcularMensal; this.calcularTotalAno = calcularTotalAno;' +
       ' this.mesclarConsecutivos = mesclarConsecutivos; this.tipologiaColor = tipologiaColor;' +
       ' this.renderCorpoTabela = renderCorpoTabela; this.escapeHtml = escapeHtml;' +
@@ -1787,7 +1814,7 @@ test('o gate de senha (tentarDesbloquear) fecha a Tendência com fecharTendencia
 test('o live-refresh (atualizarDadosAoVivo) fecha a Tendência com fecharTendenciaVigente logo após buscar dados novos', () => {
   const html = renderComSenha([registroExemplo()]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptTabela = scripts[3][1];
+  const scriptTabela = scripts[5][1];
   assert.match(scriptTabela, /window\.__REGISTROS__ = registrosNovos;\s*\n\s*window\.__REGISTROS__ = fecharTendenciaVigente\(window\.__REGISTROS__, window\.__VIGENTE_IDX__\);/);
 });
 
@@ -2112,7 +2139,7 @@ test('renderDashboard includes the Alertas tab button, the 4 Alertas selector co
 test('recalcularAlertas deriva a dimensão da barra de cima (dimensoesEmOrdem(filtrosSelecionados.dimensao)[0]), não de um filtro próprio -- confirma via código-fonte que filtrosAlertas.dimensao não existe mais em lugar nenhum', () => {
   const html = renderComSenha([registroExemplo()]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptTabela = scripts[3][1];
+  const scriptTabela = scripts[5][1];
   assert.match(scriptTabela, /var dimensao = dimensoesEmOrdem\(filtrosSelecionados\.dimensao\)\[0\];/);
   assert.doesNotMatch(scriptTabela, /filtrosAlertas\.dimensao/, 'filtrosAlertas não deve ter mais uma chave "dimensao" -- removida junto com o seletor');
 });
@@ -2120,7 +2147,7 @@ test('recalcularAlertas deriva a dimensão da barra de cima (dimensoesEmOrdem(fi
 test('renderDashboard\'s Alertas table shell starts empty (thead/tbody with no rows) -- confirmed above already; this test instead locks in that recalcularAlertas exists and is reachable from the client script, by checking montarDashboard wires the 3rd tab click handler', () => {
   const html = renderComSenha([registroExemplo()]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptTabela = scripts[3][1];
+  const scriptTabela = scripts[5][1];
   assert.match(scriptTabela, /document\.getElementById\('aba-alertas'\)\.addEventListener\('click', function \(\) \{ alternarAba\('alertas'\); \}\);/);
   assert.match(scriptTabela, /function recalcularAlertas\(\)/);
   assert.match(scriptTabela, /document\.getElementById\('secao-alertas'\)\.style\.display = aba === 'alertas' \? '' : 'none';/);
@@ -2129,7 +2156,7 @@ test('renderDashboard\'s Alertas table shell starts empty (thead/tbody with no r
 test('every filter change (recorte or Alertas-specific) recalculates BOTH recalcularTabela and recalcularAlertas unconditionally -- the old cfg.aoMudar mechanism (which left recorte filters never touching Alertas) is gone', () => {
   const html = renderComSenha([registroExemplo()]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptTabela = scripts[3][1];
+  const scriptTabela = scripts[5][1];
   // O mecanismo antigo era cfg.aoMudar (um campo por config) -- esse sim
   // continua removido. Desde a extração pra tools/comum/render-shell.js
   // (ver Fase 2 do Planejamento Semanal), montarFiltroMulti ganhou um
@@ -2162,7 +2189,7 @@ test('every filter change (recorte or Alertas-specific) recalculates BOTH recalc
 test('aplicarBuscaAlertas (extraído do HTML real gerado) hides rows whose data-search does not contain the normalized search term, and shows all rows when the term is empty', () => {
   const html = renderComSenha([registroExemplo()]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptTabela = scripts[3][1];
+  const scriptTabela = scripts[5][1];
   const linhas = [
     { dataset: { search: 'sup-a realizado previsto total ano' }, style: {} },
     { dataset: { search: 'sup-b realizado previsto total ano' }, style: {} },
