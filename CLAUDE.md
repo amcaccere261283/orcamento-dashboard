@@ -1082,6 +1082,27 @@ inteiro, **pool inclusive**, e a única exceção é a equipe indisponível, que
   `celula-alvo`/`pool-alvo` — limpar em outro lugar deixaria o destaque preso em um
   dos quatro caminhos de saída do arrasto.
 
+## Atualizar Demandas ao clicar em "Atualizar dados" (2026-08-14)
+
+O botão "Atualizar dados" da Matriz de Orçamento (`tools/orcamento/render-dashboard.js`,
+`atualizarDadosAoVivo`) agora também recalcula Demandas (chegadas mensais +
+saldo de abertura), não só Previsto/Realizado/Tendência. Reaproveita o
+mecanismo de bundle de navegador que a página semanal já usava
+(`tools/comum/browser-bundle.js` + `tools/semanal/{compute-semanal,parse-avancos,
+parse-lab,compute-demandas}.js`, embutidos como 2 `<script>` novos antes do
+script principal -- 6 `<script>` ao todo, mesmo layout de
+`tools/semanal/render-semanal.js`) em vez de duplicar as regras de parsing à
+mão. `window.__ANO_ORCAMENTO__` (baked no HTML, mesmo padrão de
+`window.__VIGENTE_IDX__`) substitui a necessidade de reler o ano do
+cabeçalho do espelho ao vivo.
+
+Divergência deliberada do padrão da semanal: avancos-online.csv/lab-online.csv
+são OPCIONAIS aqui (cada um com `.catch(() => null)`, mais um try/catch em
+volta do recálculo) -- na semanal um 404 neles derruba o refresh inteiro,
+mas na Matriz de Orçamento Previsto/Realizado/Tendência (o conteúdo
+principal da página) não depende desses 2 arquivos, só Demandas depende.
+Ver `docs/superpowers/specs/2026-08-13-orcamento-atualizar-demandas-design.md`.
+
 ## Estilo de trabalho
 
 Vale o mesmo do repositório principal: decidir e implementar sem parar para perguntar
