@@ -2031,7 +2031,7 @@ ${markupFiltros(FILTROS_ALERTAS, { recuo: '      ', classes: 'filtros-alertas' }
     </div>
   </div>
   </main>
-  <script>window.__VIGENTE_IDX__ = ${vigenteIdx};</script>
+  <script>window.__VIGENTE_IDX__ = ${vigenteIdx}; window.__ANO_ORCAMENTO__ = ${periodos[0].getUTCFullYear()};</script>
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
   <script>${scriptDesbloqueio()}</script>
   <script>${scriptFiltros()}${SCRIPT_CLIENTE_TABELA}</script>

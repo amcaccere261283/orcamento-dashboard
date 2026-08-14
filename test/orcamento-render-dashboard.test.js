@@ -78,6 +78,11 @@ test('renderDashboard embeds an encrypted blob (salt/iv/dados/iteracoes) that de
   assert.equal(registrosDecifrados[0].tipologia, 'SM');
 });
 
+test('renderDashboard embute window.__ANO_ORCAMENTO__ (ano de periodos[0]) num <script> -- o live-refresh usa isso pra recompor os 12 meses do ano sem precisar reler o cabeçalho do espelho', () => {
+  const html = renderComSenha([registroExemplo()]);
+  assert.match(html, /window\.__ANO_ORCAMENTO__ = 2026;/);
+});
+
 test('renderDashboard embeds demandasSaldoAbertura in the same encrypted blob as registros/demandasChegadasMensais, defaulting to {} when omitted', () => {
   const registro = registroExemplo();
   const htmlComSaldo = renderComSenha([registro], { demandasSaldoAbertura: { 'SUP-7133-24||SM': 42 } });
@@ -118,7 +123,7 @@ test('renderDashboard titles each of the 12 month columns with the real "Mês/An
 test('renderDashboard embeds window.__VIGENTE_IDX__ as a plain (non-encrypted) integer, computed from generatedAt vs the periodos month range', () => {
   // periodosExemplo() generates Jan..Dez/2026; renderComSenha's default generatedAt is 2026-07-21 (see renderComSenha) -- month index 6 (Jul, 0-based).
   const html = renderComSenha([registroExemplo()]);
-  assert.match(html, /<script>window\.__VIGENTE_IDX__ = 6;<\/script>/);
+  assert.match(html, /<script>window\.__VIGENTE_IDX__ = 6; window\.__ANO_ORCAMENTO__ = 2026;<\/script>/);
 });
 
 test('renderDashboard includes a série filter (Previsto/Realizado/Tendência) and a categoria filter (fixed, non-sensitive labels, safe to render server-side unlike tipologia/grupo/SUP), and Limpar filtros / Atualizar dados buttons', () => {
