@@ -148,14 +148,23 @@ test('recalcularDemandasAoVivo também devolve o saldo de abertura (estoque em 3
   assert.strictEqual(resultado.chegadasMensais['SUP-7133-24||SP'], undefined, 'furo de 2025 não é chegada de 2026');
 });
 
-test('atualizarDadosAoVivo busca avancos/lab/demandas-sondagem/demandas-lab junto com a MATRIZ, cada um dos 4 de Demandas com .catch próprio -- uma falha neles nunca pode derrubar a atualização de Previsto/Realizado/Tendência (só Demandas fica sem atualizar)', () => {
+test('atualizarDadosAoVivo busca avancos/lab/demandas-sondagem/demandas-lab junto com a MATRIZ, cada um dos 4 de Demandas com .catch(() => null) próprio -- uma falha neles nunca pode derrubar a atualização de Previsto/Realizado/Tendência (só Demandas fica sem atualizar) -- e a MATRIZ (1º item do Promise.all) NUNCA tem .catch, já que uma falha nela tem que derrubar a atualização inteira', () => {
   const html = renderComSenha([registroExemplo()]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   const scriptTabela = scripts[5][1];
-  assert.match(scriptTabela, /buscarCsvOrcamento\(URL_ESPELHO_AVANCOS\)\.catch\(/);
-  assert.match(scriptTabela, /buscarCsvOrcamento\(URL_ESPELHO_LAB\)\.catch\(/);
-  assert.match(scriptTabela, /buscarCsvOrcamento\(URL_ESPELHO_DEMANDAS_SONDAGEM\)\.catch\(/);
-  assert.match(scriptTabela, /buscarJsonOrcamento\(URL_ESPELHO_DEMANDAS_LAB\)\.catch\(/);
+  // Casa o array INTEIRO do Promise.all, linha a linha -- não só a presença
+  // de ".catch(", mas o CORPO exato do handler (-> null, nunca relança) em
+  // cada um dos 4 fetches de Demandas. Um handler trocado por algo como
+  // ".catch(function (e) { throw e; })" (derrubando de volta o
+  // graceful-degradation que esta tarefa existe pra construir) quebraria
+  // este match. E como o 1º item exige a vírgula logo após
+  // "buscarCsvOrcamento(URL_ESPELHO_MATRIZ)", um .catch acidental ali
+  // (que faria uma falha da MATRIZ parar de derrubar a atualização) também
+  // quebraria o match.
+  assert.match(
+    scriptTabela,
+    /Promise\.all\(\[\s*buscarCsvOrcamento\(URL_ESPELHO_MATRIZ\),\s*buscarCsvOrcamento\(URL_ESPELHO_AVANCOS\)\.catch\(function \(\) \{ return null; \}\),\s*buscarCsvOrcamento\(URL_ESPELHO_LAB\)\.catch\(function \(\) \{ return null; \}\),\s*buscarCsvOrcamento\(URL_ESPELHO_DEMANDAS_SONDAGEM\)\.catch\(function \(\) \{ return null; \}\),\s*buscarJsonOrcamento\(URL_ESPELHO_DEMANDAS_LAB\)\.catch\(function \(\) \{ return null; \}\),\s*\]\)/
+  );
 });
 
 test('atualizarDadosAoVivo só recalcula Demandas quando avancos E lab vieram com sucesso (nenhum dos dois é null), e um erro de PARSING dentro do recálculo (não só de fetch) também não derruba o resto da atualização', () => {
@@ -166,6 +175,179 @@ test('atualizarDadosAoVivo só recalcula Demandas quando avancos E lab vieram co
   assert.match(scriptTabela, /window\.__DEMANDAS_MENSAIS__ = demandas\.chegadasMensais;/);
   assert.match(scriptTabela, /window\.__DEMANDAS_SALDO_ABERTURA__ = demandas\.saldoAbertura;/);
   assert.match(scriptTabela, /catch \(erroDemandas\) \{/);
+});
+
+// ---- Testes de EXECUÇÃO de atualizarDadosAoVivo (não só de shape do
+// código-fonte, como os 2 testes acima) -- rodam de verdade os 6 <script>
+// da página num vm.Context isolado, com window.fetch mockado, igual ao
+// padrão que test/semanal-render-semanal-wireup.test.js (montarSandbox) já
+// usa pro botão "Atualizar dados" da página Semanal. Diferente daquele
+// arquivo, aqui não existe (ainda) um dom-falso dedicado pra tabela do
+// Orçamento (linhas reais com data-serie/data-grupo/etc.) -- em vez de
+// construir um, o document abaixo é GENÉRICO: getElementById/querySelector
+// sempre devolvem um elemento-mock com o mesmo formato (style/classList/
+// innerHTML/textContent/etc.), e querySelectorAll sempre devolve [].
+// recalcularTabela/recalcularAlertas leem e escrevem nesses elementos sem
+// erro, mas como as consultas por linha (#tabela-orcamento tbody tr,
+// #tabela-alertas tbody tr) voltam vazias, preencherLinha nunca é chamado
+// -- não prova que a TABELA re-renderiza corretamente (isso já é coberto
+// por outros testes desta suíte, com dados pré-fabricados), só que
+// atualizarDadosAoVivo roda de ponta a ponta sem lançar erro E que
+// window.__DEMANDAS_MENSAIS__/window.__REGISTROS__ terminam com os
+// valores certos -- exatamente o contrato de degradação que esta task
+// existe pra proteger.
+function documentoGenericoOrcamento() {
+  function elementoGenerico() {
+    const classes = new Set();
+    const el = {
+      style: {},
+      classList: {
+        add: (c) => classes.add(c),
+        remove: (c) => classes.delete(c),
+        contains: (c) => classes.has(c),
+        toggle: (c, forcar) => {
+          const presente = forcar === undefined ? !classes.has(c) : !!forcar;
+          if (presente) classes.add(c); else classes.delete(c);
+          return presente;
+        },
+      },
+      addEventListener: () => {},
+      focus: () => {},
+      value: '',
+      textContent: '',
+      innerHTML: '',
+      disabled: false,
+      options: [{}],
+      closest: () => el,
+      appendChild: () => {},
+      querySelector: () => elementoGenerico(),
+      querySelectorAll: () => [],
+    };
+    return el;
+  }
+  return {
+    getElementById: () => elementoGenerico(),
+    querySelector: () => elementoGenerico(),
+    querySelectorAll: () => [],
+    addEventListener: () => {},
+  };
+}
+
+// Junta os 6 <script> (mesma contagem que extrairFuncoesPuras já valida) e
+// roda num Realm à parte -- window É o próprio objeto global do sandbox
+// (mesmo truque de montarSandbox em semanal-render-semanal-wireup.test.js),
+// então toda function declarada no topo do script (inclusive
+// atualizarDadosAoVivo) já sai exposta em sandbox.<nome> e em
+// sandbox.window.<nome> sem precisar de nenhum "this.X = X" extra.
+function montarSandboxOrcamento(html, fetchMock) {
+  const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  assert.equal(blocos.length, 6, 'esperava exatamente 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, tabela)');
+  const codigo = blocos.join('\n;\n');
+  const sandbox = {
+    document: documentoGenericoOrcamento(),
+    console,
+    fetch: fetchMock || (() => Promise.reject(new Error('fetch não mockado neste teste'))),
+  };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(codigo, sandbox, { filename: 'orcamento-atualizar-dados-teste.js' });
+  return sandbox;
+}
+
+// Mesmo fixture (CSV moldado como a exportação real do espelho da MATRIZ)
+// que o teste de parseMatrizClient acima usa, só que com SUP/tipologia
+// batendo com os furos de avancosCsv (SUP-7133-24/SP) usados abaixo, pra
+// redirecionarSupsDesconhecidos achar o registro real em vez de cair em
+// "Diversos".
+function construirMatrizCsvDeTesteDemandas() {
+  function celula(v) { return String(v).indexOf(',') === -1 ? v : '"' + v + '"'; }
+  function linha(campos) { return campos.map(celula).join(','); }
+  const cabecalho = linha(
+    ['', 'ORIGEM', 'GRUPO', 'TOMADOR', 'SUP', 'ESCOPO', 'APOIO', 'INICIO', 'TERMINO', 'SONDAGEM', 'Demanda à cadastrar', 'Demanda Cadastrada', 'BASE']
+      .concat(Array(12).fill('01/01/2026'))
+      .concat(['PICO', 'MÉDIA', 'PROD.', 'DIAS'])
+      .concat(Array(12).fill('01/01/2026'))
+      .concat(['TOTAL', 'TOTAL INICIAL', 'TICKET'])
+      .concat(Array(12).fill('01/01/2026'))
+      .concat(['TOTAL', 'TOTAL INICIAL', 'OBSERVAÇÃO'])
+  );
+  const linhaTodos = linha(
+    ['', 'CONTRATO VIGENTE', 'Todos', 'Todos', 'Todos', 'Todos', 'Todos', 'Todos', 'Todos', 'SP', '', '0', 'P']
+      .concat(Array(46).fill('99'))
+  );
+  function linhaContrato(base, equipesValor) {
+    return linha(
+      ['', 'CONTRATO VIGENTE', 'PÁTRIA', 'Via Araucária', 'SUP-7133-24', 'Bloco 1', 'Apoio', '27/05/2024', '27/05/2029', 'SP', '', '0', base]
+        .concat(Array(12).fill(equipesValor))
+        .concat([equipesValor, '0', '0', '25'])
+        .concat(Array(12).fill('10'))
+        .concat(['120', '0', '1885'])
+        .concat(Array(12).fill(equipesValor))
+        .concat(['999', '0', 'Nota'])
+    );
+  }
+  return [cabecalho, linhaTodos, linhaContrato('P', '4,5'), linhaContrato('R', '3,2'), linhaContrato('T', '0')].join('\n');
+}
+
+async function esperarMicrotarefas() {
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
+test('atualizarDadosAoVivo (execução real via vm.Context, fetch mockado) recalcula window.__DEMANDAS_MENSAIS__/__DEMANDAS_SALDO_ABERTURA__ de verdade quando avancos+lab respondem -- mesmo com os 2 arquivos de PENDENTES (demandas-sondagem/demandas-lab, opcionais) fora do ar em 404 -- prova de execução ponta a ponta, não só de shape do código-fonte', async () => {
+  const html = renderComSenha([registroExemplo()]);
+  const matrizCsv = construirMatrizCsvDeTesteDemandas();
+  const avancosCsv = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
+    + 'SUP-7133-24,46023,SP,PENDENTE,,Não,10,,OS-1,\n';
+  const labCsv = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
+
+  const fetchMock = (url) => {
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, status: 200, text: () => avancosCsv });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, status: 200, text: () => labCsv });
+    if (url.indexOf('demandas-sondagem-online.csv') !== -1) return Promise.resolve({ ok: false, status: 404 });
+    if (url.indexOf('demandas-lab-online.json') !== -1) return Promise.resolve({ ok: false, status: 404 });
+    return Promise.resolve({ ok: true, status: 200, text: () => matrizCsv }); // qualquer outra URL é a MATRIZ
+  };
+
+  const sandbox = montarSandboxOrcamento(html, fetchMock);
+  sandbox.window.__REGISTROS__ = [];
+  sandbox.window.__DEMANDAS_MENSAIS__ = { 'sentinela||antiga': [9] };
+
+  assert.equal(typeof sandbox.atualizarDadosAoVivo, 'function', 'atualizarDadosAoVivo precisa existir no escopo global depois de rodar os 6 <script>');
+  sandbox.atualizarDadosAoVivo();
+  await esperarMicrotarefas();
+
+  assert.equal(sandbox.window.__REGISTROS__.length, 1, 'a MATRIZ mockada tem 1 registro real (a linha Todos é descartada)');
+  assert.equal(sandbox.window.__REGISTROS__[0].sup, 'SUP-7133-24');
+  assert.notDeepEqual(sandbox.window.__DEMANDAS_MENSAIS__, { 'sentinela||antiga': [9] }, 'Demandas precisa ter sido recalculada de verdade, não continuar com o valor sentinela antigo');
+  assert.ok(sandbox.window.__DEMANDAS_MENSAIS__['SUP-7133-24||SP'], 'chave SUP+tipologia do furo mockado precisa existir nas chegadas recalculadas');
+  assert.strictEqual(sandbox.window.__DEMANDAS_MENSAIS__['SUP-7133-24||SP'][0], 1, 'o furo PENDENTE criado em 46023 (01/01/2026) chega no mês 0 (Janeiro)');
+});
+
+test('atualizarDadosAoVivo (execução real via vm.Context) preserva window.__DEMANDAS_MENSAIS__ EXATAMENTE como estava quando o fetch de avancos falha de verdade (erro de rede, não só um 404 esperado) -- window.__REGISTROS__ (Previsto/Realizado/Tendência) continua atualizando normalmente a partir da MATRIZ, só Demandas fica intocado', async () => {
+  const html = renderComSenha([registroExemplo()]);
+  const matrizCsv = construirMatrizCsvDeTesteDemandas();
+  const labCsv = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
+
+  const fetchMock = (url) => {
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.reject(new Error('falha de rede simulada'));
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, status: 200, text: () => labCsv });
+    if (url.indexOf('demandas-sondagem-online.csv') !== -1) return Promise.resolve({ ok: false, status: 404 });
+    if (url.indexOf('demandas-lab-online.json') !== -1) return Promise.resolve({ ok: false, status: 404 });
+    return Promise.resolve({ ok: true, status: 200, text: () => matrizCsv });
+  };
+
+  const sandbox = montarSandboxOrcamento(html, fetchMock);
+  sandbox.window.__REGISTROS__ = [];
+  const demandasSentinela = { 'sentinela||antiga': [9] };
+  sandbox.window.__DEMANDAS_MENSAIS__ = demandasSentinela;
+
+  sandbox.atualizarDadosAoVivo();
+  await esperarMicrotarefas();
+
+  assert.strictEqual(sandbox.window.__DEMANDAS_MENSAIS__, demandasSentinela, 'com avancos falhando, Demandas precisa continuar sendo o MESMO objeto de antes -- nunca recalculado nem apagado (identidade, não só valor)');
+  assert.equal(sandbox.window.__REGISTROS__.length, 1, 'a MATRIZ, que não falhou, continua atualizando window.__REGISTROS__ normalmente mesmo com avancos fora do ar');
+  assert.equal(sandbox.window.__REGISTROS__[0].sup, 'SUP-7133-24');
 });
 
 test('renderDashboard embeds demandasSaldoAbertura in the same encrypted blob as registros/demandasChegadasMensais, defaulting to {} when omitted', () => {
