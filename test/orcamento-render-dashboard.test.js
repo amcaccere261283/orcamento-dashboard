@@ -148,6 +148,26 @@ test('recalcularDemandasAoVivo também devolve o saldo de abertura (estoque em 3
   assert.strictEqual(resultado.chegadasMensais['SUP-7133-24||SP'], undefined, 'furo de 2025 não é chegada de 2026');
 });
 
+test('atualizarDadosAoVivo busca avancos/lab/demandas-sondagem/demandas-lab junto com a MATRIZ, cada um dos 4 de Demandas com .catch próprio -- uma falha neles nunca pode derrubar a atualização de Previsto/Realizado/Tendência (só Demandas fica sem atualizar)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptTabela = scripts[5][1];
+  assert.match(scriptTabela, /buscarCsvOrcamento\(URL_ESPELHO_AVANCOS\)\.catch\(/);
+  assert.match(scriptTabela, /buscarCsvOrcamento\(URL_ESPELHO_LAB\)\.catch\(/);
+  assert.match(scriptTabela, /buscarCsvOrcamento\(URL_ESPELHO_DEMANDAS_SONDAGEM\)\.catch\(/);
+  assert.match(scriptTabela, /buscarJsonOrcamento\(URL_ESPELHO_DEMANDAS_LAB\)\.catch\(/);
+});
+
+test('atualizarDadosAoVivo só recalcula Demandas quando avancos E lab vieram com sucesso (nenhum dos dois é null), e um erro de PARSING dentro do recálculo (não só de fetch) também não derruba o resto da atualização', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptTabela = scripts[5][1];
+  assert.match(scriptTabela, /if \(textos\[1\] && textos\[2\]\) \{\s*try \{/);
+  assert.match(scriptTabela, /window\.__DEMANDAS_MENSAIS__ = demandas\.chegadasMensais;/);
+  assert.match(scriptTabela, /window\.__DEMANDAS_SALDO_ABERTURA__ = demandas\.saldoAbertura;/);
+  assert.match(scriptTabela, /catch \(erroDemandas\) \{/);
+});
+
 test('renderDashboard embeds demandasSaldoAbertura in the same encrypted blob as registros/demandasChegadasMensais, defaulting to {} when omitted', () => {
   const registro = registroExemplo();
   const htmlComSaldo = renderComSenha([registro], { demandasSaldoAbertura: { 'SUP-7133-24||SM': 42 } });

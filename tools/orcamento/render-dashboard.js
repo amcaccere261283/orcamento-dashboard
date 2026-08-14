@@ -1978,15 +1978,32 @@ function preservarPrevistoInicial(registrosAntigos, registrosNovos) {
 
 function atualizarDadosAoVivo() {
   definirStatusAtualizacao('Atualizando…', false);
-  fetch(URL_ESPELHO_MATRIZ + (URL_ESPELHO_MATRIZ.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now())
-    .then(function (resposta) {
-      if (!resposta.ok) throw new Error('HTTP ' + resposta.status);
-      return resposta.text();
-    })
-    .then(function (texto) {
-      var grid = parseCsvGrid(texto);
+  Promise.all([
+    buscarCsvOrcamento(URL_ESPELHO_MATRIZ),
+    buscarCsvOrcamento(URL_ESPELHO_AVANCOS).catch(function () { return null; }),
+    buscarCsvOrcamento(URL_ESPELHO_LAB).catch(function () { return null; }),
+    buscarCsvOrcamento(URL_ESPELHO_DEMANDAS_SONDAGEM).catch(function () { return null; }),
+    buscarJsonOrcamento(URL_ESPELHO_DEMANDAS_LAB).catch(function () { return null; }),
+  ])
+    .then(function (textos) {
+      var grid = parseCsvGrid(textos[0]);
       var registrosNovos = parseMatrizClient(grid);
       if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho -- confira se o Apps Script já rodou pelo menos uma vez');
+
+      // Demandas é uma 5ª série opcional (só na dimensão Volume) -- ao
+      // contrário da MATRIZ, uma falha em avancos/lab nunca pode derrubar o
+      // resto do botão. Cada fetch acima já degrada com .catch(() => null);
+      // aqui o try/catch cobre também um erro de PARSING (formato mudou),
+      // que aconteceria DEPOIS do fetch já ter tido sucesso.
+      if (textos[1] && textos[2]) {
+        try {
+          var demandas = recalcularDemandasAoVivo(textos[1], textos[2], textos[3], textos[4], registrosNovos);
+          window.__DEMANDAS_MENSAIS__ = demandas.chegadasMensais;
+          window.__DEMANDAS_SALDO_ABERTURA__ = demandas.saldoAbertura;
+        } catch (erroDemandas) {
+          console.warn('Não foi possível recalcular Demandas: ' + erroDemandas.message);
+        }
+      }
 
       preservarPrevistoInicial(window.__REGISTROS__, registrosNovos);
       window.__REGISTROS__ = registrosNovos;
