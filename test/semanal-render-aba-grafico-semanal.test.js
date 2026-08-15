@@ -449,6 +449,44 @@ test('Volume ganha a série Demandas: cor #9700DA e rótulo na legenda', () => {
   assert.doesNotMatch(html, /#a78bfa/, 'lavanda do realizadoPrevistoInicial do orçamento -- série diferente, não pode aparecer');
 });
 
+// Fix round 1 (2026-08-15): os testes acima e os de FRONTEIRA/Acumulado mais
+// abaixo chamam pendentesNaData/chegadasSemanaisPorIndices/calcularAcumulado
+// DIRETO e recomputam o esperado à mão -- provam que as PRIMITIVAS (que esta
+// task não mudou) estão certas, mas ficam cegos pra dois jeitos de a
+// PRODUÇÃO (construirPainelGraficoSemanalHtml) fazer a fiação errado:
+// cortar a abertura em semanas[0].inicio em vez de inicio-1, ou vazar o
+// saldo de abertura pras barras semanais (.valores) além do Acumulado
+// (.acumulado). Este teste chama a função de produção de verdade e lê os
+// números que ela DESENHA, via data-tooltip -- mesmo mecanismo do teste
+// "...os valores desenhados no gráfico batem EXATAMENTE..." mais acima
+// neste arquivo (~linha 92), agora pra a série Demandas.
+test('construirPainelGraficoSemanalHtml: os valores REAIS desenhados pela série Demandas -- barras semanais em FLUXO puro [2,2,1,1,1], Acumulado nasce do saldo de abertura [4,6,7,8,9], passando pelo PIPELINE REAL', () => {
+  const html = painelVolume({ porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_COM_ABERTURA } });
+  const [painelBarras, painelAcumulado] = html.split('Acumulado no mês — Volume');
+  assert.ok(painelAcumulado, 'pré-condição: o painel Acumulado existe (Volume sempre tem os dois painéis)');
+
+  // Painel Semanal (barras): FLUXO puro das chegadas, sem o saldo de
+  // abertura somado -- é o que a 2ª mutação da revisão (abertura vazando
+  // pra .valores) quebraria.
+  assert.match(painelBarras, /S1 \(01\/07 a 05\/07\) · Demandas: 2"/, 'S1: 2 chegadas de julho');
+  assert.match(painelBarras, /S2 \(06\/07 a 12\/07\) · Demandas: 2"/, 'S2: 2 chegadas de julho');
+  assert.match(painelBarras, /S3 \(13\/07 a 19\/07\) · Demandas: 1"/, 'S3: 1 chegada de julho');
+  assert.match(painelBarras, /S4 \(20\/07 a 26\/07\) · Demandas: 1"/, 'S4: 1 chegada de julho');
+  assert.match(painelBarras, /S5 \(27\/07 a 31\/07\) · Demandas: 1"/, 'S5: 1 chegada de julho');
+  assert.doesNotMatch(painelBarras, /Demandas: [4-9]"/, 'nenhuma barra semanal pode mostrar o saldo de abertura (2) somado ao fluxo');
+
+  // Painel Acumulado (curva S): nasce do saldo de abertura (2 -- 3 chegadas
+  // de junho menos 1 saída de junho) e soma corrida das chegadas de julho
+  // -- é o que a 1ª mutação da revisão (cortar em semanas[0].inicio em vez
+  // de inicio-1, contando a chegada de 01/jul duas vezes) inflaria pra
+  // [5,7,8,9,10].
+  assert.match(painelAcumulado, /S1 \(01\/07 a 05\/07\) · Demandas: 4"/, 'abertura 2 + S1 2 = 4');
+  assert.match(painelAcumulado, /S2 \(06\/07 a 12\/07\) · Demandas: 6"/, '4 + S2 2 = 6');
+  assert.match(painelAcumulado, /S3 \(13\/07 a 19\/07\) · Demandas: 7"/, '6 + S3 1 = 7');
+  assert.match(painelAcumulado, /S4 \(20\/07 a 26\/07\) · Demandas: 8"/, '7 + S4 1 = 8');
+  assert.match(painelAcumulado, /S5 \(27\/07 a 31\/07\) · Demandas: 9"/, '8 + S5 1 = 9 -- fecha em abertura(2) + total do mês(7)');
+});
+
 test('Equipes e Financeiro NÃO ganham a série Demandas', () => {
   const semanas = _semanasDoMes(ANO, VIGENTE_JULHO);
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_COM_ABERTURA } };

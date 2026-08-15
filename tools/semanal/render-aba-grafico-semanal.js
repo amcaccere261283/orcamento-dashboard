@@ -73,9 +73,9 @@ var DIMENSOES_ROTULO_SEMANAL = { equipes: 'Equipes', volume: 'Volume', financeir
 // A 4ª série, 'demandas', não entra em ORDEM_SERIES_GRAFICO de propósito: ela
 // só existe na dimensão Volume, acrescentada à mão em
 // construirPainelGraficoSemanalHtml. #9700DA é o roxo de Demandas do projeto
-// inteiro (.linha-pendentes-demandas/.linha-demandas, tools/comum/render-shell.js
-// e render-aba-demandas.js) -- NÃO confundir com #a78bfa, a lavanda do
-// realizadoPrevistoInicial do orçamento.
+// inteiro (.linha-pendentes-demandas/.linha-demandas, CSS_SEMANAL em
+// render-semanal.js -- e SERIE_COR.demandas em tools/orcamento/render-dashboard.js)
+// -- NÃO confundir com #a78bfa, a lavanda do realizadoPrevistoInicial do orçamento.
 var SERIE_COR = { previsto: '#2f6ad0', realizado: '#7fd858', tendencia: '#f6b53f', demandas: '#9700DA' };
 var SERIE_TRACEJADO = { previsto: '', realizado: '1,5', tendencia: '9,5', demandas: '4,3' };
 var SERIE_LABELS = { previsto: 'Previsto', realizado: 'Realizado', tendencia: 'Tendência', demandas: 'Demandas' };
