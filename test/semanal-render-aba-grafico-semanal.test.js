@@ -5,6 +5,7 @@ const { diaEpoch } = require('../tools/semanal/compute-semanal.js');
 const {
   renderAbaGraficoSemanal, construirPainelGraficoSemanalHtml,
   construirGraficoSemanalSvg, construirGraficoAcumuladoSemanalSvg,
+  chegadasSemanaisPorIndices,
 } = require('../tools/semanal/render-aba-grafico-semanal.js');
 
 const ANO = 2026;
@@ -347,4 +348,63 @@ test('no ponto de junção do Acumulado só uma série desenha marcador e rótul
   const linhas = [...svg.matchAll(/<polyline class="grafico-linha" points="([^"]+)"/g)].map((m) => m[1]);
   assert.ok(linhas.some((pts) => pts.split(' ').length === 3),
     'a Tendência tem que ser uma polilinha de 3 pontos (junção + 2 semanas futuras)');
+});
+
+// --- Task 1: chegadas por semana -----------------------------------------
+
+const SEMANAS_JULHO = require('../tools/semanal/compute-semanal.js').semanasDoMes(ANO, VIGENTE_JULHO);
+
+// S1=dias 1-5, S2=6-12, S3=13-19, S4=20-26, S5=27-31 -> [2,2,1,1,1]
+const EVENTOS_CHEGADAS = {
+  chegada: [diaJul(1), diaJul(3), diaJul(8), diaJul(8), diaJul(15), diaJul(25), diaJul(28)],
+  sondagemRealizada: [], saidaEstoque: [],
+};
+
+test('chegadasSemanaisPorIndices: bucketiza as chegadas nas semanas certas do mês', () => {
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_CHEGADAS } };
+  const resultado = chegadasSemanaisPorIndices([registro(100)], [0], demandas, SEMANAS_JULHO);
+  assert.deepStrictEqual(resultado, [2, 2, 1, 1, 1]);
+});
+
+test('chegadasSemanaisPorIndices: semana sem chegada é 0, nunca null -- é contagem medida', () => {
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': { chegada: [diaJul(15)], sondagemRealizada: [], saidaEstoque: [] } } };
+  const resultado = chegadasSemanaisPorIndices([registro(100)], [0], demandas, SEMANAS_JULHO);
+  assert.deepStrictEqual(resultado, [0, 0, 1, 0, 0]);
+  resultado.forEach((v) => assert.strictEqual(typeof v, 'number'));
+});
+
+test('chegadasSemanaisPorIndices: respeita indices -- registro fora do filtro não conta', () => {
+  const outro = registro(100); outro.sup = 'SUP-0002-24';
+  const demandas = {
+    porRegistroEventos: {
+      'SUP-0001-24||ST': EVENTOS_CHEGADAS,
+      'SUP-0002-24||ST': EVENTOS_CHEGADAS,
+    },
+  };
+  // Só o índice 0 passa no filtro: conta uma vez, não duas.
+  assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100), outro], [0], demandas, SEMANAS_JULHO), [2, 2, 1, 1, 1]);
+  // Os dois passam: dobra.
+  assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100), outro], [0, 1], demandas, SEMANAS_JULHO), [4, 4, 2, 2, 2]);
+});
+
+test('chegadasSemanaisPorIndices: chave sem entrada em porRegistroEventos devolve zeros, sem lançar', () => {
+  const demandas = { porRegistroEventos: {} };
+  assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100)], [0], demandas, SEMANAS_JULHO), [0, 0, 0, 0, 0]);
+});
+
+test('chegadasSemanaisPorIndices: sem demandas devolve zeros, sem lançar', () => {
+  assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100)], [0], undefined, SEMANAS_JULHO), [0, 0, 0, 0, 0]);
+  assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100)], [0], {}, SEMANAS_JULHO), [0, 0, 0, 0, 0]);
+});
+
+test('chegadasSemanaisPorIndices: evento fora do mês exibido não entra em nenhuma semana', () => {
+  const foraDoMes = {
+    chegada: [
+      diaEpoch(new Date(Date.UTC(2026, 5, 30))), // 30/jun -- véspera
+      diaEpoch(new Date(Date.UTC(2026, 7, 1))),  // 01/ago -- dia seguinte ao fim
+    ],
+    sondagemRealizada: [], saidaEstoque: [],
+  };
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': foraDoMes } };
+  assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100)], [0], demandas, SEMANAS_JULHO), [0, 0, 0, 0, 0]);
 });

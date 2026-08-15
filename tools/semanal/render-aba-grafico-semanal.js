@@ -75,6 +75,49 @@ var SERIE_TRACEJADO = { previsto: '', realizado: '1,5', tendencia: '9,5' };
 var SERIE_LABELS = { previsto: 'Previsto', realizado: 'Realizado', tendencia: 'Tendência' };
 var ORDEM_SERIES_GRAFICO = ['previsto', 'realizado', 'tendencia'];
 
+// Mesma expressão de chaveMatriz (tools/comum/linha-base.js) -- duplicada de
+// propósito, igual a render-aba-semanal.js:71 e compute-balanco.js:182, porque
+// este módulo entra no bundle do navegador: as dependências de OUTRO diretório
+// são removidas do bundle, não reescritas. Importá-la daqui quebraria a página
+// publicada em silêncio.
+function chaveDemandas(sup, tipologia) {
+  return sup + '||' + tipologia;
+}
+
+// Chegadas de demanda por SEMANA, através dos registros em 'indices'. O evento
+// 'chegada' de porRegistroEventos é a "Criação da OS" do furo (Link 1) e a
+// "Criação" do ensaio de Lab (Links 4/5), já em dia-epoch -- a MESMA lista que
+// pendentesNaData (render-aba-semanal.js) percorre pro estoque da Tabela.
+//
+// É a versão semanal de chegadasMensaisPorRegistro (compute-demandas.js), que
+// faz o mesmo por MÊS no build do orçamento. Lá o bucketing precisou ir pro
+// build porque o cliente do orçamento não tem data nenhuma; aqui roda no
+// CLIENTE porque os eventos crus, datados, já chegam nele. Ver
+// docs/superpowers/specs/2026-08-14-demandas-no-grafico-semanal-design.md.
+//
+// Semana sem chegada nenhuma é 0, nunca null: é contagem medida, e zero
+// chegadas é informação -- ao contrário de semanasTendencia, onde null diz
+// "não se projeta aqui".
+function chegadasSemanaisPorIndices(registros, indices, demandas, semanas) {
+  var porSemana = new Array((semanas || []).length).fill(0);
+  if (!demandas || !demandas.porRegistroEventos) return porSemana;
+  (indices || []).forEach(function (i) {
+    var registro = registros[i];
+    if (!registro) return;
+    var entrada = demandas.porRegistroEventos[chaveDemandas(registro.sup, registro.tipologia)];
+    if (!entrada) return;
+    (entrada.chegada || []).forEach(function (dia) {
+      for (var s = 0; s < semanas.length; s++) {
+        if (dia >= semanas[s].inicio && dia <= semanas[s].fim) {
+          porSemana[s] += 1;
+          return;
+        }
+      }
+    });
+  });
+  return porSemana;
+}
+
 var GRAFICO_LARGURA = 1000;
 var GRAFICO_ALTURA_BARRAS = 320;
 var GRAFICO_ALTURA_LINHA = 280;
@@ -448,4 +491,5 @@ function renderAbaGraficoSemanal(registros, indices, dimensoes, opcoes) {
 module.exports = {
   renderAbaGraficoSemanal, construirPainelGraficoSemanalHtml,
   construirGraficoSemanalSvg, construirGraficoAcumuladoSemanalSvg,
+  chegadasSemanaisPorIndices,
 };
