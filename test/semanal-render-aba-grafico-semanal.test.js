@@ -71,7 +71,7 @@ test('renderAbaGraficoSemanal: Volume/Financeiro ganham painel Semanal + Acumula
   assert.strictEqual((blocos[1].match(/class="grafico-painel"/g) || []).length, 2, 'Volume: Semanal + Acumulado');
 });
 
-test('construirPainelGraficoSemanalHtml: Volume com demandas mostra as 3 séries (Previsto/Realizado/Tendência) com as cores certas', () => {
+test('construirPainelGraficoSemanalHtml: Volume mostra as 4 séries (Previsto/Realizado/Tendência/Demandas) com as cores certas', () => {
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_REALIZADO_CONHECIDO } };
   const semanas = require('../tools/semanal/compute-semanal.js').semanasDoMes(ANO, VIGENTE_JULHO);
   const html = construirPainelGraficoSemanalHtml(
@@ -87,6 +87,8 @@ test('construirPainelGraficoSemanalHtml: Volume com demandas mostra as 3 séries
   assert.match(html, />Previsto</);
   assert.match(html, />Realizado</);
   assert.match(html, />Tendência</);
+  assert.match(html, /#9700DA/, 'cor de Demandas -- a 4ª série, só nesta dimensão');
+  assert.match(html, />Demandas</);
 });
 
 test('construirPainelGraficoSemanalHtml: os valores desenhados no gráfico batem EXATAMENTE com os da Tabela Semanal pro mesmo fixture -- [2,3,1,0,0], passando pelo PIPELINE REAL (não hardcoded)', () => {
@@ -414,4 +416,123 @@ test('chegadasSemanaisPorIndices: semanas undefined com demandas válidas não l
   // deve devolver [] sem lançar "Cannot read properties of undefined (reading 'length')"
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_CHEGADAS } };
   assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100)], [0], demandas, undefined), []);
+});
+
+// --- Task 2: a 4ª série (Demandas) no painel de Volume --------------------
+
+const { semanasDoMes: _semanasDoMes, indiceSemanaAtual: _indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
+
+// 3 chegadas em junho, 1 delas já executada em junho -> saldo de abertura = 2.
+// Mais as 7 chegadas de julho de EVENTOS_CHEGADAS -> [2,2,1,1,1].
+const EVENTOS_COM_ABERTURA = {
+  chegada: [
+    diaEpoch(new Date(Date.UTC(2026, 5, 10))),
+    diaEpoch(new Date(Date.UTC(2026, 5, 20))),
+    diaEpoch(new Date(Date.UTC(2026, 5, 25))),
+  ].concat(EVENTOS_CHEGADAS.chegada),
+  sondagemRealizada: [],
+  saidaEstoque: [diaEpoch(new Date(Date.UTC(2026, 5, 28)))],
+};
+
+function painelVolume(demandas) {
+  const semanas = _semanasDoMes(ANO, VIGENTE_JULHO);
+  return construirPainelGraficoSemanalHtml(
+    [registro(1000)], [0], 'volume', VIGENTE_JULHO, semanas, semanas.length, true,
+    _indiceSemanaAtual(semanas, HOJE_15_JUL), demandas, HOJE_15_JUL
+  );
+}
+
+test('Volume ganha a série Demandas: cor #9700DA e rótulo na legenda', () => {
+  const html = painelVolume({ porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_COM_ABERTURA } });
+  assert.match(html, /#9700DA/, 'roxo de Demandas do projeto inteiro');
+  assert.match(html, />Demandas</, 'rótulo na legenda');
+  assert.doesNotMatch(html, /#a78bfa/, 'lavanda do realizadoPrevistoInicial do orçamento -- série diferente, não pode aparecer');
+});
+
+test('Equipes e Financeiro NÃO ganham a série Demandas', () => {
+  const semanas = _semanasDoMes(ANO, VIGENTE_JULHO);
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_COM_ABERTURA } };
+  ['equipes', 'financeiro'].forEach((dimensao) => {
+    const html = construirPainelGraficoSemanalHtml(
+      [registro(1000)], [0], dimensao, VIGENTE_JULHO, semanas, semanas.length, true,
+      _indiceSemanaAtual(semanas, HOJE_15_JUL), demandas, HOJE_15_JUL
+    );
+    assert.doesNotMatch(html, /#9700DA/, dimensao + ' não pode ter Demandas -- é contagem física, sem equivalente em headcount nem R$');
+    assert.doesNotMatch(html, />Demandas</, dimensao + ' não pode ter Demandas na legenda');
+  });
+});
+
+test('FRONTEIRA do saldo de abertura: chegada no 1º dia do mês conta na S1 e NÃO na abertura', () => {
+  // Uma única chegada, exatamente em 01/jul (= semanas[0].inicio).
+  // Se o corte da abertura fosse semanas[0].inicio em vez de inicio - 1, ela
+  // seria contada DUAS vezes e o acumulado fecharia em 2 em vez de 1.
+  const soNoPrimeiroDia = { chegada: [diaJul(1)], sondagemRealizada: [], saidaEstoque: [] };
+  const semanas = _semanasDoMes(ANO, VIGENTE_JULHO);
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': soNoPrimeiroDia } };
+
+  const { pendentesNaData } = require('../tools/semanal/render-aba-semanal.js');
+  const abertura = pendentesNaData([registro(1000)], [0], demandas, semanas[0].inicio - 1);
+  assert.strictEqual(abertura, 0, 'a chegada do dia 1 NÃO pertence ao saldo de abertura');
+
+  const porSemana = chegadasSemanaisPorIndices([registro(1000)], [0], demandas, semanas);
+  assert.deepStrictEqual(porSemana, [1, 0, 0, 0, 0], 'ela pertence à S1');
+});
+
+test('FRONTEIRA do saldo de abertura: chegada na véspera conta na abertura e em nenhuma semana', () => {
+  const soNaVespera = {
+    chegada: [diaEpoch(new Date(Date.UTC(2026, 5, 30)))], // 30/jun
+    sondagemRealizada: [], saidaEstoque: [],
+  };
+  const semanas = _semanasDoMes(ANO, VIGENTE_JULHO);
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': soNaVespera } };
+
+  const { pendentesNaData } = require('../tools/semanal/render-aba-semanal.js');
+  assert.strictEqual(pendentesNaData([registro(1000)], [0], demandas, semanas[0].inicio - 1), 1);
+  assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(1000)], [0], demandas, semanas), [0, 0, 0, 0, 0]);
+});
+
+test('Acumulado de Demandas nasce do saldo de abertura e fecha em abertura + total do mês', () => {
+  // abertura = 3 chegadas de junho - 1 saída de junho = 2
+  // chegadas de julho = [2,2,1,1,1], total 7
+  // acumulado esperado = [4, 6, 7, 8, 9]  (2 + soma corrida)
+  const semanas = _semanasDoMes(ANO, VIGENTE_JULHO);
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_COM_ABERTURA } };
+  const { pendentesNaData } = require('../tools/semanal/render-aba-semanal.js');
+  const { calcularAcumulado } = require('../tools/semanal/compute-grafico-semanal.js');
+
+  const abertura = pendentesNaData([registro(1000)], [0], demandas, semanas[0].inicio - 1);
+  assert.strictEqual(abertura, 2, 'pré-condição: 3 chegadas em junho, 1 já executada');
+
+  const porSemana = chegadasSemanaisPorIndices([registro(1000)], [0], demandas, semanas);
+  const acumulado = calcularAcumulado(porSemana).map((v) => (v || 0) + abertura);
+  assert.deepStrictEqual(acumulado, [4, 6, 7, 8, 9]);
+
+  // Monotônico não-decrescente: chegadas nunca são negativas.
+  for (let i = 1; i < acumulado.length; i++) assert.ok(acumulado[i] >= acumulado[i - 1]);
+});
+
+test('DECISÃO 2026-08-14: o Acumulado de Demandas NÃO é cortado na semana em curso', () => {
+  // Escolha explícita do dono do projeto: espelhar o orçamento em vez da
+  // coerência local do painel. As semanas futuras achatam a curva (não há
+  // chegadas lá) -- é o efeito que cortarAcumuladoNasElapsadas evita no
+  // Realizado, e aqui é aceito de propósito. Este teste existe para que uma
+  // revisão futura não "corrija" isso sem perguntar.
+  const soNaS1 = { chegada: [diaJul(2)], sondagemRealizada: [], saidaEstoque: [] };
+  const semanas = _semanasDoMes(ANO, VIGENTE_JULHO);
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': soNaS1 } };
+  const { calcularAcumulado } = require('../tools/semanal/compute-grafico-semanal.js');
+
+  const acumulado = calcularAcumulado(chegadasSemanaisPorIndices([registro(1000)], [0], demandas, semanas));
+  // Achata em 1, e NENHUMA semana vira null (que é o que o corte produziria).
+  assert.deepStrictEqual(acumulado, [1, 1, 1, 1, 1]);
+  acumulado.forEach((v) => assert.notStrictEqual(v, null));
+});
+
+test('Sem demandas, Volume volta às 3 séries de sempre', () => {
+  const semanas = _semanasDoMes(ANO, VIGENTE_JULHO);
+  const html = construirPainelGraficoSemanalHtml(
+    [registro(1000)], [0], 'volume', VIGENTE_JULHO, semanas, semanas.length, false, -1, undefined, undefined
+  );
+  assert.doesNotMatch(html, /#9700DA/);
+  assert.doesNotMatch(html, />Demandas</);
 });

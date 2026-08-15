@@ -1,6 +1,6 @@
 'use strict';
 const { semanasDoMes, indiceSemanaAtual } = require('./compute-semanal.js');
-const { calcularSeriesSemanaisDimensao, formatarIntervaloSemana } = require('./render-aba-semanal.js');
+const { calcularSeriesSemanaisDimensao, formatarIntervaloSemana, pendentesNaData } = require('./render-aba-semanal.js');
 const {
   calcularAcumulado, calcularEscalaEixo, GRAFICO_NUM_TICKS,
   cortarAcumuladoNasElapsadas, calcularAcumuladoAposElapsadas,
@@ -70,9 +70,15 @@ var DIMENSOES_ROTULO_SEMANAL = { equipes: 'Equipes', volume: 'Volume', financeir
 // tools/comum/render-shell.js) e .linha-tendencia (CSS_SEMANAL,
 // render-semanal.js) já usam nas linhas da Tabela Semanal: a cor de
 // "Previsto" tem que ser a mesma em toda a página, tabela ou gráfico.
-var SERIE_COR = { previsto: '#2f6ad0', realizado: '#7fd858', tendencia: '#f6b53f' };
-var SERIE_TRACEJADO = { previsto: '', realizado: '1,5', tendencia: '9,5' };
-var SERIE_LABELS = { previsto: 'Previsto', realizado: 'Realizado', tendencia: 'Tendência' };
+// A 4ª série, 'demandas', não entra em ORDEM_SERIES_GRAFICO de propósito: ela
+// só existe na dimensão Volume, acrescentada à mão em
+// construirPainelGraficoSemanalHtml. #9700DA é o roxo de Demandas do projeto
+// inteiro (.linha-pendentes-demandas/.linha-demandas, tools/comum/render-shell.js
+// e render-aba-demandas.js) -- NÃO confundir com #a78bfa, a lavanda do
+// realizadoPrevistoInicial do orçamento.
+var SERIE_COR = { previsto: '#2f6ad0', realizado: '#7fd858', tendencia: '#f6b53f', demandas: '#9700DA' };
+var SERIE_TRACEJADO = { previsto: '', realizado: '1,5', tendencia: '9,5', demandas: '4,3' };
+var SERIE_LABELS = { previsto: 'Previsto', realizado: 'Realizado', tendencia: 'Tendência', demandas: 'Demandas' };
 var ORDEM_SERIES_GRAFICO = ['previsto', 'realizado', 'tendencia'];
 
 // Mesma expressão de chaveMatriz (tools/comum/linha-base.js) -- duplicada de
@@ -435,6 +441,34 @@ function construirPainelGraficoSemanalHtml(registros, indices, dimensao, vigente
       indiceConector: serie === 'tendencia' ? indiceConectorTendencia : null,
     };
   });
+
+  // Demandas (chegadas) -- 4ª série, SÓ na dimensão Volume. Duas decisões do
+  // dono do projeto em 2026-08-14, ambas espelhando o Gráfico do orçamento em
+  // vez da coerência local deste painel (ver o spec
+  // 2026-08-14-demandas-no-grafico-semanal-design.md):
+  //
+  // 1. O Acumulado nasce do SALDO DE ABERTURA do mês, não de zero como as
+  //    outras 3 séries. Sem isso a curva de Demandas fica quase sempre ABAIXO
+  //    da de Realizado -- o que se lê como impossível (não dá pra executar
+  //    mais do que chegou), mas é só a janela de um mês escondendo a carteira
+  //    que já estava aberta antes dele.
+  // 2. NÃO é cortado na semana em curso. As semanas futuras achatam a curva --
+  //    é o efeito que cortarAcumuladoNasElapsadas evita no Realizado, aceito
+  //    aqui de propósito. Não "corrigir" numa revisão sem perguntar.
+  if (dimensao === 'volume' && demandas && demandas.porRegistroEventos) {
+    var chegadasSemanais = chegadasSemanaisPorIndices(registros, indices, demandas, semanas);
+    // O corte é 'inicio - 1', NÃO 'inicio': pendentesNaData conta
+    // 'chegada <= dataEpoch' INCLUSIVE, então cortar no próprio primeiro dia
+    // do mês contaria a demanda que chegou nele DUAS vezes -- no saldo de
+    // abertura E na S1 -- inflando o Acumulado sem erro nem aviso.
+    var aberturaDemandas = pendentesNaData(registros, indices, demandas, semanas[0].inicio - 1);
+    dadosPorSerie.push({
+      serie: 'demandas',
+      valores: chegadasSemanais,
+      acumulado: calcularAcumulado(chegadasSemanais).map(function (v) { return (v || 0) + aberturaDemandas; }),
+      indiceConector: null,
+    });
+  }
 
   var rotuloDimensao = DIMENSOES_ROTULO_SEMANAL[dimensao] || '';
   var casasDecimais = 0; // Volume/Financeiro/Equipes semanais sempre inteiro -- sem dimensão-razão nesta página.
