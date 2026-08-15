@@ -408,3 +408,10 @@ test('chegadasSemanaisPorIndices: evento fora do mês exibido não entra em nenh
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': foraDoMes } };
   assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100)], [0], demandas, SEMANAS_JULHO), [0, 0, 0, 0, 0]);
 });
+
+test('chegadasSemanaisPorIndices: semanas undefined com demandas válidas não lança -- devolve [] guardado', () => {
+  // Reprodução do bug: demandas válidas com chegada não vazia + semanas undefined
+  // deve devolver [] sem lançar "Cannot read properties of undefined (reading 'length')"
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_CHEGADAS } };
+  assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100)], [0], demandas, undefined), []);
+});

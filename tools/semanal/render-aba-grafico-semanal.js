@@ -99,7 +99,8 @@ function chaveDemandas(sup, tipologia) {
 // chegadas é informação -- ao contrário de semanasTendencia, onde null diz
 // "não se projeta aqui".
 function chegadasSemanaisPorIndices(registros, indices, demandas, semanas) {
-  var porSemana = new Array((semanas || []).length).fill(0);
+  var semanasSafe = semanas || [];
+  var porSemana = new Array(semanasSafe.length).fill(0);
   if (!demandas || !demandas.porRegistroEventos) return porSemana;
   (indices || []).forEach(function (i) {
     var registro = registros[i];
@@ -107,8 +108,8 @@ function chegadasSemanaisPorIndices(registros, indices, demandas, semanas) {
     var entrada = demandas.porRegistroEventos[chaveDemandas(registro.sup, registro.tipologia)];
     if (!entrada) return;
     (entrada.chegada || []).forEach(function (dia) {
-      for (var s = 0; s < semanas.length; s++) {
-        if (dia >= semanas[s].inicio && dia <= semanas[s].fim) {
+      for (var s = 0; s < semanasSafe.length; s++) {
+        if (dia >= semanasSafe[s].inicio && dia <= semanasSafe[s].fim) {
           porSemana[s] += 1;
           return;
         }
