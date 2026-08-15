@@ -916,6 +916,71 @@ contar Sondadores distintos ativos no mês, por (SUP, tipologia), como proxy de 
 equipes trabalharam". Ao retomar, pergunte a ele antes de implementar -- não assuma essa
 opção como decidida.
 
+### Série Demandas no Gráfico (2026-08-14)
+
+A aba Gráficos ganhou uma 4ª série, **Demandas** (roxa `#9700DA`), **só na dimensão
+Volume** — barra no painel Semanal, linha no Acumulado. É a série `chegadas`
+(quantos furos + ensaios CHEGARAM), portada do Gráfico do orçamento
+(`docs/superpowers/specs/2026-08-13-demandas-no-grafico-orcamento-design.md`).
+Spec desta rodada: `.../2026-08-14-demandas-no-grafico-semanal-design.md`.
+
+**Duas decisões do dono do projeto que contrariam o painel vizinho** — registradas
+para não serem "corrigidas" numa revisão futura:
+
+1. **O Acumulado nasce do saldo de abertura do mês**, não de zero como as outras 3
+   séries. Sem isso a curva de Demandas fica abaixo da de Realizado, o que se lê como
+   impossível — é só a janela de um mês escondendo a carteira já aberta antes dele.
+   No orçamento o mesmo problema foi medido: 55% dos furos executados em 2026 tinham
+   Criação da OS em 2025 ou antes. Com a janela de um MÊS, o efeito é maior ainda.
+2. **A curva NÃO é cortada na semana em curso** — achata nas semanas futuras, que é
+   exatamente o efeito que `cortarAcumuladoNasElapsadas` evita no Realizado. Aceito
+   de propósito. Travado por teste.
+
+**O off-by-one que duplica demanda:** o corte do saldo de abertura é
+`semanas[0].inicio - 1`, NUNCA `semanas[0].inicio`. `pendentesNaData` conta
+`chegada <= D` inclusive — com o corte no próprio dia 1, a demanda que chega nele
+entra no saldo E na S1, inflando o Acumulado sem erro nem aviso. Há teste de
+fronteira nos dois sentidos.
+
+**Ao contrário do orçamento, isto não tocou build, blob cifrado nem golden:** o
+cliente da semanal já recebe `porRegistroEventos` com os eventos crus datados, e
+`semanas[]` já traz `inicio`/`fim` em dia-epoch, então o bucketing
+(`chegadasSemanaisPorIndices`) roda no cliente. `chaveDemandas` foi DUPLICADA neste
+módulo, não importada — é a convenção dos módulos que entram no bundle do navegador.
+
+**O botão "Atualizar dados" cobre esta série** — ela lê `porRegistroEventos` do mesmo
+`window.__DEMANDAS__` que `atualizarDadosAoVivoSemanal` recalcula.
+
+### Armadilha: `atualizar-arquivos.js` publica qualquer branch que estiver com checkout feito (2026-08-15)
+
+`tools/semanal/atualizar-arquivos.js` publica com `git push origin HEAD:master`
+(comentário em torno da linha 92-112 do arquivo), não `git push origin master`. Isso é
+deliberado — a branch local `master` fica parada muito atrás de `origin/master` (este
+repositório roda de branches de trabalho), então `push origin master` empurraria o ref
+errado e seria rejeitado; publicar `HEAD` é o que faz o script funcionar mesmo assim (ver
+"Orçamento branch de publicação" nas memórias do projeto).
+
+**A consequência é que `HEAD` não distingue "branch de trabalho terminado" de "branch de
+trabalho pela metade".** O script roda agendado, sem saber (nem perguntar) o que está com
+checkout feito no momento em que dispara. Se for uma feature branch com commits ainda em
+revisão, ele publica exatamente esse estado no site ao vivo — foi o que aconteceu em
+2026-08-15 às 08:04: a branch `semanal-demandas-grafico`, com a série Demandas já no
+código mas as revisões de plano ainda em andamento, estava com checkout feito na máquina
+agendada e foi ao ar antes de terminar de ser revisada. Não houve erro nenhum no processo:
+o script fez exatamente o que o comentário documenta que ele faz.
+
+**Consequência prática para quem trabalha aqui:** enquanto uma feature branch está com
+checkout feito nesta máquina, ela é publicável a qualquer momento — não é preciso rodar
+`git push` manualmente para que o trabalho vá ao ar. Não deixe trabalho pela metade numa
+branch com checkout feito de um dia para o outro (fazer `git switch` de volta para
+`master`, ou terminar e mergear, antes de parar por hoje); e depois de qualquer
+interrupção, confira `git log origin/master` para saber o que já foi publicado antes de
+assumir que ainda está tudo em revisão. É a mesma classe de falha do incidente de
+2026-07-12 já registrado acima (automação silenciosa alterando o que está publicado sem
+que ninguém tenha pedido naquele momento) — chegando por uma rota diferente: lá era um
+passo de acumulação de histórico que não avisava quando faltava um arquivo; aqui é um
+push automático que não distingue o que está pronto do que não está.
+
 ### Aba Alocação Equipes (2026-08-10)
 
 Sétima aba do dashboard: um quadro SUP × tipologia onde equipes de campo são arrastadas
