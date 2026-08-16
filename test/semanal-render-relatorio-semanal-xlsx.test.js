@@ -100,7 +100,7 @@ test('a aba Volume tem o cabeçalho das 3 janelas e uma linha por registro/tipol
   assert.match(sheetXml, /Acumulado do mês — Realizado/);
   assert.match(sheetXml, /Semana que vem — Tendência/);
   // 1 título + 1 cabeçalho + TOTAL GERAL + 2 tipologias + (registro+TOTAL SUP) x2 = 9 linhas
-  const linhas = [...sheetXml.matchAll(/<row r="\d+">/g)];
+  const linhas = [...sheetXml.matchAll(/<row r="\d+"[^>]*>/g)];
   assert.strictEqual(linhas.length, 9);
 });
 
