@@ -44,11 +44,16 @@ var CABECALHO_DESVIOS = [
   str('Previsto'), str('Realizado/Tendência'), str('Desvio %'), str('Status'), str('Ação'), str('Responsável'),
 ];
 
+function casasDaDimensaoRotulo(dimensaoRotulo) {
+  return dimensaoRotulo === 'Equipes' ? 2 : 0;
+}
+
 function linhaDesvio(d) {
+  var casas = casasDaDimensaoRotulo(d.dimensao);
   return [
     str(d.sup), str(d.tomador), str(d.tipologia), str(d.contrato || ''), str(d.janela), str(d.dimensao),
-    celulaNumOuVazia(d.previsto), celulaNumOuVazia(d.numerador), str(formatarDesvioTexto(d.desvio)),
-    str(d.status), str(''), str(''),
+    celulaNumOuVazia(arredondar(d.previsto, casas)), celulaNumOuVazia(arredondar(d.numerador, casas)),
+    str(formatarDesvioTexto(d.desvio)), str(d.status), str(''), str(''),
   ];
 }
 
