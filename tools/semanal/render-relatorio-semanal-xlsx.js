@@ -11,8 +11,8 @@ const { str, num, buildXlsx } = require('./xlsx-writer-browser.js');
 // !Number.isFinite cobre tanto NaN quanto ±Infinity: um NaN chegando aqui
 // serializaria como <v>NaN</v>, um .xlsx que o Excel recusa abrir -- melhor
 // uma célula vazia do que um arquivo corrompido.
-function celulaNumOuVazia(v) {
-  return (v === null || v === undefined || !Number.isFinite(v)) ? str('') : num(v);
+function celulaNumOuVazia(v, estiloNumero) {
+  return (v === null || v === undefined || !Number.isFinite(v)) ? str('') : num(v, estiloNumero);
 }
 
 function formatarDesvioTexto(d) {
@@ -69,8 +69,10 @@ function montarAbaResumo(opcoes, resumo, janelaAnterior, janelaSeguinte) {
 }
 
 var CABECALHO_DESVIOS = [
-  str('SUP'), str('Tomador'), str('Tipologia'), str('Contrato'), str('Janela'), str('Dimensão'),
-  str('Previsto'), str('Realizado/Tendência'), str('Desvio %'), str('Status'), str('Ação'), str('Responsável'),
+  str('SUP', 'cabecalhoTabela'), str('Tomador', 'cabecalhoTabela'), str('Tipologia', 'cabecalhoTabela'), str('Contrato', 'cabecalhoTabela'),
+  str('Janela', 'cabecalhoTabela'), str('Dimensão', 'cabecalhoTabela'),
+  str('Previsto', 'cabecalhoTabela'), str('Realizado/Tendência', 'cabecalhoTabela'), str('Desvio %', 'cabecalhoTabela'),
+  str('Status', 'cabecalhoTabela'), str('Ação', 'cabecalhoTabela'), str('Responsável', 'cabecalhoTabela'),
 ];
 
 // Duas casas quase-idênticas porque os domínios de entrada são diferentes:
@@ -85,39 +87,61 @@ function casasDaDimensaoRotulo(dimensaoRotulo) {
   return dimensaoRotulo === 'Equipes' ? 2 : 0;
 }
 
-function linhaDesvio(d) {
+function linhaDesvio(d, zebra) {
   var casas = casasDaDimensaoRotulo(d.dimensao);
+  var estiloTexto = zebra ? 'textoZebra' : 'texto';
+  var estiloNumero = casas === 2
+    ? (zebra ? 'numeroDuasCasasZebra' : 'numeroDuasCasas')
+    : (zebra ? 'numeroMilharZebra' : 'numeroMilhar');
   return [
-    str(d.sup), str(d.tomador), str(d.tipologia), str(d.contrato || ''), str(d.janela), str(d.dimensao),
-    celulaNumOuVazia(arredondar(d.previsto, casas)), celulaNumOuVazia(arredondar(d.numerador, casas)),
-    str(formatarDesvioTexto(d.desvio)), str(d.status), str(''), str(''),
+    str(d.sup, estiloTexto), str(d.tomador, estiloTexto), str(d.tipologia, estiloTexto), str(d.contrato || '', estiloTexto),
+    str(d.janela, estiloTexto), str(d.dimensao, estiloTexto),
+    celulaNumOuVazia(arredondar(d.previsto, casas), estiloNumero), celulaNumOuVazia(arredondar(d.numerador, casas), estiloNumero),
+    str(formatarDesvioTexto(d.desvio), estiloTexto), str(d.status, estiloTexto), str('', estiloTexto), str('', estiloTexto),
   ];
 }
 
-function montarAbaDesvios(desvios) {
-  var rows = [[str('Por tipologia')], CABECALHO_DESVIOS.slice()];
-  var linhaInicioTipologia = rows.length + 1;
-  desvios.porTipologia.forEach(function (d) { rows.push(linhaDesvio(d)); });
-  var linhaFimTipologia = rows.length;
+var COLS_DESVIOS = [12, 26, 16, 14, 28, 12, 12, 18, 10, 12, 22, 18];
 
-  rows.push([str('')]);
-  rows.push([str('Por contrato')]);
-  rows.push(CABECALHO_DESVIOS.slice());
-  var linhaInicioContrato = rows.length + 1;
-  desvios.porContrato.forEach(function (d) { rows.push(linhaDesvio(d)); });
-  var linhaFimContrato = rows.length;
-
+function montarAbaDesvios(desvios, subtitulo) {
+  var sufixo = subtitulo ? ' · ' + subtitulo : '';
+  var rows = [
+    [str('Relatório Semanal — Planejamento · Desvios' + sufixo, 'titulo')],
+  ];
+  var linhaInicioTipologia = 0, linhaFimTipologia = 0;
+  var linhaInicioContrato = 0, linhaFimContrato = 0;
   var colunaStatus = 'J'; // 10ª coluna de CABECALHO_DESVIOS (A..L)
   var conditionalFormats = [];
-  if (linhaFimTipologia >= linhaInicioTipologia) {
-    conditionalFormats.push({ sqref: colunaStatus + linhaInicioTipologia + ':' + colunaStatus + linhaFimTipologia, color: 'critico', text: 'Crítico' });
-    conditionalFormats.push({ sqref: colunaStatus + linhaInicioTipologia + ':' + colunaStatus + linhaFimTipologia, color: 'atencao', text: 'Atenção' });
+
+  if (desvios.porTipologia.length > 0) {
+    rows.push([str('Por tipologia', 'rotulo')]);
+    rows.push(CABECALHO_DESVIOS.slice());
+    linhaInicioTipologia = rows.length + 1;
+    desvios.porTipologia.forEach(function (d, i) { rows.push(linhaDesvio(d, i % 2 === 1)); });
+    linhaFimTipologia = rows.length;
+    rows.push([str('')]);
+    if (linhaFimTipologia >= linhaInicioTipologia) {
+      conditionalFormats.push({ sqref: colunaStatus + linhaInicioTipologia + ':' + colunaStatus + linhaFimTipologia, color: 'critico', text: 'Crítico' });
+      conditionalFormats.push({ sqref: colunaStatus + linhaInicioTipologia + ':' + colunaStatus + linhaFimTipologia, color: 'atencao', text: 'Atenção' });
+    }
   }
-  if (linhaFimContrato >= linhaInicioContrato) {
-    conditionalFormats.push({ sqref: colunaStatus + linhaInicioContrato + ':' + colunaStatus + linhaFimContrato, color: 'critico', text: 'Crítico' });
-    conditionalFormats.push({ sqref: colunaStatus + linhaInicioContrato + ':' + colunaStatus + linhaFimContrato, color: 'atencao', text: 'Atenção' });
+
+  if (desvios.porContrato.length > 0) {
+    rows.push([str('Por contrato', 'rotulo')]);
+    rows.push(CABECALHO_DESVIOS.slice());
+    linhaInicioContrato = rows.length + 1;
+    desvios.porContrato.forEach(function (d, i) { rows.push(linhaDesvio(d, i % 2 === 1)); });
+    linhaFimContrato = rows.length;
+    if (linhaFimContrato >= linhaInicioContrato) {
+      conditionalFormats.push({ sqref: colunaStatus + linhaInicioContrato + ':' + colunaStatus + linhaFimContrato, color: 'critico', text: 'Crítico' });
+      conditionalFormats.push({ sqref: colunaStatus + linhaInicioContrato + ':' + colunaStatus + linhaFimContrato, color: 'atencao', text: 'Atenção' });
+    }
   }
-  return { name: 'Desvios', rows: rows, conditionalFormats: conditionalFormats };
+
+  return {
+    name: 'Desvios', rows: rows, conditionalFormats: conditionalFormats,
+    colWidths: COLS_DESVIOS, freezeRows: 3, rowHeights: { 1: 28, 3: 30 }, merges: ['A1:L1'],
+  };
 }
 
 // Ver o comentário de casasDaDimensaoRotulo acima -- esta recebe a chave
@@ -171,14 +195,15 @@ function gerarRelatorioSemanalXlsx(opcoes) {
   var linhasEquipes = montarLinhasDimensao(opcoes.registros, opcoes.indices, 'equipes', ctx);
   var desvios = montarDesvios({ volume: linhasVolume, equipes: linhasEquipes });
   var resumo = resumoDesvios(desvios);
+  var subtitulo = NOMES_MES[ctx.mesIdx] + '/' + ctx.ano;
   var janelaAnterior = semanaAnterior(ctx.ano, ctx.mesIdx, ctx.semanas, ctx.indiceAtual);
   var janelaSeguinte = semanaSeguinte(ctx.ano, ctx.mesIdx, ctx.semanas, ctx.indiceAtual);
 
   var sheets = [
     montarAbaResumo(opcoes, resumo, janelaAnterior, janelaSeguinte),
-    montarAbaDesvios(desvios),
-    montarAbaDimensao('Volume', linhasVolume, 'volume'),
-    montarAbaDimensao('Equipes', linhasEquipes, 'equipes'),
+    montarAbaDesvios(desvios, subtitulo),
+    montarAbaDimensao('Volume', linhasVolume, 'volume', subtitulo),
+    montarAbaDimensao('Equipes', linhasEquipes, 'equipes', subtitulo),
   ];
   return {
     bytes: buildXlsx(sheets),

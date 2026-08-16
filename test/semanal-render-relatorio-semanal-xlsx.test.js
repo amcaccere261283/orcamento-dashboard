@@ -133,6 +133,35 @@ test('a aba Desvios tem cabeçalho, seções Por tipologia/Por contrato e format
   assert.match(sheetXml, /<conditionalFormatting sqref="J\d+:J\d+"><cfRule[^>]*dxfId="1"[^>]*text="Atenção"/);
 });
 
+test('a aba Desvios tem título mesclado, cabeçalho estilizado e zebra alternando nas linhas de dado', () => {
+  const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesComDesvios());
+  const sheetXml = extrairAba(resultado.bytes, 2); // Desvios
+
+  assert.match(sheetXml, /<mergeCells count="1"><mergeCell ref="A1:L1"\/><\/mergeCells>/);
+  assert.match(sheetXml, /<c r="A1" s="1" t="inlineStr"><is><t>Relatório Semanal — Planejamento · Desvios · Jul\/2026<\/t>/);
+  // cabeçalho (linha 3: título=1, "Por tipologia"=2, cabeçalho=3) com estilo cabecalhoTabela (índice 2)
+  assert.match(sheetXml, /<c r="A3" s="2" t="inlineStr"><is><t>SUP<\/t>/);
+  // 1ª linha de dado (linha 4) sem zebra, 2ª linha de dado (linha 5) com zebra
+  assert.match(sheetXml, /<row r="4"><c r="A4" s="4"/);
+  assert.match(sheetXml, /<row r="5"><c r="A5" s="5"/);
+});
+
+test('a aba Desvios formata Previsto/Realizado-Tendência com separador de milhar quando a dimensão é Volume', () => {
+  const desvios = {
+    porTipologia: [],
+    porContrato: [{
+      sup: 'SUP-A', tomador: 'Tomador-A', tipologia: 'ST', contrato: 'SUP-A',
+      janela: 'Semana anterior', dimensao: 'Volume',
+      previsto: 12345, numerador: 6789, desvio: 0.55, status: 'Crítico', cor: '#D32020',
+    }],
+  };
+  const sheets = [RenderRelatorioSemanalXlsx.montarAbaDesvios(desvios)];
+  const bytes = buildXlsx(sheets);
+  const sheetXml = extrairAba(bytes, 1);
+  // s="7" = numeroMilhar (sem zebra, 1ª linha de dado)
+  assert.match(sheetXml, /<c r="G4" s="7"><v>12345<\/v><\/c>/);
+});
+
 // Bundled cleanup A1 (revisão final 2026-08-16): o arredondamento de
 // linhaDesvio() (casasDaDimensaoRotulo('Volume') === 0) foi confirmado
 // estruturalmente quando foi implementado, mas nunca contra um valor
