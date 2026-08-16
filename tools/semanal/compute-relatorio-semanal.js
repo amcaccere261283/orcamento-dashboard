@@ -192,12 +192,16 @@ function montarDesvios(linhasPorDimensao) {
 // Contagem de Crítico/Atenção da geração inteira, pro capítulo Resumo do
 // .xlsx e pra linha-resumo do histórico -- soma só porContrato (o nível mais
 // fino), pra não contar duas vezes o mesmo desvio físico (que também
-// aparece agregado em porTipologia).
+// aparece agregado em porTipologia). 'critico'/'atencao' são o total (forma
+// já existente, consumida por render-semanal.js sem mudança); 'porDimensao'
+// é aditivo -- a quebra por Volume/Equipes que o capítulo Resumo passou a
+// mostrar ao lado do total.
 function resumoDesvios(desvios) {
-  var resumo = { critico: 0, atencao: 0 };
+  var resumo = { critico: 0, atencao: 0, porDimensao: {} };
   (desvios.porContrato || []).forEach(function (d) {
-    if (d.status === 'Crítico') resumo.critico++;
-    else if (d.status === 'Atenção') resumo.atencao++;
+    if (!resumo.porDimensao[d.dimensao]) resumo.porDimensao[d.dimensao] = { critico: 0, atencao: 0 };
+    if (d.status === 'Crítico') { resumo.critico++; resumo.porDimensao[d.dimensao].critico++; }
+    else if (d.status === 'Atenção') { resumo.atencao++; resumo.porDimensao[d.dimensao].atencao++; }
   });
   return resumo;
 }

@@ -29,6 +29,7 @@ function criarPlanilhaFalsa() {
     const aba = {
       nome,
       getMaxRows: () => Math.max(celulas.length, 1000),
+      getLastRow: () => celulas.length,
       getRange(linha, coluna, nLinhas, nColunas) {
         return {
           setNumberFormat(formato) {

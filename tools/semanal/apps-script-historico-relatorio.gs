@@ -32,11 +32,15 @@ function abaHistorico() {
   if (!aba) {
     aba = planilha.insertSheet(ABA);
     aba.getRange(1, 1, 1, CABECALHO.length).setValues([CABECALHO]);
-    // Texto puro desde o nascimento -- mesma cautela de apps-script-alocacao.gs
-    // (normalizarDia): evita qualquer coerção silenciosa do Sheets, inclusive
-    // nas colunas numéricas vazias (a linha-resumo tem previsto/realizado/
-    // tendência em branco).
-    aba.getRange(1, 1, aba.getMaxRows(), CABECALHO.length).setNumberFormat('@');
+    // Só as colunas de IDENTIDADE viram texto puro (evita coerção de Data em
+    // geradoEm/semanaInicio/semanaFim -- mesma cautela de apps-script-alocacao.gs,
+    // normalizarDia). As colunas de MEDIDA (previsto/realizado/tendência das 3
+    // janelas + qtdCritico/qtdAtencao) ficam em formato numérico padrão de
+    // propósito -- formatá-las como texto (como esta função fazia antes)
+    // faz SUM()/gráfico sobre o histórico sempre devolver 0.
+    var maxLinhas = aba.getMaxRows();
+    aba.getRange(1, 1, maxLinhas, 6).setNumberFormat('@');
+    aba.getRange(1, CABECALHO.length, maxLinhas, 1).setNumberFormat('@');
   }
   return aba;
 }
@@ -61,12 +65,18 @@ function resposta(objeto) {
 }
 
 // corpo: { linhas: [...] } -- um lote inteiro por geração de relatório.
-// appendRow por linha: sem upsert, sem checagem de duplicata -- cada clique
-// no botão é um registro histórico novo, mesmo que a semana seja a mesma.
+// Um setValues() só (não appendRow por linha): sem upsert, sem checagem de
+// duplicata -- cada clique no botão é um registro histórico novo, mesmo que
+// a semana seja a mesma. Com dado realista (~340 registros MATRIZ, 681
+// linhas por lote) 681 appendRow separados custavam 15-60s de trava por
+// clique -- cada um é uma ida-e-volta própria à planilha.
 function doPost(e) {
   var corpo = JSON.parse(e.postData.contents);
   var aba = abaHistorico();
   var linhas = (corpo && corpo.linhas) || [];
-  linhas.forEach(function (l) { aba.appendRow(linhaParaArray(l)); });
+  if (linhas.length) {
+    var valores = linhas.map(linhaParaArray);
+    aba.getRange(aba.getLastRow() + 1, 1, valores.length, CABECALHO.length).setValues(valores);
+  }
   return resposta({ ok: true, gravadas: linhas.length });
 }

@@ -1461,7 +1461,7 @@ function montarOpcoesRelatorioSemanal(registros, indices) {
   return {
     registros: registros, indices: indicesAba,
     ano: window.__ANO__, mesIdx: mesSelecionadoIdx, semanas: semanas,
-    indiceAtual: ComputeSemanal.indiceSemanaAtual(semanas, hojeEpoch),
+    indiceAtual: semanaConsolidadoIdx(semanas, hojeEpoch),
     demandas: window.__DEMANDAS__, hojeEpoch: hojeEpoch,
     geradoEm: new Date(), autor: (window.__ALOCACAO_AUTOR__ || 'dashboard'),
   };
@@ -1532,22 +1532,34 @@ function definirStatusRelatorio(texto) {
 }
 
 async function gerarRelatorioExcel() {
+  if (ESTADO_RELATORIO_SEMANAL.gerando) return;
+  ESTADO_RELATORIO_SEMANAL.gerando = true;
+  var botao = document.getElementById('gerar-relatorio-excel');
+  if (botao) botao.disabled = true;
   definirStatusRelatorio('Gerando...');
-  var indices = indicesFiltrados(
-    window.__REGISTROS__,
-    filtrosSelecionadosSemanal.tipologia, filtrosSelecionadosSemanal.categoria,
-    filtrosSelecionadosSemanal.grupo, filtrosSelecionadosSemanal.sup, filtrosSelecionadosSemanal.origem
-  );
-  var opcoes = montarOpcoesRelatorioSemanal(window.__REGISTROS__, indices);
-  var resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoes);
-  baixarArquivoXlsx(resultado.bytes, nomeArquivoRelatorio(opcoes.geradoEm));
+  try {
+    var indices = indicesFiltrados(
+      window.__REGISTROS__,
+      filtrosSelecionadosSemanal.tipologia, filtrosSelecionadosSemanal.categoria,
+      filtrosSelecionadosSemanal.grupo, filtrosSelecionadosSemanal.sup, filtrosSelecionadosSemanal.origem
+    );
+    var opcoes = montarOpcoesRelatorioSemanal(window.__REGISTROS__, indices);
+    var resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoes);
+    baixarArquivoXlsx(resultado.bytes, nomeArquivoRelatorio(opcoes.geradoEm));
 
-  var lote = montarLoteHistoricoRelatorio(resultado, opcoes);
-  var envio = await clienteHistoricoRelatorio().gravar(lote);
-  definirStatusRelatorio(
-    'Relatório baixado (Crítico: ' + resultado.resumo.critico + ' · Atenção: ' + resultado.resumo.atencao + ')'
-    + (envio.ok ? '' : ' -- histórico será reenviado depois (sem rede)')
-  );
+    var lote = montarLoteHistoricoRelatorio(resultado, opcoes);
+    var envio = await clienteHistoricoRelatorio().gravar(lote);
+    definirStatusRelatorio(
+      'Relatório baixado (Crítico: ' + resultado.resumo.critico + ' · Atenção: ' + resultado.resumo.atencao + ')'
+      + (envio.ok ? '' : ' -- histórico será reenviado depois (sem rede)')
+      + (envio.modo === 'local' ? ' · histórico local (Apps Script não publicado)' : '')
+    );
+  } catch (err) {
+    definirStatusRelatorio('Erro ao gerar o relatório: ' + err.message);
+  } finally {
+    ESTADO_RELATORIO_SEMANAL.gerando = false;
+    if (botao) botao.disabled = false;
+  }
 }
 
 function chaveSemanaAtual() {

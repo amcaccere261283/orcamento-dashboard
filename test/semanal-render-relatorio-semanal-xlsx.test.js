@@ -7,6 +7,7 @@ const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 const RenderRelatorioSemanalXlsx = require('../tools/semanal/render-relatorio-semanal-xlsx.js');
 const { semanasDoMes, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
+const { buildXlsx } = require('../tools/semanal/xlsx-writer-browser.js');
 
 const ANO = 2026;
 const JULHO = 6;
@@ -132,13 +133,89 @@ test('a aba Desvios tem cabeçalho, seções Por tipologia/Por contrato e format
   assert.match(sheetXml, /<conditionalFormatting sqref="J\d+:J\d+"><cfRule[^>]*dxfId="1"[^>]*text="Atenção"/);
 });
 
-test('a aba Resumo mostra as contagens de Crítico/Atenção batendo com resultado.resumo', () => {
+// Bundled cleanup A1 (revisão final 2026-08-16): o arredondamento de
+// linhaDesvio() (casasDaDimensaoRotulo('Volume') === 0) foi confirmado
+// estruturalmente quando foi implementado, mas nunca contra um valor
+// fracionário de verdade -- um desvio de Volume com Previsto/Tendência
+// quebrados (o caso real: uma janela "Semana que vem" projetada por
+// Tendência) precisa sair como inteiro na célula, nunca com casas decimais.
+test('a aba Desvios arredonda Previsto/Realizado-Tendência de Volume para inteiro, mesmo vindo fracionário', () => {
+  const desvios = {
+    porTipologia: [],
+    porContrato: [{
+      sup: 'SUP-A', tomador: 'Tomador-A', tipologia: 'ST', contrato: 'SUP-A',
+      janela: 'Semana que vem', dimensao: 'Volume',
+      previsto: 16.6, numerador: 6.3333333333333, desvio: 0.381, status: 'Crítico', cor: '#D32020',
+    }],
+  };
+  const sheets = [RenderRelatorioSemanalXlsx.montarAbaDesvios(desvios)];
+  const bytes = buildXlsx(sheets);
+  const sheetXml = extrairAba(bytes, 1);
+  assert.match(sheetXml, /<v>17<\/v>/, 'Previsto 16.6 precisa arredondar para 17 (inteiro), não vazar fracionário');
+  assert.match(sheetXml, /<v>6<\/v>/, 'Realizado/Tendência 6.33... precisa arredondar para 6 (inteiro), não vazar fracionário');
+  assert.ok(!sheetXml.includes('16.6'), 'não pode vazar o Previsto fracionário cru');
+  assert.ok(!sheetXml.includes('6.333'), 'não pode vazar a Tendência fracionária crua');
+});
+
+// Bundled cleanup B (revisão final 2026-08-16): celulaNumOuVazia ganhou um
+// guard contra NaN/±Infinity -- sem ele, um NaN chegando aqui serializaria
+// como <v>NaN</v>, produzindo um .xlsx que o Excel recusa abrir.
+test('celulaNumOuVazia (via montarAbaDesvios) transforma NaN numa célula vazia, não em <v>NaN</v>', () => {
+  const desvios = {
+    porTipologia: [],
+    porContrato: [{
+      sup: 'SUP-Z', tomador: 'Tomador-A', tipologia: 'ST', contrato: 'SUP-Z',
+      janela: 'Semana anterior', dimensao: 'Volume',
+      previsto: NaN, numerador: 6, desvio: null, status: 'Crítico', cor: '#D32020',
+    }],
+  };
+  const sheets = [RenderRelatorioSemanalXlsx.montarAbaDesvios(desvios)];
+  const bytes = buildXlsx(sheets);
+  const sheetXml = extrairAba(bytes, 1);
+  assert.ok(!sheetXml.includes('NaN'), 'um NaN não pode chegar ao XML -- Excel recusa abrir o arquivo');
+  // A coluna G (Previsto) da linha de dados precisa ser uma célula de texto
+  // vazia (inline string), não uma célula numérica.
+  assert.match(sheetXml, /<c r="G\d+" t="inlineStr"><is><t><\/t><\/is><\/c>/);
+});
+
+test('a aba Resumo mostra as contagens de Crítico/Atenção (por contrato) batendo com resultado.resumo', () => {
   const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesComDesvios());
   assert.strictEqual(resultado.resumo.critico, 3);
   assert.strictEqual(resultado.resumo.atencao, 1);
   const sheetXml = extrairAba(resultado.bytes, 1); // Resumo
-  assert.match(sheetXml, /<t>Desvios Crítico<\/t><\/is><\/c><c r="B6"><v>3<\/v><\/c>/);
-  assert.match(sheetXml, /<t>Desvios Atenção<\/t><\/is><\/c><c r="B7"><v>1<\/v><\/c>/);
+  // Layout: 1 título, 2 mês/ano, 3 semana anterior, 4 semana vigente,
+  // 5 semana que vem, 6 gerado em, 7 gerado por, 8 vazia, 9 crítico, 10 atenção.
+  assert.match(sheetXml, /<t>Desvios Crítico \(por contrato\)<\/t><\/is><\/c><c r="B9"><v>3<\/v><\/c>/);
+  assert.match(sheetXml, /<t>Desvios Atenção \(por contrato\)<\/t><\/is><\/c><c r="B10"><v>1<\/v><\/c>/);
+});
+
+test('a aba Resumo declara o período do relatório: mês/ano, semana anterior e semana que vem', () => {
+  const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesComDesvios());
+  const sheetXml = extrairAba(resultado.bytes, 1); // Resumo
+  assert.match(sheetXml, /<t>Mês\/ano do relatório<\/t>/);
+  assert.match(sheetXml, /<t>Jul\/2026<\/t>/);
+  assert.match(sheetXml, /<t>Semana anterior<\/t>/);
+  assert.match(sheetXml, /<t>Semana que vem<\/t>/);
+  // A fixture usa semanasDoMes(2026, JULHO) com hojeEpoch = semanas[1].inicio,
+  // então indiceAtual=1: a semana anterior é semanas[0] e a que vem, semanas[2]
+  // -- as três datas precisam ser distintas entre si (nenhuma delas "—").
+  assert.doesNotMatch(sheetXml, /<t>Semana anterior<\/t><\/is><\/c><c r="B3"[^>]*><is><t>—<\/t>/);
+  assert.doesNotMatch(sheetXml, /<t>Semana que vem<\/t><\/is><\/c><c r="B5"[^>]*><is><t>—<\/t>/);
+});
+
+test('a aba Resumo quebra Crítico/Atenção por dimensão (Volume/Equipes)', () => {
+  const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesComDesvios());
+  const sheetXml = extrairAba(resultado.bytes, 1); // Resumo
+  assert.match(sheetXml, /<t>  Volume — Crítico<\/t>/);
+  assert.match(sheetXml, /<t>  Volume — Atenção<\/t>/);
+  assert.match(sheetXml, /<t>  Equipes — Crítico<\/t>/);
+  assert.match(sheetXml, /<t>  Equipes — Atenção<\/t>/);
+  // O fixture opcoesComDesvios só popula registros ST (Volume) -- a linha de
+  // Equipes tem que existir e ficar em zero, não sumir do relatório.
+  assert.match(sheetXml, /<t>  Equipes — Crítico<\/t><\/is><\/c><c r="B13"><v>0<\/v><\/c>/);
+  assert.match(sheetXml, /<t>  Equipes — Atenção<\/t><\/is><\/c><c r="B14"><v>0<\/v><\/c>/);
+  assert.match(sheetXml, /<t>  Volume — Crítico<\/t><\/is><\/c><c r="B11"><v>3<\/v><\/c>/);
+  assert.match(sheetXml, /<t>  Volume — Atenção<\/t><\/is><\/c><c r="B12"><v>1<\/v><\/c>/);
 });
 
 test('a aba Equipes arredonda valores fracionários para 2 casas decimais', () => {

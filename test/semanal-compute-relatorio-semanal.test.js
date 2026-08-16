@@ -161,9 +161,32 @@ test('montarDesvios separa por tipo de linha (tipologia vs contrato) e cruza vol
 
 test('resumoDesvios conta só porContrato (nível mais fino), não duplica com porTipologia', () => {
   const desvios = {
-    porTipologia: [{ status: 'Crítico' }, { status: 'Atenção' }, { status: 'Crítico' }],
-    porContrato: [{ status: 'Crítico' }, { status: 'Atenção' }],
+    porTipologia: [{ status: 'Crítico', dimensao: 'Volume' }, { status: 'Atenção', dimensao: 'Volume' }, { status: 'Crítico', dimensao: 'Volume' }],
+    porContrato: [{ status: 'Crítico', dimensao: 'Volume' }, { status: 'Atenção', dimensao: 'Volume' }],
   };
   const resumo = ComputeRelatorioSemanal.resumoDesvios(desvios);
-  assert.deepStrictEqual(resumo, { critico: 1, atencao: 1 });
+  assert.strictEqual(resumo.critico, 1);
+  assert.strictEqual(resumo.atencao, 1);
+});
+
+test('resumoDesvios.porDimensao quebra Crítico/Atenção corretamente entre Volume e Equipes', () => {
+  const desvios = {
+    porTipologia: [],
+    porContrato: [
+      { status: 'Crítico', dimensao: 'Volume' },
+      { status: 'Crítico', dimensao: 'Volume' },
+      { status: 'Atenção', dimensao: 'Volume' },
+      { status: 'Crítico', dimensao: 'Equipes' },
+      { status: 'Atenção', dimensao: 'Equipes' },
+      { status: 'Atenção', dimensao: 'Equipes' },
+      { status: 'Dentro da meta', dimensao: 'Volume' }, // não conta em nenhum lado
+    ],
+  };
+  const resumo = ComputeRelatorioSemanal.resumoDesvios(desvios);
+  assert.strictEqual(resumo.critico, 3, 'total crítico: 2 Volume + 1 Equipes');
+  assert.strictEqual(resumo.atencao, 3, 'total atenção: 1 Volume + 2 Equipes');
+  assert.deepStrictEqual(resumo.porDimensao, {
+    Volume: { critico: 2, atencao: 1 },
+    Equipes: { critico: 1, atencao: 2 },
+  });
 });

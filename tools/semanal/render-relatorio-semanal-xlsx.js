@@ -5,11 +5,14 @@
 // um require não-destruturado sobrevive ao build sem erro, mas quebra em
 // silêncio no navegador com "require is not defined" na primeira vez que a
 // função é chamada.
-const { montarLinhasDimensao, montarDesvios, resumoDesvios } = require('./compute-relatorio-semanal.js');
+const { montarLinhasDimensao, montarDesvios, resumoDesvios, semanaAnterior, semanaSeguinte } = require('./compute-relatorio-semanal.js');
 const { str, num, buildXlsx } = require('./xlsx-writer-browser.js');
 
+// !Number.isFinite cobre tanto NaN quanto ±Infinity: um NaN chegando aqui
+// serializaria como <v>NaN</v>, um .xlsx que o Excel recusa abrir -- melhor
+// uma célula vazia do que um arquivo corrompido.
 function celulaNumOuVazia(v) {
-  return (v === null || v === undefined) ? str('') : num(v);
+  return (v === null || v === undefined || !Number.isFinite(v)) ? str('') : num(v);
 }
 
 function formatarDesvioTexto(d) {
@@ -28,16 +31,37 @@ function formatarDataHora(date) {
     + ' ' + doisDigitos(date.getHours()) + ':' + doisDigitos(date.getMinutes());
 }
 
-function montarAbaResumo(opcoes, resumo) {
+var NOMES_MES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+// A capa precisa dizer QUAL período o relatório descreve -- antes só nomeava
+// a semana vigente, e nem o mês/ano do relatório apareciam em lugar nenhum
+// do arquivo. E as contagens de desvio são explicitamente "(por contrato)",
+// pra não parecerem contradizer o que a aba Desvios mostra logo depois (que
+// exibe TANTO por tipologia QUANTO por contrato -- ver o comentário de
+// resumoDesvios em compute-relatorio-semanal.js sobre por que só porContrato
+// entra na contagem, pra não contar o mesmo desvio físico duas vezes).
+function montarAbaResumo(opcoes, resumo, janelaAnterior, janelaSeguinte) {
   var semanaVigente = opcoes.semanas[opcoes.indiceAtual];
+  function intervalo(alvo) {
+    return alvo && alvo.semana ? formatarDataCurta(alvo.semana.inicio) + ' a ' + formatarDataCurta(alvo.semana.fim) : '—';
+  }
+  var volumeResumo = resumo.porDimensao.Volume || { critico: 0, atencao: 0 };
+  var equipesResumo = resumo.porDimensao.Equipes || { critico: 0, atencao: 0 };
   var rows = [
     [str('Relatório Semanal — Planejamento')],
+    [str('Mês/ano do relatório'), str(NOMES_MES[opcoes.mesIdx] + '/' + opcoes.ano)],
+    [str('Semana anterior'), str(intervalo(janelaAnterior))],
     [str('Semana vigente'), str(semanaVigente ? formatarDataCurta(semanaVigente.inicio) + ' a ' + formatarDataCurta(semanaVigente.fim) : '—')],
+    [str('Semana que vem'), str(intervalo(janelaSeguinte))],
     [str('Gerado em'), str(formatarDataHora(opcoes.geradoEm))],
     [str('Gerado por'), str(opcoes.autor || 'dashboard')],
     [str('')],
-    [str('Desvios Crítico'), num(resumo.critico)],
-    [str('Desvios Atenção'), num(resumo.atencao)],
+    [str('Desvios Crítico (por contrato)'), num(resumo.critico)],
+    [str('Desvios Atenção (por contrato)'), num(resumo.atencao)],
+    [str('  Volume — Crítico'), num(volumeResumo.critico)],
+    [str('  Volume — Atenção'), num(volumeResumo.atencao)],
+    [str('  Equipes — Crítico'), num(equipesResumo.critico)],
+    [str('  Equipes — Atenção'), num(equipesResumo.atencao)],
   ];
   return { name: 'Resumo', rows: rows };
 }
@@ -47,6 +71,14 @@ var CABECALHO_DESVIOS = [
   str('Previsto'), str('Realizado/Tendência'), str('Desvio %'), str('Status'), str('Ação'), str('Responsável'),
 ];
 
+// Duas casas quase-idênticas porque os domínios de entrada são diferentes:
+// esta recebe o RÓTULO de exibição ('Volume'/'Equipes', capitalizado --
+// DIMENSAO_ROTULO_RELATORIO em compute-relatorio-semanal.js), usada pela
+// aba Desvios, que só conhece o desvio já rotulado. casasDaDimensao (mais
+// abaixo) recebe a chave CRUA ('volume'/'equipes'), usada pelas abas
+// Volume/Equipes, que já têm a chave de antemão. Fundir as duas exigiria
+// normalizar um lado ou outro em todo chamador -- não valeu o troco por
+// duas linhas.
 function casasDaDimensaoRotulo(dimensaoRotulo) {
   return dimensaoRotulo === 'Equipes' ? 2 : 0;
 }
@@ -86,6 +118,8 @@ function montarAbaDesvios(desvios) {
   return { name: 'Desvios', rows: rows, conditionalFormats: conditionalFormats };
 }
 
+// Ver o comentário de casasDaDimensaoRotulo acima -- esta recebe a chave
+// CRUA ('volume'/'equipes'), não o rótulo capitalizado.
 function casasDaDimensao(dimensao) { return dimensao === 'equipes' ? 2 : 0; }
 
 function arredondar(v, casas) {
@@ -135,9 +169,11 @@ function gerarRelatorioSemanalXlsx(opcoes) {
   var linhasEquipes = montarLinhasDimensao(opcoes.registros, opcoes.indices, 'equipes', ctx);
   var desvios = montarDesvios({ volume: linhasVolume, equipes: linhasEquipes });
   var resumo = resumoDesvios(desvios);
+  var janelaAnterior = semanaAnterior(ctx.ano, ctx.mesIdx, ctx.semanas, ctx.indiceAtual);
+  var janelaSeguinte = semanaSeguinte(ctx.ano, ctx.mesIdx, ctx.semanas, ctx.indiceAtual);
 
   var sheets = [
-    montarAbaResumo(opcoes, resumo),
+    montarAbaResumo(opcoes, resumo, janelaAnterior, janelaSeguinte),
     montarAbaDesvios(desvios),
     montarAbaDimensao('Volume', linhasVolume, 'volume'),
     montarAbaDimensao('Equipes', linhasEquipes, 'equipes'),

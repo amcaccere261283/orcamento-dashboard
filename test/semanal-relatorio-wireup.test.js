@@ -94,7 +94,90 @@ test('clicar em "Gerar relatório Excel" baixa um .xlsx (via Blob) e o status re
   assert.ok(blobsCriados[0].partes[0].length > 0, 'o .xlsx não pode vir vazio');
   assert.strictEqual(ancoraCriada.cliques, 1, 'o link de download precisa ser clicado uma vez');
   assert.match(ancoraCriada.download, /^relatorio-semanal-\d{4}-\d{2}-\d{2}\.xlsx$/);
-  assert.match(documentoFalso.getElementById('status-relatorio-excel').textContent, /Relatório baixado \(Crítico: \d+ · Atenção: \d+\)/);
+  // URL_HISTORICO_RELATORIO ainda é o placeholder PENDENTE- nesta branch, então
+  // toda geração cai em modo local -- o status precisa dizer isso, não só
+  // parecer um sucesso indistinguível de um envio de verdade à Sheet.
+  assert.match(
+    documentoFalso.getElementById('status-relatorio-excel').textContent,
+    /Relatório baixado \(Crítico: \d+ · Atenção: \d+\) · histórico local \(Apps Script não publicado\)/
+  );
+  assert.strictEqual(botao.disabled, false, 'o botão precisa voltar a habilitado depois de terminar');
+});
+
+test('indiceAtual nunca é -1, mesmo com o mês selecionado fora do mês que contém "hoje" (Fix Crítico da revisão final)', async () => {
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-A', 'ST', 100),
+    registroSintetico('SUP-0002-24', 'Tomador-B', 'ST', 50),
+  ];
+  const geradoEm = new Date('2026-07-15T00:00:00Z');
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // Força o mês SELECIONADO a ficar a 6 meses de distância do mês real de
+  // hoje (a data do relógio da máquina que roda o teste, não `geradoEm`
+  // acima -- montarOpcoesRelatorioSemanal usa hojeEpochDoNavegador(), que lê
+  // Date real) -- garante que "hoje" nunca cai dentro das semanas do mês
+  // selecionado, não importa em que dia o teste rodar. window.__ANO__ vem
+  // fixo de PERIODOS_2026 (2026): se o teste rodar num ano civil diferente
+  // de 2026, o ano sozinho já garante o mesmo descasamento.
+  sandbox.mesSelecionadoIdx = (new Date().getMonth() + 6) % 12;
+
+  const indices = sandbox.indicesFiltrados(
+    sandbox.window.__REGISTROS__,
+    sandbox.filtrosSelecionadosSemanal.tipologia, sandbox.filtrosSelecionadosSemanal.categoria,
+    sandbox.filtrosSelecionadosSemanal.grupo, sandbox.filtrosSelecionadosSemanal.sup, sandbox.filtrosSelecionadosSemanal.origem
+  );
+  const opcoes = sandbox.montarOpcoesRelatorioSemanal(sandbox.window.__REGISTROS__, indices);
+
+  assert.ok(
+    opcoes.indiceAtual >= 0 && opcoes.indiceAtual < opcoes.semanas.length,
+    'indiceAtual nunca pode ser -1, mesmo com o mês selecionado fora do mês corrente (era ' + opcoes.indiceAtual + ')'
+  );
+});
+
+test('um clique duplo (re-entrância) não dispara a geração duas vezes', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-A', 'ST', 100)];
+  const geradoEm = new Date('2026-07-15T00:00:00Z');
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso, blobsCriados } = montarSandbox(html);
+
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  const botao = documentoFalso.getElementById('gerar-relatorio-excel');
+  const primeiro = botao.listeners.click();
+  // Dispara um segundo clique síncrono, antes do primeiro terminar (o botão
+  // já deveria estar `disabled`, e o guard ESTADO_RELATORIO_SEMANAL.gerando
+  // precisa recusar o segundo antes mesmo do disabled ter efeito prático).
+  const segundo = botao.listeners.click();
+  await Promise.all([primeiro, segundo]);
+
+  assert.strictEqual(blobsCriados.length, 1, 'o segundo clique, em voo com o primeiro, não pode gerar um segundo .xlsx');
+});
+
+test('um erro durante a geração aparece no status em vez de deixar "Gerando..." travado', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-A', 'ST', 100)];
+  const geradoEm = new Date('2026-07-15T00:00:00Z');
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  sandbox.RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx = () => { throw new Error('falha proposital de teste'); };
+
+  const botao = documentoFalso.getElementById('gerar-relatorio-excel');
+  await botao.listeners.click();
+
+  assert.match(
+    documentoFalso.getElementById('status-relatorio-excel').textContent,
+    /Erro ao gerar o relatório: falha proposital de teste/
+  );
+  assert.strictEqual(botao.disabled, false, 'o botão precisa reabilitar mesmo depois de um erro');
+  assert.strictEqual(sandbox.ESTADO_RELATORIO_SEMANAL.gerando, false, 'o guard de re-entrância precisa liberar mesmo depois de um erro');
 });
 
 test('a chamada a RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx e a HistoricoRelatorioSheet.criarClienteHistoricoRelatorio estão no código-fonte de gerarRelatorioExcel', () => {
