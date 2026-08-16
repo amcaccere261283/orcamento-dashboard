@@ -320,6 +320,8 @@ function renderControles(estado) {
   }).join('');
   return '<div class="controles-consolidado">'
     + '<label class="controle-consolidado">Semana<select id="consolidado-semana">' + opcoesSemana + '</select></label>'
+    + '<button id="gerar-relatorio-excel" type="button">Gerar relatório Excel</button>'
+    + '<span id="status-relatorio-excel" class="status-atualizacao"></span>'
     + '</div>';
 }
 

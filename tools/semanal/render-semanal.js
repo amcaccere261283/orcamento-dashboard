@@ -22,6 +22,11 @@ const { fonteParaCliente: fonteParaClienteLinhaBase } = require('../comum/linha-
 // implantações > Nova versão); só uma implantação NOVA do zero a trocaria.
 const URL_ALOCACAO = 'https://script.google.com/macros/s/AKfycby3jOFa1eOZ9Rtu7mRq8iZWtZdKdg-7ATqzbU-fBba5eLuV5_U69nAe7-Md_3-l_ciB/exec';
 
+// Web app do Apps Script que guarda o histórico do relatório semanal
+// (tools/semanal/apps-script-historico-relatorio.gs). PENDENTE- até o dono
+// do projeto publicar -- mesmo mecanismo de URL_ALOCACAO acima.
+const URL_HISTORICO_RELATORIO = 'PENDENTE-publicar-o-apps-script-historico-relatorio';
+
 // Página da spec com as duas abas (Semanal / Balanço de massa), agora com a
 // barra de filtros compartilhada (markupFiltros()/scriptFiltros() da casca,
 // ../comum/render-shell.js): origem/categoria/tipologia/grupo/sup + dimensão
@@ -778,6 +783,16 @@ const BUNDLE_ARQUIVOS = [
   // (diasNaSemana) e é consumido por render-aba-semanal.js -- por isso entra
   // ENTRE os dois. A ordem desta lista é o contrato de dependência.
   'compute-semanal.js', 'compute-tendencia-semanal.js', 'render-aba-semanal.js', 'render-aba-alertas.js', 'render-aba-consolidado.js',
+  // Relatório Semanal em Excel (2026-08-16): zip-writer-browser.js e
+  // xlsx-writer-browser.js não consomem nada same-dir (zip depende só de
+  // zip-writer-browser.js, que já entra antes dele). compute-relatorio-
+  // semanal.js consome compute-semanal.js, render-aba-semanal.js,
+  // render-aba-alertas.js e render-aba-consolidado.js -- todos já
+  // registrados acima. render-relatorio-semanal-xlsx.js consome compute-
+  // relatorio-semanal.js e xlsx-writer-browser.js, ambos logo antes dele.
+  // historico-relatorio-sheet.js não consome nada same-dir.
+  'zip-writer-browser.js', 'xlsx-writer-browser.js', 'compute-relatorio-semanal.js',
+  'render-relatorio-semanal-xlsx.js', 'historico-relatorio-sheet.js',
   // Os dois de 2026-08-04. compute-alertas-tendencia.js só tem um
   // require('../comum/calculo-equipes.js'), que o bundler REMOVE
   // (DIAS_PREMISSA_MES chega como global). render-alertas-tendencia.js
@@ -924,6 +939,8 @@ var FiltroAtivos = MODULOS['filtro-ativos.js'];
 var EquipesAlocaveis = MODULOS['equipes-alocaveis.js'];
 var GruposVeiculo = MODULOS['grupos-veiculo.js'];
 var AlocacaoSheet = MODULOS['alocacao-sheet.js'];
+var RenderRelatorioSemanalXlsx = MODULOS['render-relatorio-semanal-xlsx.js'];
+var HistoricoRelatorioSheet = MODULOS['historico-relatorio-sheet.js'];
 var RenderAbaAlocacao = MODULOS['render-aba-alocacao.js'];
 
 var MODO_DEMANDAS = 'mensal';
@@ -1095,6 +1112,7 @@ function fecharTendenciaVigente(dados) {
   // blob (ver URL_ALOCACAO/renderSemanal). clienteAlocacao() (ESTADO_ALOCACAO,
   // acima) lê window.__ALOCACAO_URL__ na primeira vez que precisa dele.
   window.__ALOCACAO_URL__ = dados && dados.alocacaoUrl;
+  window.__HISTORICO_RELATORIO_URL__ = dados && dados.historicoRelatorioUrl;
   return dados && dados.registros ? dados.registros : dados;
 }
 
@@ -1416,6 +1434,120 @@ function clienteAlocacao() {
     });
   }
   return ESTADO_ALOCACAO.cliente;
+}
+
+var ESTADO_RELATORIO_SEMANAL = { cliente: null };
+
+function clienteHistoricoRelatorio() {
+  if (!ESTADO_RELATORIO_SEMANAL.cliente) {
+    ESTADO_RELATORIO_SEMANAL.cliente = HistoricoRelatorioSheet.criarClienteHistoricoRelatorio({
+      url: (window.__HISTORICO_RELATORIO_URL__ || 'PENDENTE-publicar-o-apps-script-historico-relatorio'),
+      fetch: function (u, o) { return fetch(u, o); },
+      armazenamento: window.localStorage,
+    });
+  }
+  return ESTADO_RELATORIO_SEMANAL.cliente;
+}
+
+// O relatório sempre mostra Volume E Equipes juntos (não depende de qual
+// dimensão está marcada na barra compartilhada) -- por isso usa 'volume'
+// fixo pra decidir o recorte de "somente ativos" (mesma coerção que o
+// Consolidado já aplica quando a barra está em Equipes, ver
+// dimensaoDaTabela em render-aba-consolidado.js).
+function montarOpcoesRelatorioSemanal(registros, indices) {
+  var indicesAba = indicesDaAba(indices, 'volume');
+  var semanas = semanasDoMesSelecionado();
+  var hojeEpoch = hojeEpochDoNavegador();
+  return {
+    registros: registros, indices: indicesAba,
+    ano: window.__ANO__, mesIdx: mesSelecionadoIdx, semanas: semanas,
+    indiceAtual: ComputeSemanal.indiceSemanaAtual(semanas, hojeEpoch),
+    demandas: window.__DEMANDAS__, hojeEpoch: hojeEpoch,
+    geradoEm: new Date(), autor: (window.__ALOCACAO_AUTOR__ || 'dashboard'),
+  };
+}
+
+function celulaHistoricoOuVazia(v) { return (v === null || v === undefined) ? '' : v; }
+
+// Uma linha por (SUP x Tipologia) -- os registros ('registro', ver compute-
+// relatorio-semanal.js) de Volume e de Equipes, mais a linha-resumo de
+// fechamento da geração. Granularidade por CONTRATO fica só no .xlsx
+// baixado (ver o spec, "Histórico").
+function montarLoteHistoricoRelatorio(resultado, opcoes) {
+  var semanaVigente = opcoes.semanas[opcoes.indiceAtual] || {};
+  var geradoEmIso = opcoes.geradoEm.toISOString();
+  var linhas = [];
+
+  function linhasDaDimensao(nomeDimensao, linhasHierarquia) {
+    linhasHierarquia.filter(function (l) { return l.tipo === 'registro'; }).forEach(function (l) {
+      linhas.push({
+        geradoEm: geradoEmIso, semanaInicio: semanaVigente.inicio, semanaFim: semanaVigente.fim,
+        sup: l.sup, tipologia: l.tipologia, dimensao: nomeDimensao,
+        previstoSemanaAnterior: celulaHistoricoOuVazia(l.janelas.semanaAnterior.previsto),
+        realizadoSemanaAnterior: celulaHistoricoOuVazia(l.janelas.semanaAnterior.realizado),
+        tendenciaSemanaAnterior: celulaHistoricoOuVazia(l.janelas.semanaAnterior.tendencia),
+        previstoAcumulado: celulaHistoricoOuVazia(l.janelas.acumulado.previsto),
+        realizadoAcumulado: celulaHistoricoOuVazia(l.janelas.acumulado.realizado),
+        tendenciaAcumulado: celulaHistoricoOuVazia(l.janelas.acumulado.tendencia),
+        previstoSemanaQueVem: celulaHistoricoOuVazia(l.janelas.semanaQueVem.previsto),
+        tendenciaSemanaQueVem: celulaHistoricoOuVazia(l.janelas.semanaQueVem.tendencia),
+        autor: opcoes.autor,
+      });
+    });
+  }
+  linhasDaDimensao('volume', resultado.linhasVolume);
+  linhasDaDimensao('equipes', resultado.linhasEquipes);
+
+  linhas.push({
+    geradoEm: geradoEmIso, semanaInicio: semanaVigente.inicio, semanaFim: semanaVigente.fim,
+    sup: '—', tipologia: 'TOTAL GERAL', dimensao: '',
+    qtdCritico: resultado.resumo.critico, qtdAtencao: resultado.resumo.atencao,
+    autor: opcoes.autor,
+  });
+
+  return { linhas: linhas };
+}
+
+function nomeArquivoRelatorio(geradoEm) {
+  var dd = (geradoEm.getDate() < 10 ? '0' : '') + geradoEm.getDate();
+  var mm = (geradoEm.getMonth() + 1 < 10 ? '0' : '') + (geradoEm.getMonth() + 1);
+  return 'relatorio-semanal-' + geradoEm.getFullYear() + '-' + mm + '-' + dd + '.xlsx';
+}
+
+function baixarArquivoXlsx(bytes, nomeArquivo) {
+  var blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function definirStatusRelatorio(texto) {
+  var span = document.getElementById('status-relatorio-excel');
+  if (span) span.textContent = texto;
+}
+
+async function gerarRelatorioExcel() {
+  definirStatusRelatorio('Gerando...');
+  var indices = indicesFiltrados(
+    window.__REGISTROS__,
+    filtrosSelecionadosSemanal.tipologia, filtrosSelecionadosSemanal.categoria,
+    filtrosSelecionadosSemanal.grupo, filtrosSelecionadosSemanal.sup, filtrosSelecionadosSemanal.origem
+  );
+  var opcoes = montarOpcoesRelatorioSemanal(window.__REGISTROS__, indices);
+  var resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoes);
+  baixarArquivoXlsx(resultado.bytes, nomeArquivoRelatorio(opcoes.geradoEm));
+
+  var lote = montarLoteHistoricoRelatorio(resultado, opcoes);
+  var envio = await clienteHistoricoRelatorio().gravar(lote);
+  definirStatusRelatorio(
+    'Relatório baixado (Crítico: ' + resultado.resumo.critico + ' · Atenção: ' + resultado.resumo.atencao + ')'
+    + (envio.ok ? '' : ' -- histórico será reenviado depois (sem rede)')
+  );
 }
 
 function chaveSemanaAtual() {
@@ -2137,6 +2269,8 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
       montarAbaConsolidado(registros, indices, dimensoes);
     });
   }
+  var botaoRelatorio = document.getElementById('gerar-relatorio-excel');
+  if (botaoRelatorio) botaoRelatorio.addEventListener('click', gerarRelatorioExcel);
 }
 
 // Redesenha cabeçalho + corpo da aba Alertas inteiros a cada mudança (de
@@ -2845,7 +2979,7 @@ function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoE
     throw new Error('renderSemanal requer "demandas.porRegistroEventos" (de tools/semanal/compute-demandas.js) -- sem isso Realizado/Tendência/Demandas Pendentes desapareceriam da Tabela Semanal sem nenhum erro no build.');
   }
 
-  const dadosJson = JSON.stringify({ registros, baseline, demandas, alocacaoUrl: URL_ALOCACAO });
+  const dadosJson = JSON.stringify({ registros, baseline, demandas, alocacaoUrl: URL_ALOCACAO, historicoRelatorioUrl: URL_HISTORICO_RELATORIO });
   const dadosCifrados = cifrarComSenha(dadosJson, senha);
   const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');
 

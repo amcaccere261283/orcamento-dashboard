@@ -490,3 +490,9 @@ test('a dimensao recebida ainda troca as colunas de premissa', () => {
   assert.ok(financeiro.indexOf('Ticket médio') !== -1);
   assert.strictEqual(financeiro.indexOf('Equipes previstas'), -1);
 });
+
+test('renderControles inclui o botão "Gerar relatório Excel" e o span de status, ao lado do seletor de semana', () => {
+  const html = renderControles({ semanas: SEMANAS, semanaIdx: 0 });
+  assert.match(html, /<button id="gerar-relatorio-excel" type="button">Gerar relatório Excel<\/button>/);
+  assert.match(html, /<span id="status-relatorio-excel" class="status-atualizacao"><\/span>/);
+});

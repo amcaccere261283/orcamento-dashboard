@@ -1,9 +1,12 @@
 'use strict';
-const ComputeRelatorioSemanal = require('./compute-relatorio-semanal.js');
-const XlsxWriterBrowser = require('./xlsx-writer-browser.js');
-
-var str = XlsxWriterBrowser.str;
-var num = XlsxWriterBrowser.num;
+// Requires DESTRUTURADOS de propósito (não `const X = require(...)`): é o
+// padrão que tools/comum/browser-bundle.js sabe reescrever
+// (transformaModulo) para MODULOS['arquivo.js'] no bundle do navegador --
+// um require não-destruturado sobrevive ao build sem erro, mas quebra em
+// silêncio no navegador com "require is not defined" na primeira vez que a
+// função é chamada.
+const { montarLinhasDimensao, montarDesvios, resumoDesvios } = require('./compute-relatorio-semanal.js');
+const { str, num, buildXlsx } = require('./xlsx-writer-browser.js');
 
 function celulaNumOuVazia(v) {
   return (v === null || v === undefined) ? str('') : num(v);
@@ -128,10 +131,10 @@ function gerarRelatorioSemanalXlsx(opcoes) {
     demandas: opcoes.demandas, hojeEpoch: opcoes.hojeEpoch, mesAtualReal: opcoes.mesAtualReal,
     temSemanasReais: !!(opcoes.demandas && opcoes.demandas.porRegistroEventos),
   };
-  var linhasVolume = ComputeRelatorioSemanal.montarLinhasDimensao(opcoes.registros, opcoes.indices, 'volume', ctx);
-  var linhasEquipes = ComputeRelatorioSemanal.montarLinhasDimensao(opcoes.registros, opcoes.indices, 'equipes', ctx);
-  var desvios = ComputeRelatorioSemanal.montarDesvios({ volume: linhasVolume, equipes: linhasEquipes });
-  var resumo = ComputeRelatorioSemanal.resumoDesvios(desvios);
+  var linhasVolume = montarLinhasDimensao(opcoes.registros, opcoes.indices, 'volume', ctx);
+  var linhasEquipes = montarLinhasDimensao(opcoes.registros, opcoes.indices, 'equipes', ctx);
+  var desvios = montarDesvios({ volume: linhasVolume, equipes: linhasEquipes });
+  var resumo = resumoDesvios(desvios);
 
   var sheets = [
     montarAbaResumo(opcoes, resumo),
@@ -140,7 +143,7 @@ function gerarRelatorioSemanalXlsx(opcoes) {
     montarAbaDimensao('Equipes', linhasEquipes, 'equipes'),
   ];
   return {
-    bytes: XlsxWriterBrowser.buildXlsx(sheets),
+    bytes: buildXlsx(sheets),
     resumo: resumo, desvios: desvios, linhasVolume: linhasVolume, linhasEquipes: linhasEquipes,
   };
 }
