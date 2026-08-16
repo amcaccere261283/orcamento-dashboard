@@ -1,0 +1,111 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert');
+const ComputeRelatorioSemanal = require('../tools/semanal/compute-relatorio-semanal.js');
+const { semanasDoMes, diaEpoch, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
+const RenderAbaSemanal = require('../tools/semanal/render-aba-semanal.js');
+const RenderAbaAlertas = require('../tools/semanal/render-aba-alertas.js');
+
+const ANO = 2026;
+
+function registro({ sup, tipologia = 'ST', grupo = 'Grupo-A', tomador = 'Tomador-A', mesIdx, volume = 0, equipesTotal = 2 }) {
+  const zeros = () => new Array(12).fill(0);
+  const mk = (v) => { const a = zeros(); a[mesIdx] = v; return a; };
+  const mkEquipes = (v) => { const a = zeros(); a[mesIdx] = v; return a; };
+  return {
+    sup, tipologia, grupo, tomador, origem: 'CONTRATO VIGENTE',
+    previsto: { volume: mk(volume), financeiro: zeros(), equipes: mkEquipes(2), equipesResumo: { prod: 8 }, volumeResumo: { ticket: 1 } },
+    realizado: { volume: zeros(), financeiro: zeros(), equipes: zeros(), equipesResumo: {}, volumeResumo: {} },
+    total: { volume: zeros(), financeiro: zeros(), equipes: mkEquipes(equipesTotal), equipesResumo: {}, volumeResumo: {} },
+  };
+}
+
+function demandasCom(eventosPorChave) {
+  const porRegistroEventos = {};
+  Object.keys(eventosPorChave).forEach((chave) => {
+    porRegistroEventos[chave] = { chegada: [], saidaEstoque: [], sondagemRealizada: eventosPorChave[chave] };
+  });
+  return { porRegistroEventos };
+}
+
+test('semanaAnterior da 1ª semana de agosto devolve a última semana de julho, no mesmo ano', () => {
+  const AGOSTO = 7;
+  const semanasAgo = semanasDoMes(ANO, AGOSTO);
+  const alvo = ComputeRelatorioSemanal.semanaAnterior(ANO, AGOSTO, semanasAgo, 0);
+  const semanasJul = semanasDoMes(ANO, 6);
+  assert.strictEqual(alvo.mesIdx, 6);
+  assert.deepStrictEqual(alvo.semana, semanasJul[semanasJul.length - 1]);
+  assert.strictEqual(alvo.semana.fim, diaEpoch(new Date(Date.UTC(ANO, AGOSTO, 1))) - 1, 'a última semana de julho termina no dia anterior a 01/08');
+});
+
+test('semanaSeguinte da última semana de dezembro devolve a 1ª semana de janeiro do ano SEGUINTE', () => {
+  const DEZEMBRO = 11;
+  const semanasDez = semanasDoMes(ANO, DEZEMBRO);
+  const alvo = ComputeRelatorioSemanal.semanaSeguinte(ANO, DEZEMBRO, semanasDez, semanasDez.length - 1);
+  assert.strictEqual(alvo.mesIdx, 12, 'mesIdx sai de [0,11] -- Previsto/Tendência ficam sem dado, tratado por calcularSeriesSemanaisDimensao');
+  assert.strictEqual(alvo.semana.inicio, diaEpoch(new Date(Date.UTC(ANO + 1, 0, 1))), 'a semana seguinte a dezembro começa em 1º de janeiro do ano seguinte');
+});
+
+test('serieDaSemana: Previsto/Tendência ficam sem dado fora dos 12 meses carregados, mas Realizado (por data) continua correto', () => {
+  const AGOSTO = 7;
+  const semanasAgo = semanasDoMes(ANO, AGOSTO);
+  const reg = registro({ sup: 'SUP-A', mesIdx: AGOSTO, volume: 100 });
+  const alvo = ComputeRelatorioSemanal.semanaAnterior(ANO, AGOSTO, semanasAgo, 0); // cai em julho, mesIdx 6 -- ainda dentro do ano, sem furo nele
+  // Força o alvo para FORA do ano (dezembro anterior), simulando a 1ª semana de janeiro:
+  const semanasJan = semanasDoMes(ANO, 0);
+  const alvoForaDoAno = ComputeRelatorioSemanal.semanaAnterior(ANO, 0, semanasJan, 0);
+  assert.strictEqual(alvoForaDoAno.mesIdx, -1);
+
+  const demandas = demandasCom({ 'SUP-A||ST': [alvoForaDoAno.semana.inicio] }); // 1 furo realizado dentro da semana-alvo
+  const ctx = { hojeEpoch: alvoForaDoAno.semana.fim + 10, demandas, temSemanasReais: true };
+  const serie = ComputeRelatorioSemanal.serieDaSemana([reg], [0], 'volume', alvoForaDoAno, ctx);
+
+  assert.strictEqual(serie.previsto, null, 'previsto[-1] é undefined -- calcularSeriesSemanaisDimensao devolve null, não 0');
+  assert.strictEqual(serie.realizado, 1, 'o furo é contado por DATA, independente do índice de mês estar fora de [0,11]');
+});
+
+test('serieAcumulada usa exatamente a mesma janela "Acumulado até a semana atual" que a aba Alertas expõe', () => {
+  const JULHO = 6;
+  const semanas = semanasDoMes(ANO, JULHO);
+  const reg = registro({ sup: 'SUP-A', mesIdx: JULHO, volume: 70 });
+  const diaComFuro = semanas[0].inicio;
+  const demandas = demandasCom({ 'SUP-A||ST': [diaComFuro] });
+  const hojeEpoch = semanas[1].inicio; // início da 2ª semana -- a 1ª já fechou
+  const indiceAtual = indiceSemanaAtual(semanas, hojeEpoch);
+  const ctx = {
+    ano: ANO, mesIdx: JULHO, semanas: semanas, indiceAtual: indiceAtual,
+    demandas: demandas, hojeEpoch: hojeEpoch, temSemanasReais: true,
+  };
+
+  const obtido = ComputeRelatorioSemanal.serieAcumulada([reg], [0], 'volume', ctx);
+
+  const elapsadas = RenderAbaAlertas.semanasElapsadas(semanas, hojeEpoch);
+  const series = RenderAbaSemanal.calcularSeriesSemanaisDimensao([reg], [0], 'volume', JULHO, semanas, semanas.length, true, indiceAtual, demandas, hojeEpoch);
+  const janela = RenderAbaAlertas.janelaDoPeriodo(RenderAbaAlertas.PERIODO_ACUMULADO, semanas.length, elapsadas);
+  const esperadoRealizado = RenderAbaAlertas.agregarFatias(series.semanasRealizado, 'volume', janela);
+
+  assert.strictEqual(obtido.realizado, esperadoRealizado);
+  assert.strictEqual(obtido.realizado, 1, 'o furo do dia 1 da S1 conta no acumulado, já que a S1 encerrou');
+});
+
+test('montarLinhasDimensao produz TOTAL GERAL, uma linha por tipologia, e por SUP um registro + TOTAL <SUP>', () => {
+  const JULHO = 6;
+  const semanas = semanasDoMes(ANO, JULHO);
+  const registros = [
+    registro({ sup: 'SUP-A', tipologia: 'ST', mesIdx: JULHO, volume: 10 }),
+    registro({ sup: 'SUP-B', tipologia: 'SP', mesIdx: JULHO, volume: 20 }),
+  ];
+  const hojeEpoch = semanas[0].inicio;
+  const ctx = {
+    ano: ANO, mesIdx: JULHO, semanas: semanas, indiceAtual: indiceSemanaAtual(semanas, hojeEpoch),
+    demandas: demandasCom({}), hojeEpoch: hojeEpoch, temSemanasReais: true,
+  };
+  const linhas = ComputeRelatorioSemanal.montarLinhasDimensao(registros, [0, 1], 'volume', ctx);
+  const tipos = linhas.map((l) => l.tipo);
+  assert.deepStrictEqual(tipos, [
+    'total-geral', 'total-geral-tipologia', 'total-geral-tipologia',
+    'registro', 'total-sup', 'registro', 'total-sup',
+  ]);
+  const linhaRegistroA = linhas.find((l) => l.tipo === 'registro' && l.sup === 'SUP-A');
+  assert.strictEqual(linhaRegistroA.contrato, 'SUP-A', 'o contrato É o SUP -- cada registro é (SUP, tipologia)');
+});
