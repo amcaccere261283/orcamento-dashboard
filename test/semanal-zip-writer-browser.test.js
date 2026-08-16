@@ -35,11 +35,11 @@ test('createZip produz um .zip de verdade, extraível por unzip, com os bytes or
 
 test('createZip com zero entradas produz um .zip vazio válido (só o EOCD)', () => {
   const bytes = createZip([]);
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zip-writer-browser-test-'));
-  const zipPath = path.join(tmpDir, 'vazio.zip');
-  fs.writeFileSync(zipPath, Buffer.from(bytes));
-  const outDir = path.join(tmpDir, 'out');
-  fs.mkdirSync(outDir);
-  execFileSync('unzip', ['-q', zipPath, '-d', outDir]);
-  assert.deepStrictEqual(fs.readdirSync(outDir), []);
+  assert.strictEqual(bytes.length, 22);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  assert.strictEqual(view.getUint32(0, true), 0x06054b50); // assinatura EOCD
+  assert.strictEqual(view.getUint16(8, true), 0);  // entradas neste disco
+  assert.strictEqual(view.getUint16(10, true), 0); // entradas totais
+  assert.strictEqual(view.getUint32(12, true), 0); // tamanho do diretório central
+  assert.strictEqual(view.getUint32(16, true), 0); // offset do diretório central
 });
