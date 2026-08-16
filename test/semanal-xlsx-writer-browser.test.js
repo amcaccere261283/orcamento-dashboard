@@ -111,6 +111,11 @@ test('sheet.rowHeights define a altura de uma linha específica', () => {
   assert.match(sheetXml, /<row r="2">/);
 });
 
+test('um nome de estilo desconhecido falha alto, em vez de emitir s="undefined" e corromper o .xlsx', () => {
+  const sheets = [{ name: 'S', rows: [[str('X', 'estilo-que-nao-existe')]] }];
+  assert.throws(() => buildXlsx(sheets), /Estilo desconhecido: estilo-que-nao-existe/);
+});
+
 test('sem colWidths/merges/freezeRows/rowHeights, a saída não ganha nenhuma das tags novas', () => {
   const sheets = [{ name: 'S', rows: [[str('A')]] }];
   const outDir = buildAndExtract(sheets);

@@ -281,6 +281,17 @@ test('a aba Equipes arredonda valores fracionários para 2 casas decimais', () =
   assert.ok(!sheetXml.includes('2.6666666666666665'), 'não pode vazar o valor fracionário cru sem arredondar');
 });
 
+test('as 4 abas têm o título no mesmo formato "Relatório Semanal — Planejamento · <Aba> · <Mês/Ano>"', () => {
+  const registros = [registro({ sup: 'SUP-A', volume: 10 })];
+  const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesBase(registros, [0]));
+  const abas = ['Resumo', 'Desvios', 'Volume', 'Equipes'];
+  abas.forEach((nome, i) => {
+    const sheetXml = extrairAba(resultado.bytes, i + 1);
+    const esperado = new RegExp('Relatório Semanal — Planejamento · ' + nome + ' · Jul/2026');
+    assert.match(sheetXml, esperado, nome + ' deveria mostrar o mês/ano no título');
+  });
+});
+
 test('a aba Resumo tem título mesclado A1:B1 e larguras de coluna, sem mudar as 14 linhas de conteúdo', () => {
   const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesComDesvios());
   const sheetXml = extrairAba(resultado.bytes, 1); // Resumo

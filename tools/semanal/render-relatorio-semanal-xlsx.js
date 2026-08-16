@@ -15,6 +15,16 @@ function celulaNumOuVazia(v, estiloNumero) {
   return (v === null || v === undefined || !Number.isFinite(v)) ? str('') : num(v, estiloNumero);
 }
 
+// Toda linha de título é mesclada até a última coluna da tabela -- cada
+// célula do intervalo precisa do estilo 'titulo' aplicado individualmente
+// (o merge em si não propaga fundo/borda das células não estilizadas em
+// leitores OOXML estritos), não só a célula visível com o texto.
+function linhaTitulo(texto, totalColunas) {
+  var celulas = [str(texto, 'titulo')];
+  for (var i = 1; i < totalColunas; i++) celulas.push(str('', 'titulo'));
+  return celulas;
+}
+
 function formatarDesvioTexto(d) {
   return (d === null || d === undefined) ? '' : Math.round(d * 100) + '%';
 }
@@ -50,7 +60,7 @@ function montarAbaResumo(opcoes, resumo, janelaAnterior, janelaSeguinte) {
   var volumeResumo = resumo.porDimensao.Volume || { critico: 0, atencao: 0 };
   var equipesResumo = resumo.porDimensao.Equipes || { critico: 0, atencao: 0 };
   var rows = [
-    [str('Relatório Semanal — Planejamento · Resumo', 'titulo'), str('', 'titulo')],
+    linhaTitulo('Relatório Semanal — Planejamento · Resumo · ' + NOMES_MES[opcoes.mesIdx] + '/' + opcoes.ano, 2),
     [str('Mês/ano do relatório', 'rotulo'), str(NOMES_MES[opcoes.mesIdx] + '/' + opcoes.ano)],
     [str('Semana anterior', 'rotulo'), str(intervalo(janelaAnterior))],
     [str('Semana vigente', 'rotulo'), str(semanaVigente ? formatarDataCurta(semanaVigente.inicio) + ' a ' + formatarDataCurta(semanaVigente.fim) : '—')],
@@ -106,13 +116,16 @@ var COLS_DESVIOS = [12, 26, 16, 14, 28, 12, 12, 18, 10, 12, 22, 18];
 function montarAbaDesvios(desvios, subtitulo) {
   var sufixo = subtitulo ? ' · ' + subtitulo : '';
   var rows = [
-    [str('Relatório Semanal — Planejamento · Desvios' + sufixo, 'titulo')],
+    linhaTitulo('Relatório Semanal — Planejamento · Desvios' + sufixo, CABECALHO_DESVIOS.length),
   ];
   var linhaInicioTipologia = 0, linhaFimTipologia = 0;
   var linhaInicioContrato = 0, linhaFimContrato = 0;
   var colunaStatus = 'J'; // 10ª coluna de CABECALHO_DESVIOS (A..L)
   var conditionalFormats = [];
 
+  // Seção inteira (rótulo + cabeçalho, não só as linhas de dado) fica de
+  // fora quando não há nenhum desvio nela -- do contrário o relatório
+  // mostraria um cabeçalho vazio pra uma categoria sem nada a reportar.
   if (desvios.porTipologia.length > 0) {
     rows.push([str('Por tipologia', 'rotulo')]);
     rows.push(CABECALHO_DESVIOS.slice());
@@ -186,7 +199,7 @@ var COLS_DIMENSAO = [12, 26, 16, 14, 15, 15, 15, 15, 15, 15, 15, 15];
 function montarAbaDimensao(nomeAba, linhas, dimensao, subtitulo) {
   var sufixo = subtitulo ? ' · ' + subtitulo : '';
   var rows = [
-    [str('Relatório Semanal — Planejamento · ' + nomeAba + sufixo, 'titulo')],
+    linhaTitulo('Relatório Semanal — Planejamento · ' + nomeAba + sufixo, CABECALHO_DIMENSAO.length),
     CABECALHO_DIMENSAO.slice(),
   ];
   var indiceZebra = 0;

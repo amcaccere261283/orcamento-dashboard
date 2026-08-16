@@ -44,7 +44,11 @@ function escapeXml(s) {
 
 function cellXml(cell, ref) {
   if (cell == null) return '';
-  var s = cell.estilo ? ' s="' + ESTILO_INDICE[cell.estilo] + '"' : '';
+  var s = '';
+  if (cell.estilo) {
+    if (!(cell.estilo in ESTILO_INDICE)) throw new Error('Estilo desconhecido: ' + cell.estilo);
+    s = ' s="' + ESTILO_INDICE[cell.estilo] + '"';
+  }
   if (cell.type === 'str') return '<c r="' + ref + '"' + s + ' t="inlineStr"><is><t>' + escapeXml(cell.value) + '</t></is></c>';
   if (cell.type === 'num') return '<c r="' + ref + '"' + s + '><v>' + cell.value + '</v></c>';
   if (cell.type === 'formula') return '<c r="' + ref + '"' + s + '><f>' + escapeXml(cell.formula) + '</f></c>';
