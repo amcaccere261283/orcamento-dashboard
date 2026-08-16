@@ -155,32 +155,51 @@ function arredondar(v, casas) {
 }
 
 var CABECALHO_DIMENSAO = [
-  str('SUP'), str('Tomador'), str('Tipologia'), str('Contrato'),
-  str('Semana anterior — Previsto'), str('Semana anterior — Realizado'), str('Semana anterior — Tendência'),
-  str('Acumulado do mês — Previsto'), str('Acumulado do mês — Realizado'), str('Acumulado do mês — Tendência'),
-  str('Semana que vem — Previsto'), str('Semana que vem — Tendência'),
+  str('SUP', 'cabecalhoTabela'), str('Tomador', 'cabecalhoTabela'), str('Tipologia', 'cabecalhoTabela'), str('Contrato', 'cabecalhoTabela'),
+  str('Semana anterior — Previsto', 'cabecalhoTabela'), str('Semana anterior — Realizado', 'cabecalhoTabela'), str('Semana anterior — Tendência', 'cabecalhoTabela'),
+  str('Acumulado do mês — Previsto', 'cabecalhoTabela'), str('Acumulado do mês — Realizado', 'cabecalhoTabela'), str('Acumulado do mês — Tendência', 'cabecalhoTabela'),
+  str('Semana que vem — Previsto', 'cabecalhoTabela'), str('Semana que vem — Tendência', 'cabecalhoTabela'),
 ];
 
-function linhaDimensao(linha, dimensao) {
+function linhaDimensao(linha, dimensao, total, zebra) {
   var casas = casasDaDimensao(dimensao);
   var j = linha.janelas;
+  var estiloTexto = total ? 'textoTotal' : (zebra ? 'textoZebra' : 'texto');
+  var estiloNumero = casas === 2
+    ? (total ? 'numeroDuasCasasTotal' : (zebra ? 'numeroDuasCasasZebra' : 'numeroDuasCasas'))
+    : (total ? 'numeroMilharTotal' : (zebra ? 'numeroMilharZebra' : 'numeroMilhar'));
   return [
-    str(linha.sup), str(linha.tomador), str(linha.tipologia), str(linha.contrato || ''),
-    celulaNumOuVazia(arredondar(j.semanaAnterior.previsto, casas)),
-    celulaNumOuVazia(arredondar(j.semanaAnterior.realizado, casas)),
-    celulaNumOuVazia(arredondar(j.semanaAnterior.tendencia, casas)),
-    celulaNumOuVazia(arredondar(j.acumulado.previsto, casas)),
-    celulaNumOuVazia(arredondar(j.acumulado.realizado, casas)),
-    celulaNumOuVazia(arredondar(j.acumulado.tendencia, casas)),
-    celulaNumOuVazia(arredondar(j.semanaQueVem.previsto, casas)),
-    celulaNumOuVazia(arredondar(j.semanaQueVem.tendencia, casas)),
+    str(linha.sup, estiloTexto), str(linha.tomador, estiloTexto), str(linha.tipologia, estiloTexto), str(linha.contrato || '', estiloTexto),
+    celulaNumOuVazia(arredondar(j.semanaAnterior.previsto, casas), estiloNumero),
+    celulaNumOuVazia(arredondar(j.semanaAnterior.realizado, casas), estiloNumero),
+    celulaNumOuVazia(arredondar(j.semanaAnterior.tendencia, casas), estiloNumero),
+    celulaNumOuVazia(arredondar(j.acumulado.previsto, casas), estiloNumero),
+    celulaNumOuVazia(arredondar(j.acumulado.realizado, casas), estiloNumero),
+    celulaNumOuVazia(arredondar(j.acumulado.tendencia, casas), estiloNumero),
+    celulaNumOuVazia(arredondar(j.semanaQueVem.previsto, casas), estiloNumero),
+    celulaNumOuVazia(arredondar(j.semanaQueVem.tendencia, casas), estiloNumero),
   ];
 }
 
-function montarAbaDimensao(nomeAba, linhas, dimensao) {
-  var rows = [CABECALHO_DIMENSAO.slice()];
-  linhas.forEach(function (linha) { rows.push(linhaDimensao(linha, dimensao)); });
-  return { name: nomeAba, rows: rows };
+var COLS_DIMENSAO = [12, 26, 16, 14, 15, 15, 15, 15, 15, 15, 15, 15];
+
+function montarAbaDimensao(nomeAba, linhas, dimensao, subtitulo) {
+  var sufixo = subtitulo ? ' · ' + subtitulo : '';
+  var rows = [
+    [str('Relatório Semanal — Planejamento · ' + nomeAba + sufixo, 'titulo')],
+    CABECALHO_DIMENSAO.slice(),
+  ];
+  var indiceZebra = 0;
+  linhas.forEach(function (linha) {
+    var total = linha.tipo !== 'registro';
+    var zebra = false;
+    if (!total) { zebra = indiceZebra % 2 === 1; indiceZebra++; }
+    rows.push(linhaDimensao(linha, dimensao, total, zebra));
+  });
+  return {
+    name: nomeAba, rows: rows,
+    colWidths: COLS_DIMENSAO, freezeRows: 2, rowHeights: { 1: 28, 2: 30 }, merges: ['A1:L1'],
+  };
 }
 
 // opcoes: { registros, indices, ano, mesIdx, semanas, indiceAtual, demandas,

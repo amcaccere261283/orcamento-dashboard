@@ -99,9 +99,26 @@ test('a aba Volume tem o cabeçalho das 3 janelas e uma linha por registro/tipol
   assert.match(sheetXml, /Semana anterior — Previsto/);
   assert.match(sheetXml, /Acumulado do mês — Realizado/);
   assert.match(sheetXml, /Semana que vem — Tendência/);
-  // 1 cabeçalho + TOTAL GERAL + 2 tipologias + (registro+TOTAL SUP) x2 = 8 linhas
+  // 1 título + 1 cabeçalho + TOTAL GERAL + 2 tipologias + (registro+TOTAL SUP) x2 = 9 linhas
   const linhas = [...sheetXml.matchAll(/<row r="\d+">/g)];
-  assert.strictEqual(linhas.length, 8);
+  assert.strictEqual(linhas.length, 9);
+});
+
+test('a aba Volume tem título mesclado e cabeçalho estilizado', () => {
+  const registros = [registro({ sup: 'SUP-A', volume: 10 })];
+  const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesBase(registros, [0]));
+  const sheetXml = extrairAba(resultado.bytes, 3); // Volume
+  assert.match(sheetXml, /<mergeCells count="1"><mergeCell ref="A1:L1"\/><\/mergeCells>/);
+  assert.match(sheetXml, /<c r="A1" s="1" t="inlineStr"><is><t>Relatório Semanal — Planejamento · Volume · Jul\/2026<\/t>/);
+  assert.match(sheetXml, /<c r="A2" s="2" t="inlineStr"><is><t>SUP<\/t>/);
+});
+
+test('a aba Volume estiliza a linha TOTAL GERAL diferente de uma linha de registro', () => {
+  const registros = [registro({ sup: 'SUP-A', volume: 10 })];
+  const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesBase(registros, [0]));
+  const sheetXml = extrairAba(resultado.bytes, 3); // Volume
+  // linha 3 = TOTAL GERAL (título=1, cabeçalho=2, TOTAL GERAL=3) -- estilo textoTotal (s="6")
+  assert.match(sheetXml, /<row r="3"><c r="A3" s="6" t="inlineStr"><is><t>—<\/t><\/is><\/c>/);
 });
 
 test('gerarRelatorioSemanalXlsx devolve resumo/desvios/linhas junto com bytes, prontos pro histórico', () => {
