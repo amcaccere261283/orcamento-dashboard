@@ -33,6 +33,8 @@ function formatarDataHora(date) {
 
 var NOMES_MES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
+var COLS_RESUMO = [32, 24];
+
 // A capa precisa dizer QUAL período o relatório descreve -- antes só nomeava
 // a semana vigente, e nem o mês/ano do relatório apareciam em lugar nenhum
 // do arquivo. E as contagens de desvio são explicitamente "(por contrato)",
@@ -48,22 +50,22 @@ function montarAbaResumo(opcoes, resumo, janelaAnterior, janelaSeguinte) {
   var volumeResumo = resumo.porDimensao.Volume || { critico: 0, atencao: 0 };
   var equipesResumo = resumo.porDimensao.Equipes || { critico: 0, atencao: 0 };
   var rows = [
-    [str('Relatório Semanal — Planejamento')],
-    [str('Mês/ano do relatório'), str(NOMES_MES[opcoes.mesIdx] + '/' + opcoes.ano)],
-    [str('Semana anterior'), str(intervalo(janelaAnterior))],
-    [str('Semana vigente'), str(semanaVigente ? formatarDataCurta(semanaVigente.inicio) + ' a ' + formatarDataCurta(semanaVigente.fim) : '—')],
-    [str('Semana que vem'), str(intervalo(janelaSeguinte))],
-    [str('Gerado em'), str(formatarDataHora(opcoes.geradoEm))],
-    [str('Gerado por'), str(opcoes.autor || 'dashboard')],
+    [str('Relatório Semanal — Planejamento · Resumo', 'titulo'), str('', 'titulo')],
+    [str('Mês/ano do relatório', 'rotulo'), str(NOMES_MES[opcoes.mesIdx] + '/' + opcoes.ano)],
+    [str('Semana anterior', 'rotulo'), str(intervalo(janelaAnterior))],
+    [str('Semana vigente', 'rotulo'), str(semanaVigente ? formatarDataCurta(semanaVigente.inicio) + ' a ' + formatarDataCurta(semanaVigente.fim) : '—')],
+    [str('Semana que vem', 'rotulo'), str(intervalo(janelaSeguinte))],
+    [str('Gerado em', 'rotulo'), str(formatarDataHora(opcoes.geradoEm))],
+    [str('Gerado por', 'rotulo'), str(opcoes.autor || 'dashboard')],
     [str('')],
-    [str('Desvios Crítico (por contrato)'), num(resumo.critico)],
-    [str('Desvios Atenção (por contrato)'), num(resumo.atencao)],
-    [str('  Volume — Crítico'), num(volumeResumo.critico)],
-    [str('  Volume — Atenção'), num(volumeResumo.atencao)],
-    [str('  Equipes — Crítico'), num(equipesResumo.critico)],
-    [str('  Equipes — Atenção'), num(equipesResumo.atencao)],
+    [str('Desvios Crítico (por contrato)', 'rotulo'), num(resumo.critico)],
+    [str('Desvios Atenção (por contrato)', 'rotulo'), num(resumo.atencao)],
+    [str('  Volume — Crítico', 'rotulo'), num(volumeResumo.critico)],
+    [str('  Volume — Atenção', 'rotulo'), num(volumeResumo.atencao)],
+    [str('  Equipes — Crítico', 'rotulo'), num(equipesResumo.critico)],
+    [str('  Equipes — Atenção', 'rotulo'), num(equipesResumo.atencao)],
   ];
-  return { name: 'Resumo', rows: rows };
+  return { name: 'Resumo', rows: rows, colWidths: COLS_RESUMO, rowHeights: { 1: 28 }, merges: ['A1:B1'] };
 }
 
 var CABECALHO_DESVIOS = [

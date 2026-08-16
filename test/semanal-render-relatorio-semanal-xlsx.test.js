@@ -234,3 +234,14 @@ test('a aba Equipes arredonda valores fracionários para 2 casas decimais', () =
   assert.match(sheetXml, /<v>2\.67<\/v>/);
   assert.ok(!sheetXml.includes('2.6666666666666665'), 'não pode vazar o valor fracionário cru sem arredondar');
 });
+
+test('a aba Resumo tem título mesclado A1:B1 e larguras de coluna, sem mudar as 14 linhas de conteúdo', () => {
+  const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesComDesvios());
+  const sheetXml = extrairAba(resultado.bytes, 1); // Resumo
+  assert.match(sheetXml, /<mergeCells count="1"><mergeCell ref="A1:B1"\/><\/mergeCells>/);
+  assert.match(sheetXml, /<c r="A1" s="1" t="inlineStr">/);
+  assert.match(sheetXml, /<cols><col min="1" max="1" width="32" customWidth="1"\/><col min="2" max="2" width="24" customWidth="1"\/><\/cols>/);
+  // as 14 linhas de sempre continuam nas mesmas posições -- B9/B13 inalterados
+  assert.match(sheetXml, /<t>Desvios Crítico \(por contrato\)<\/t><\/is><\/c><c r="B9"><v>3<\/v><\/c>/);
+  assert.match(sheetXml, /<t>  Equipes — Crítico<\/t><\/is><\/c><c r="B13"><v>0<\/v><\/c>/);
+});
