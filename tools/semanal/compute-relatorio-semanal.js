@@ -1,7 +1,7 @@
 'use strict';
 const { semanasDoMes, indiceSemanaAtual } = require('./compute-semanal.js');
 const { calcularSeriesSemanaisDimensao } = require('./render-aba-semanal.js');
-const { agregarFatias, janelaDoPeriodo, semanasElapsadas, PERIODO_ACUMULADO } = require('./render-aba-alertas.js');
+const { agregarFatias, janelaDoPeriodo, semanasElapsadas, classificarSemaforo, PERIODO_ACUMULADO } = require('./render-aba-alertas.js');
 const { blocosPorSup, tipologiasPresentes } = require('./render-aba-consolidado.js');
 
 // Módulo dual Node+navegador (bundle) -- mesmo padrão 'var'/'function' e
@@ -138,6 +138,71 @@ function montarLinhasDimensao(registros, indices, dimensao, ctx) {
   return linhas;
 }
 
+// Base de comparação por janela: sempre "o que aconteceu/vai acontecer" ÷
+// Previsto -- mesma leitura do semáforo de Alertas. "Semana que vem" não tem
+// Realizado (ainda não aconteceu): usa Tendência.
+function desvioDaJanela(nomeJanela, janela) {
+  var numerador = nomeJanela === 'semanaQueVem' ? janela.tendencia : janela.realizado;
+  var desvio = (numerador === null || numerador === undefined || !janela.previsto)
+    ? null : numerador / janela.previsto;
+  return { desvio: desvio, previsto: janela.previsto, numerador: numerador };
+}
+
+var JANELA_ROTULO = {
+  semanaAnterior: 'Semana anterior', acumulado: 'Acumulado do mês até a data', semanaQueVem: 'Semana que vem',
+};
+var DIMENSAO_ROTULO_RELATORIO = { volume: 'Volume', equipes: 'Equipes' };
+
+// Uma linha de desvio por (linha da hierarquia x janela), só quando o
+// semáforo classifica Crítico ou Atenção -- Excelente/Dentro da meta/Sem
+// dado não entram neste capítulo.
+function extrairDesvios(linhas, dimensao) {
+  var desvios = [];
+  linhas.forEach(function (linha) {
+    ['semanaAnterior', 'acumulado', 'semanaQueVem'].forEach(function (nomeJanela) {
+      var calculo = desvioDaJanela(nomeJanela, linha.janelas[nomeJanela]);
+      var classe = classificarSemaforo(calculo.desvio);
+      if (classe.indicador !== 'Crítico' && classe.indicador !== 'Atenção') return;
+      desvios.push({
+        sup: linha.sup, tomador: linha.tomador, tipologia: linha.tipologia, contrato: linha.contrato,
+        janela: JANELA_ROTULO[nomeJanela], dimensao: DIMENSAO_ROTULO_RELATORIO[dimensao],
+        previsto: calculo.previsto, numerador: calculo.numerador, desvio: calculo.desvio,
+        status: classe.indicador, cor: classe.cor,
+      });
+    });
+  });
+  return desvios;
+}
+
+// linhasPorDimensao: { volume: linhas de montarLinhasDimensao, equipes: linhas }.
+// Devolve { porTipologia, porContrato }, cruzando as duas dimensões.
+function montarDesvios(linhasPorDimensao) {
+  var porTipologia = [];
+  var porContrato = [];
+  ['volume', 'equipes'].forEach(function (dimensao) {
+    var linhas = linhasPorDimensao[dimensao] || [];
+    var tipologiaLinhas = linhas.filter(function (l) { return l.tipo === 'total-geral-tipologia'; });
+    var contratoLinhas = linhas.filter(function (l) { return l.tipo === 'registro'; });
+    porTipologia = porTipologia.concat(extrairDesvios(tipologiaLinhas, dimensao));
+    porContrato = porContrato.concat(extrairDesvios(contratoLinhas, dimensao));
+  });
+  return { porTipologia: porTipologia, porContrato: porContrato };
+}
+
+// Contagem de Crítico/Atenção da geração inteira, pro capítulo Resumo do
+// .xlsx e pra linha-resumo do histórico -- soma só porContrato (o nível mais
+// fino), pra não contar duas vezes o mesmo desvio físico (que também
+// aparece agregado em porTipologia).
+function resumoDesvios(desvios) {
+  var resumo = { critico: 0, atencao: 0 };
+  (desvios.porContrato || []).forEach(function (d) {
+    if (d.status === 'Crítico') resumo.critico++;
+    else if (d.status === 'Atenção') resumo.atencao++;
+  });
+  return resumo;
+}
+
 module.exports = {
   semanaAnterior, semanaSeguinte, serieDaSemana, serieAcumulada, janelasDoGrupo, montarLinhasDimensao,
+  extrairDesvios, montarDesvios, resumoDesvios, JANELA_ROTULO, DIMENSAO_ROTULO_RELATORIO,
 };

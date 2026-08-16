@@ -109,3 +109,61 @@ test('montarLinhasDimensao produz TOTAL GERAL, uma linha por tipologia, e por SU
   const linhaRegistroA = linhas.find((l) => l.tipo === 'registro' && l.sup === 'SUP-A');
   assert.strictEqual(linhaRegistroA.contrato, 'SUP-A', 'o contrato É o SUP -- cada registro é (SUP, tipologia)');
 });
+
+function linhaSintetica(tipo, extras, janelas) {
+  return Object.assign({ tipo: tipo, sup: 'SUP-X', tomador: 'Tomador-X', tipologia: 'ST', contrato: 'SUP-X' }, extras, { janelas: janelas });
+}
+
+test('extrairDesvios só inclui linhas Crítico ou Atenção -- Dentro da meta/Excelente/Sem dado ficam de fora', () => {
+  const linhas = [
+    linhaSintetica('total-geral-tipologia', {}, {
+      semanaAnterior: { previsto: 100, realizado: 50, tendencia: 50 }, // 50% -> Crítico
+      acumulado: { previsto: 100, realizado: 95, tendencia: 95 }, // 95% -> Dentro da meta
+      semanaQueVem: { previsto: 100, tendencia: 80 }, // 80% -> Atenção
+    }),
+  ];
+  const desvios = ComputeRelatorioSemanal.extrairDesvios(linhas, 'volume');
+  assert.strictEqual(desvios.length, 2, 'só semanaAnterior (Crítico) e semanaQueVem (Atenção) entram -- acumulado (Dentro da meta) fica de fora');
+  assert.deepStrictEqual(desvios.map((d) => d.janela).sort(), ['Semana anterior', 'Semana que vem']);
+  assert.strictEqual(desvios.find((d) => d.janela === 'Semana anterior').status, 'Crítico');
+  assert.strictEqual(desvios.find((d) => d.janela === 'Semana que vem').status, 'Atenção');
+});
+
+test('extrairDesvios: "semana que vem" usa Tendência (não Realizado, que ainda não existe) como numerador', () => {
+  const linhas = [
+    linhaSintetica('registro', {}, {
+      semanaAnterior: { previsto: null, realizado: null, tendencia: null },
+      acumulado: { previsto: null, realizado: null, tendencia: null },
+      semanaQueVem: { previsto: 100, tendencia: 40 }, // 40% -> Crítico
+    }),
+  ];
+  const desvios = ComputeRelatorioSemanal.extrairDesvios(linhas, 'equipes');
+  assert.strictEqual(desvios.length, 1);
+  assert.strictEqual(desvios[0].numerador, 40);
+  assert.strictEqual(desvios[0].status, 'Crítico');
+});
+
+test('montarDesvios separa por tipo de linha (tipologia vs contrato) e cruza volume + equipes', () => {
+  const linhasVolume = [
+    linhaSintetica('total-geral-tipologia', { tipologia: 'ST' }, {
+      semanaAnterior: { previsto: 100, realizado: 40, tendencia: 40 }, acumulado: { previsto: null, realizado: null, tendencia: null }, semanaQueVem: { previsto: null, tendencia: null },
+    }),
+    linhaSintetica('registro', { sup: 'SUP-A', contrato: 'SUP-A' }, {
+      semanaAnterior: { previsto: null, realizado: null, tendencia: null }, acumulado: { previsto: 100, realizado: 40, tendencia: 40 }, semanaQueVem: { previsto: null, tendencia: null },
+    }),
+  ];
+  const linhasEquipes = [];
+  const desvios = ComputeRelatorioSemanal.montarDesvios({ volume: linhasVolume, equipes: linhasEquipes });
+  assert.strictEqual(desvios.porTipologia.length, 1);
+  assert.strictEqual(desvios.porContrato.length, 1);
+  assert.strictEqual(desvios.porTipologia[0].dimensao, 'Volume');
+});
+
+test('resumoDesvios conta só porContrato (nível mais fino), não duplica com porTipologia', () => {
+  const desvios = {
+    porTipologia: [{ status: 'Crítico' }, { status: 'Atenção' }, { status: 'Crítico' }],
+    porContrato: [{ status: 'Crítico' }, { status: 'Atenção' }],
+  };
+  const resumo = ComputeRelatorioSemanal.resumoDesvios(desvios);
+  assert.deepStrictEqual(resumo, { critico: 1, atencao: 1 });
+});
