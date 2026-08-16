@@ -7,29 +7,63 @@ const vm = require('node:vm');
 
 const CAMINHO_GS = path.join(__dirname, '..', 'tools', 'semanal', 'apps-script-historico-relatorio.gs');
 
+// Reproduz o que o Sheets faz numa célula SEM formato de texto: 'YYYY-MM-DD'
+// vira Date; '2026' vira número; o resto fica string. É o comportamento que
+// quebrou em produção, medido contra a planilha real.
+const RE_ISO = /^\d{4}-\d{2}-\d{2}$/;
+function coagirComoSheets(valor, formatoTexto) {
+  if (formatoTexto) return valor;
+  if (typeof valor === 'string' && RE_ISO.test(valor)) {
+    const [ano, mes, dia] = valor.split('-').map(Number);
+    return new Date(ano, mes - 1, dia);
+  }
+  if (typeof valor === 'string' && /^\d+$/.test(valor)) return Number(valor);
+  return valor;
+}
+
 function criarPlanilhaFalsa() {
   const abas = new Map();
   function criarAba(nome) {
     const celulas = [];
-    return {
+    const formatoTexto = [];
+    const aba = {
       nome,
       getMaxRows: () => Math.max(celulas.length, 1000),
       getRange(linha, coluna, nLinhas, nColunas) {
         return {
-          setNumberFormat() { return this; },
+          setNumberFormat(formato) {
+            for (let r = linha; r < linha + nLinhas; r++) {
+              formatoTexto[r] = formatoTexto[r] || [];
+              for (let c = coluna; c < coluna + nColunas; c++) formatoTexto[r][c] = formato === '@';
+            }
+            return this;
+          },
           setValues(valores) {
             for (let r = 0; r < nLinhas; r++) {
               const alvo = linha + r - 1;
               while (celulas.length <= alvo) celulas.push([]);
-              for (let c = 0; c < nColunas; c++) celulas[alvo][coluna + c - 1] = valores[r][c];
+              for (let c = 0; c < nColunas; c++) {
+                const ehTexto = !!(formatoTexto[linha + r] && formatoTexto[linha + r][coluna + c]);
+                celulas[alvo][coluna + c - 1] = coagirComoSheets(valores[r][c], ehTexto);
+              }
             }
             return this;
           },
         };
       },
-      appendRow(valores) { celulas.push(valores.slice()); },
+      appendRow(valores) {
+        aba.getRange(celulas.length + 1, 1, 1, valores.length).setValues([valores]);
+      },
+      // Escreve IGNORANDO o formato da célula, para simular o que a versão
+      // anterior do .gs deixou gravado: ela usava appendRow sem formatar nada,
+      // então o Sheets coagia a data. Não existe no objeto Sheet de verdade --
+      // é uma porta dos fundos só do dublê, e por isso tem nome feio.
+      __injetarLinhaCrua(valores) {
+        celulas.push(valores.map(v => coagirComoSheets(v, false)));
+      },
       _celulas: celulas,
     };
+    return aba;
   }
   return {
     getSheetByName: nome => abas.get(nome) || null,
@@ -85,4 +119,15 @@ test('um lote com várias linhas grava todas, na ordem, e devolve a contagem', (
   const aba = s.planilha.getSheetByName('HISTORICO_RELATORIO');
   assert.strictEqual(aba._celulas.length, 4);
   assert.strictEqual(aba._celulas[3][14], 3); // qtdCritico da linha-resumo
+});
+
+test('geradoEm/semanaInicio sobrevivem como texto puro -- o Sheets não os coage para Date', () => {
+  const s = carregarScript();
+  s.post({ linhas: [{ geradoEm: '2026-08-16T10:00:00.000Z', semanaInicio: '2026-08-10', sup: 'SUP-A', tipologia: 'ST', dimensao: 'volume' }] });
+  const aba = s.planilha.getSheetByName('HISTORICO_RELATORIO');
+  const linhaGravada = aba._celulas[1]; // linha 0 é o cabeçalho
+  assert.strictEqual(typeof linhaGravada[0], 'string', 'geradoEm precisa continuar string, não virar Date');
+  assert.strictEqual(linhaGravada[0], '2026-08-16T10:00:00.000Z');
+  assert.strictEqual(typeof linhaGravada[1], 'string', 'semanaInicio precisa continuar string, não virar Date');
+  assert.strictEqual(linhaGravada[1], '2026-08-10');
 });
