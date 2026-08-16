@@ -1061,11 +1061,17 @@ function semanasDoMesSelecionado() {
 // Os índices que uma aba deve mostrar: os já filtrados pela barra, e depois
 // só os ativos, se o check estiver ligado. Fica aqui e não em
 // indicesFiltrados porque "ativo" depende do MÊS que a aba mostra -- ver o
-// comentário no topo de filtro-ativos.js. Consolidado, Alertas e Semanal
-// chamam esta função (cada uma com a dimensão que está mostrando);
-// Gráficos e Demandas ficam de fora de propósito -- ver o comentário no
-// topo do arquivo de spec desta tarefa (Gráficos soma tudo numa série só,
-// onde inativo já contribui zero; Demandas não quebra por registro).
+// comentário no topo de filtro-ativos.js. Consolidado, Alertas, Semanal e
+// (desde 2026-08-15) Gráficos chamam esta função, cada uma com a dimensão
+// que está mostrando; só Demandas fica de fora de propósito (lê agregado
+// por tipologia, não quebra por registro).
+//
+// Gráficos ficou de fora até 2026-08-15: com só 3 séries de FLUXO
+// (Previsto/Realizado/Tendência), um registro inativo já somava zero nelas
+// -- aplicar o filtro seria um no-op. A 4ª série, Demandas, quebrou essa
+// premissa: o saldo de abertura do Acumulado é ESTOQUE, não fluxo, então um
+// registro sem NENHUM movimento no mês selecionado ainda carrega o backlog
+// inteiro já aberto antes dele -- ver montarAbaGraficoSemanal.
 function indicesDaAba(indices, dimensao) {
   if (!SOMENTE_ATIVOS) return indices;
   var semanas = semanasDoMesSelecionado();
@@ -1118,13 +1124,46 @@ function alternarAba(aba) {
 // Gráficos é uma segunda leitura visual dos MESMOS números da Tabela
 // Semanal, nunca um recorte à parte (por isso não tem controles próprios,
 // ao contrário da aba Balanço de massa).
+//
+// Chama renderAbaGraficoSemanal UMA VEZ POR DIMENSÃO exibida, cada uma com
+// o seu próprio indicesDaAba(indices, dimensao), em vez de uma chamada só
+// com 'dimensoes' inteiro -- MESMO padrão e MESMO motivo de recalcularSemanal
+// pra Tabela Semanal (ver o comentário lá): "ativo" depende da dimensão, e um
+// único 'indices' compartilhado não consegue expressar isso.
+//
+// Até 2026-08-15 esta função ficava de fora do filtro "Somente SUPs ativos"
+// de propósito -- o comentário de indicesDaAba ainda registra essa exclusão
+// como histórico. A justificativa era que as 3 séries de sempre
+// (Previsto/Realizado/Tendência) são FLUXO: um registro inativo no mês já
+// soma zero nelas, então aplicar o filtro seria um no-op. Essa justificativa
+// deixou de valer com a 4ª série, Demandas (2026-08-14): o saldo de abertura
+// do Acumulado é ESTOQUE, não fluxo -- um registro sem nenhum movimento no
+// mês ainda carrega o backlog inteiro já aberto antes dele. Medido ao vivo
+// em agosto/2026 com o check no padrão (ligado): filtrando por tipologia BL,
+// a Tabela Semanal (que já respeitava o filtro) mostrava 0 Demandas
+// Pendentes enquanto o Gráfico (que não respeitava) desenhava uma curva
+// achatada em 42 -- duas abas da mesma página discordando do mesmo conceito.
+// NÃO "restaurar" a exclusão antiga numa revisão futura sem reconferir esta
+// distinção fluxo-vs-estoque primeiro.
 function montarAbaGraficoSemanal(registros, indices, dimensoes, vigenteIdx, hojeEpoch) {
-  document.getElementById('grafico-semanal-conteudo').innerHTML = RenderAbaGraficoSemanal.renderAbaGraficoSemanal(registros, indices, dimensoes, {
+  var opcoes = {
     vigenteIdx: vigenteIdx,
     ano: window.__ANO__,
     demandas: window.__DEMANDAS__,
     hojeEpoch: hojeEpoch,
-  });
+  };
+  var mesValido = vigenteIdx >= 0 && vigenteIdx <= 11;
+  // Sem mês vigente válido, renderAbaGraficoSemanal devolve o mesmo aviso
+  // "sem mês vigente válido" independente de 'indices'/'dimensao' -- uma
+  // chamada por dimensão duplicaria esse aviso (um por dimensão marcada) em
+  // vez das uma vez só de sempre. Chamada única aqui, com 'indices' cru (o
+  // aviso não depende dele).
+  var html = !mesValido
+    ? RenderAbaGraficoSemanal.renderAbaGraficoSemanal(registros, indices, dimensoes, opcoes)
+    : dimensoes.map(function (dimensao) {
+      return RenderAbaGraficoSemanal.renderAbaGraficoSemanal(registros, indicesDaAba(indices, dimensao), [dimensao], opcoes);
+    }).join('');
+  document.getElementById('grafico-semanal-conteudo').innerHTML = html;
 }
 
 // Tooltip único, delegado -- mesmo mecanismo do Gráfico no orçamento

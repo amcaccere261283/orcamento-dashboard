@@ -200,13 +200,21 @@ var aberturaDemandas = pendentesNaData(registros, indices, demandas, semanas[0].
 - A série só existe quando há `demandas` (`temSemanasReais`/`temDemandas` já governa
   isso para Realizado/Tendência) — sem `demandas`, o painel volta às 3 séries de sempre.
 
-### Efeito colateral esperado na largura das barras
+### Largura das barras: o teto absorve a 4ª série, sem efeito visível
 
 `construirColunasSvg` calcula `larguraColuna` a partir de `numSeries`
-(`render-aba-grafico-semanal.js:205`). No painel de Volume passam a ser 4 séries em vez
-de 3, então **as barras de Volume ficam mais estreitas que as de Equipes/Financeiro**.
-Não é defeito, e não pede tratamento: é a mesma mecânica que o orçamento já vive com
-5 séries no Gráfico. Só está registrado aqui para não virar "achado" numa revisão.
+(`render-aba-grafico-semanal.js:205`): `Math.min(GRAFICO_BARRA_MAX, (slot -
+GRAFICO_BARRA_GAP*(numSeries-1))/numSeries)`, com `GRAFICO_BARRA_MAX = 24`. Uma versão
+anterior deste documento previa que, com 4 séries em vez de 3, **as barras de Volume
+ficariam mais estreitas que as de Equipes/Financeiro** — não acontece. Medido (revisão
+final de 2026-08-15): o teto de 24 px vence em toda configuração real da página, com 3
+OU 4 séries, em meses de 4, 5 ou 6 semanas — a largura da coluna fecha em exatos 24,0 px
+nos dois casos, sempre. A conta de `(slot - gap*(n-1))/n` só ficaria abaixo de 24 com
+uma semana bem mais estreita do que este painel produz (`GRAFICO_LARGURA` fixo em 1000,
+nunca mais de 6 semanas por mês); com os parâmetros reais, mesmo o mês de 6 semanas e 4
+séries ainda calcula ~25,6 px antes do teto entrar. Não editar esta seção de volta pra
+prever um efeito visual sem remedir — é exatamente o "achado" que este parágrafo existe
+pra evitar, só que ao contrário: aqui o risco é inventar um problema que não existe.
 
 ## Riscos
 

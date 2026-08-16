@@ -105,8 +105,15 @@ function chaveDemandas(sup, tipologia) {
 // chegadas é informação -- ao contrário de semanasTendencia, onde null diz
 // "não se projeta aqui".
 function chegadasSemanaisPorIndices(registros, indices, demandas, semanas) {
-  var semanasSafe = semanas || [];
-  var porSemana = new Array(semanasSafe.length).fill(0);
+  // 'semanas' NÃO tem guarda aqui de propósito -- o único chamador de
+  // produção (construirPainelGraficoSemanalHtml) já dereferencia
+  // 'semanas[0].inicio' sem guarda nenhuma, cinco linhas depois de chamar
+  // esta função com o mesmo 'semanas'. Uma guarda só aqui era falsa
+  // segurança: 'semanas' ausente derrubava o chamador do mesmo jeito, só
+  // que uma linha mais tarde -- ver o achado da revisão final de
+  // 2026-08-15. 'semanas' é exigido pelo contrato real (sempre vem de
+  // semanasDoMes, ver renderAbaGraficoSemanal), não opcional.
+  var porSemana = new Array(semanas.length).fill(0);
   if (!demandas || !demandas.porRegistroEventos) return porSemana;
   (indices || []).forEach(function (i) {
     var registro = registros[i];
@@ -114,8 +121,8 @@ function chegadasSemanaisPorIndices(registros, indices, demandas, semanas) {
     var entrada = demandas.porRegistroEventos[chaveDemandas(registro.sup, registro.tipologia)];
     if (!entrada) return;
     (entrada.chegada || []).forEach(function (dia) {
-      for (var s = 0; s < semanasSafe.length; s++) {
-        if (dia >= semanasSafe[s].inicio && dia <= semanasSafe[s].fim) {
+      for (var s = 0; s < semanas.length; s++) {
+        if (dia >= semanas[s].inicio && dia <= semanas[s].fim) {
           porSemana[s] += 1;
           return;
         }

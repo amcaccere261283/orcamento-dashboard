@@ -468,9 +468,22 @@ coagida. Com `equipes` marcada a aba emite uma nota dizendo que mostra Volume.
 aplicado por `indicesDaAba`), ligado por padrão. O check próprio do Balanço saiu.
 **Ele NÃO cabe em `indicesFiltrados`**: os filtros de lá recortam por propriedade do
 registro e não conhecem período; "ativo" depende do mês que a aba mostra, então é estado
-compartilhado aplicado POR ABA. Aplicado em Semanal, Alertas e Consolidado; **fora de
-Gráficos** (soma tudo numa série só, inativo contribui zero — código sem efeito) e **fora
-de Demandas** (lê agregado por tipologia, não quebra por registro).
+compartilhado aplicado POR ABA. Aplicado em Semanal, Alertas, Consolidado e (desde
+2026-08-15) Gráficos; **fora só de Demandas** (lê agregado por tipologia, não quebra por
+registro).
+
+**Gráficos ficou de fora até 2026-08-15** — a justificativa era que as 3 séries de sempre
+(Previsto/Realizado/Tendência) são FLUXO: um registro inativo no mês já soma zero nelas,
+então o filtro seria um no-op. A 4ª série, Demandas (ver "Série Demandas no Gráfico" mais
+abaixo), quebrou essa premissa: o saldo de abertura do Acumulado é ESTOQUE, não fluxo — um
+registro sem nenhum movimento no mês selecionado ainda carrega o backlog inteiro já aberto
+antes dele. Medido ao vivo em agosto/2026 com o check no padrão (ligado): filtrando por
+tipologia BL, a Tabela Semanal (que já respeitava o filtro) mostrava 0 Demandas Pendentes
+enquanto o Gráfico (que não respeitava) desenhava uma curva achatada em 42. Fix:
+`montarAbaGraficoSemanal` (`render-semanal.js`) passou a chamar
+`RenderAbaGraficoSemanal.renderAbaGraficoSemanal` uma vez por dimensão exibida, cada uma
+com `indicesDaAba(indices, dimensao)` — mesmo padrão que `recalcularSemanal` já usa pra
+Tabela Semanal.
 
 **Há DUAS noções de "ativo", e elas não coincidem** — o comentário no topo de
 `filtro-ativos.js` que diz o contrário está errado. O Balanço decide por linha

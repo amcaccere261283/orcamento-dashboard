@@ -421,6 +421,86 @@ test('com o check "somente ativos" ligado, o furo pendente de um SUP sem movimen
   assert.match(semCheck, />1</, 'desligado, o furo pendente de SUP-0002-24 volta a contar');
 });
 
+// --- Filtro "Somente SUPs ativos" aplicado ao Gráfico (Finding 1, revisão
+// final de 2026-08-15) -------------------------------------------------
+// Mesmo fixture/raciocínio do teste da Tabela Semanal logo acima: SUP-0002-24
+// não tem NENHUM movimento de Volume em julho (fixture sintético sempre zera
+// previsto/realizado.volume), mas tem uma chegada de demanda em junho que
+// nunca saiu do estoque -- um saldo de abertura real, sem nenhum movimento no
+// mês exibido. Até esta correção, montarAbaGraficoSemanal recebia 'indices'
+// cru (sem indicesDaAba), então o Gráfico ignorava o checkbox por completo:
+// o saldo de abertura de SUP-0002-24 aparecia SEMPRE no Acumulado de
+// Demandas, com o check ligado ou desligado -- a mesma Tabela Semanal, do
+// lado, mostrando 0 furos pendentes com o check ligado. Este teste prova que
+// as duas abas passam a concordar.
+test('com o check "somente ativos" ligado, o saldo de abertura de Demandas de um SUP sem movimento no mes some do Acumulado do Gráfico; desligado, volta', async () => {
+  const registros = [
+    registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000),
+    registroSintetico('SUP-0002-24', 'Tomador-Sintetico-Gama', 0),
+  ];
+  const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho)
+  const demandas = {
+    tipologias: [], totais: {},
+    porRegistroEventos: {
+      // SUP-0001-24: um furo REALIZADO dentro de julho -- ativo em Volume via
+      // furo. Sem chegada -- não contribui saldo de abertura nenhum.
+      'SUP-0001-24||ST': {
+        chegada: [], sondagemRealizada: [diaEpoch(new Date(Date.UTC(2026, 6, 5)))], saidaEstoque: [],
+      },
+      // SUP-0002-24: nenhum furo dentro de julho (nem previsto/realizado de
+      // Volume) -- INATIVO em Volume. Mas tem uma chegada em junho que nunca
+      // saiu do estoque: saldo de abertura de 1, sem nenhum movimento em julho.
+      'SUP-0002-24||ST': {
+        chegada: [diaEpoch(new Date(Date.UTC(2026, 5, 10)))], sondagemRealizada: [], saidaEstoque: [],
+      },
+    },
+  };
+  const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // Marca Volume (Financeiro continua marcado também -- minimoUm, não
+  // substitui) pra a série Demandas aparecer no painel Volume do Gráfico.
+  const painelDimensao = documentoFalso.getElementById('seletor-dimensao-painel');
+  const checkboxVolume = painelDimensao.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'volume')[0];
+  assert.ok(checkboxVolume, 'esperava um checkbox "volume" no seletor de dimensão');
+  checkboxVolume.checked = true;
+  checkboxVolume.listeners.change();
+
+  // Nenhum dos dois registros tem chegada EM JULHO -- a barra Semanal (fluxo
+  // puro) fecha em 0 em S1 com o check ligado ou desligado; só o Acumulado
+  // (que soma o saldo de abertura) pode diferir. Por isso "Demandas: 1"
+  // aparecendo em S1 só pode vir do Acumulado, nunca da barra.
+  const grafico = () => documentoFalso.getElementById('grafico-semanal-conteudo').innerHTML;
+
+  const comCheck = grafico();
+  assert.match(comCheck, /S1 \(01\/07 a 05\/07\) · Demandas: 0"/, 'com o check ligado, S1 (barra e Acumulado) fecha em 0 -- só SUP-0001-24 conta, e ele não tem chegada');
+  assert.doesNotMatch(comCheck, /S1 \(01\/07 a 05\/07\) · Demandas: 1"/, 'com o check ligado, o saldo de abertura de SUP-0002-24 (inativo em Volume) não pode entrar no Acumulado');
+
+  const checkboxSomenteAtivos = documentoFalso.getElementById('somente-ativos');
+  assert.ok(checkboxSomenteAtivos, 'checkbox somente-ativos existe no DOM após os scripts rodarem');
+  checkboxSomenteAtivos.checked = false;
+  checkboxSomenteAtivos.listeners.change({ target: checkboxSomenteAtivos });
+
+  const semCheck = grafico();
+  assert.match(semCheck, /S1 \(01\/07 a 05\/07\) · Demandas: 1"/, 'desligado, o saldo de abertura de SUP-0002-24 volta a entrar no Acumulado');
+});
+
+// Prova estática, complementar à prova dinâmica acima -- mesmo padrão do
+// teste equivalente da Tabela Semanal ("a chamada a RenderAbaSemanal...",
+// mais acima neste arquivo).
+test('a chamada a RenderAbaGraficoSemanal.renderAbaGraficoSemanal, com indicesDaAba por dimensão, está no código-fonte de montarAbaGraficoSemanal', () => {
+  const registros = [registroSintetico('SUP-0005-24', 'Tomador-Sintetico-Zeta', 1000)];
+  const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  const scriptCliente = scripts[5][1]; // 6º <script>: SCRIPT_CLIENTE_SEMANAL
+  assert.match(
+    scriptCliente,
+    /dimensoes\.map\(function \(dimensao\) \{[\s\S]{0,200}RenderAbaGraficoSemanal\.renderAbaGraficoSemanal\(registros, indicesDaAba\(indices, dimensao\), \[dimensao\]/
+  );
+});
+
 test('o HTML da semanal tem o botão "Atualizar dados" e o span de status, com os MESMOS ids que o CSS compartilhado (cssBase) estiliza', () => {
   const html = renderSemanal({ registros: [], baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   assert.match(html, /<button id="atualizar-dashboard" type="button">/);

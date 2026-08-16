@@ -368,6 +368,30 @@ test('chegadasSemanaisPorIndices: bucketiza as chegadas nas semanas certas do m�
   assert.deepStrictEqual(resultado, [2, 2, 1, 1, 1]);
 });
 
+// Achado da revisão final de 2026-08-15: o lado 'inicio' do bucketing
+// ('dia >= semanas[s].inicio') já era travado por outro teste (mutar '>='
+// pra '>' quebra 5 testes da suíte inteira), mas o lado 'fim'
+// ('dia <= semanas[s].fim') não tinha NENHUMA cobertura -- mutar '<=' pra
+// '<' deixava a suíte inteira verde. Semanas são contíguas (cursor =
+// fimSemana + 1, compute-semanal.js), então um evento exatamente no 'fim'
+// de uma semana ficaria SEM bucket nenhum -- silenciosamente descartado,
+// não empurrado pra semana seguinte. Medido: 11 das 11.505 chegadas reais
+// de julho/2026 caem exatamente num 'fim' de semana.
+// Extensão do fixture acima (concat, sem mutar EVENTOS_CHEGADAS -- ele é
+// compartilhado com outros testes) com os dois dias de fronteira reais
+// deste calendário: 12/07/2026 é o 'fim' de S2 (06/07 a 12/07), e
+// 31/07/2026 é o 'fim' de S5, último dia do mês.
+test('chegadasSemanaisPorIndices: chegada exatamente no ÚLTIMO dia de uma semana ("fim", inclusive) cai nela, não fica sem bucket', () => {
+  const eventosComFronteira = {
+    chegada: EVENTOS_CHEGADAS.chegada.concat([diaJul(12), diaJul(31)]),
+    sondagemRealizada: [], saidaEstoque: [],
+  };
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': eventosComFronteira } };
+  const resultado = chegadasSemanaisPorIndices([registro(100)], [0], demandas, SEMANAS_JULHO);
+  // Fixture original [2,2,1,1,1] + 1 em S2 (12/07) + 1 em S5 (31/07).
+  assert.deepStrictEqual(resultado, [2, 3, 1, 1, 2]);
+});
+
 test('chegadasSemanaisPorIndices: semana sem chegada é 0, nunca null -- é contagem medida', () => {
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': { chegada: [diaJul(15)], sondagemRealizada: [], saidaEstoque: [] } } };
   const resultado = chegadasSemanaisPorIndices([registro(100)], [0], demandas, SEMANAS_JULHO);
@@ -411,11 +435,18 @@ test('chegadasSemanaisPorIndices: evento fora do mês exibido não entra em nenh
   assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100)], [0], demandas, SEMANAS_JULHO), [0, 0, 0, 0, 0]);
 });
 
-test('chegadasSemanaisPorIndices: semanas undefined com demandas válidas não lança -- devolve [] guardado', () => {
-  // Reprodução do bug: demandas válidas com chegada não vazia + semanas undefined
-  // deve devolver [] sem lançar "Cannot read properties of undefined (reading 'length')"
+// Revisão final de 2026-08-15: a guarda 'semanas || []' que este teste
+// provava foi removida -- ela era proteção falsa. O único chamador de
+// produção (construirPainelGraficoSemanalHtml) já dereferencia
+// 'semanas[0].inicio' sem guarda nenhuma cinco linhas depois de chamar esta
+// função com o mesmo 'semanas' undefined -- então "não lançar aqui" nunca
+// evitava o throw em produção, só adiava uma linha. 'semanas' é exigido pelo
+// contrato real (sempre vem de semanasDoMes). Este teste passou a provar o
+// contrário do que provava antes: que omitir 'semanas' lança, coerente com o
+// que o chamador de produção já faz.
+test('chegadasSemanaisPorIndices: semanas undefined lança -- não é mais um caso tolerado (era proteção falsa, ver render-aba-grafico-semanal.js)', () => {
   const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': EVENTOS_CHEGADAS } };
-  assert.deepStrictEqual(chegadasSemanaisPorIndices([registro(100)], [0], demandas, undefined), []);
+  assert.throws(() => chegadasSemanaisPorIndices([registro(100)], [0], demandas, undefined));
 });
 
 // --- Task 2: a 4ª série (Demandas) no painel de Volume --------------------
