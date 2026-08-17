@@ -187,3 +187,104 @@ test('mesesPendentes continua trazendo os meses SEM dado nenhum, que é o backfi
   assert.deepEqual(mesesPendentes(porDia, 2026, 7), [1, 2, 3, 4, 6, 7],
     'maio sai (tem dado e não é corrente nem anterior); junho entra por ser o anterior, apesar de ter dado');
 });
+
+// --- mesclarProducao: o núcleo do merge do Link 7 ------------------------
+// Extraído de main() em 2026-08-17. A revisão final da branch do "Realizado
+// até HOJE" apontou que a regra mais perigosa do arquivo morava dentro de
+// main(), inalcançável por teste: estar em 'mesesBuscados' AUTORIZA descartar
+// tudo que já estava gravado daquele mês. Mesmo desenho de gravarRoster, que
+// já era puro exatamente por isso.
+const { mesclarProducao } = require('../tools/semanal/atualizar-equipes-online.js');
+
+const DIA_FIM_PADRAO = diaEpochDe(2026, 7, 17);
+function linhaLink7(idEquipe, sup, tipo, diaEpoch) {
+  return { idEquipe, sup, tipo, diaEpoch };
+}
+
+// A REGRESSÃO que motivou a extração: em 2026-08-08 um espaço duplo num
+// cabeçalho fez parseLinhasLink7 descartar TODAS as linhas sem lançar erro.
+// Se um mês nessa condição fosse marcado como buscado, o merge apagaria o
+// mês inteiro de dado bom. Virou risco real quando o mês anterior passou a
+// ser rebuscado toda vez.
+test('mesclarProducao: mês que voltou com ZERO linha NÃO é regravado -- o dado anterior dele sobrevive', () => {
+  const diaJun = diaEpochDe(2026, 6, 10);
+  const { linhasSaida, mesesBuscados, mesesVazios, diasPreservados } = mesclarProducao({
+    resultadosPorMes: [{ chave: '2026-06', lidas: [] }],
+    jaTemos: { [String(diaJun)]: [`441,SUP-1,SP,${diaJun}`] },
+    diaFim: DIA_FIM_PADRAO,
+  });
+  assert.deepEqual(linhasSaida, [`441,SUP-1,SP,${diaJun}`], 'a linha de junho tem que sobreviver');
+  assert.equal(diasPreservados, 1);
+  assert.equal(mesesBuscados.has('2026-06'), false, 'mês vazio não pode autorizar descarte');
+  assert.deepEqual(mesesVazios, ['2026-06'], 'e tem que ser reportado, não sumir calado');
+});
+
+test('mesclarProducao: mês que voltou COM linha substitui o dado anterior daquele mês', () => {
+  const diaVelho = diaEpochDe(2026, 6, 10);
+  const diaNovo = diaEpochDe(2026, 6, 20);
+  const { linhasSaida, diasPreservados } = mesclarProducao({
+    resultadosPorMes: [{ chave: '2026-06', lidas: [linhaLink7(333, 'SUP-NOVO', 'SM', diaNovo)] }],
+    jaTemos: { [String(diaVelho)]: [`222,SUP-VELHO,SP,${diaVelho}`] },
+    diaFim: DIA_FIM_PADRAO,
+  });
+  assert.deepEqual(linhasSaida, [`333,SUP-NOVO,SM,${diaNovo}`], 'o dado velho de junho sai; o novo entra');
+  assert.equal(diasPreservados, 0);
+});
+
+test('mesclarProducao: mês que nem foi tentado (falhou, ou não estava pendente) fica intacto', () => {
+  const diaMai = diaEpochDe(2026, 5, 10);
+  const diaJun = diaEpochDe(2026, 6, 20);
+  const { linhasSaida, diasPreservados } = mesclarProducao({
+    resultadosPorMes: [{ chave: '2026-06', lidas: [linhaLink7(333, 'SUP-A', 'SM', diaJun)] }],
+    jaTemos: { [String(diaMai)]: [`111,SUP-MAIO,SP,${diaMai}`] },
+    diaFim: DIA_FIM_PADRAO,
+  });
+  assert.equal(diasPreservados, 1);
+  assert.ok(linhasSaida.includes(`111,SUP-MAIO,SP,${diaMai}`), 'maio não foi buscado: tem que continuar lá');
+});
+
+// O filtro de/ate do site não restringe "Data / Hora Primeira Foto" ao
+// intervalo pedido (achado em 2026-08-09): a resposta de um mês traz sessões
+// de OS antigas ainda ativas. Elas não podem entrar no agregado.
+test('mesclarProducao: linha de um mês que NÃO foi buscado vem na resposta e é descartada', () => {
+  const diaJun = diaEpochDe(2026, 6, 20);
+  const diaAbrAntigo = diaEpochDe(2026, 4, 3);
+  const { linhasSaida } = mesclarProducao({
+    resultadosPorMes: [{ chave: '2026-06', lidas: [
+      linhaLink7(333, 'SUP-A', 'SM', diaJun),
+      linhaLink7(999, 'SUP-ANTIGO', 'SP', diaAbrAntigo),
+    ] }],
+    jaTemos: {},
+    diaFim: DIA_FIM_PADRAO,
+  });
+  assert.deepEqual(linhasSaida, [`333,SUP-A,SM,${diaJun}`], 'a sessão de abril não pertence ao merge de junho');
+});
+
+test('mesclarProducao: linha DEPOIS do corte (diaFim) é descartada -- não existe dado de dia futuro', () => {
+  const diaHoje = diaEpochDe(2026, 7, 17);
+  const diaAmanha = diaEpochDe(2026, 7, 18);
+  const { linhasSaida } = mesclarProducao({
+    resultadosPorMes: [{ chave: '2026-07', lidas: [
+      linhaLink7(1, 'SUP-A', 'SP', diaHoje),
+      linhaLink7(2, 'SUP-B', 'SP', diaAmanha),
+    ] }],
+    jaTemos: {},
+    diaFim: diaHoje,
+  });
+  assert.deepEqual(linhasSaida, [`1,SUP-A,SP,${diaHoje}`], 'o dia de hoje entra (corte em D); amanhã não existe');
+});
+
+test('mesclarProducao: a saída sai ordenada por dia, misturando linha nova e preservada', () => {
+  const d1 = diaEpochDe(2026, 5, 1);
+  const d2 = diaEpochDe(2026, 6, 2);
+  const d3 = diaEpochDe(2026, 6, 25);
+  const { linhasSaida } = mesclarProducao({
+    resultadosPorMes: [{ chave: '2026-06', lidas: [
+      linhaLink7(3, 'SUP-C', 'SP', d3),
+      linhaLink7(2, 'SUP-B', 'SP', d2),
+    ] }],
+    jaTemos: { [String(d1)]: [`1,SUP-A,SP,${d1}`] },
+    diaFim: DIA_FIM_PADRAO,
+  });
+  assert.deepEqual(linhasSaida.map((l) => Number(l.split(',')[3])), [d1, d2, d3]);
+});

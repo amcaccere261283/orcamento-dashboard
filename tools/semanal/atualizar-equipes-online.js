@@ -388,6 +388,64 @@ function mesesPendentes(porDia, ano, mesCorrente) {
   return pendentes;
 }
 
+// Núcleo PURO do merge da produção (Link 7): decide quais meses autorizam
+// descarte, filtra o que veio e costura com o que já estava gravado. Extraído
+// de main() em 2026-08-17, por pedido da revisão final: a regra mais perigosa
+// do arquivo morava lá dentro, inalcançável por teste. Mesmo desenho de
+// gravarRoster, que já era puro exatamente por esse motivo.
+//
+// - resultadosPorMes: [{ chave: 'AAAA-MM', lidas: [{idEquipe, sup, tipo, diaEpoch}] }].
+//   Mês que FALHOU não entra na lista -- quem chama trata a exceção e o mês
+//   simplesmente não é tocado.
+// - jaTemos: { diaEpoch: ['linha crua', ...] }, como lerCsvExistente devolve.
+// - diaFim: dia-desde-época do corte (HOJE desde 2026-08-17).
+function mesclarProducao({ resultadosPorMes, jaTemos, diaFim }) {
+  const mesesBuscados = new Set();
+  const mesesVazios = [];
+  const linhasBrutas = [];
+  for (const { chave, lidas } of resultadosPorMes || []) {
+    linhasBrutas.push(...lidas);
+    // SÓ marca o mês como buscado se veio linha. Estar em 'mesesBuscados'
+    // AUTORIZA o laço de preservação abaixo a descartar tudo que já estava
+    // gravado daquele mês -- então uma resposta que parseia para ZERO linha,
+    // sem lançar, apagaria um mês inteiro de dado bom. Isso não é hipotético
+    // neste arquivo: em 2026-08-08 um espaço duplo num cabeçalho fez
+    // parseLinhasLink7 descartar TODAS as linhas sem erro nenhum. Virou risco
+    // real em 2026-08-17, quando o mês ANTERIOR passou a ser rebuscado toda
+    // vez (ver mesesPendentes): antes disso um mês fechado com dado nunca era
+    // rebuscado, então não tinha como regredir.
+    if (lidas.length) mesesBuscados.add(chave);
+    else mesesVazios.push(chave);
+  }
+
+  // Recorta aos meses REALMENTE buscados, e nunca além do corte: o filtro
+  // de/ate do site não restringe "Data / Hora Primeira Foto" ao intervalo
+  // pedido (achado em 2026-08-09), então sessões de OS antigas ainda ativas
+  // entrariam no agregado sem isto.
+  const linhasNovas = linhasBrutas.filter(
+    (l) => mesesBuscados.has(mesDoDia(l.diaEpoch)) && l.diaEpoch <= diaFim,
+  );
+
+  // Formato cru desde 2026-08-10: IdEquipe,SUP,Tipo,DiaEpoch, uma linha por
+  // (equipe, dia, contrato) -- a fração/alocação por roster é calculada no
+  // cruzamento (build/refresh), não aqui. Ver
+  // compute-equipes-realizado-alocado.js.
+  const linhasSaida = linhasNovas.map((l) => `${l.idEquipe},${l.sup},${l.tipo},${l.diaEpoch}`);
+
+  // Preserva os dias dos meses que NÃO foram rebuscados agora. A disjunção
+  // entre o que se grava e o que se preserva vem inteiramente de
+  // 'mesesBuscados' (chaveado 'AAAA-MM' por mesDoDia) -- não há cursor de dia.
+  let diasPreservados = 0;
+  for (const [dia, linhas] of Object.entries(jaTemos || {})) {
+    if (mesesBuscados.has(mesDoDia(Number(dia)))) continue;
+    linhasSaida.push(...linhas);
+    diasPreservados++;
+  }
+
+  linhasSaida.sort((a, b) => Number(a.split(',')[3]) - Number(b.split(',')[3]));
+  return { linhasSaida, linhasNovas, mesesBuscados, mesesVazios, diasPreservados, totalBruto: linhasBrutas.length };
+}
+
 // Fatia o intervalo pedido em meses -- o Link 7 aceita qualquer intervalo num
 // fetch só, mas um ano inteiro numa requisição é uma tabela grande demais
 // para raspar de uma vez com segurança. Mês a mês mantém cada resposta no
@@ -455,8 +513,7 @@ async function main() {
 
   console.log(`Buscando produção (Link 7 -- campo/sondagens): ${pendentes.length} mês(es) de ${ano} -- ${pendentes.map((m) => String(m).padStart(2, '0')).join(', ')} (corte em hoje: ${fmtData(dataDoDiaEpoch(diaFim))})...`);
 
-  const linhasLink7Brutas = [];
-  const mesesBuscados = new Set();
+  const resultadosPorMes = [];
   const falhas = [];
   for (const mes of pendentes) {
     const de = new Date(Date.UTC(ano, mes - 1, 1));
@@ -464,91 +521,59 @@ async function main() {
     // Nunca além de hoje: não há dado de dia futuro no Link 7.
     const ate = diaEpoch(ateMes) > diaFim ? dataDoDiaEpoch(diaFim) : ateMes;
     if (diaEpoch(de) > diaFim) continue;
+    const chave = `${ano}-${String(mes).padStart(2, '0')}`;
     try {
       const lidas = await buscarJanela(de, ate);
       console.log(`  ${fmtData(de)} a ${fmtData(ate)}: ${lidas.length} sondagem-dia (bruto)`);
-      linhasLink7Brutas.push(...lidas);
-      // SÓ marca o mês como buscado se veio linha. Estar em 'mesesBuscados'
-      // autoriza o merge abaixo a DESCARTAR tudo que já estava gravado
-      // daquele mês -- então uma resposta que parseia para ZERO linha, sem
-      // lançar, apagaria um mês inteiro de dado bom. Isso não é hipotético
-      // neste arquivo: em 2026-08-08 um espaço duplo num cabeçalho fez
-      // parseLinhasLink7 descartar TODAS as linhas sem erro nenhum (ver o
-      // comentário do cabeçalho mais acima). O guard global
-      // `if (!linhasLink7.length) throw` não pega este caso, porque basta o
-      // mês corrente ter vindo bom para o total ser > 0.
-      // Virou risco real em 2026-08-17, quando o mês ANTERIOR passou a ser
-      // rebuscado toda vez (ver mesesPendentes): antes disso um mês fechado
-      // com dado nunca era rebuscado, então não tinha como regredir.
-      // Mesma convenção de resiliência do catch abaixo: o que não veio agora
-      // fica preservado como estava.
-      if (lidas.length) mesesBuscados.add(`${ano}-${String(mes).padStart(2, '0')}`);
-      else console.warn(`  ${fmtData(de)} a ${fmtData(ate)}: ZERO linha -- o mês NÃO será regravado (o dado anterior dele fica intacto).`);
+      resultadosPorMes.push({ chave, lidas });
     } catch (err) {
       // Um mês que falha não pode derrubar os outros nem apagar o que já
-      // estava gravado -- o merge abaixo preserva os meses não buscados.
+      // estava gravado -- não entrando em resultadosPorMes, ele nunca é
+      // marcado como buscado, e mesclarProducao o preserva.
       console.warn(`  ${fmtData(de)} a ${fmtData(ate)}: FALHOU -- ${err.message}`);
-      falhas.push(`${ano}-${String(mes).padStart(2, '0')}`);
+      falhas.push(chave);
     }
   }
 
-  if (!linhasLink7Brutas.length) {
+  // Todo o merge (quais meses autorizam descarte, o filtro por mês/corte e a
+  // costura com o CSV anterior) mora em mesclarProducao, puro e coberto por
+  // teste -- ver a nota na definição dela.
+  const {
+    linhasSaida, linhasNovas, mesesVazios, diasPreservados, totalBruto,
+  } = mesclarProducao({ resultadosPorMes, jaTemos, diaFim });
+
+  if (!totalBruto) {
     throw new Error('Nenhuma linha encontrada no Link 7 -- abortando sem gravar (sessao expirada, ou período sem nenhuma sondagem -- confira antes de aceitar um CSV vazio).');
   }
-
-  // O filtro de/ate do site NÃO restringe "Data / Hora Primeira Foto" ao
-  // intervalo pedido -- achado ao vivo em 2026-08-09: uma busca de
-  // 01/08-31/08 devolveu sessões de foto genuínas desde 25/06 (OS aberta há
-  // semanas, ainda ativa em agosto, mas com sessões antigas incluídas na
-  // resposta). Cada linha tem data PRÓPRIA e correta (confirmado: a mesma OS
-  // aparece várias vezes, cada uma com timestamp distinto -- não é um resumo
-  // por OS) -- o problema é só que a resposta não fica contida no mês
-  // pedido. Sem este filtro, equipesPeriodo (calculado a partir do dia MAIS
-  // ANTIGO no CSV, ver parseEquipesFracaoCsv em build-dashboard.js) sairia
-  // com o mês errado (ex.: junho em vez de agosto), e o mês REAL (agosto)
-  // seria tratado como "fora da cobertura" pelo Balanço -- silenciosamente
-  // sem dado, mesmo o CSV tendo dado bom pra agosto.
-  // Recorta aos meses REALMENTE buscados, e nunca além de hoje: o filtro
-  // de/ate do site não restringe "Data / Hora Primeira Foto" ao intervalo
-  // pedido (achado em 2026-08-09), então sessões de OS antigas entrariam no
-  // agregado sem isto. O dia corrente AGORA ENTRA (2026-08-17) -- ele é
-  // parcial, e é o rebusque do mês corrente (e do anterior, ver
-  // mesesPendentes) que o completa depois.
-  const linhasLink7 = linhasLink7Brutas.filter((l) => mesesBuscados.has(mesDoDia(l.diaEpoch)) && l.diaEpoch <= diaFim);
-  const foraDoIntervalo = linhasLink7Brutas.length - linhasLink7.length;
-  if (foraDoIntervalo > 0) {
-    console.log(`  ${foraDoIntervalo} linha(s) fora do intervalo pedido (sessão de foto de OS antiga ainda ativa) -- descartadas, ficam ${linhasLink7.length}.`);
+  for (const chave of mesesVazios) {
+    console.warn(`  ${chave}: ZERO linha -- o mês NÃO será regravado (o dado anterior dele fica intacto).`);
   }
-  if (!linhasLink7.length) {
+
+  // O filtro por mês buscado + corte que mesclarProducao aplica existe porque
+  // o de/ate do site NÃO restringe "Data / Hora Primeira Foto" ao intervalo
+  // pedido -- achado ao vivo em 2026-08-09: uma busca de 01/08-31/08 devolveu
+  // sessões de foto genuínas desde 25/06 (OS aberta há semanas, ainda ativa em
+  // agosto, mas com sessões antigas incluídas na resposta). Cada linha tem data
+  // PRÓPRIA e correta (confirmado: a mesma OS aparece várias vezes, cada uma
+  // com timestamp distinto -- não é um resumo por OS); o problema é só que a
+  // resposta não fica contida no mês pedido. Sem o filtro, equipesPeriodo
+  // (calculado a partir do dia MAIS ANTIGO no CSV, ver parseEquipesFracaoCsv em
+  // build-dashboard.js) sairia com o mês errado (ex.: junho em vez de agosto), e
+  // o mês REAL seria tratado como "fora da cobertura" pelo Balanço --
+  // silenciosamente sem dado, mesmo o CSV tendo dado bom.
+  const foraDoIntervalo = totalBruto - linhasNovas.length;
+  if (foraDoIntervalo > 0) {
+    console.log(`  ${foraDoIntervalo} linha(s) fora do intervalo pedido (sessão de foto de OS antiga ainda ativa) -- descartadas, ficam ${linhasNovas.length}.`);
+  }
+  if (!linhasNovas.length) {
     throw new Error('Todas as linhas do Link 7 ficaram fora do intervalo depois do filtro -- abortando sem gravar (não é o caso normal, confira antes de aceitar um CSV vazio).');
   }
 
-  console.log(`  ${linhasLink7.length} linha(s) de produção (equipe, dia, contrato) no período buscado.`);
-
-  // Formato cru desde 2026-08-10: IdEquipe,SUP,Tipo,DiaEpoch, uma linha por
-  // (equipe, dia, contrato) -- a fração/alocação por roster passou a ser
-  // calculada no cruzamento (build/refresh), não mais aqui. Ver
-  // compute-equipes-realizado-alocado.js e a spec
-  // docs/superpowers/specs/2026-08-10-equipes-realizado-roster-link6-link7-design.md.
-  const linhasSaida = linhasLink7.map((l) => `${l.idEquipe},${l.sup},${l.tipo},${l.diaEpoch}`);
-
-  // Preserva os dias dos meses que NÃO foram rebuscados agora. A disjunção
-  // entre o que se grava e o que se preserva vem inteiramente de
-  // 'mesesBuscados' (chaveado 'AAAA-MM' por mesDoDia) -- não há mais cursor de
-  // dia. Um mês só entra nesse conjunto se a busca dele voltou com pelo menos
-  // uma linha (ver o guard no laço acima).
-  let diasPreservados = 0;
-  for (const [dia, linhas] of Object.entries(jaTemos)) {
-    if (mesesBuscados.has(mesDoDia(Number(dia)))) continue;
-    linhasSaida.push(...linhas);
-    diasPreservados++;
-  }
-
-  linhasSaida.sort((a, b) => Number(a.split(',')[3]) - Number(b.split(',')[3]));
+  console.log(`  ${linhasNovas.length} linha(s) de produção (equipe, dia, contrato) no período buscado.`);
 
   fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
   fs.writeFileSync(OUT_PATH, [CABECALHO_PRODUCAO, ...linhasSaida].join('\n') + '\n', 'utf8');
-  const diasNovos = new Set(linhasLink7.map((l) => l.diaEpoch)).size;
+  const diasNovos = new Set(linhasNovas.map((l) => l.diaEpoch)).size;
   if (falhas.length) console.warn(`${falhas.length} mês(es) falharam e ficaram como estavam: ${falhas.join(', ')}`);
   console.log(`Pronto: ${diasNovos} dia(s) novo(s) + ${diasPreservados} dia(s) preservado(s) do CSV anterior, gravado em ${OUT_PATH}.`);
 }
@@ -558,7 +583,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  parseLinhasLink7, lerCsvExistente, janelasMensais, mesesPendentes, mesDoDia, main,
+  parseLinhasLink7, lerCsvExistente, janelasMensais, mesesPendentes, mesclarProducao, mesDoDia, main,
   linhasRosterDoMes, lerRosterExistente, buscarRoster, gravarRoster,
   CABECALHO_ROSTER, CABECALHO_PRODUCAO,
 };
