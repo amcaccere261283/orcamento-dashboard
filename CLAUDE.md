@@ -458,6 +458,46 @@ ainda é provável de manhã, porque a captura das 8h pega a segunda quase vazia
 é circunstância, não estrutura. Segue sem trava de dias mínimos, decisão explícita
 do dono do projeto em 2026-08-17.
 
+### Realizado de Equipes: tira encarregado da conta, "auxiliar" vira campoSemFuro (2026-08-17)
+
+Investigação partiu de uma pergunta concreta do dono do projeto: "por que a S3 da Tabela
+Semanal mostra 89 equipes?". Reproduzido decifrando o HTML publicado
+(`decifrarComSenha` + `window.__DADOS_CIFRADOS__`) e rodando `somarEquipesNoIntervalo`
+direto em Node contra o dado real — 89 = `Math.ceil(534 equipe-dia / 6 dias úteis)`,
+soma de `demandas.equipesPorDia` (roster Link 6 + produção Link 7) de TODOS os pares
+(SUP, tipologia) na semana. Não era anomalia (S1 83 · S2 80 · **S3 89** · S4 97 · S5 91 ·
+S6 90, tendência subindo o mês inteiro) — era o balde `naoEquipe`
+(`ativaNaDefinicaoNova`, `compute-equipes-realizado-alocado.js`) contando encarregado,
+auxiliar, contratação, admissão e desligamento junto com quem está de fato em campo,
+decisão deliberada de 2026-08-10 (só excluía `'fora'`).
+
+**Duas mudanças, pedidas em sequência pelo dono do projeto:**
+
+1. **Encarregado (e o resto do balde `naoEquipe`) sai da conta.** `ativaNaDefinicaoNova`
+   virou idêntica a `contaComoAtiva()` (mobilizada + campoSemFuro). Não há granularidade
+   pra excluir só "encarregado": a classificação de origem (`classificar-dia-equipe.js`)
+   não distingue encarregado de contratação/admissão/desligamento dentro do mesmo balde
+   — excluir um exclui todos. Efeito: Equipes REALIZADO caiu de 21.168 para 16.714
+   equipe-dia no ano; S3 do mês vigente caiu de 89 para 75.
+2. **"Auxiliar" saiu do balde `naoEquipe` pro lado OPOSTO**, pedido em seguida ao
+   perguntar "o que seria o auxiliar" nesse balde: apoiar outra equipe em campo (texto
+   tipo `"Auxiliar Flavio"`) ainda é equipe ativa, só não é furo próprio no dia — virou
+   `campoSemFuro` em vez de `naoEquipe`. A exceção antiga `volta.*auxiliar|auxiliar.*volta`
+   (2026-08-11, que já tratava só o caso de VOLTAR a ser auxiliar como ativa) ficou
+   redundante e saiu — agora qualquer "auxiliar" cai direto em campoSemFuro.
+
+**Armadilha ao medir o efeito: o CSV do roster é CACHE, reclassificado só no FETCH, não
+no build.** Rodar `build-dashboard.js` de novo sozinho não muda nada — `equipesPorDia`
+vem de `dist/equipes-roster-online.csv`, já com o `Estado` pré-calculado por
+`atualizar-equipes-online.js` na hora da busca. Pra ver o efeito da mudança de regra é
+preciso rebuscar (`node tools/semanal/atualizar-equipes-online.js`), e mesmo assim só o
+MÊS VIGENTE é rebuscado — meses anteriores ficam com a classificação antiga, preservada
+do CSV anterior (ver "225 dia(s) preservado(s)" no log do fetcher). Medido: rebuscar
+agosto/2026 achou só 4 células com "auxiliar" no mês — Equipes REALIZADO subiu de 16.714
+para 16.718; S3 ficou em 75 (nenhuma das 4 caiu nessa semana especificamente).
+
+Commits: `52ed885` (encarregado), `767cbdf` (auxiliar).
+
 ### Consolidado congelado, filtro global de ativos e o anel do status (2026-08-04)
 
 Spec: `docs/superpowers/specs/2026-08-04-semanal-consolidado-congelado-e-ativos-design.md`.
