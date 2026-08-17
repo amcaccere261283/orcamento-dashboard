@@ -447,13 +447,16 @@ fórmula nova automaticamente (mesma função), sem mudança de código nesses d
 diagnóstico nesta mesma mudança — o parágrafo acima vale como histórico do Alerta A
 antigo, não como descrição da API atual.
 
-**O gatilho `realizadoVigente === 0` dispara com certeza em todo primeiro dia de
-semana.** O Realizado sempre para em d−1 (`realizadoAteEpoch = hojeEpoch - 1`,
-`render-aba-semanal.js`), então na segunda-feira o intervalo de contagem da semana
-vigente fica vazio e `realizadoVigente` sai 0 POR CONSTRUÇÃO, não importa o que já
-tenha sido lançado naquele dia — o alerta "Avaliar movimentação de equipe" dispara
-para TODO SUP no ramo `R > P`, a cada semana, garantido. É decisão explícita do
-dono do projeto (ver o spec de 2026-08-17), sem trava de dias mínimos.
+**O gatilho `realizadoVigente === 0` tende a disparar cedo na segunda-feira, mas
+não é mais garantido.** Enquanto o Realizado parava em d−1, o intervalo de contagem
+da semana vigente ficava vazio no primeiro dia dela e `realizadoVigente` saía 0 POR
+CONSTRUÇÃO — o alerta "Avaliar movimentação de equipe" disparava para TODO SUP no
+ramo `R > P`, toda semana, sem exceção. **O corte passou a ser HOJE em 2026-08-17**
+(ver `docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md`), e isso
+deixou de valer: a segunda-feira pode ter avanço registrado. Na prática o disparo
+ainda é provável de manhã, porque a captura das 8h pega a segunda quase vazia — mas
+é circunstância, não estrutura. Segue sem trava de dias mínimos, decisão explícita
+do dono do projeto em 2026-08-17.
 
 ### Consolidado congelado, filtro global de ativos e o anel do status (2026-08-04)
 
@@ -806,17 +809,22 @@ Demandas, Alertas e Consolidado entram numa rodada seguinte.
    cobrem **de 2025-01 em diante** — o Lab buscava só o mês corrente, o que fazia
    LAB.C/LAB.E aparecer com Realizado zero em qualquer mês passado (medido: 3.550
    ensaios contra os 169.041 reais de 15 meses). Equipes (Link 7) faz backfill do
-   **ano corrente**, por mês faltante. E **todo Realizado para em d−1** — o dia
-   corrente está incompleto por construção. `realizadoAteEpoch`
-   (`render-aba-semanal.js`) existe só para isso; `hojeEpoch` continua sendo hoje
-   para semana em curso, saldo de pendentes e congelamento do Consolidado.
+   **ano corrente**, por mês faltante. E **todo Realizado contava até d−1** — o dia
+   corrente estava incompleto por construção, e `realizadoAteEpoch`
+   (`render-aba-semanal.js`) existia só para isso. **Superado em 2026-08-17** (ver
+   `docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md`): a atualização
+   passou a rodar às 8h diariamente, o que a página serve é o retrato daquela hora,
+   e o Realizado passou a contar até **HOJE (D)**. A variável sumiu — o Realizado usa
+   `hojeEpoch` como todo o resto da função, e a Tabela Semanal passou a concordar com
+   o Balanço de massa, que já cortava assim. Vale nas três dimensões, e o Link 7
+   (produção de equipes) passou a buscar e gravar o dia corrente junto.
 2. **Demanda é estoque numa data:** pendência ≤ D e execução > D, com **D = o
    primeiro dia do período**. Execução exatamente em D já não é demanda em D.
    Cancelamento **não** participa mais da saída do estoque.
 3. **O Link 1 é a fonte única de sondagem executada** — só muda mês/ano na URL.
 4. **A exclusão vale em todas as fontes** (`tools/comum/exclusoes.js`, uma
    implementação só). No Lab, `Tomadora` é lida como `Tomador` — é a mesma coluna.
-5. **UTC−3 sempre** (`hojeNoFusoProjeto`/`diaEpochDeOntem` em `tools/comum/datas.js`),
+5. **UTC−3 sempre** (`hojeNoFusoProjeto`/`diaEpochDeHoje` em `tools/comum/datas.js`),
    inclusive no navegador. **E nada que vem dos links é transformado.**
 6. **Troca de fonte pergunta sobre a anterior** antes de deixar órfão no repositório.
 

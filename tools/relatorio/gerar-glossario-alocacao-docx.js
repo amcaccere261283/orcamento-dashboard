@@ -668,9 +668,10 @@ function montarDocumento() {
   b.push(item([{ t: 'Total (m) = 0,01', b: true }, ' — lançamento de controle, sem metragem real.']));
   b.push(item([{ t: 'Status = Cancelado', b: true }, '.']));
   b.push(h3('Duas regras de tempo que explicam muita coisa'));
-  b.push(item([{ t: 'O realizado para sempre em ONTEM. ', b: true },
-    'O dia corrente está incompleto por construção — o extrato é alimentado ao longo do dia. Contá-lo '
-    + 'faria a semana em curso parecer em queda até virar a meia-noite.']));
+  b.push(item([{ t: 'O realizado conta até HOJE. ', b: true },
+    'A atualização dos dados roda às 8h todo dia, então o que você vê é o retrato daquela hora — o dia '
+    + 'corrente entra com o que já tiver sido lançado até ali, e fica completo na atualização do dia '
+    + 'seguinte.']));
   b.push(item([{ t: 'Tudo é medido no fuso de Brasília (UTC−3)', b: true },
     ', inclusive no navegador de quem abre a página em outro fuso.']));
   b.push(pRico(['Os furos ainda ', { t: 'não executados', b: true },
@@ -878,7 +879,7 @@ function montarDocumento() {
   b.push(passo(5, ['Se o número depende de equipe (capacidade, dias, contrato do dia), confira a ',
     { t: 'aba EQ', b: true }, ': é ela que manda. Lembre-se do espelho de 30 minutos.']));
   b.push(passo(6, 'Se depende de furo (tendência, carteira), lembre-se de que o realizado para em '
-    + 'ONTEM e de que deslocamentos e cancelados não entram.'));
+    + 'HOJE (retrato das 8h) e de que deslocamentos e cancelados não entram.'));
   b.push(h3('Limites conhecidos'));
   b.push(item('A aba planeja o MÊS CORRENTE. Semanas de outros meses abrem em somente leitura.'));
   b.push(item('Ela não conhece o efetivo das equipes nem os nomes das pessoas — só o líder.'));

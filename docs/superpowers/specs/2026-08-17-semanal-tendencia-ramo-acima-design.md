@@ -104,16 +104,16 @@ que o resto do arquivo já usa para caminhos inalcançáveis.
 **Decisão explícita, sem trava extra:** o gatilho é `realizadoVigente === 0` sem
 exigir um número mínimo de dias decorridos na semana vigente — inclusive no
 primeiro dia dela. É deliberado (bate com "ainda não tivemos avanço na semana", o
-cenário que motivou o pedido). Mas o efeito não é "pode soar prematuro" — é
-garantido: como o Realizado sempre para em d−1 (`realizadoAteEpoch = hojeEpoch -
-1`, `render-aba-semanal.js`), no PRIMEIRO dia de cada semana o intervalo de
-contagem da semana vigente fica vazio e `realizadoVigente` sai 0 POR CONSTRUÇÃO —
-a fonte de dados não tem como devolver outro valor nesse dia, não importa o que já
-tenha sido lançado. Ou seja, o alerta dispara com CERTEZA para todo SUP no ramo
-`R > P` durante toda a segunda-feira, e na terça-feira a evidência ainda reflete só
-o que rodou na segunda. É um dia em cada sete, não um caso raro. Sem dado para
-calibrar uma trava de dias mínimos agora, fica registrado como ponto a revisitar se
-incomodar na prática — não como bug.
+cenário que motivou o pedido).
+
+> **Correção de 2026-08-17 (mesmo dia).** A versão original deste parágrafo dizia
+> que o disparo era garantido POR CONSTRUÇÃO em toda segunda-feira, porque o
+> Realizado parava em d−1 e o intervalo da semana vigente ficava vazio no primeiro
+> dia dela. **Isso deixou de valer no mesmo dia:** o corte do Realizado passou a ser
+> HOJE (ver `2026-08-17-realizado-ate-hoje-design.md`), e a segunda-feira pode ter
+> avanço registrado. O disparo ainda é provável de manhã — a captura das 8h pega a
+> segunda quase vazia — mas é circunstância, não garantia. A decisão de não colocar
+> trava de dias mínimos foi mantida pelo dono do projeto depois dessa mudança.
 
 ## Decisão 3 — o que não muda
 
