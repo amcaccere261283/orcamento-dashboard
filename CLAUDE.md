@@ -430,6 +430,22 @@ estoque de demanda. Disparam só quando a verificação falha — o semáforo j�
   aberta para furo que já tinha sido entregue (num caso medido: excedente de 140, dos
   quais 130 já estavam prontos). Os nomes são compridos de propósito.
 
+**Ramo `R > P` mudou de fórmula em 2026-08-17** — ver
+`docs/superpowers/specs/2026-08-17-semanal-tendencia-ramo-acima-design.md`. Antes, a
+semana vigente e as futuras estendiam o ritmo médio das semanas fechadas; isso inflava a
+leitura da semana fechada e escondia quando uma equipe acima do plano parava de avançar.
+Agora esse ramo projeta **igual ao ramo `R ≈ P`**: mira o Previsto de cada semana (nunca
+abaixo do Realizado parcial da vigente). `ritmoPorDia` continua no diagnóstico (vira
+evidência do alerta abaixo), só não projeta mais nada. O Alerta A ("Avaliar equipe e
+demanda") foi substituído por **"Avaliar movimentação de equipe"**: dispara quando o ramo
+é `R > P` e a semana vigente ainda não teve NENHUM avanço
+(`diagnostico.realizadoVigente === 0`) — sinal de que a equipe pode ter sido deslocada.
+Não depende mais de saldo de demandas. Consolidado congelado e Alocação Equipes herdam a
+fórmula nova automaticamente (mesma função), sem mudança de código nesses dois. Os campos
+`previstoAPartirDeHoje`/`tendenciaAPartirDeHoje` do parágrafo acima **saíram** do
+diagnóstico nesta mesma mudança — ficam morto o texto acima como histórico do Alerta A
+antigo, não como API atual.
+
 ### Consolidado congelado, filtro global de ativos e o anel do status (2026-08-04)
 
 Spec: `docs/superpowers/specs/2026-08-04-semanal-consolidado-congelado-e-ativos-design.md`.
