@@ -265,9 +265,9 @@ test('Tendência: só semanas TOTALMENTE fechadas ficam sem-dado (o Realizado j�
   assert.deepStrictEqual(numeros, ['', '', '250', '435', '311', '1.000']);
 });
 
-test('Tendência nunca fica negativa quando o Realizado já passou o Previsto -- continua no ritmo já realizado POR DIA, multiplicado pelos dias de cada semana futura', () => {
+test('Tendência nunca fica negativa quando o Realizado já passou o Previsto -- mira o Previsto de cada semana futura', () => {
   const eventos = {
-    // 20 furos concentrados em S27+S28: realizado até agora bem acima do Previsto.
+    // 20 furos concentrados em S1+S2: realizado até agora bem acima do Previsto.
     sondagemRealizada: new Array(10).fill(diaJul(1)).concat(new Array(10).fill(diaJul(8))),
     saidaEstoque: [], chegada: [],
   };
@@ -276,18 +276,16 @@ test('Tendência nunca fica negativa quando o Realizado já passou o Previsto --
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
   assert.doesNotMatch(linhaTendencia, />-/, 'nenhum valor negativo -- ">-" isola número negativo dos hífens em nomes de classe');
   // Ramo R > P (realizadoAcumulado 20 muito acima do previstoAcumulado das
-  // semanas fechadas). Desde a Task 2 (compute-tendencia-semanal.js, ver
-  // Decisão 3/"O que muda em relação a hoje" da spec de 2026-08-04) o ritmo
-  // sai só das semanas TOTALMENTE FECHADAS (S1+S2 = 10+10 = 20 furos, em
-  // 5+7 = 12 dias), não mais incluindo os dias já passados da semana em
-  // curso (S3) -- ritmoPorDia = 20/12, não mais 20/15. S4 (7 dias) =
-  // 20/12*7 = 11,67; S5 (5 dias) = 20/12*5 = 8,33 -- maiores que antes
-  // (9,33/6,67) porque o mesmo Realizado agora se divide por menos dias.
-  const ritmoPorDia = 20 / 12;
+  // semanas fechadas S1+S2). Desde a Task 1 (compute-tendencia-semanal.js, ver
+  // docs/superpowers/specs/2026-08-04-semanal-tendencia-regras-e-alertas-design.md)
+  // o ramo R > P mudou: em vez de ritmo das fechadas multiplicado pelos dias,
+  // agora mira o Previsto de cada semana. Previsto de julho (5) reparte inteiro
+  // em [1,1,1,1,1]. S3 vigente (realizado parcial 0) = max(1, 0) = 1.
+  // S4 futura = Previsto = 1; S5 futura = Previsto = 1.
   const fmt = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   const numeros = linhaTendencia.match(/<td class="num[^"]*">([^<]*)<\/td>/g).map(td => td.match(/>([^<]*)</)[1]);
-  assert.strictEqual(numeros[3], fmt(ritmoPorDia * 7), 'semana futura S4 (7 dias) continua no ritmo médio já realizado por dia');
-  assert.strictEqual(numeros[4], fmt(ritmoPorDia * 5), 'semana futura S5 (5 dias) idem, proporcional aos seus próprios dias');
+  assert.strictEqual(numeros[3], fmt(1), 'semana futura S4 mira o Previsto da semana = 1');
+  assert.strictEqual(numeros[4], fmt(1), 'semana futura S5 mira o Previsto da semana = 1');
 });
 
 test('Tendência: no último dia do mês (semana vigente = a última, sem dias restantes nela e sem semana futura), as 4 semanas fechadas ficam sem-dado e a última mostra sua projeção -- que coincide com seu próprio Realizado (nada mais a distribuir); o Fechamento continua batendo', () => {
