@@ -1,6 +1,6 @@
 'use strict';
 const { avaliarAlertaTendencia, ALERTA_ROTULO} = require('./compute-alertas-tendencia.js');
-const { calcularSeriesSemanaisDimensao, pendentesNaData} = require('./render-aba-semanal.js');
+const { calcularSeriesSemanaisDimensao } = require('./render-aba-semanal.js');
 const { somarPrevistoMes} = require('./render-aba-consolidado.js');
 const { agruparIndicesAlertas, tomadorDoGrupo, normalizarBusca} = require('./render-aba-alertas.js');
 const { diasNaSemana, indiceSemanaAtual} = require('./compute-semanal.js');
@@ -12,14 +12,17 @@ const { diasNaSemana, indiceSemanaAtual} = require('./compute-semanal.js');
 // SÓ na dimensão Volume, de propósito: as duas perguntas são físicas (furos em
 // carteira, furos por equipe-dia). Em R$ não existe estoque de demanda, e em
 // Equipes não existe Realizado semanal em lugar nenhum desta página.
+//
+// O alerta do ramo R>P mudou de pergunta em 2026-08-17 -- ver
+// docs/superpowers/specs/2026-08-17-semanal-tendencia-ramo-acima-design.md.
 
 var COR_ALERTA = '#c0392b';
 var COR_SEM_DADO = '#95a5a6';
 
 // Rótulo do caso "não dá nem pra saber o ramo" (sem base de demandas
 // carregada) -- não é um dos dois alertas de ALERTA_ROTULO (compute-alertas-
-// tendencia.js), então não entra lá: nomear a linha "Avaliar equipe e
-// demanda" ou "Equipes com pouco recurso" seria afirmar qual das duas
+// tendencia.js), então não entra lá: nomear a linha "Avaliar movimentação de
+// equipe" ou "Equipes com pouco recurso" seria afirmar qual das duas
 // perguntas ficou pendente quando, na verdade, nenhuma chegou a ser feita.
 var ROTULO_SEM_AVALIACAO = 'Tendência não avaliada';
 
@@ -47,16 +50,13 @@ function textoEvidencia(alerta) {
     return 'Sem base de demandas carregada -- sem ela não dá pra saber se o ritmo está acima ou abaixo do plano';
   }
   if (alerta.status === 'sem-dado') {
-    // Só o Alerta B (produtividade) chega aqui. O 'sem-dado' do Alerta A
-    // exigiria saldoDemandas null, e ele nunca é: sem base de demandas o
-    // bypass de renderLinhaGrupo intercepta antes (tipo 'sem-avaliacao'), e
-    // com base carregada pendentesNaData sempre devolve número. A mensagem
-    // "Sem base de demandas carregada" que existia neste ramo era inalcançável.
+    // Só o Alerta B (produtividade) chega aqui -- o de movimentação nunca tem
+    // 'sem-dado' (só olha o próprio diagnóstico, sem insumo externo).
     return 'Sem equipes previstas ou sem premissa de produtividade';
   }
-  if (alerta.tipo === 'demanda') {
-    return 'Saldo de demandas ' + formatarNumero(alerta.saldoDemandas, 0)
-      + ' · excedente projetado ' + formatarNumero(alerta.excedenteProjetado, 0);
+  if (alerta.tipo === 'movimentacao') {
+    return 'Ritmo médio nas semanas fechadas ' + formatarNumero(alerta.ritmoAnterior, 2)
+      + ' furos/dia · nenhum avanço registrado na semana em curso';
   }
   return 'Produtividade exigida ' + formatarNumero(alerta.produtividadeExigida, 2)
     + ' · esperada ' + formatarNumero(alerta.produtividadeEsperada, 2)
@@ -130,7 +130,6 @@ function renderLinhaGrupo(rotuloGrupo, registros, indices, ctx) {
         diagnostico: series.diagnosticoTendencia,
         mesIdx: ctx.mesIdx,
         diasDoMes: ctx.diasDoMes,
-        saldoDemandas: pendentesNaData(registros, indices, ctx.demandas, ctx.hojeEpoch),
         equipesPrevistas: somarPrevistoMes(registros, indices, 'equipes', ctx.mesIdx),
         produtividadeEsperada: premissaProdutividadeDoGrupo(registros, indices, ctx.mesIdx),
       })

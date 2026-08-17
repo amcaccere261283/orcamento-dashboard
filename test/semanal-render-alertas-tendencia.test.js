@@ -55,7 +55,7 @@ test('grupo sem alerta nenhum nao vira linha', () => {
     demandas: demandasDe('A', chegadas, realizadas),
     hojeEpoch: HOJE,
   });
-  assert.ok(html.indexOf('Avaliar equipe e demanda') === -1);
+  assert.ok(html.indexOf('Avaliar movimentação de equipe') === -1);
   assert.ok(html.indexOf('Equipes com pouco recurso') === -1);
 });
 
@@ -80,6 +80,35 @@ test('deficit grande com uma equipe improdutiva vira a linha de equipes', () => 
   });
   assert.ok(html.indexOf('Equipes com pouco recurso ou improdutividade') !== -1);
   assert.ok(/data-search=/.test(html), 'a linha precisa do data-search para a busca da aba');
+});
+
+test('R>P com a semana vigente zerada gera a linha "Avaliar movimentacao de equipe"', () => {
+  // Previsto do mes 62 -> semanas [10,14,14,14,10] (2/dia). S1+S2 previsto=24;
+  // 30 furos realizados nelas (15 no dia 1, 15 no dia 6) -> ramo acima.
+  // Nenhum furo realizado em S3 (13..19) ate o corte de d-1 (14/07) -> a
+  // vigente fica zerada e o alerta dispara.
+  const realizadas = [];
+  for (let i = 0; i < 15; i++) { realizadas.push(dia(1)); realizadas.push(dia(6)); }
+  const html = renderCorpoAlertasTendencia([registro('A', 62, 1, 1)], [0], {
+    agruparPor: 'sup', dimensao: 'volume', mesIdx: 6, semanas: SEMANAS,
+    demandas: demandasDe('A', [], realizadas),
+    hojeEpoch: HOJE,
+  });
+  assert.ok(html.indexOf('Avaliar movimentação de equipe') !== -1);
+  assert.ok(/data-search=/.test(html), 'a linha precisa do data-search para a busca da aba');
+});
+
+test('R>P com avanco na vigente, mesmo pequeno, nao alerta', () => {
+  const realizadas = [];
+  for (let i = 0; i < 15; i++) { realizadas.push(dia(1)); realizadas.push(dia(6)); }
+  realizadas.push(dia(13)); // 1 furo na vigente, antes do corte de hoje-1 (14/07)
+  const html = renderCorpoAlertasTendencia([registro('A', 62, 1, 1)], [0], {
+    agruparPor: 'sup', dimensao: 'volume', mesIdx: 6, semanas: SEMANAS,
+    demandas: demandasDe('A', [], realizadas),
+    hojeEpoch: HOJE,
+  });
+  assert.strictEqual(html.indexOf('Avaliar movimentação de equipe'), -1);
+  assert.strictEqual(html.indexOf('data-search='), -1, 'nenhum alerta dispara nesse grupo');
 });
 
 test('sem demandas carregadas o bloco diz sem dado, nao "tudo certo"', () => {
