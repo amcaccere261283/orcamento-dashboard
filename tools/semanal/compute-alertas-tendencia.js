@@ -1,11 +1,15 @@
 'use strict';
 const { DIAS_PREMISSA_MES } = require('../comum/calculo-equipes.js');
 
-// Os dois alertas de diagnóstico pedidos em 2026-08-04 -- ver
-// docs/superpowers/specs/2026-08-04-semanal-tendencia-regras-e-alertas-design.md.
-// Puro: recebe o 'diagnostico' que compute-tendencia-semanal.js já calculou e
-// os três insumos externos (saldo de demandas, equipes previstas, premissa de
-// produtividade), e responde a pergunta que o ramo levanta.
+// Os dois alertas de diagnóstico da aba Alertas. Puro: recebe o
+// 'diagnostico' que compute-tendencia-semanal.js já calculou e responde a
+// pergunta que o ramo levanta.
+//
+// Alerta 'movimentacao' (ramo R>P, desde 2026-08-17 -- ver
+// docs/superpowers/specs/2026-08-17-semanal-tendencia-ramo-acima-design.md):
+// só olha o próprio diagnóstico, sem insumo externo. Alerta 'produtividade'
+// (ramo R<P, 2026-08-04) ainda depende de dois insumos externos: equipes
+// previstas e premissa de produtividade.
 //
 // O require de '../comum/' é REMOVIDO pelo bundler (ver transformaModulo em
 // tools/comum/browser-bundle.js): no navegador DIAS_PREMISSA_MES chega como
@@ -13,7 +17,7 @@ const { DIAS_PREMISSA_MES } = require('../comum/calculo-equipes.js');
 // bundle. No Node o require resolve normalmente.
 
 var ALERTA_ROTULO = {
-  demanda: 'Avaliar equipe e demanda',
+  movimentacao: 'Avaliar movimentação de equipe',
   produtividade: 'Equipes com pouco recurso ou improdutividade',
 };
 
@@ -35,8 +39,7 @@ function semDado(tipo, diagnostico) {
   };
 }
 
-// entrada: { ramo, diagnostico, mesIdx, diasDoMes, saldoDemandas,
-//            equipesPrevistas, produtividadeEsperada }
+// entrada: { ramo, diagnostico, mesIdx, diasDoMes, equipesPrevistas, produtividadeEsperada }
 // Devolve null quando não há nada a dizer, e um objeto quando há -- 'sem-dado'
 // quando falta insumo para decidir. Ausência nunca vira "tudo certo".
 function avaliarAlertaTendencia(entrada) {
@@ -45,20 +48,16 @@ function avaliarAlertaTendencia(entrada) {
   if (!d || e.ramo === 'igual' || e.ramo === 'sem-dado' || !e.ramo) return null;
 
   if (e.ramo === 'acima') {
-    // O ritmo acima do plano tem carteira que o sustente?
-    var excedente = d.tendenciaAPartirDeHoje - d.previstoAPartirDeHoje;
-    if (excedente <= 0) return null;
-    if (e.saldoDemandas === null || e.saldoDemandas === undefined) return semDado('demanda', d);
-    if (e.saldoDemandas >= excedente) return null;
+    // A equipe que produziu acima do plano continua avançando na semana em
+    // curso? Zero furos nela, com as fechadas acima do plano, é o sinal de
+    // que ela pode ter sido deslocada -- avaliar mover pra onde falta.
+    // Ver docs/superpowers/specs/2026-08-17-semanal-tendencia-ramo-acima-design.md.
+    if (d.realizadoVigente > 0) return null;
     return {
-      tipo: 'demanda', status: 'alerta',
+      tipo: 'movimentacao', status: 'alerta',
       realizadoAcumulado: d.realizadoAcumulado,
       previstoAcumulado: d.previstoAcumulado,
-      // Quanto a projeção do que falta DAQUI PRA FRENTE passa do plano do
-      // mesmo recorte -- a semana em curso entra só na fração posterior a
-      // hoje, nos dois lados (ver compute-tendencia-semanal.js).
-      excedenteProjetado: excedente,
-      saldoDemandas: e.saldoDemandas,
+      ritmoAnterior: d.ritmoPorDia,
     };
   }
 

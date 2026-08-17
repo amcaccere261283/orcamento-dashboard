@@ -5,42 +5,36 @@ const { avaliarAlertaTendencia, diasPremissaRestantes, ALERTA_ROTULO } = require
 const { DIAS_PREMISSA_MES } = require('../tools/comum/calculo-equipes.js');
 
 // Julho (mesIdx 6): 31 dias de calendario, 30 dias de premissa.
-// previstoAPartirDeHoje/tendenciaAPartirDeHoje medem so o que ainda NAO
-// aconteceu (a semana em curso entra pela fatia posterior a hoje) -- ver
+// realizadoVigente é o dado que o alerta 'movimentacao' usa (ramo R>P) -- ver
 // compute-tendencia-semanal.js.
-const DIAG_ACIMA = {
+const DIAG_ACIMA_SEM_AVANCO = {
   realizadoAcumulado: 180, previstoAcumulado: 120, semanasFechadas: 2, indiceVigente: 2,
-  saldo: 130, ritmoPorDia: 15, diasRestantesMes: 18, previstoAPartirDeHoje: 190, tendenciaAPartirDeHoje: 270,
+  realizadoVigente: 0, saldo: 130, ritmoPorDia: 15, diasRestantesMes: 18,
 };
+const DIAG_ACIMA_COM_AVANCO = Object.assign({}, DIAG_ACIMA_SEM_AVANCO, { realizadoVigente: 40 });
 const DIAG_ABAIXO = {
   realizadoAcumulado: 60, previstoAcumulado: 120, semanasFechadas: 2, indiceVigente: 2,
-  saldo: 250, ritmoPorDia: 5, diasRestantesMes: 18, previstoAPartirDeHoje: 190, tendenciaAPartirDeHoje: 250,
+  realizadoVigente: 0, saldo: 250, ritmoPorDia: 5, diasRestantesMes: 18,
 };
 const BASE = { mesIdx: 6, diasDoMes: 31 };
 
 test('ramo igual e ramo sem-dado nao produzem alerta', () => {
-  assert.strictEqual(avaliarAlertaTendencia(Object.assign({ ramo: 'igual', diagnostico: DIAG_ACIMA }, BASE)), null);
+  assert.strictEqual(avaliarAlertaTendencia(Object.assign({ ramo: 'igual', diagnostico: DIAG_ACIMA_SEM_AVANCO }, BASE)), null);
   assert.strictEqual(avaliarAlertaTendencia(Object.assign({ ramo: 'sem-dado', diagnostico: null }, BASE)), null);
 });
 
-test('R>P sem carteira que sustente o ritmo dispara "avaliar equipe e demanda"', () => {
-  // excedente = 270 - 190 = 80. Saldo de demandas 30 < 80 -> alerta.
-  const a = avaliarAlertaTendencia(Object.assign({ ramo: 'acima', diagnostico: DIAG_ACIMA, saldoDemandas: 30 }, BASE));
-  assert.strictEqual(a.tipo, 'demanda');
+test('R>P com a semana vigente zerada dispara "avaliar movimentacao de equipe"', () => {
+  const a = avaliarAlertaTendencia(Object.assign({ ramo: 'acima', diagnostico: DIAG_ACIMA_SEM_AVANCO }, BASE));
+  assert.strictEqual(a.tipo, 'movimentacao');
   assert.strictEqual(a.status, 'alerta');
-  assert.strictEqual(a.excedenteProjetado, 80);
-  assert.strictEqual(a.saldoDemandas, 30);
+  assert.strictEqual(a.realizadoAcumulado, 180);
+  assert.strictEqual(a.previstoAcumulado, 120);
+  assert.strictEqual(a.ritmoAnterior, 15);
 });
 
-test('R>P com carteira suficiente nao alerta', () => {
-  const a = avaliarAlertaTendencia(Object.assign({ ramo: 'acima', diagnostico: DIAG_ACIMA, saldoDemandas: 200 }, BASE));
+test('R>P com qualquer avanco na semana vigente nao alerta', () => {
+  const a = avaliarAlertaTendencia(Object.assign({ ramo: 'acima', diagnostico: DIAG_ACIMA_COM_AVANCO }, BASE));
   assert.strictEqual(a, null);
-});
-
-test('R>P sem demandas carregadas vira sem-dado, nunca alerta nem silencio', () => {
-  const a = avaliarAlertaTendencia(Object.assign({ ramo: 'acima', diagnostico: DIAG_ACIMA, saldoDemandas: null }, BASE));
-  assert.strictEqual(a.tipo, 'demanda');
-  assert.strictEqual(a.status, 'sem-dado');
 });
 
 test('R<P que exige mais produtividade do que a premissa dispara o alerta de equipes', () => {
@@ -89,6 +83,6 @@ test('dias de premissa restantes recortam DIAS_PREMISSA_MES pela fracao do mes q
 });
 
 test('os dois rotulos de tela existem', () => {
-  assert.strictEqual(typeof ALERTA_ROTULO.demanda, 'string');
+  assert.strictEqual(typeof ALERTA_ROTULO.movimentacao, 'string');
   assert.strictEqual(typeof ALERTA_ROTULO.produtividade, 'string');
 });
