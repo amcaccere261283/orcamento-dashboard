@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   lerCsvExistente, linhasRosterDoMes, gravarRoster, lerRosterExistente, CABECALHO_ROSTER,
+  mesesPendentes,
 } = require('../tools/semanal/atualizar-equipes-online.js');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -137,4 +138,46 @@ test('gravarRoster preserva linhas de agosto de OUTRO ano ao regravar agosto do 
   } finally {
     fs.rmSync(caminho, { force: true });
   }
+});
+
+// Dia-desde-época de uma data do calendário, para montar as chaves de porDia.
+// Mesma conta de diaEpoch (tools/comum/datas.js), repetida aqui para o teste
+// não depender da ordem de import daquele módulo.
+function diaEpochDe(ano, mes, dia) {
+  return Math.floor(Date.UTC(ano, mes - 1, dia) / 86400000);
+}
+
+// O fetcher passou a gravar o dia CORRENTE (2026-08-17, ver
+// docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md), e o dia
+// corrente é parcial: ele é capturado às 8h e só fica completo na captura do
+// dia seguinte. O mês corrente já era rebuscado sempre, então o caso normal se
+// resolve sozinho -- menos na virada do mês, onde o último dia ficaria
+// congelado no retrato parcial para sempre. Por isso o mês ANTERIOR também
+// entra.
+test('mesesPendentes inclui o mês anterior mesmo quando ele já tem dado -- senão o último dia dele congela parcial', () => {
+  // Todos os meses de jan a jul já têm dado; o mês corrente é julho (7).
+  const porDia = {};
+  [1, 2, 3, 4, 5, 6, 7].forEach((mes) => {
+    porDia[String(diaEpochDe(2026, mes, 10))] = ['441,SUP-1,SP,0'];
+  });
+  const pendentes = mesesPendentes(porDia, 2026, 7);
+  assert.deepEqual(pendentes, [6, 7], 'o mês corrente (7) e o anterior (6), nada mais');
+});
+
+test('mesesPendentes em JANEIRO não inventa mês 0 -- o mês anterior cruzaria o ano, que está fora do backfill', () => {
+  const porDia = { [String(diaEpochDe(2026, 1, 10))]: ['441,SUP-1,SP,0'] };
+  assert.deepEqual(mesesPendentes(porDia, 2026, 1), [1]);
+});
+
+test('mesesPendentes continua trazendo os meses SEM dado nenhum, que é o backfill original', () => {
+  // Maio E junho têm dado; o mês corrente é julho. Junho precisa ter dado para
+  // este teste discriminar: sem dado ele entraria pelo backfill de qualquer
+  // jeito, e a regra do "mês anterior" ficaria sem prova. Com dado, só a regra
+  // nova o traz -- antes dela o esperado era [1, 2, 3, 4, 7].
+  const porDia = {
+    [String(diaEpochDe(2026, 5, 10))]: ['441,SUP-1,SP,0'],
+    [String(diaEpochDe(2026, 6, 10))]: ['441,SUP-1,SP,0'],
+  };
+  assert.deepEqual(mesesPendentes(porDia, 2026, 7), [1, 2, 3, 4, 6, 7],
+    'maio sai (tem dado e não é corrente nem anterior); junho entra por ser o anterior, apesar de ter dado');
 });

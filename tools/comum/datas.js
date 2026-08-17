@@ -71,13 +71,13 @@ function hojeNoFusoProjeto(agora = new Date()) {
   return { ano: d.getUTCFullYear(), mes: d.getUTCMonth() + 1, dia: d.getUTCDate() };
 }
 
-// Dia-desde-época do ÚLTIMO dia que já fechou (d-1). Decisão do dono do
-// projeto em 2026-08-10: "realizado sempre considerar até o dia anterior ao
-// atual". O dia corrente nunca entra em série de Realizado -- ele está
-// incompleto por construção, e contá-lo faz toda semana em curso parecer em
-// queda até virar a meia-noite.
-function diaEpochDeOntem(agora = new Date()) {
-  return diaEpoch(agoraNoFusoProjeto(agora)) - 1;
+// Dia-desde-época de HOJE, no fuso do projeto. Até 2026-08-17 esta função era
+// 'diaEpochDeOntem' e devolvia d-1, pela regra de que o dia corrente estava
+// incompleto. A atualização passou a rodar às 8h diariamente e o Realizado
+// passou a contar até D -- ver
+// docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md.
+function diaEpochDeHoje(agora = new Date()) {
+  return diaEpoch(agoraNoFusoProjeto(agora));
 }
 
 function trechosParaCliente() {
@@ -95,6 +95,6 @@ function fonteParaCliente() {
 
 module.exports = {
   excelSerialParaData, formatarMesAno, calcularVigenteIdx, diaEpoch,
-  OFFSET_PROJETO_MS, agoraNoFusoProjeto, hojeNoFusoProjeto, diaEpochDeOntem,
+  OFFSET_PROJETO_MS, agoraNoFusoProjeto, hojeNoFusoProjeto, diaEpochDeHoje,
   trechosParaCliente, fonteParaCliente,
 };

@@ -4,7 +4,7 @@ const path = require('node:path');
 const { diaEpoch } = require('./compute-semanal.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const { linhaExcluida } = require('../comum/exclusoes.js');
-const { hojeNoFusoProjeto, diaEpochDeOntem } = require('../comum/datas.js');
+const { hojeNoFusoProjeto, diaEpochDeHoje } = require('../comum/datas.js');
 const cdp = require('./cdp-client.js');
 const { parseAbaEq } = require('./compute-equipes-ativas.js');
 const { classificarDiaEquipe } = require('./classificar-dia-equipe.js');
@@ -371,7 +371,16 @@ function mesesPendentes(porDia, ano, mesCorrente) {
   const pendentes = [];
   for (let mes = 1; mes <= mesCorrente; mes++) {
     const chave = `${ano}-${String(mes).padStart(2, '0')}`;
-    if (mes === mesCorrente || !comDado.has(chave)) pendentes.push(mes);
+    // O mês ANTERIOR entra mesmo já tendo dado (2026-08-17): desde que o
+    // fetcher passou a gravar o dia corrente, o último dia de cada mês é
+    // gravado PARCIAL (retrato das 8h). O mês corrente já era rebuscado
+    // sempre, o que completa o dia de ontem todo dia -- mas na virada do mês
+    // ele deixa de ser o corrente, e sem isto o dia 30/31 ficaria congelado
+    // no parcial para sempre, sem erro nem aviso.
+    // Limite conhecido: em 01/01 o mês anterior é dezembro do ano ANTERIOR, e
+    // este backfill é escopado ao ano corrente -- 31/12 fica parcial. Ver
+    // docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md.
+    if (mes === mesCorrente || mes === mesCorrente - 1 || !comDado.has(chave)) pendentes.push(mes);
   }
   return pendentes;
 }
@@ -408,7 +417,8 @@ async function buscarJanela(de, ate) {
 // Backfill incremental, decidido pelo dono do projeto em 2026-08-10: "você
 // precisa baixar os extratos de dias anteriores que você não tem no
 // histórico. Da primeira vez considere baixar ref ao ano atual, depois baixa
-// apenas os dias que não temos considerando d-1".
+// apenas os dias que não temos considerando d-1" (o corte virou HOJE em
+// 2026-08-17 -- ver o spec citado em mesesPendentes).
 //
 // Antes disto o fetcher buscava SÓ o mês corrente, e o Δ equipes ficava sem
 // dado em qualquer mês passado -- 8 dias de cobertura contra 20 meses de
@@ -431,7 +441,7 @@ async function main() {
     console.warn(`Roster: FALHOU por completo -- ${err.message}. O arquivo anterior fica como estava; seguindo para a produção (Link 7).`);
   }
 
-  const diaFim = diaEpochDeOntem();
+  const diaFim = diaEpochDeHoje();
   const { porDia: jaTemos } = lerCsvExistente(OUT_PATH);
 
   const pendentes = mesesPendentes(jaTemos, ano, mesCorrente);
@@ -440,7 +450,7 @@ async function main() {
     return;
   }
 
-  console.log(`Buscando produção (Link 7 -- campo/sondagens): ${pendentes.length} mês(es) de ${ano} -- ${pendentes.map((m) => String(m).padStart(2, '0')).join(', ')} (corte em d-1: ${fmtData(dataDoDiaEpoch(diaFim))})...`);
+  console.log(`Buscando produção (Link 7 -- campo/sondagens): ${pendentes.length} mês(es) de ${ano} -- ${pendentes.map((m) => String(m).padStart(2, '0')).join(', ')} (corte em hoje: ${fmtData(dataDoDiaEpoch(diaFim))})...`);
 
   const linhasLink7Brutas = [];
   const mesesBuscados = new Set();
@@ -448,7 +458,7 @@ async function main() {
   for (const mes of pendentes) {
     const de = new Date(Date.UTC(ano, mes - 1, 1));
     const ateMes = new Date(Date.UTC(ano, mes, 0));
-    // Nunca além de d-1: o dia corrente está incompleto no Link 7.
+    // Nunca além de hoje: não há dado de dia futuro no Link 7.
     const ate = diaEpoch(ateMes) > diaFim ? dataDoDiaEpoch(diaFim) : ateMes;
     if (diaEpoch(de) > diaFim) continue;
     try {
@@ -480,14 +490,16 @@ async function main() {
   // com o mês errado (ex.: junho em vez de agosto), e o mês REAL (agosto)
   // seria tratado como "fora da cobertura" pelo Balanço -- silenciosamente
   // sem dado, mesmo o CSV tendo dado bom pra agosto.
-  // Recorta aos meses REALMENTE buscados, e nunca além de d-1: o filtro
+  // Recorta aos meses REALMENTE buscados, e nunca além de hoje: o filtro
   // de/ate do site não restringe "Data / Hora Primeira Foto" ao intervalo
-  // pedido (achado em 2026-08-09), então sessões de OS antigas e o dia
-  // corrente parcial entrariam no agregado sem isto.
+  // pedido (achado em 2026-08-09), então sessões de OS antigas entrariam no
+  // agregado sem isto. O dia corrente AGORA ENTRA (2026-08-17) -- ele é
+  // parcial, e é o rebusque do mês corrente (e do anterior, ver
+  // mesesPendentes) que o completa depois.
   const linhasLink7 = linhasLink7Brutas.filter((l) => mesesBuscados.has(mesDoDia(l.diaEpoch)) && l.diaEpoch <= diaFim);
   const foraDoIntervalo = linhasLink7Brutas.length - linhasLink7.length;
   if (foraDoIntervalo > 0) {
-    console.log(`  ${foraDoIntervalo} linha(s) fora do intervalo pedido (sessão de foto de OS antiga ainda ativa, ou o dia de hoje) -- descartadas, ficam ${linhasLink7.length}.`);
+    console.log(`  ${foraDoIntervalo} linha(s) fora do intervalo pedido (sessão de foto de OS antiga ainda ativa) -- descartadas, ficam ${linhasLink7.length}.`);
   }
   if (!linhasLink7.length) {
     throw new Error('Todas as linhas do Link 7 ficaram fora do intervalo depois do filtro -- abortando sem gravar (não é o caso normal, confira antes de aceitar um CSV vazio).');
