@@ -31,20 +31,23 @@ test('ausência não conta como ativa: baixada, férias, folga, falta, atestado'
     });
 });
 
-test('quem não é equipe de campo não conta: contratação, admissão, auxiliar, encarregado, desligamento', () => {
+test('quem não é equipe de campo não conta: contratação, admissão, encarregado, desligamento', () => {
   ['Em processo de contratação', 'sem previsão de contratação', 'Encarregado equipes',
-    'Auxiliar Flavio', 'vai ficar como auxiliar - JC pediu', 'Pediu desligamento',
-    'agiardando Aso e integração', 'Assumir equipe pós desligamento Delmiro']
+    'Pediu desligamento', 'agiardando Aso e integração', 'Assumir equipe pós desligamento Delmiro']
     .forEach((t) => {
       assert.strictEqual(classificarDiaEquipe(t).estado, 'naoEquipe', t);
       assert.strictEqual(contaComoAtiva('naoEquipe'), false);
     });
 });
 
-test('"Auxiliar ... carregar equipamento" é auxiliar, não equipe carregando -- a ordem das regras decide', () => {
-  // Casa as duas ideias; naoEquipe tem que vencer, senão uma pessoa que virou
-  // auxiliar entraria na conta como se fosse uma equipe a mais em campo.
-  assert.strictEqual(classificarDiaEquipe('Auxiliar Flavio - carregar equipamento').estado, 'naoEquipe');
+test('"auxiliar" CONTA como ativa (campoSemFuro) desde 2026-08-17 -- apoiar outra equipe em campo ainda é equipe', () => {
+  ['Auxiliar Flavio', 'vai ficar como auxiliar - JC pediu', 'Auxiliar Flavio - carregar equipamento']
+    .forEach((t) => {
+      const c = classificarDiaEquipe(t);
+      assert.strictEqual(c.estado, 'campoSemFuro', t);
+      assert.strictEqual(c.noDefault, false, t + ' já está catalogado (auxiliar), não deveria entrar no relatório');
+      assert.strictEqual(contaComoAtiva(c.estado), true);
+    });
 });
 
 test('equipe em campo sem furo CONTA como ativa', () => {

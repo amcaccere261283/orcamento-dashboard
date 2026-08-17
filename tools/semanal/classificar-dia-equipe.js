@@ -23,8 +23,11 @@
 //   'fora'         -- baixada, férias, folga, falta, atestado, afastamento.
 //                     NÃO conta: decisão explícita de excluir férias e baixada.
 //   'naoEquipe'    -- não é uma equipe de campo: em contratação, em admissão/
-//                     integração, virou auxiliar de outra equipe, encarregado,
-//                     pediu desligamento. NÃO conta.
+//                     integração, encarregado, pediu desligamento. NÃO conta.
+//                     "Auxiliar" não entra mais neste balde desde 2026-08-17
+//                     (pedido do dono do projeto) -- vira 'campoSemFuro' (ver
+//                     REGRAS abaixo): apoiar outra equipe em campo ainda é
+//                     equipe ativa, só não produz furo próprio no dia.
 //
 // TEXTO NOVO FALHA ALTO, não cai calado em nenhum balde -- mesmo contrato de
 // tipologias-avancos.js. Um texto não reconhecido significa que a planilha
@@ -55,20 +58,9 @@ var RE_OS = /\(\s*(\d{3,6}-\d{2})\s*\)/;
 // dos textos que caíram no default (textosNoDefault) para revisão -- em vez de
 // quebrar o build por causa de um nome de rodovia que ninguém tinha visto.
 //
-// Ordem importa: 'naoEquipe' vem ANTES do default porque "Auxiliar Flavio --
-// carregar equipamento" é sobre alguém que virou auxiliar, não uma equipe
-// carregando equipamento.
 var REGRAS = [
   { estado: 'fora', re: /baixada|f[ée]rias|folga|falta|atestado|afasta|licen[çc]a|inss|acidente|n[ãa]o atuou|sem atua[çc]/i },
-  // Exceção antes da regra geral de naoEquipe (2026-08-11, pedido do dono do
-  // projeto): "auxiliar" sozinho é gente fora de equipe (contratação/
-  // hospitalizado/etc, cai na regra abaixo), mas "voltam com ele"/"volta a
-  // ser auxiliar" descreve alguém VOLTANDO a apoiar uma equipe em campo --
-  // conta como ativa (campoSemFuro), não como naoEquipe. "Desmobilização"
-  // saiu do balde 'fora' pelo mesmo pedido -- cai sozinha na regra de
-  // campoSemFuro logo abaixo, via o radical 'mobiliza' que já existia ali.
-  { estado: 'campoSemFuro', re: /volta.*auxiliar|auxiliar.*volta/i },
-  { estado: 'naoEquipe', re: /contrata|admiss|integra[çc]|\baso\b|auxiliar|encarregado|assumir equipe|pediu desligamento|desligad|sem previs|indicar|tratativa|verificando nomes/i },
+  { estado: 'naoEquipe', re: /contrata|admiss|integra[çc]|\baso\b|encarregado|assumir equipe|pediu desligamento|desligad|sem previs|indicar|tratativa|verificando nomes/i },
   // Formas JÁ CATALOGADAS de "equipe em campo sem furo". Não mudam o
   // resultado (o default classifica igual), mas tiram esses textos do
   // relatório de revisão: sem isso, "Mobilização" e "Veículo quebrou"
@@ -77,7 +69,10 @@ var REGRAS = [
   // Radicais, não palavras inteiras: a planilha escreve "Embargados",
   // "Embargo" e "Embargada" para a mesma coisa (foi assim que "Embargados"
   // escapou de /embargo/ na primeira escrita desta linha).
-  { estado: 'campoSemFuro', re: /mobiliza|ve[íi]culo|carro|chuva|parada de seguran|treinamento|treinando|apoio|acompanhamento|carregar|carregando|suporte|retorn|embarg|inspe[çc][ãa]o|outra frente/i },
+  // "auxiliar" entrou aqui em 2026-08-17 (antes vivia no balde 'naoEquipe',
+  // ver comentário no topo do arquivo) -- apoiar outra equipe em campo ainda
+  // é equipe ativa, só não é furo próprio no dia.
+  { estado: 'campoSemFuro', re: /mobiliza|ve[íi]culo|carro|chuva|parada de seguran|treinamento|treinando|apoio|acompanhamento|carregar|carregando|suporte|retorn|embarg|inspe[çc][ãa]o|outra frente|auxiliar/i },
 ];
 
 // texto -> { estado, os, noDefault } | null quando a célula está vazia (dia que

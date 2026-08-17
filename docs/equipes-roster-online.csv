@@ -21791,7 +21791,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 523,20666,mobilizada,0,,Inonaldo Filho,SP
 535,20666,fora,0,,José Henrique,SM
 536,20666,mobilizada,0,,Fernando Ikaró,SP
-537,20666,naoEquipe,0,,Jeferson Pereira,SM
+537,20666,campoSemFuro,0,,Jeferson Pereira,SM
 540,20666,fora,0,,Filipe R. Ribeiro,SM
 552,20666,fora,0,,Alison Pires,SP
 559,20666,mobilizada,0,,Lucas Santana,SP
@@ -21900,7 +21900,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 523,20667,mobilizada,0,,Inonaldo Filho,SP
 535,20667,fora,0,,José Henrique,SM
 536,20667,mobilizada,0,,Fernando Ikaró,SP
-537,20667,naoEquipe,0,,Jeferson Pereira,SM
+537,20667,campoSemFuro,0,,Jeferson Pereira,SM
 540,20667,fora,0,,Filipe R. Ribeiro,SM
 552,20667,fora,0,,Alison Pires,SP
 559,20667,mobilizada,0,,Lucas Santana,SP
@@ -22008,7 +22008,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 523,20668,mobilizada,0,,Inonaldo Filho,SP
 535,20668,fora,0,,José Henrique,SM
 536,20668,campoSemFuro,0,,Fernando Ikaró,SP
-537,20668,naoEquipe,0,,Jeferson Pereira,SM
+537,20668,campoSemFuro,0,,Jeferson Pereira,SM
 540,20668,fora,0,,Filipe R. Ribeiro,SM
 552,20668,fora,0,,Alison Pires,SP
 559,20668,mobilizada,0,,Lucas Santana,SP
@@ -22119,7 +22119,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 523,20669,mobilizada,0,,Inonaldo Filho,SP
 535,20669,fora,0,,José Henrique,SM
 536,20669,mobilizada,0,,Fernando Ikaró,SP
-537,20669,naoEquipe,0,,Jeferson Pereira,SM
+537,20669,campoSemFuro,0,,Jeferson Pereira,SM
 540,20669,fora,0,,Filipe R. Ribeiro,SM
 552,20669,fora,0,,Alison Pires,SP
 559,20669,mobilizada,0,,Lucas Santana,SP
@@ -23514,8 +23514,8 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 79,20682,mobilizada,0,,Leonardo D. Marques,SM
 121,20682,mobilizada,0,,Joaquim T. Lira,SM
 136,20682,mobilizada,0,,Marcos R. Sá,SM
-143,20682,campoSemFuro,1,,Gilmar M. Silva,SP
-154,20682,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+143,20682,mobilizada,0,,Gilmar M. Silva,SP
+154,20682,mobilizada,0,,Rudrigo Gadelha,SP
 164,20682,campoSemFuro,1,,Jucevan,SM
 171,20682,mobilizada,0,17361-26,Francinaldo G. Souza,SP
 175,20682,mobilizada,0,16925-25,João dos. Filho,SM

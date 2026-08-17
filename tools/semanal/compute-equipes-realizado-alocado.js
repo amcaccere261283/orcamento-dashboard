@@ -12,16 +12,19 @@ var JANELA_FALLBACK_PADRAO = 45;
 
 // "Ativa" = mobilizada ou campoSemFuro -- mesma definição de contaComoAtiva()
 // em classificar-dia-equipe.js. EXCLUI 'naoEquipe' (contratação, admissão,
-// encarregado, auxiliar, desligamento) e 'fora' (férias/baixada/folga).
+// encarregado, desligamento) e 'fora' (férias/baixada/folga).
 //
 // Até 2026-08-17 esta função incluía 'naoEquipe' de propósito (só excluía
-// 'fora'), e o Realizado de Equipes da Tabela Semanal contava encarregados/
-// auxiliares junto com quem está de fato em campo -- pedido explícito do
-// dono do projeto pra tirar encarregado dessa conta (não há granularidade
-// pra excluir só "encarregado" dentro do balde 'naoEquipe': a classificação
-// de origem, ver classificar-dia-equipe.js, não distingue encarregado de
-// auxiliar/contratação/admissão/desligamento -- excluir um exclui o balde
-// inteiro).
+// 'fora'), e o Realizado de Equipes da Tabela Semanal contava encarregados
+// junto com quem está de fato em campo -- pedido explícito do dono do
+// projeto pra tirar encarregado dessa conta. Não há granularidade pra
+// excluir só "encarregado" dentro do balde 'naoEquipe' (contratação/
+// admissão/desligamento continuam juntos, indistinguíveis) -- excluir
+// encarregado exclui o balde inteiro. "Auxiliar" saiu do balde 'naoEquipe'
+// no mesmo pedido, mas foi pro lado oposto: virou 'campoSemFuro' (ver
+// classificar-dia-equipe.js), porque apoiar outra equipe em campo é
+// considerado equipe ativa -- então já entra aqui como ativa, sem precisar
+// de nenhum ajuste nesta função.
 function ativaNaDefinicaoNova(estado) {
   return estado === 'mobilizada' || estado === 'campoSemFuro';
 }
