@@ -164,6 +164,12 @@ test('mesesPendentes inclui o mês anterior mesmo quando ele já tem dado -- sen
   assert.deepEqual(pendentes, [6, 7], 'o mês corrente (7) e o anterior (6), nada mais');
 });
 
+// ATENÇÃO ao ler este teste: ele NÃO prova que a borda de janeiro é tratada pela
+// condição -- quem impede o mês 0 é o limite do laço (`for (mes = 1; ...)`), então
+// a implementação ANTIGA também devolvia [1] aqui. Ele é guarda contra UMA mutação
+// específica: alguém reescrever a regra como `pendentes.push(mesCorrente - 1)`
+// fora do laço, que em janeiro empurraria 0. Não o leia como evidência mais forte
+// do que isso.
 test('mesesPendentes em JANEIRO não inventa mês 0 -- o mês anterior cruzaria o ano, que está fora do backfill', () => {
   const porDia = { [String(diaEpochDe(2026, 1, 10))]: ['441,SUP-1,SP,0'] };
   assert.deepEqual(mesesPendentes(porDia, 2026, 1), [1]);

@@ -377,6 +377,9 @@ function mesesPendentes(porDia, ano, mesCorrente) {
     // sempre, o que completa o dia de ontem todo dia -- mas na virada do mês
     // ele deixa de ser o corrente, e sem isto o dia 30/31 ficaria congelado
     // no parcial para sempre, sem erro nem aviso.
+    // Precondição deste conserto: o fetcher tem de rodar pelo menos uma vez
+    // DURANTE o mês seguinte. Se ninguém rodar por seis semanas, o último dia
+    // capturado continua parcial -- mesmo estado silencioso, por outra rota.
     // Limite conhecido: em 01/01 o mês anterior é dezembro do ano ANTERIOR, e
     // este backfill é escopado ao ano corrente -- 31/12 fica parcial. Ver
     // docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md.
@@ -465,7 +468,22 @@ async function main() {
       const lidas = await buscarJanela(de, ate);
       console.log(`  ${fmtData(de)} a ${fmtData(ate)}: ${lidas.length} sondagem-dia (bruto)`);
       linhasLink7Brutas.push(...lidas);
-      mesesBuscados.add(`${ano}-${String(mes).padStart(2, '0')}`);
+      // SÓ marca o mês como buscado se veio linha. Estar em 'mesesBuscados'
+      // autoriza o merge abaixo a DESCARTAR tudo que já estava gravado
+      // daquele mês -- então uma resposta que parseia para ZERO linha, sem
+      // lançar, apagaria um mês inteiro de dado bom. Isso não é hipotético
+      // neste arquivo: em 2026-08-08 um espaço duplo num cabeçalho fez
+      // parseLinhasLink7 descartar TODAS as linhas sem erro nenhum (ver o
+      // comentário do cabeçalho mais acima). O guard global
+      // `if (!linhasLink7.length) throw` não pega este caso, porque basta o
+      // mês corrente ter vindo bom para o total ser > 0.
+      // Virou risco real em 2026-08-17, quando o mês ANTERIOR passou a ser
+      // rebuscado toda vez (ver mesesPendentes): antes disso um mês fechado
+      // com dado nunca era rebuscado, então não tinha como regredir.
+      // Mesma convenção de resiliência do catch abaixo: o que não veio agora
+      // fica preservado como estava.
+      if (lidas.length) mesesBuscados.add(`${ano}-${String(mes).padStart(2, '0')}`);
+      else console.warn(`  ${fmtData(de)} a ${fmtData(ate)}: ZERO linha -- o mês NÃO será regravado (o dado anterior dele fica intacto).`);
     } catch (err) {
       // Um mês que falha não pode derrubar os outros nem apagar o que já
       // estava gravado -- o merge abaixo preserva os meses não buscados.
@@ -514,9 +532,11 @@ async function main() {
   // docs/superpowers/specs/2026-08-10-equipes-realizado-roster-link6-link7-design.md.
   const linhasSaida = linhasLink7.map((l) => `${l.idEquipe},${l.sup},${l.tipo},${l.diaEpoch}`);
 
-  // Preserva os dias dos meses que NÃO foram rebuscados agora -- mesma
-  // idempotência de sempre (diaInicio é ultimoDia + 1, os dois conjuntos são
-  // disjuntos por construção).
+  // Preserva os dias dos meses que NÃO foram rebuscados agora. A disjunção
+  // entre o que se grava e o que se preserva vem inteiramente de
+  // 'mesesBuscados' (chaveado 'AAAA-MM' por mesDoDia) -- não há mais cursor de
+  // dia. Um mês só entra nesse conjunto se a busca dele voltou com pelo menos
+  // uma linha (ver o guard no laço acima).
   let diasPreservados = 0;
   for (const [dia, linhas] of Object.entries(jaTemos)) {
     if (mesesBuscados.has(mesDoDia(Number(dia)))) continue;

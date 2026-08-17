@@ -805,7 +805,7 @@ de cada número desses dois quadros. **Elas mandam sobre qualquer coisa datada a
 disto nesta seção.** Escopo declarado: só Tabela Semanal e Gráficos — Balanço,
 Demandas, Alertas e Consolidado entram numa rodada seguinte.
 
-1. **Cobertura e corte em d−1.** Realizado de Sondagem (Link 1) e de Lab (Link 4)
+1. **Cobertura e corte do Realizado.** Realizado de Sondagem (Link 1) e de Lab (Link 4)
    cobrem **de 2025-01 em diante** — o Lab buscava só o mês corrente, o que fazia
    LAB.C/LAB.E aparecer com Realizado zero em qualquer mês passado (medido: 3.550
    ensaios contra os 169.041 reais de 15 meses). Equipes (Link 7) faz backfill do
@@ -818,6 +818,16 @@ Demandas, Alertas e Consolidado entram numa rodada seguinte.
    `hojeEpoch` como todo o resto da função, e a Tabela Semanal passou a concordar com
    o Balanço de massa, que já cortava assim. Vale nas três dimensões, e o Link 7
    (produção de equipes) passou a buscar e gravar o dia corrente junto.
+   **Cuidado — o efeito NÃO é o mesmo nas três.** Volume e Financeiro são contagem:
+   ganhar o dia de hoje só pode somar. **Equipes é MÉDIA** (`somarEquipesNoIntervalo`
+   divide pelos dias ÚTEIS DO CALENDÁRIO na janela, não pelos dias com dado), então
+   incluir o dia corrente aumenta o divisor enquanto o numerador daquele dia ainda é
+   quase zero às 8h: **a média da semana em curso CAI**. Medido na fixture do teste:
+   a mesma semana passou de 2 para 1. Isso é aceito de propósito (decisão do dono do
+   projeto em 2026-08-17, ciente do efeito) porque o Balanço de massa sempre cortou
+   em `hojeEpoch` e já mostrava o número diluído — as duas abas discordavam, e agora
+   concordam. Efeito colateral na segunda-feira: basta UMA equipe com foto às 8h para
+   a célula sair de "sem dado" e virar esse número pequeno.
 2. **Demanda é estoque numa data:** pendência ≤ D e execução > D, com **D = o
    primeiro dia do período**. Execução exatamente em D já não é demanda em D.
    Cancelamento **não** participa mais da saída do estoque.

@@ -18,10 +18,29 @@ página serve é um retrato das 8h, não um fluxo que se degrada ao longo do dia
 E explicitamente: **a regra do corte em D vale para o Realizado**, não só para a
 Demanda, que já usava D (regra 2 da mesma seção: "pendência ≤ D e execução > D").
 
-**O que o dono do projeto perguntou e foi confirmado antes de implementar:** "com a
-opção 1 eu vou ter o acumulado na semana até o dia anterior, certo?" — sim. O corte
-em d−1 de hoje já inclui o dia anterior INTEIRO; a mudança só **acrescenta** o dia
-corrente por cima. Nada do que a página já mostra é perdido.
+**O que o dono do projeto perguntou antes de implementar:** "com a opção 1 eu vou ter
+o acumulado na semana até o dia anterior, certo?" — a resposta dada na hora foi "sim,
+nada é perdido; a mudança só acrescenta o dia corrente por cima".
+
+> **Correção de 2026-08-17, achada pela revisão final de branch.** Aquela resposta
+> vale para **Volume e Financeiro**, que são CONTAGEM: o dia anterior continua
+> inteiro e o dia de hoje só soma. **Não vale para Equipes**, que é MÉDIA —
+> `somarEquipesNoIntervalo` divide pelos dias ÚTEIS DO CALENDÁRIO da janela, não
+> pelos dias com dado. Incluir o dia corrente aumenta o divisor enquanto o numerador
+> daquele dia ainda é quase zero às 8h, então **a média da semana em curso CAI**.
+> Medido na própria fixture do teste desta rodada: a mesma semana, com os mesmos
+> dados, passou de `2` para `1`, e o fechamento de `5/3` para `4/3`. Na segunda-feira
+> há um agravante: basta UMA equipe com foto lançada às 8h para a célula deixar de
+> ser "sem dado" e virar esse número pequeno.
+>
+> **Levado ao dono do projeto com o efeito medido, ele optou por manter o corte em D
+> também em Equipes** — porque o Balanço de massa sempre cortou em `hojeEpoch`
+> (`compute-balanco.js`) e já exibia o número diluído: as duas abas discordavam sobre
+> a mesma pergunta, e agora concordam. Uniformidade entre as três dimensões e
+> coerência entre as duas abas valeram mais que a diluição da média durante o dia.
+> As alternativas oferecidas e recusadas foram: voltar só Equipes para d−1; e trocar
+> o divisor para "dias com dado" (que mudaria a semântica do indicador também nas
+> semanas passadas, e exigiria rodada própria).
 
 ## Decisão 1 — o corte do Realizado vira `hojeEpoch`
 
