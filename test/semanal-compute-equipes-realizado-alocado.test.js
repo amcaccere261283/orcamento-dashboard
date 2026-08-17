@@ -56,12 +56,12 @@ test('estado "fora" nunca entra na conta, mesmo com produção no mesmo dia', ()
   assert.equal(ativos, 0);
 });
 
-test('estado "naoEquipe" CONTA como ativa -- definição nova de 2026-08-10, diferente de contaComoAtiva', () => {
+test('estado "naoEquipe" (encarregado, auxiliar, contratação...) NÃO conta como ativa -- pedido do dono do projeto em 2026-08-17 pra tirar encarregado da conta', () => {
   const roster = [{ idEquipe: '1', diaEpoch: 100, estado: 'naoEquipe' }];
   const producao = [{ idEquipe: '1', sup: 'SUP-A', tipo: 'SP', diaEpoch: 100 }];
   const { porDia, ativos } = agregarEquipesRealizadoAlocado({ roster, producao });
-  assert.equal(porDia['SUP-A||SP'][100], 1);
-  assert.equal(ativos, 1);
+  assert.deepEqual(porDia, {});
+  assert.equal(ativos, 0);
 });
 
 test('carry-forward usa a produção mais RECENTE dentro da janela, não a mais antiga', () => {
