@@ -85,7 +85,7 @@ test('deficit grande com uma equipe improdutiva vira a linha de equipes', () => 
 test('R>P com a semana vigente zerada gera a linha "Avaliar movimentacao de equipe"', () => {
   // Previsto do mes 62 -> semanas [10,14,14,14,10] (2/dia). S1+S2 previsto=24;
   // 30 furos realizados nelas (15 no dia 1, 15 no dia 6) -> ramo acima.
-  // Nenhum furo realizado em S3 (13..19) ate o corte de d-1 (14/07) -> a
+  // Nenhum furo realizado em S3 (13..19) ate hoje (15/07) -> a
   // vigente fica zerada e o alerta dispara.
   const realizadas = [];
   for (let i = 0; i < 15; i++) { realizadas.push(dia(1)); realizadas.push(dia(6)); }

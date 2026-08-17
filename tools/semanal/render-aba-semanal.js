@@ -308,18 +308,20 @@ function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento, casasOuForma
 // abaixo); Consolidado e Alertas não passam, e o comportamento pra eles
 // fica idêntico ao de antes (undefined nunca é < vigenteIdx).
 function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx, semanas, numSemanas, temSemanasReais, indiceAtual, demandas, hojeEpoch, mesAtualReal, opcoesInternas) {
-  // O REALIZADO para em d-1, nunca em hoje -- regra do dono do projeto,
-  // 2026-08-10 ("realizado sempre considerar até o dia anterior ao atual").
-  // O dia corrente está incompleto por construção: o extrato do sond.com.br
-  // é alimentado ao longo do dia, então contá-lo faz a semana em curso
-  // parecer em queda até virar a meia-noite, e faz a Tendência escolher o
-  // ramo "R < P" por um déficit que é só do relógio.
+  // O REALIZADO conta até HOJE (D), inclusive -- pedido do dono do projeto em
+  // 2026-08-17, ver docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md.
   //
-  // Só o Realizado usa este corte. 'hojeEpoch' continua sendo HOJE para todo
-  // o resto -- qual é a semana em curso, o saldo de Demandas Pendentes, o
-  // congelamento do Consolidado -- porque essas perguntas são sobre o
-  // calendário, não sobre dado que ainda vai chegar.
-  var realizadoAteEpoch = hojeEpoch - 1;
+  // Até 2026-08-10 a regra era parar em d-1, porque o extrato do sond.com.br
+  // era alimentado ao longo do dia e contar o dia corrente fazia a semana em
+  // curso parecer em queda até virar a meia-noite. A atualização passou a
+  // rodar às 8h diariamente: o que a página serve é o retrato daquela hora,
+  // não um fluxo que se degrada, então o dia corrente entra.
+  //
+  // Com isso some a variável 'realizadoAteEpoch', que existia só para esse
+  // corte: o Realizado passa a usar 'hojeEpoch' direto, igual a todo o resto
+  // da função (qual é a semana em curso, saldo de Demandas Pendentes,
+  // congelamento do Consolidado). E a Tabela Semanal passa a concordar com o
+  // Balanço de massa, que já cortava em hojeEpoch (compute-balanco.js).
   var mesVigente = previstoMesVigente(registros, indices, dimensao, vigenteIdx);
   // INTEIRAS desde 2026-08-03 (pedido do dono do projeto): a soma das semanas
   // é exatamente Math.floor(mesVigente) -- nunca supera o total do mês, e o
@@ -379,11 +381,11 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
       semanasRealizado = dividirEmSemanas(realizadoMatriz, dimensao, numSemanas, semanas);
     } else {
       semanasRealizado = semanas.map(function (semana, i) {
-        // Semana em curso: conta só até d-1. Se a semana começou HOJE,
-        // realizadoAteEpoch < semana.inicio e o intervalo fica vazio -- 0, que
-        // é a resposta certa (ainda não há dia fechado nesta semana).
-        if (i === indiceAtual) return contarEventosNoIntervalo(registros, indices, demandas, 'sondagemRealizada', semana.inicio, realizadoAteEpoch, pesoPorRegistro);
-        // Semana já encerrada: o intervalo inteiro dela já é <= d-1.
+        // Semana em curso: conta até HOJE, inclusive. Se a semana começou
+        // hoje, o intervalo é de um dia só -- o que já tiver sido lançado
+        // até a captura das 8h.
+        if (i === indiceAtual) return contarEventosNoIntervalo(registros, indices, demandas, 'sondagemRealizada', semana.inicio, hojeEpoch, pesoPorRegistro);
+        // Semana já encerrada: o intervalo inteiro dela já passou.
         if (semana.fim < hojeEpoch) return contarEventosNoIntervalo(registros, indices, demandas, 'sondagemRealizada', semana.inicio, semana.fim, pesoPorRegistro);
         return 0; // semana futura -- nada aconteceu ainda
       });
@@ -448,11 +450,11 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
   // mesmo tratamento que a linha Previsto já recebe.
   if (dimensao === 'equipes' && temSemanasReais) {
     semanasRealizado = semanas.map(function (semana) {
-      // Mesmo corte em d-1 do Realizado de Volume/Financeiro acima: o dia
-      // corrente ainda está sendo alimentado no Link 7, e incluí-lo dilui a
-      // média com um dia parcial.
-      if (semana.inicio > realizadoAteEpoch) return null; // semana futura, ou começou hoje
-      var fim = Math.min(semana.fim, realizadoAteEpoch);
+      // Mesmo corte em HOJE do Realizado de Volume/Financeiro acima. Uma
+      // semana que COMEÇOU hoje deixa de ser sem-dado: vira uma janela de um
+      // dia, que é a leitura certa quando o dia de hoje conta.
+      if (semana.inicio > hojeEpoch) return null; // semana estritamente futura
+      var fim = Math.min(semana.fim, hojeEpoch);
       return somarEquipesNoIntervalo(registros, indices, demandas, semana.inicio, fim);
     });
     fechamentoRealizado = fecharMes(semanasRealizado, dimensao);

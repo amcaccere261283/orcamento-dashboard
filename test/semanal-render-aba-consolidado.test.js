@@ -145,15 +145,17 @@ test('semana encerrada e semana em curso trazem a data-ancora no cabecalho, sem 
 // 97 -- contra 74 com o índice trocado.
 //
 // A regra de 2026-08-10 ("realizado sempre considerar até d-1") APAGOU essa
-// diferença, e não por acidente: congelar ancora hojeEfetivo no PRIMEIRO dia
-// da semana k, então a janela de Realizado dela vai de semanas[k].inicio até
-// semanas[k].inicio - 1 -- vazia por construção. E como só se congela semana
-// que já começou, o índice do hoje real é sempre >= k, o que faz as semanas
-// anteriores a k serem contadas inteiras pelos DOIS caminhos. Verificado por
-// varredura exaustiva (todas as semanas de julho/2026 x todos os dias de
-// evento x todos os índices possíveis): no cenário real, nenhuma combinação
-// distingue os dois. O parâmetro continua semanticamente certo, mas deixou
-// de ser observável aqui.
+// diferença por um tempo: congelar ancora hojeEfetivo no PRIMEIRO dia da
+// semana k, e com o corte em d-1 a janela de Realizado dela ia de
+// semanas[k].inicio até semanas[k].inicio - 1 -- vazia por construção.
+//
+// O corte em HOJE (2026-08-17, ver
+// docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md) DEVOLVEU a
+// diferença: a janela da semana ancorada passa a ser [inicio, inicio], um dia
+// -- justamente o dia em que a fixture põe os 30 furos. O esperado voltou a
+// ser 97, o mesmo número da fixture original, e o parâmetro
+// ctx.indiceAtualEfetivo voltou a ser observável aqui (com ctx.indiceAtual no
+// lugar dele, o teste falha de novo).
 //
 // O que este teste prende agora é o mecanismo que sobrou e importa: a
 // Tendência congelada é RECALCULADA na âncora, e por isso a semana ancorada
@@ -166,8 +168,8 @@ test('a Tendência congelada é recalculada na âncora: a semana ancorada não c
     semanaIdx: 1, demandas: demandasCom({ 'SUP-A||ST': eventos }), hojeEpoch: diaJul(15),
   }));
   const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
-  assert.strictEqual(celulas[5], '74',
-    'os 30 furos de 06/07 NÃO entram: em 06/07 nenhum dia da S2 tinha fechado ainda (corte em d-1)');
+  assert.strictEqual(celulas[5], '97',
+    'os 30 furos de 06/07 ENTRAM: com o corte em HOJE, a janela da S2 ancorada em 06/07 é o próprio dia 06/07');
 
   // E o Realizado exibido NUNCA congela -- ele sai do hoje real, então os
   // mesmos 30 furos aparecem nele. É o contraste que prova que são duas

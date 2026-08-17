@@ -446,12 +446,12 @@ test('Realizado/Tendência aparecem em Volume E Financeiro (Financeiro pesado pe
 // não soma). registro() default é sup='SUP-0001-24', tipologia='ST' -- as
 // fixtures abaixo usam a chave 'SUP-0001-24||ST'.
 
-test('Realizado de Equipes: média diária por semana, cortada em d-1 -- S1 e S2 fechadas, S3 vigente truncada em 2 dias, S4/S5 futuras sem-dado. Tendência (2026-08-07) vem de registro.total.equipes, repetida nas semanas que ainda NÃO fecharam (2026-08-10: some nas encerradas -- S1/S2 aqui)', () => {
+test('Realizado de Equipes: média diária por semana, cortada em HOJE -- S1 e S2 fechadas, S3 vigente truncada em 3 dias, S4/S5 futuras sem-dado. Tendência (2026-08-07) vem de registro.total.equipes, repetida nas semanas que ainda NÃO fecharam (2026-08-10: some nas encerradas -- S1/S2 aqui)', () => {
   const equipesPorDia = {
     'SUP-0001-24||ST': {
       [diaJul(1)]: 3, [diaJul(3)]: 1,    // S1 (5 dias corridos, seg-dom, mas domingo dia5 sai da conta -- 4 dias úteis): soma 4 / 4 = 1,00 -- ver teste seguinte pra denominador
       [diaJul(8)]: 7,                     // S2 (7 dias corridos, seg-dom, domingo dia12 sai da conta -- 6 dias úteis): 7 / 6 = 1,1667 -> Math.ceil = 2
-      [diaJul(14)]: 3,                    // S3 (13-19, truncada em d-1=14 -> 2 dias: 13 e 14)
+      [diaJul(14)]: 3,                    // S3 (13-19, truncada em hoje=15 -> 3 dias: 13, 14 e 15)
       [diaJul(22)]: 99,                   // S4 é futura (hoje=15) -- não deve entrar em nada
     },
   };
@@ -473,13 +473,13 @@ test('Realizado de Equipes: média diária por semana, cortada em d-1 -- S1 e S2
   // global): S1 = (3+1)/4 dias úteis = 1,00 -> 1; S2 = 7/6 dias úteis =
   // 1,1667 -> Math.ceil = 2.
   //
-  // S3 desde 2026-08-10 (corte em d-1): a janela para no dia 14, não no dia
-  // 15 (hoje) -- são 2 dias, ambos úteis (13=segunda, 14=terça), então
-  // 3/2 = 1,5 -> Math.ceil = 2. O dia corrente está incompleto no Link 7 (as
-  // fotos chegam ao longo do dia) e incluí-lo diluía a média com um dia
-  // parcial.
-  assert.deepStrictEqual(series.semanasRealizado, [1, 2, 2, null, null]);
-  assert.ok(Math.abs(series.fechamentoRealizado - 5 / 3) < 1e-9, 'fechamento é a MÉDIA de [1,2,2], não a soma');
+  // S3 desde 2026-08-17 (corte em HOJE, não mais em d-1): a janela vai do dia
+  // 13 ao dia 15 (hoje) -- 3 dias, todos úteis (13=segunda, 14=terça,
+  // 15=quarta), então 3/3 = 1,0 -> Math.ceil = 1. Com o corte antigo em d-1
+  // eram 2 dias (13 e 14) e dava 3/2 = 1,5 -> 2. Ver
+  // docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md.
+  assert.deepStrictEqual(series.semanasRealizado, [1, 2, 1, null, null]);
+  assert.ok(Math.abs(series.fechamentoRealizado - 4 / 3) < 1e-9, 'fechamento é a MÉDIA de [1,2,1], não a soma');
   // 2026-08-10: Tendência de Equipes some nas semanas já ENCERRADAS (fim <
   // hoje) -- S1 e S2 fecharam antes de 15/07, ficam null. S3 (vigente),
   // S4/S5 (futuras) continuam mostrando o Total repetido, igual ao Previsto.
@@ -877,4 +877,32 @@ test('a unidade agrupa CPTu, SH e VT numa só -- não são três unidades', () =
   // SUPs diferentes são unidades diferentes -- a Alocação também separa por SUP.
   assert.notStrictEqual(chaveUnidadeTendencia({ sup: 'SUP-A', tipologia: 'SP' }),
     chaveUnidadeTendencia({ sup: 'SUP-B', tipologia: 'SP' }));
+});
+
+test('o furo de HOJE entra no Realizado da semana em curso -- o corte é em D, não em d-1 (2026-08-17)', () => {
+  // hoje = 15/07 (S3, 13..19). Um furo em 13/07 (passado) e um em 15/07 (hoje).
+  // Com o corte antigo em d-1 (14/07) só o primeiro contava: S3 = 1.
+  const eventos = { sondagemRealizada: [diaJul(13), diaJul(15)], saidaEstoque: [], chegada: [] };
+  const demandas = { porRegistroEventos: { 'SUP-0001-24||ST': eventos } };
+  const series = calcularSeriesSemanaisDimensao(
+    [registro(1000)], [0], 'volume', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
+    true, indiceSemanaAtual(SEMANAS_JULHO, HOJE_15_JUL), demandas, HOJE_15_JUL
+  );
+  assert.strictEqual(series.semanasRealizado[2], 2, 'os dois furos entram: o de 13/07 e o de HOJE (15/07)');
+});
+
+test('Realizado de Equipes: semana que COMEÇOU hoje deixa de ser sem-dado e mostra a média de 1 dia (2026-08-17)', () => {
+  // hoje = 13/07, o PRIMEIRO dia da S3 (13..19). Com o corte antigo em d-1 a
+  // condição `semana.inicio > realizadoAteEpoch` era verdadeira e S3 voltava
+  // null ("semana futura, ou começou hoje"). Com o corte em D, a janela é
+  // [13, 13] -- um dia, útil (segunda) -- e a média é o próprio valor dele.
+  const hoje13 = diaJul(13);
+  const equipesPorDia = { 'SUP-0001-24||ST': { [diaJul(13)]: 4 } };
+  const demandas = { porRegistroEventos: {}, equipesPorDia };
+  const series = calcularSeriesSemanaisDimensao(
+    [registro(0)], [0], 'equipes', VIGENTE_JULHO, SEMANAS_JULHO, SEMANAS_JULHO.length,
+    true, indiceSemanaAtual(SEMANAS_JULHO, hoje13), demandas, hoje13
+  );
+  assert.strictEqual(series.semanasRealizado[2], 4, 'S3 começou hoje: 4/1 dia útil = 4, não null');
+  assert.strictEqual(series.semanasRealizado[3], null, 'S4 continua futura, sem dado');
 });
