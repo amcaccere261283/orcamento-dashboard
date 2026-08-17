@@ -38,14 +38,6 @@ test('semanaAnterior da 1ª semana de agosto devolve a última semana de julho, 
   assert.strictEqual(alvo.semana.fim, diaEpoch(new Date(Date.UTC(ANO, AGOSTO, 1))) - 1, 'a última semana de julho termina no dia anterior a 01/08');
 });
 
-test('semanaSeguinte da última semana de dezembro devolve a 1ª semana de janeiro do ano SEGUINTE', () => {
-  const DEZEMBRO = 11;
-  const semanasDez = semanasDoMes(ANO, DEZEMBRO);
-  const alvo = ComputeRelatorioSemanal.semanaSeguinte(ANO, DEZEMBRO, semanasDez, semanasDez.length - 1);
-  assert.strictEqual(alvo.mesIdx, 12, 'mesIdx sai de [0,11] -- Previsto/Tendência ficam sem dado, tratado por calcularSeriesSemanaisDimensao');
-  assert.strictEqual(alvo.semana.inicio, diaEpoch(new Date(Date.UTC(ANO + 1, 0, 1))), 'a semana seguinte a dezembro começa em 1º de janeiro do ano seguinte');
-});
-
 test('serieDaSemana: Previsto/Tendência ficam sem dado fora dos 12 meses carregados, mas Realizado (por data) continua correto', () => {
   const AGOSTO = 7;
   const semanasAgo = semanasDoMes(ANO, AGOSTO);
@@ -88,6 +80,32 @@ test('serieAcumulada usa exatamente a mesma janela "Acumulado até a semana atua
   assert.strictEqual(obtido.realizado, 1, 'o furo do dia 1 da S1 conta no acumulado, já que a S1 encerrou');
 });
 
+test('janelasDoGrupo traz a SEMANA VIGENTE (semanas[indiceAtual]), não a semana seguinte', () => {
+  const JULHO = 6;
+  const semanas = semanasDoMes(ANO, JULHO);
+  const reg = registro({ sup: 'SUP-A', mesIdx: JULHO, volume: 70 });
+  const hojeEpoch = semanas[1].inicio; // início da 2ª semana -- a vigente é semanas[1]
+  const indiceAtual = indiceSemanaAtual(semanas, hojeEpoch);
+  const ctx = {
+    ano: ANO, mesIdx: JULHO, semanas: semanas, indiceAtual: indiceAtual,
+    demandas: demandasCom({}), hojeEpoch: hojeEpoch, temSemanasReais: true,
+  };
+
+  const janelas = ComputeRelatorioSemanal.janelasDoGrupo([reg], [0], 'volume', ctx);
+
+  const esperadoVigente = ComputeRelatorioSemanal.serieDaSemana(
+    [reg], [0], 'volume',
+    { semana: semanas[1], mesIdx: JULHO, semanasDoMesAlvo: semanas, indiceNoMes: 1 },
+    ctx
+  );
+  assert.deepStrictEqual(janelas.semanaVigente, esperadoVigente, 'semanaVigente precisa ser a série da semana[indiceAtual] (semanas[1]), não de semanas[2]');
+  assert.notDeepStrictEqual(
+    janelas.semanaVigente,
+    ComputeRelatorioSemanal.serieDaSemana([reg], [0], 'volume', { semana: semanas[2], mesIdx: JULHO, semanasDoMesAlvo: semanas, indiceNoMes: 2 }, ctx),
+    'não pode coincidir com a série da semana seguinte (semanas[2]) -- garante que o antigo comportamento "semana que vem" não voltou'
+  );
+});
+
 test('montarLinhasDimensao produz TOTAL GERAL, uma linha por tipologia, e por SUP um registro + TOTAL <SUP>', () => {
   const JULHO = 6;
   const semanas = semanasDoMes(ANO, JULHO);
@@ -119,22 +137,22 @@ test('extrairDesvios só inclui linhas Crítico ou Atenção -- Dentro da meta/E
     linhaSintetica('total-geral-tipologia', {}, {
       semanaAnterior: { previsto: 100, realizado: 50, tendencia: 50 }, // 50% -> Crítico
       acumulado: { previsto: 100, realizado: 95, tendencia: 95 }, // 95% -> Dentro da meta
-      semanaQueVem: { previsto: 100, tendencia: 80 }, // 80% -> Atenção
+      semanaVigente: { previsto: 100, realizado: 30, tendencia: 80 }, // 80% (por Tendência) -> Atenção
     }),
   ];
   const desvios = ComputeRelatorioSemanal.extrairDesvios(linhas, 'volume');
-  assert.strictEqual(desvios.length, 2, 'só semanaAnterior (Crítico) e semanaQueVem (Atenção) entram -- acumulado (Dentro da meta) fica de fora');
-  assert.deepStrictEqual(desvios.map((d) => d.janela).sort(), ['Semana anterior', 'Semana que vem']);
+  assert.strictEqual(desvios.length, 2, 'só semanaAnterior (Crítico) e semanaVigente (Atenção) entram -- acumulado (Dentro da meta) fica de fora');
+  assert.deepStrictEqual(desvios.map((d) => d.janela).sort(), ['Semana anterior', 'Semana vigente']);
   assert.strictEqual(desvios.find((d) => d.janela === 'Semana anterior').status, 'Crítico');
-  assert.strictEqual(desvios.find((d) => d.janela === 'Semana que vem').status, 'Atenção');
+  assert.strictEqual(desvios.find((d) => d.janela === 'Semana vigente').status, 'Atenção');
 });
 
-test('extrairDesvios: "semana que vem" usa Tendência (não Realizado, que ainda não existe) como numerador', () => {
+test('extrairDesvios: "semana vigente" usa Tendência (não o Realizado parcial, que ainda não fechou a semana) como numerador', () => {
   const linhas = [
     linhaSintetica('registro', {}, {
       semanaAnterior: { previsto: null, realizado: null, tendencia: null },
       acumulado: { previsto: null, realizado: null, tendencia: null },
-      semanaQueVem: { previsto: 100, tendencia: 40 }, // 40% -> Crítico
+      semanaVigente: { previsto: 100, realizado: 10, tendencia: 40 }, // 40% (por Tendência) -> Crítico
     }),
   ];
   const desvios = ComputeRelatorioSemanal.extrairDesvios(linhas, 'equipes');
@@ -146,10 +164,10 @@ test('extrairDesvios: "semana que vem" usa Tendência (não Realizado, que ainda
 test('montarDesvios separa por tipo de linha (tipologia vs contrato) e cruza volume + equipes', () => {
   const linhasVolume = [
     linhaSintetica('total-geral-tipologia', { tipologia: 'ST' }, {
-      semanaAnterior: { previsto: 100, realizado: 40, tendencia: 40 }, acumulado: { previsto: null, realizado: null, tendencia: null }, semanaQueVem: { previsto: null, tendencia: null },
+      semanaAnterior: { previsto: 100, realizado: 40, tendencia: 40 }, acumulado: { previsto: null, realizado: null, tendencia: null }, semanaVigente: { previsto: null, realizado: null, tendencia: null },
     }),
     linhaSintetica('registro', { sup: 'SUP-A', contrato: 'SUP-A' }, {
-      semanaAnterior: { previsto: null, realizado: null, tendencia: null }, acumulado: { previsto: 100, realizado: 40, tendencia: 40 }, semanaQueVem: { previsto: null, tendencia: null },
+      semanaAnterior: { previsto: null, realizado: null, tendencia: null }, acumulado: { previsto: 100, realizado: 40, tendencia: 40 }, semanaVigente: { previsto: null, realizado: null, tendencia: null },
     }),
   ];
   const linhasEquipes = [];

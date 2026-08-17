@@ -13,17 +13,17 @@ const { blocosPorSup, tipologiasPresentes } = require('./render-aba-consolidado.
 // até a semana atual" que a aba Alertas já expõe). Garantia: o relatório
 // nunca pode divergir do que a página mostra, porque é o MESMO cálculo.
 
-// A semana ANTERIOR ou SEGUINTE a semanas[indiceAtual], podendo cair num mês
-// (e ano) civil diferente. semanasDoMes(ano, mesIdx) aceita mesIdx fora de
-// [0,11]: o overflow de mês do Date.UTC do JavaScript resolve o rollover de
-// ano sozinho, então as datas da semana vizinha saem corretas mesmo quando
-// mesIdxVizinho é -1 (dezembro do ano anterior) ou 12 (janeiro do ano
-// seguinte). O QUE NÃO sai correto nesse caso é o Previsto/Tendência: os
-// registros só carregam os 12 meses de window.__ANO__, então
-// registro.previsto.volume[-1] e [12] são sempre undefined --
-// calcularSeriesSemanaisDimensao já trata isso como "sem dado" sozinha, sem
-// nenhuma guarda extra precisar existir aqui (limitação conhecida e aceita,
-// ver o spec -- só afeta a 1ª semana de janeiro e a última de dezembro).
+// A semana ANTERIOR a semanas[indiceAtual], podendo cair num mês (e ano)
+// civil diferente -- diferente de "semana vigente" (sempre semanas[indiceAtual]
+// do próprio mês selecionado, nunca cruza fronteira). semanasDoMes(ano, mesIdx)
+// aceita mesIdx fora de [0,11]: o overflow de mês do Date.UTC do JavaScript
+// resolve o rollover de ano sozinho, então as datas da semana anterior saem
+// corretas mesmo quando mesIdxAnterior é -1 (dezembro do ano anterior). O QUE
+// NÃO sai correto nesse caso é o Previsto/Tendência: os registros só carregam
+// os 12 meses de window.__ANO__, então registro.previsto.volume[-1] é sempre
+// undefined -- calcularSeriesSemanaisDimensao já trata isso como "sem dado"
+// sozinha, sem nenhuma guarda extra precisar existir aqui (limitação
+// conhecida e aceita, ver o spec -- só afeta a 1ª semana de janeiro).
 function semanaAnterior(ano, mesIdx, semanas, indiceAtual) {
   if (indiceAtual - 1 >= 0) {
     return { semana: semanas[indiceAtual - 1], mesIdx: mesIdx, semanasDoMesAlvo: semanas, indiceNoMes: indiceAtual - 1 };
@@ -33,14 +33,6 @@ function semanaAnterior(ano, mesIdx, semanas, indiceAtual) {
     semana: semanasMesAnterior[semanasMesAnterior.length - 1],
     mesIdx: mesIdx - 1, semanasDoMesAlvo: semanasMesAnterior, indiceNoMes: semanasMesAnterior.length - 1,
   };
-}
-
-function semanaSeguinte(ano, mesIdx, semanas, indiceAtual) {
-  if (indiceAtual + 1 < semanas.length) {
-    return { semana: semanas[indiceAtual + 1], mesIdx: mesIdx, semanasDoMesAlvo: semanas, indiceNoMes: indiceAtual + 1 };
-  }
-  var semanasMesSeguinte = semanasDoMes(ano, mesIdx + 1);
-  return { semana: semanasMesSeguinte[0], mesIdx: mesIdx + 1, semanasDoMesAlvo: semanasMesSeguinte, indiceNoMes: 0 };
 }
 
 // Previsto/Realizado/Tendência de 'alvo.semana' -- mesmo mecanismo de
@@ -88,16 +80,16 @@ function serieAcumulada(registros, indices, dimensao, ctx) {
 }
 
 // As 3 janelas de UM grupo (SUP inteiro, uma tipologia agregada, ou um
-// registro/contrato), para uma dimensão.
+// registro/contrato), para uma dimensão. "Semana vigente" nunca cruza
+// mês/ano -- é sempre semanas[indiceAtual] do próprio mês selecionado, ao
+// contrário de "semana anterior" (que pode cair no mês civil anterior).
 function janelasDoGrupo(registros, indices, dimensao, ctx) {
   var alvoAnterior = semanaAnterior(ctx.ano, ctx.mesIdx, ctx.semanas, ctx.indiceAtual);
-  var alvoSeguinte = semanaSeguinte(ctx.ano, ctx.mesIdx, ctx.semanas, ctx.indiceAtual);
-  var semanaAnt = serieDaSemana(registros, indices, dimensao, alvoAnterior, ctx);
-  var semanaSeg = serieDaSemana(registros, indices, dimensao, alvoSeguinte, ctx);
+  var alvoVigente = { semana: ctx.semanas[ctx.indiceAtual], mesIdx: ctx.mesIdx, semanasDoMesAlvo: ctx.semanas, indiceNoMes: ctx.indiceAtual };
   return {
-    semanaAnterior: semanaAnt,
+    semanaAnterior: serieDaSemana(registros, indices, dimensao, alvoAnterior, ctx),
     acumulado: serieAcumulada(registros, indices, dimensao, ctx),
-    semanaQueVem: { previsto: semanaSeg.previsto, tendencia: semanaSeg.tendencia },
+    semanaVigente: serieDaSemana(registros, indices, dimensao, alvoVigente, ctx),
   };
 }
 
@@ -139,17 +131,20 @@ function montarLinhasDimensao(registros, indices, dimensao, ctx) {
 }
 
 // Base de comparação por janela: sempre "o que aconteceu/vai acontecer" ÷
-// Previsto -- mesma leitura do semáforo de Alertas. "Semana que vem" não tem
-// Realizado (ainda não aconteceu): usa Tendência.
+// Previsto -- mesma leitura do semáforo de Alertas. "Semana vigente" ainda
+// não fechou (Realizado é só parcial, até hoje): usa Tendência, a mesma
+// projeção CONGELADA no início dela que a aba Consolidado mostra -- comparar
+// o Previsto da semana inteira contra um Realizado parcial acusaria desvio
+// falso logo na segunda-feira.
 function desvioDaJanela(nomeJanela, janela) {
-  var numerador = nomeJanela === 'semanaQueVem' ? janela.tendencia : janela.realizado;
+  var numerador = nomeJanela === 'semanaVigente' ? janela.tendencia : janela.realizado;
   var desvio = (numerador === null || numerador === undefined || !janela.previsto)
     ? null : numerador / janela.previsto;
   return { desvio: desvio, previsto: janela.previsto, numerador: numerador };
 }
 
 var JANELA_ROTULO = {
-  semanaAnterior: 'Semana anterior', acumulado: 'Acumulado do mês até a data', semanaQueVem: 'Semana que vem',
+  semanaAnterior: 'Semana anterior', acumulado: 'Acumulado do mês até a data', semanaVigente: 'Semana vigente',
 };
 var DIMENSAO_ROTULO_RELATORIO = { volume: 'Volume', equipes: 'Equipes' };
 
@@ -159,7 +154,7 @@ var DIMENSAO_ROTULO_RELATORIO = { volume: 'Volume', equipes: 'Equipes' };
 function extrairDesvios(linhas, dimensao) {
   var desvios = [];
   linhas.forEach(function (linha) {
-    ['semanaAnterior', 'acumulado', 'semanaQueVem'].forEach(function (nomeJanela) {
+    ['semanaAnterior', 'acumulado', 'semanaVigente'].forEach(function (nomeJanela) {
       var calculo = desvioDaJanela(nomeJanela, linha.janelas[nomeJanela]);
       var classe = classificarSemaforo(calculo.desvio);
       if (classe.indicador !== 'Crítico' && classe.indicador !== 'Atenção') return;
@@ -207,6 +202,6 @@ function resumoDesvios(desvios) {
 }
 
 module.exports = {
-  semanaAnterior, semanaSeguinte, serieDaSemana, serieAcumulada, janelasDoGrupo, montarLinhasDimensao,
+  semanaAnterior, serieDaSemana, serieAcumulada, janelasDoGrupo, montarLinhasDimensao,
   extrairDesvios, montarDesvios, resumoDesvios, JANELA_ROTULO, DIMENSAO_ROTULO_RELATORIO,
 };

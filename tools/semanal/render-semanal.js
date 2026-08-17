@@ -1489,8 +1489,9 @@ function montarLoteHistoricoRelatorio(resultado, opcoes) {
         previstoAcumulado: celulaHistoricoOuVazia(l.janelas.acumulado.previsto),
         realizadoAcumulado: celulaHistoricoOuVazia(l.janelas.acumulado.realizado),
         tendenciaAcumulado: celulaHistoricoOuVazia(l.janelas.acumulado.tendencia),
-        previstoSemanaQueVem: celulaHistoricoOuVazia(l.janelas.semanaQueVem.previsto),
-        tendenciaSemanaQueVem: celulaHistoricoOuVazia(l.janelas.semanaQueVem.tendencia),
+        previstoSemanaVigente: celulaHistoricoOuVazia(l.janelas.semanaVigente.previsto),
+        realizadoSemanaVigente: celulaHistoricoOuVazia(l.janelas.semanaVigente.realizado),
+        tendenciaSemanaVigente: celulaHistoricoOuVazia(l.janelas.semanaVigente.tendencia),
         autor: opcoes.autor,
       });
     });

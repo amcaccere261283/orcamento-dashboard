@@ -5,7 +5,7 @@
 // um require não-destruturado sobrevive ao build sem erro, mas quebra em
 // silêncio no navegador com "require is not defined" na primeira vez que a
 // função é chamada.
-const { montarLinhasDimensao, montarDesvios, resumoDesvios, semanaAnterior, semanaSeguinte } = require('./compute-relatorio-semanal.js');
+const { montarLinhasDimensao, montarDesvios, resumoDesvios, semanaAnterior } = require('./compute-relatorio-semanal.js');
 const { str, num, buildXlsx } = require('./xlsx-writer-browser.js');
 
 // !Number.isFinite cobre tanto NaN quanto ±Infinity: um NaN chegando aqui
@@ -52,7 +52,7 @@ var COLS_RESUMO = [32, 24];
 // exibe TANTO por tipologia QUANTO por contrato -- ver o comentário de
 // resumoDesvios em compute-relatorio-semanal.js sobre por que só porContrato
 // entra na contagem, pra não contar o mesmo desvio físico duas vezes).
-function montarAbaResumo(opcoes, resumo, janelaAnterior, janelaSeguinte) {
+function montarAbaResumo(opcoes, resumo, janelaAnterior) {
   var semanaVigente = opcoes.semanas[opcoes.indiceAtual];
   function intervalo(alvo) {
     return alvo && alvo.semana ? formatarDataCurta(alvo.semana.inicio) + ' a ' + formatarDataCurta(alvo.semana.fim) : '—';
@@ -64,7 +64,6 @@ function montarAbaResumo(opcoes, resumo, janelaAnterior, janelaSeguinte) {
     [str('Mês/ano do relatório', 'rotulo'), str(NOMES_MES[opcoes.mesIdx] + '/' + opcoes.ano)],
     [str('Semana anterior', 'rotulo'), str(intervalo(janelaAnterior))],
     [str('Semana vigente', 'rotulo'), str(semanaVigente ? formatarDataCurta(semanaVigente.inicio) + ' a ' + formatarDataCurta(semanaVigente.fim) : '—')],
-    [str('Semana que vem', 'rotulo'), str(intervalo(janelaSeguinte))],
     [str('Gerado em', 'rotulo'), str(formatarDataHora(opcoes.geradoEm))],
     [str('Gerado por', 'rotulo'), str(opcoes.autor || 'dashboard')],
     [str('')],
@@ -171,7 +170,7 @@ var CABECALHO_DIMENSAO = [
   str('SUP', 'cabecalhoTabela'), str('Tomador', 'cabecalhoTabela'), str('Tipologia', 'cabecalhoTabela'), str('Contrato', 'cabecalhoTabela'),
   str('Semana anterior — Previsto', 'cabecalhoTabela'), str('Semana anterior — Realizado', 'cabecalhoTabela'), str('Semana anterior — Tendência', 'cabecalhoTabela'),
   str('Acumulado do mês — Previsto', 'cabecalhoTabela'), str('Acumulado do mês — Realizado', 'cabecalhoTabela'), str('Acumulado do mês — Tendência', 'cabecalhoTabela'),
-  str('Semana que vem — Previsto', 'cabecalhoTabela'), str('Semana que vem — Tendência', 'cabecalhoTabela'),
+  str('Semana vigente — Previsto', 'cabecalhoTabela'), str('Semana vigente — Realizado', 'cabecalhoTabela'), str('Semana vigente — Tendência', 'cabecalhoTabela'),
 ];
 
 function linhaDimensao(linha, dimensao, total, zebra) {
@@ -189,12 +188,13 @@ function linhaDimensao(linha, dimensao, total, zebra) {
     celulaNumOuVazia(arredondar(j.acumulado.previsto, casas), estiloNumero),
     celulaNumOuVazia(arredondar(j.acumulado.realizado, casas), estiloNumero),
     celulaNumOuVazia(arredondar(j.acumulado.tendencia, casas), estiloNumero),
-    celulaNumOuVazia(arredondar(j.semanaQueVem.previsto, casas), estiloNumero),
-    celulaNumOuVazia(arredondar(j.semanaQueVem.tendencia, casas), estiloNumero),
+    celulaNumOuVazia(arredondar(j.semanaVigente.previsto, casas), estiloNumero),
+    celulaNumOuVazia(arredondar(j.semanaVigente.realizado, casas), estiloNumero),
+    celulaNumOuVazia(arredondar(j.semanaVigente.tendencia, casas), estiloNumero),
   ];
 }
 
-var COLS_DIMENSAO = [12, 26, 16, 14, 15, 15, 15, 15, 15, 15, 15, 15];
+var COLS_DIMENSAO = [12, 26, 16, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15];
 
 function montarAbaDimensao(nomeAba, linhas, dimensao, subtitulo) {
   var sufixo = subtitulo ? ' · ' + subtitulo : '';
@@ -211,7 +211,7 @@ function montarAbaDimensao(nomeAba, linhas, dimensao, subtitulo) {
   });
   return {
     name: nomeAba, rows: rows,
-    colWidths: COLS_DIMENSAO, freezeRows: 2, rowHeights: { 1: 28, 2: 30 }, merges: ['A1:L1'],
+    colWidths: COLS_DIMENSAO, freezeRows: 2, rowHeights: { 1: 28, 2: 30 }, merges: ['A1:M1'],
   };
 }
 
@@ -229,10 +229,9 @@ function gerarRelatorioSemanalXlsx(opcoes) {
   var resumo = resumoDesvios(desvios);
   var subtitulo = NOMES_MES[ctx.mesIdx] + '/' + ctx.ano;
   var janelaAnterior = semanaAnterior(ctx.ano, ctx.mesIdx, ctx.semanas, ctx.indiceAtual);
-  var janelaSeguinte = semanaSeguinte(ctx.ano, ctx.mesIdx, ctx.semanas, ctx.indiceAtual);
 
   var sheets = [
-    montarAbaResumo(opcoes, resumo, janelaAnterior, janelaSeguinte),
+    montarAbaResumo(opcoes, resumo, janelaAnterior),
     montarAbaDesvios(desvios, subtitulo),
     montarAbaDimensao('Volume', linhasVolume, 'volume', subtitulo),
     montarAbaDimensao('Equipes', linhasEquipes, 'equipes', subtitulo),

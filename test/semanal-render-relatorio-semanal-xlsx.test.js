@@ -45,9 +45,12 @@ function demandasCom(eventosPorChave) {
 // Fixture com dois registros na mesma tipologia (ST): SUP-A com previsto de
 // volume alto e pouco realizado na semana anterior (16 previsto x 6
 // realizado = 37,5% -> Crítico) e SUP-B com previsto baixo e realizado
-// parecido (8 previsto x 6 realizado = 75% -> Atenção). Confirmado rodando
-// compute-relatorio-semanal.js diretamente: porContrato sai com 3 linhas
-// Crítico e 1 Atenção (a de SUP-B), e resumoDesvios soma { critico: 3, atencao: 1 }.
+// parecido (8 previsto x 6 realizado = 75% -> Atenção), mais o Acumulado dos
+// dois (SUP-A 15,4%, SUP-B 30% -> Crítico nos dois) e a Tendência da semana
+// VIGENTE de SUP-B (12 previsto x 10,56 tendência = 88% -> Atenção).
+// Confirmado rodando compute-relatorio-semanal.js diretamente: porContrato
+// sai com 3 linhas Crítico e 2 Atenção, e resumoDesvios soma
+// { critico: 3, atencao: 2 }.
 function opcoesComDesvios() {
   const semanas = semanasDoMes(ANO, JULHO);
   const hojeEpoch = semanas[1].inicio;
@@ -98,7 +101,7 @@ test('a aba Volume tem o cabeçalho das 3 janelas e uma linha por registro/tipol
   const sheetXml = extrairAba(resultado.bytes, 3); // Resumo=1, Desvios=2, Volume=3
   assert.match(sheetXml, /Semana anterior — Previsto/);
   assert.match(sheetXml, /Acumulado do mês — Realizado/);
-  assert.match(sheetXml, /Semana que vem — Tendência/);
+  assert.match(sheetXml, /Semana vigente — Tendência/);
   // 1 título + 1 cabeçalho + TOTAL GERAL + 2 tipologias + (registro+TOTAL SUP) x2 = 9 linhas
   const linhas = [...sheetXml.matchAll(/<row r="\d+"[^>]*>/g)];
   assert.strictEqual(linhas.length, 9);
@@ -108,7 +111,7 @@ test('a aba Volume tem título mesclado e cabeçalho estilizado', () => {
   const registros = [registro({ sup: 'SUP-A', volume: 10 })];
   const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesBase(registros, [0]));
   const sheetXml = extrairAba(resultado.bytes, 3); // Volume
-  assert.match(sheetXml, /<mergeCells count="1"><mergeCell ref="A1:L1"\/><\/mergeCells>/);
+  assert.match(sheetXml, /<mergeCells count="1"><mergeCell ref="A1:M1"\/><\/mergeCells>/);
   assert.match(sheetXml, /<c r="A1" s="1" t="inlineStr"><is><t>Relatório Semanal — Planejamento · Volume · Jul\/2026<\/t>/);
   assert.match(sheetXml, /<c r="A2" s="2" t="inlineStr"><is><t>SUP<\/t>/);
 });
@@ -183,14 +186,14 @@ test('a aba Desvios formata Previsto/Realizado-Tendência com separador de milha
 // linhaDesvio() (casasDaDimensaoRotulo('Volume') === 0) foi confirmado
 // estruturalmente quando foi implementado, mas nunca contra um valor
 // fracionário de verdade -- um desvio de Volume com Previsto/Tendência
-// quebrados (o caso real: uma janela "Semana que vem" projetada por
+// quebrados (o caso real: uma janela "Semana vigente" projetada por
 // Tendência) precisa sair como inteiro na célula, nunca com casas decimais.
 test('a aba Desvios arredonda Previsto/Realizado-Tendência de Volume para inteiro, mesmo vindo fracionário', () => {
   const desvios = {
     porTipologia: [],
     porContrato: [{
       sup: 'SUP-A', tomador: 'Tomador-A', tipologia: 'ST', contrato: 'SUP-A',
-      janela: 'Semana que vem', dimensao: 'Volume',
+      janela: 'Semana vigente', dimensao: 'Volume',
       previsto: 16.6, numerador: 6.3333333333333, desvio: 0.381, status: 'Crítico', cor: '#D32020',
     }],
   };
@@ -227,26 +230,26 @@ test('celulaNumOuVazia (via montarAbaDesvios) transforma NaN numa célula vazia,
 test('a aba Resumo mostra as contagens de Crítico/Atenção (por contrato) batendo com resultado.resumo', () => {
   const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesComDesvios());
   assert.strictEqual(resultado.resumo.critico, 3);
-  assert.strictEqual(resultado.resumo.atencao, 1);
+  assert.strictEqual(resultado.resumo.atencao, 2);
   const sheetXml = extrairAba(resultado.bytes, 1); // Resumo
   // Layout: 1 título, 2 mês/ano, 3 semana anterior, 4 semana vigente,
-  // 5 semana que vem, 6 gerado em, 7 gerado por, 8 vazia, 9 crítico, 10 atenção.
-  assert.match(sheetXml, /<t>Desvios Crítico \(por contrato\)<\/t><\/is><\/c><c r="B9"><v>3<\/v><\/c>/);
-  assert.match(sheetXml, /<t>Desvios Atenção \(por contrato\)<\/t><\/is><\/c><c r="B10"><v>1<\/v><\/c>/);
+  // 5 gerado em, 6 gerado por, 7 vazia, 8 crítico, 9 atenção.
+  assert.match(sheetXml, /<t>Desvios Crítico \(por contrato\)<\/t><\/is><\/c><c r="B8"><v>3<\/v><\/c>/);
+  assert.match(sheetXml, /<t>Desvios Atenção \(por contrato\)<\/t><\/is><\/c><c r="B9"><v>2<\/v><\/c>/);
 });
 
-test('a aba Resumo declara o período do relatório: mês/ano, semana anterior e semana que vem', () => {
+test('a aba Resumo declara o período do relatório: mês/ano, semana anterior e semana vigente', () => {
   const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesComDesvios());
   const sheetXml = extrairAba(resultado.bytes, 1); // Resumo
   assert.match(sheetXml, /<t>Mês\/ano do relatório<\/t>/);
   assert.match(sheetXml, /<t>Jul\/2026<\/t>/);
   assert.match(sheetXml, /<t>Semana anterior<\/t>/);
-  assert.match(sheetXml, /<t>Semana que vem<\/t>/);
+  assert.match(sheetXml, /<t>Semana vigente<\/t>/);
   // A fixture usa semanasDoMes(2026, JULHO) com hojeEpoch = semanas[1].inicio,
-  // então indiceAtual=1: a semana anterior é semanas[0] e a que vem, semanas[2]
-  // -- as três datas precisam ser distintas entre si (nenhuma delas "—").
+  // então indiceAtual=1: a semana anterior é semanas[0] e a vigente, semanas[1]
+  // -- as duas datas precisam ser distintas entre si (nenhuma delas "—").
   assert.doesNotMatch(sheetXml, /<t>Semana anterior<\/t><\/is><\/c><c r="B3"[^>]*><is><t>—<\/t>/);
-  assert.doesNotMatch(sheetXml, /<t>Semana que vem<\/t><\/is><\/c><c r="B5"[^>]*><is><t>—<\/t>/);
+  assert.doesNotMatch(sheetXml, /<t>Semana vigente<\/t><\/is><\/c><c r="B4"[^>]*><is><t>—<\/t>/);
 });
 
 test('a aba Resumo quebra Crítico/Atenção por dimensão (Volume/Equipes)', () => {
@@ -258,10 +261,10 @@ test('a aba Resumo quebra Crítico/Atenção por dimensão (Volume/Equipes)', ()
   assert.match(sheetXml, /<t>  Equipes — Atenção<\/t>/);
   // O fixture opcoesComDesvios só popula registros ST (Volume) -- a linha de
   // Equipes tem que existir e ficar em zero, não sumir do relatório.
-  assert.match(sheetXml, /<t>  Equipes — Crítico<\/t><\/is><\/c><c r="B13"><v>0<\/v><\/c>/);
-  assert.match(sheetXml, /<t>  Equipes — Atenção<\/t><\/is><\/c><c r="B14"><v>0<\/v><\/c>/);
-  assert.match(sheetXml, /<t>  Volume — Crítico<\/t><\/is><\/c><c r="B11"><v>3<\/v><\/c>/);
-  assert.match(sheetXml, /<t>  Volume — Atenção<\/t><\/is><\/c><c r="B12"><v>1<\/v><\/c>/);
+  assert.match(sheetXml, /<t>  Equipes — Crítico<\/t><\/is><\/c><c r="B12"><v>0<\/v><\/c>/);
+  assert.match(sheetXml, /<t>  Equipes — Atenção<\/t><\/is><\/c><c r="B13"><v>0<\/v><\/c>/);
+  assert.match(sheetXml, /<t>  Volume — Crítico<\/t><\/is><\/c><c r="B10"><v>3<\/v><\/c>/);
+  assert.match(sheetXml, /<t>  Volume — Atenção<\/t><\/is><\/c><c r="B11"><v>2<\/v><\/c>/);
 });
 
 test('a aba Equipes arredonda valores fracionários para 2 casas decimais', () => {
@@ -292,13 +295,13 @@ test('as 4 abas têm o título no mesmo formato "Relatório Semanal — Planejam
   });
 });
 
-test('a aba Resumo tem título mesclado A1:B1 e larguras de coluna, sem mudar as 14 linhas de conteúdo', () => {
+test('a aba Resumo tem título mesclado A1:B1 e larguras de coluna, sem mudar as 13 linhas de conteúdo', () => {
   const resultado = RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx(opcoesComDesvios());
   const sheetXml = extrairAba(resultado.bytes, 1); // Resumo
   assert.match(sheetXml, /<mergeCells count="1"><mergeCell ref="A1:B1"\/><\/mergeCells>/);
   assert.match(sheetXml, /<c r="A1" s="1" t="inlineStr">/);
   assert.match(sheetXml, /<cols><col min="1" max="1" width="32" customWidth="1"\/><col min="2" max="2" width="24" customWidth="1"\/><\/cols>/);
-  // as 14 linhas de sempre continuam nas mesmas posições -- B9/B13 inalterados
-  assert.match(sheetXml, /<t>Desvios Crítico \(por contrato\)<\/t><\/is><\/c><c r="B9"><v>3<\/v><\/c>/);
-  assert.match(sheetXml, /<t>  Equipes — Crítico<\/t><\/is><\/c><c r="B13"><v>0<\/v><\/c>/);
+  // as 13 linhas de sempre continuam nas mesmas posições -- B8/B12 inalterados
+  assert.match(sheetXml, /<t>Desvios Crítico \(por contrato\)<\/t><\/is><\/c><c r="B8"><v>3<\/v><\/c>/);
+  assert.match(sheetXml, /<t>  Equipes — Crítico<\/t><\/is><\/c><c r="B12"><v>0<\/v><\/c>/);
 });

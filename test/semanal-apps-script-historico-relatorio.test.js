@@ -119,7 +119,7 @@ test('um lote com várias linhas grava todas, na ordem, e devolve a contagem', (
   assert.strictEqual(resultado.gravadas, 3);
   const aba = s.planilha.getSheetByName('HISTORICO_RELATORIO');
   assert.strictEqual(aba._celulas.length, 4);
-  assert.strictEqual(aba._celulas[3][14], 3); // qtdCritico da linha-resumo
+  assert.strictEqual(aba._celulas[3][15], 3); // qtdCritico da linha-resumo
 });
 
 test('geradoEm/semanaInicio sobrevivem como texto puro -- o Sheets não os coage para Date', () => {

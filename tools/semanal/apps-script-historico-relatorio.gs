@@ -23,7 +23,7 @@ var CABECALHO = [
   'geradoEm', 'semanaInicio', 'semanaFim', 'sup', 'tipologia', 'dimensao',
   'previstoSemanaAnterior', 'realizadoSemanaAnterior', 'tendenciaSemanaAnterior',
   'previstoAcumulado', 'realizadoAcumulado', 'tendenciaAcumulado',
-  'previstoSemanaQueVem', 'tendenciaSemanaQueVem', 'qtdCritico', 'qtdAtencao', 'autor',
+  'previstoSemanaVigente', 'realizadoSemanaVigente', 'tendenciaSemanaVigente', 'qtdCritico', 'qtdAtencao', 'autor',
 ];
 
 function abaHistorico() {
@@ -55,7 +55,7 @@ function linhaParaArray(l) {
     valorOuVazio(l.sup), valorOuVazio(l.tipologia), valorOuVazio(l.dimensao),
     valorOuVazio(l.previstoSemanaAnterior), valorOuVazio(l.realizadoSemanaAnterior), valorOuVazio(l.tendenciaSemanaAnterior),
     valorOuVazio(l.previstoAcumulado), valorOuVazio(l.realizadoAcumulado), valorOuVazio(l.tendenciaAcumulado),
-    valorOuVazio(l.previstoSemanaQueVem), valorOuVazio(l.tendenciaSemanaQueVem),
+    valorOuVazio(l.previstoSemanaVigente), valorOuVazio(l.realizadoSemanaVigente), valorOuVazio(l.tendenciaSemanaVigente),
     valorOuVazio(l.qtdCritico), valorOuVazio(l.qtdAtencao), valorOuVazio(l.autor),
   ];
 }
