@@ -515,6 +515,11 @@ async function main() {
 
   const resultadosPorMes = [];
   const falhas = [];
+  // A janela REALMENTE pedida de cada mês, para o aviso de "mês vazio" abaixo
+  // poder citá-la: ela não é o mês de calendário quando 'ate' foi grampeado em
+  // diaFim (o mês corrente), e essa diferença é justamente o que se quer ver
+  // ao investigar um mês que voltou sem nada.
+  const janelaPorChave = new Map();
   for (const mes of pendentes) {
     const de = new Date(Date.UTC(ano, mes - 1, 1));
     const ateMes = new Date(Date.UTC(ano, mes, 0));
@@ -522,6 +527,7 @@ async function main() {
     const ate = diaEpoch(ateMes) > diaFim ? dataDoDiaEpoch(diaFim) : ateMes;
     if (diaEpoch(de) > diaFim) continue;
     const chave = `${ano}-${String(mes).padStart(2, '0')}`;
+    janelaPorChave.set(chave, `${fmtData(de)} a ${fmtData(ate)}`);
     try {
       const lidas = await buscarJanela(de, ate);
       console.log(`  ${fmtData(de)} a ${fmtData(ate)}: ${lidas.length} sondagem-dia (bruto)`);
@@ -542,11 +548,17 @@ async function main() {
     linhasSaida, linhasNovas, mesesVazios, diasPreservados, totalBruto,
   } = mesclarProducao({ resultadosPorMes, jaTemos, diaFim });
 
+  // ANTES do guard de "nada veio", de propósito: se TODOS os meses voltarem
+  // vazios, 'totalBruto' é 0 e o throw abaixo dispara -- e é exatamente aí que
+  // saber QUAIS meses vieram vazios mais importa. Emitir depois do throw
+  // deixaria o operador só com a mensagem genérica no cenário que este guard
+  // existe para proteger (o de 2026-08-08, cabeçalho com espaço duplo).
+  for (const chave of mesesVazios) {
+    console.warn(`  ${janelaPorChave.get(chave) || chave}: ZERO linha -- o mês NÃO será regravado (o dado anterior dele fica intacto).`);
+  }
+
   if (!totalBruto) {
     throw new Error('Nenhuma linha encontrada no Link 7 -- abortando sem gravar (sessao expirada, ou período sem nenhuma sondagem -- confira antes de aceitar um CSV vazio).');
-  }
-  for (const chave of mesesVazios) {
-    console.warn(`  ${chave}: ZERO linha -- o mês NÃO será regravado (o dado anterior dele fica intacto).`);
   }
 
   // O filtro por mês buscado + corte que mesclarProducao aplica existe porque
