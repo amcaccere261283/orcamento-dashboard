@@ -43,11 +43,11 @@ test('ramo igual: a semana em curso nunca projeta abaixo do que ja e fato', () =
   assert.strictEqual(r.semanas[2], 90, 'vigente nao pode ficar abaixo do Realizado');
 });
 
-test('ramo acima: as semanas restantes seguem o ritmo medio das FECHADAS, nao o previsto', () => {
-  // hoje = 13/07. Fechadas S1+S2 = 12 dias, R acumulado 180 (P era 120).
-  // ritmo = 180/12 = 15 furos/dia.
-  // S3 e a vigente: hoje e o 1o dia dela, restam 6 dias -> 0 + 15*6 = 90.
-  // S4 (7 dias) -> 105. S5 (5 dias) -> 75.
+test('ramo acima: as semanas restantes miram o Previsto delas, nao o ritmo', () => {
+  // hoje = 13/07. Fechadas S1+S2 = 12 dias, R acumulado 180 (P era 120) -> ramo acima.
+  // ritmoPorDia ainda e calculado (15) e fica no diagnostico, mas NAO projeta mais:
+  // S3 (vigente, realizado parcial 0) = max(70, 0) = 70. S4 = 70. S5 = 50 -- o
+  // proprio Previsto de cada semana, igual ao ramo 'igual'.
   const r = calcularTendenciaSemanal({
     previstoMes: 310,
     semanasPrevisto: PREVISTO_JULHO,
@@ -56,16 +56,16 @@ test('ramo acima: as semanas restantes seguem o ritmo medio das FECHADAS, nao o 
     hojeEpoch: dia(13),
   });
   assert.strictEqual(r.ramo, 'acima');
-  assert.strictEqual(r.diagnostico.ritmoPorDia, 15);
-  assert.strictEqual(r.semanas[2], 90);
-  assert.strictEqual(r.semanas[3], 105);
-  assert.strictEqual(r.semanas[4], 75);
+  assert.strictEqual(r.diagnostico.ritmoPorDia, 15, 'ritmo continua calculado, so nao projeta mais');
+  assert.strictEqual(r.diagnostico.realizadoVigente, 0);
+  assert.strictEqual(r.semanas[2], 70, 'vigente mira o proprio Previsto dela');
+  assert.strictEqual(r.semanas[3], 70, 'futura mira o proprio Previsto dela');
+  assert.strictEqual(r.semanas[4], 50, 'futura mira o proprio Previsto dela');
 });
 
-test('ramo acima: a vigente soma o Realizado parcial ao ritmo dos dias que faltam dela', () => {
-  // hoje = 15/07, o 3o dia de S3 (13,14,15 passaram; restam 16..19 = 4 dias).
-  // Fechadas continuam S1+S2 = 12 dias, ritmo = 180/12 = 15.
-  // S3 = 40 (fato parcial) + 15*4 = 100.
+test('ramo acima: a vigente nunca projeta abaixo do que ja e fato, mesmo acima do proprio Previsto', () => {
+  // hoje = 15/07, 3o dia de S3. Realizado parcial da vigente = 40 (abaixo do
+  // Previsto de S3, que e 70) -> max(70, 40) = 70.
   const r = calcularTendenciaSemanal({
     previstoMes: 310,
     semanasPrevisto: PREVISTO_JULHO,
@@ -74,7 +74,26 @@ test('ramo acima: a vigente soma o Realizado parcial ao ritmo dos dias que falta
     hojeEpoch: dia(15),
   });
   assert.strictEqual(r.ramo, 'acima');
-  assert.strictEqual(r.semanas[2], 100);
+  assert.strictEqual(r.diagnostico.realizadoVigente, 40);
+  assert.strictEqual(r.semanas[2], 70);
+});
+
+test('ramo acima: quando a vigente ja fechou acima do proprio Previsto, a celula mostra o fato', () => {
+  // hoje = 19/07, ULTIMO dia de S3: a vigente ja realizou 200 sozinha, acima
+  // do proprio Previsto (70) -> max(70, 200) = 200. Futuras continuam
+  // mirando o proprio Previsto (70 e 50), nao o ritmo (que daria 105 e 75).
+  const r = calcularTendenciaSemanal({
+    previstoMes: 310,
+    semanasPrevisto: PREVISTO_JULHO,
+    semanasRealizado: [80, 100, 200, 0, 0],
+    semanas: SEMANAS_JULHO,
+    hojeEpoch: dia(19),
+  });
+  assert.strictEqual(r.ramo, 'acima');
+  assert.strictEqual(r.diagnostico.realizadoVigente, 200);
+  assert.strictEqual(r.semanas[2], 200, 'a celula da vigente mostra o fato, nao o Previsto');
+  assert.strictEqual(r.semanas[3], 70, 'futura mira o Previsto dela, nao o ritmo (105)');
+  assert.strictEqual(r.semanas[4], 50, 'futura mira o Previsto dela, nao o ritmo (75)');
 });
 
 test('ramo abaixo: o saldo do MES e repartido pelos dias que restam', () => {
@@ -176,7 +195,7 @@ test('sem semanas, sem previsto ou sem hoje devolve sem-dado em vez de chutar', 
   assert.strictEqual(calcularTendenciaSemanal(Object.assign({}, ok, { semanas: SEMANAS_JULHO.slice(0, 3) })).ramo, 'sem-dado');
 });
 
-test('diagnostico expoe o que o alerta precisa: previsto e tendencia A PARTIR DE HOJE', () => {
+test('diagnostico expoe realizadoVigente, o dado que o alerta de movimentacao usa', () => {
   const r = calcularTendenciaSemanal({
     previstoMes: 310,
     semanasPrevisto: PREVISTO_JULHO,
@@ -188,37 +207,12 @@ test('diagnostico expoe o que o alerta precisa: previsto e tendencia A PARTIR DE
   assert.strictEqual(r.diagnostico.indiceVigente, 2);
   assert.strictEqual(r.diagnostico.realizadoAcumulado, 180);
   assert.strictEqual(r.diagnostico.previstoAcumulado, 120);
-  // Hoje e o 1o dia de S3 (7 dias, restam 6): da S3 entra 70*6/7 = 60, nao os
-  // 70 inteiros. Antes da correcao de 2026-08-04 dava 190 (S3+S4+S5 inteiras).
-  assert.ok(Math.abs(r.diagnostico.previstoAPartirDeHoje - (70 * 6 / 7 + 70 + 50)) < 1e-9, 'S3 entra so pela fatia futura');
-  // Como S3 ainda nao realizou nada, a projecao dela e inteira: 90+105+75.
-  assert.strictEqual(r.diagnostico.tendenciaAPartirDeHoje, 270);
+  assert.strictEqual(r.diagnostico.realizadoVigente, 0);
+  assert.strictEqual(r.diagnostico.previstoAPartirDeHoje, undefined, 'campo morto, saiu do diagnostico');
+  assert.strictEqual(r.diagnostico.tendenciaAPartirDeHoje, undefined, 'campo morto, saiu do diagnostico');
 });
 
-test('o realizado JA ENTREGUE da semana em curso nao entra na tendencia a partir de hoje', () => {
-  // hoje = 19/07, ULTIMO dia de S3 (13..19): nao resta dia nenhum dela.
-  // Fechadas S1+S2 = 180 contra 120 previstos -> ramo acima, ritmo = 15/dia.
-  // S3 ja realizou 200 sozinha. A projecao de S3 e 200 + 15*0 = 200, mas os
-  // 200 sao fato consumado -- a parte projetada dela e ZERO.
-  const r = calcularTendenciaSemanal({
-    previstoMes: 310,
-    semanasPrevisto: PREVISTO_JULHO,
-    semanasRealizado: [80, 100, 200, 0, 0],
-    semanas: SEMANAS_JULHO,
-    hojeEpoch: dia(19),
-  });
-  assert.strictEqual(r.ramo, 'acima');
-  assert.strictEqual(r.diagnostico.indiceVigente, 2);
-  assert.strictEqual(r.semanas[2], 200, 'a celula da vigente continua mostrando o fato');
-  // S4 (7 dias) = 105, S5 (5 dias) = 75. Nada de S3.
-  assert.strictEqual(r.diagnostico.tendenciaAPartirDeHoje, 180, 'so S4+S5 sao projecao');
-  assert.strictEqual(r.diagnostico.previstoAPartirDeHoje, 120, 'S3 nao tem dia restante: 0 + 70 + 50');
-  // O excedente que o Alerta A cobra passa a ser 180-120 = 60, e nao os 140
-  // que a versao anterior cobrava (270-190) somando furos ja entregues.
-  assert.strictEqual(r.diagnostico.tendenciaAPartirDeHoje - r.diagnostico.previstoAPartirDeHoje, 60);
-});
-
-test('mes inteiramente no futuro: os dois campos sao o mes inteiro, sem vigente a ratear', () => {
+test('mes inteiramente no futuro: realizadoVigente e 0, sem vigente a medir', () => {
   const r = calcularTendenciaSemanal({
     previstoMes: 310,
     semanasPrevisto: PREVISTO_JULHO,
@@ -227,6 +221,5 @@ test('mes inteiramente no futuro: os dois campos sao o mes inteiro, sem vigente 
     hojeEpoch: diaEpoch(new Date(Date.UTC(2026, 5, 10))),
   });
   assert.strictEqual(r.diagnostico.indiceVigente, -1);
-  assert.strictEqual(r.diagnostico.previstoAPartirDeHoje, 310);
-  assert.strictEqual(r.diagnostico.tendenciaAPartirDeHoje, 310);
+  assert.strictEqual(r.diagnostico.realizadoVigente, 0);
 });

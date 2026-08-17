@@ -87,7 +87,11 @@ function calcularTendenciaSemanal(entrada) {
     if (k < fechadas) { saida.push(numero(semanasRealizado[k])); continue; }
     var ehVigente = (k === indiceVigente);
 
-    if (ramo === 'igual') {
+    // Ramo 'acima' passou a mirar o Previsto de cada semana, igual ao ramo
+    // 'igual' -- pedido de 2026-08-17: estender o ritmo que já bateu o plano
+    // inflava a leitura da semana fechada e escondia semana vigente parada.
+    // Ver docs/superpowers/specs/2026-08-17-semanal-tendencia-ramo-acima-design.md.
+    if (ramo === 'igual' || ramo === 'acima') {
       // "mantém o P na T": a fatia INTEIRA que a linha Previsto exibe, para as
       // duas linhas mostrarem o mesmo número. Na vigente, nunca abaixo do que
       // já é fato.
@@ -96,45 +100,18 @@ function calcularTendenciaSemanal(entrada) {
       continue;
     }
 
+    // Só o ramo 'abaixo' chega aqui.
     var diasDaFatia = ehVigente ? diasRestantesVigente : diasNaSemana(semanas[k]);
     var base = ehVigente ? realizadoVigente : 0;
 
     // saldo <= 0 dentro do ramo 'abaixo' acontece quando o Realizado parcial
     // da vigente já cobriu sozinho o que faltava do mês -- seguir a fórmula do
     // saldo ali produziria projeção NEGATIVA.
-    if (ramo === 'acima' || saldo <= 0) {
+    if (saldo <= 0) {
       saida.push(base + ritmoPorDia * diasDaFatia);
       continue;
     }
     saida.push(diasRestantesMes > 0 ? base + saldo * diasDaFatia / diasRestantesMes : base);
-  }
-
-  // "A partir de HOJE", não "a partir da semana em curso" -- e os nomes dizem
-  // isso porque a diferença é o defeito que a revisão de 2026-08-04 pegou.
-  // Somando desde o índice 'fechadas', a semana vigente entrava INTEIRA nos
-  // dois, e o excedente do Alerta A passava a cobrar carteira aberta para
-  // sustentar furos que JÁ foram entregues nos dias passados dela (medido:
-  // fechadas 130 contra 120, vigente já com 200 contra 70 no último dia dela
-  // -- excedente 140, dos quais 130 eram fato consumado). Um alerta que olha
-  // pra frente não pode ter passado no numerador.
-  var previstoAPartirDeHoje = 0;
-  var tendenciaAPartirDeHoje = 0;
-  if (indiceVigente >= 0) {
-    // Da vigente, só a FATIA proporcional aos dias que ainda faltam dela.
-    var diasVigente = diasNaSemana(semanas[indiceVigente]);
-    if (diasVigente > 0) {
-      previstoAPartirDeHoje += numero(semanasPrevisto[indiceVigente]) * diasRestantesVigente / diasVigente;
-    }
-    // E da Tendência da vigente, só a parte PROJETADA: 'saida' nessa semana é
-    // realizadoVigente (fato) + projeção dos dias que faltam, e o fato não é
-    // projeção. Nos três ramos a projeção é construída assim, então subtrair
-    // o realizado devolve exatamente a parcela futura (no ramo 'igual' a
-    // saida é max(previsto, realizado), então a diferença nunca fica negativa).
-    tendenciaAPartirDeHoje += saida[indiceVigente] - realizadoVigente;
-  }
-  for (var r = primeiraFutura; r < numSemanas; r++) {
-    previstoAPartirDeHoje += numero(semanasPrevisto[r]);
-    tendenciaAPartirDeHoje += saida[r];
   }
 
   return {
@@ -145,11 +122,12 @@ function calcularTendenciaSemanal(entrada) {
       previstoAcumulado: previstoAcumulado,
       semanasFechadas: fechadas,
       indiceVigente: indiceVigente,
+      // Consumido pelo alerta de movimentação de equipe (ramo 'acima' com a
+      // vigente zerada) -- ver compute-alertas-tendencia.js.
+      realizadoVigente: realizadoVigente,
       saldo: saldo,
       ritmoPorDia: ritmoPorDia,
       diasRestantesMes: diasRestantesMes,
-      previstoAPartirDeHoje: previstoAPartirDeHoje,
-      tendenciaAPartirDeHoje: tendenciaAPartirDeHoje,
     },
   };
 }
