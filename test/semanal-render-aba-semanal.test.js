@@ -276,8 +276,8 @@ test('Tendência nunca fica negativa quando o Realizado já passou o Previsto --
   const linhaTendencia = html.match(/<tr class="linha-serie-semanal linha-tendencia">[\s\S]*?<\/tr>/)[0];
   assert.doesNotMatch(linhaTendencia, />-/, 'nenhum valor negativo -- ">-" isola número negativo dos hífens em nomes de classe');
   // Ramo R > P (realizadoAcumulado 20 muito acima do previstoAcumulado das
-  // semanas fechadas S1+S2). Desde a Task 1 (compute-tendencia-semanal.js, ver
-  // docs/superpowers/specs/2026-08-04-semanal-tendencia-regras-e-alertas-design.md)
+  // semanas fechadas S1+S2). Pedido de 2026-08-17 (compute-tendencia-semanal.js,
+  // ver docs/superpowers/specs/2026-08-17-semanal-tendencia-ramo-acima-design.md):
   // o ramo R > P mudou: em vez de ritmo das fechadas multiplicado pelos dias,
   // agora mira o Previsto de cada semana. Previsto de julho (5) reparte inteiro
   // em [1,1,1,1,1]. S3 vigente (realizado parcial 0) = max(1, 0) = 1.

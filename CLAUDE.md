@@ -410,7 +410,7 @@ desenha). Só na dimensão **Volume**: as duas perguntas são físicas, e em R$ 
 estoque de demanda. Disparam só quando a verificação falha — o semáforo já mostra desvio.
 
 - Ramo `R > P` → **"Avaliar equipe e demanda"**, quando o saldo de demandas em aberto do
-  SUP não cobre o excedente projetado.
+  SUP não cobre o excedente projetado. (substituído em 2026-08-17 — ver adendo abaixo)
 - Ramo `R < P` → **"Equipes com pouco recurso ou improdutividade"**, quando a
   produtividade exigida para zerar o saldo passa a premissa.
 
@@ -436,15 +436,24 @@ semana vigente e as futuras estendiam o ritmo médio das semanas fechadas; isso 
 leitura da semana fechada e escondia quando uma equipe acima do plano parava de avançar.
 Agora esse ramo projeta **igual ao ramo `R ≈ P`**: mira o Previsto de cada semana (nunca
 abaixo do Realizado parcial da vigente). `ritmoPorDia` continua no diagnóstico (vira
-evidência do alerta abaixo), só não projeta mais nada. O Alerta A ("Avaliar equipe e
-demanda") foi substituído por **"Avaliar movimentação de equipe"**: dispara quando o ramo
-é `R > P` e a semana vigente ainda não teve NENHUM avanço
+evidência do alerta abaixo), só não projeta mais **nesse ramo** — ele continua projetando
+normalmente no ramo `abaixo` quando `saldo <= 0` (`compute-tendencia-semanal.js`). O
+Alerta A ("Avaliar equipe e demanda") foi substituído por **"Avaliar movimentação de
+equipe"**: dispara quando o ramo é `R > P` e a semana vigente ainda não teve NENHUM avanço
 (`diagnostico.realizadoVigente === 0`) — sinal de que a equipe pode ter sido deslocada.
 Não depende mais de saldo de demandas. Consolidado congelado e Alocação Equipes herdam a
 fórmula nova automaticamente (mesma função), sem mudança de código nesses dois. Os campos
 `previstoAPartirDeHoje`/`tendenciaAPartirDeHoje` do parágrafo acima **saíram** do
-diagnóstico nesta mesma mudança — ficam morto o texto acima como histórico do Alerta A
-antigo, não como API atual.
+diagnóstico nesta mesma mudança — o parágrafo acima vale como histórico do Alerta A
+antigo, não como descrição da API atual.
+
+**O gatilho `realizadoVigente === 0` dispara com certeza em todo primeiro dia de
+semana.** O Realizado sempre para em d−1 (`realizadoAteEpoch = hojeEpoch - 1`,
+`render-aba-semanal.js`), então na segunda-feira o intervalo de contagem da semana
+vigente fica vazio e `realizadoVigente` sai 0 POR CONSTRUÇÃO, não importa o que já
+tenha sido lançado naquele dia — o alerta "Avaliar movimentação de equipe" dispara
+para TODO SUP no ramo `R > P`, a cada semana, garantido. É decisão explícita do
+dono do projeto (ver o spec de 2026-08-17), sem trava de dias mínimos.
 
 ### Consolidado congelado, filtro global de ativos e o anel do status (2026-08-04)
 

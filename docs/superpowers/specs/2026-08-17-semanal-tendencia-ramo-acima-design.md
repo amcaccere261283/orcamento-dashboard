@@ -104,10 +104,16 @@ que o resto do arquivo já usa para caminhos inalcançáveis.
 **Decisão explícita, sem trava extra:** o gatilho é `realizadoVigente === 0` sem
 exigir um número mínimo de dias decorridos na semana vigente — inclusive no
 primeiro dia dela. É deliberado (bate com "ainda não tivemos avanço na semana", o
-cenário que motivou o pedido), mas pode soar prematuro numa segunda-feira de manhã
-sem nada lançado ainda no dia. Sem dado para calibrar uma trava de dias mínimos
-agora, fica registrado como ponto a revisitar se incomodar na prática — não como
-bug.
+cenário que motivou o pedido). Mas o efeito não é "pode soar prematuro" — é
+garantido: como o Realizado sempre para em d−1 (`realizadoAteEpoch = hojeEpoch -
+1`, `render-aba-semanal.js`), no PRIMEIRO dia de cada semana o intervalo de
+contagem da semana vigente fica vazio e `realizadoVigente` sai 0 POR CONSTRUÇÃO —
+a fonte de dados não tem como devolver outro valor nesse dia, não importa o que já
+tenha sido lançado. Ou seja, o alerta dispara com CERTEZA para todo SUP no ramo
+`R > P` durante toda a segunda-feira, e na terça-feira a evidência ainda reflete só
+o que rodou na segunda. É um dia em cada sete, não um caso raro. Sem dado para
+calibrar uma trava de dias mínimos agora, fica registrado como ponto a revisitar se
+incomodar na prática — não como bug.
 
 ## Decisão 3 — o que não muda
 

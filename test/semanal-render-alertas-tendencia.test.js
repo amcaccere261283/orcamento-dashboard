@@ -96,6 +96,16 @@ test('R>P com a semana vigente zerada gera a linha "Avaliar movimentacao de equi
   });
   assert.ok(html.indexOf('Avaliar movimentação de equipe') !== -1);
   assert.ok(/data-search=/.test(html), 'a linha precisa do data-search para a busca da aba');
+  // Pina a evidência (ritmoAnterior, que atravessa compute-alertas-tendencia.js
+  // -> render-alertas-tendencia.js): sem isto, um typo tipo 'alerta.ritmoPorDia'
+  // (o nome usado do OUTRO lado dessa fronteira) renderizaria '—' e passaria
+  // batido, porque formatarNumero(undefined) devolve '—' em vez de lançar.
+  // Semanas fechadas S1+S2 = 5+7 = 12 dias; realizadoAcumulado = 30 furos
+  // (15 no dia 1 + 15 no dia 6) -> ritmoPorDia = 30/12 = 2,5 -> "2,50".
+  assert.ok(
+    html.indexOf('Ritmo médio nas semanas fechadas 2,50 furos/dia · nenhum avanço registrado na semana em curso') !== -1,
+    'a evidência precisa trazer o ritmo formatado, não so o rotulo'
+  );
 });
 
 test('R>P com avanco na vigente, mesmo pequeno, nao alerta', () => {
