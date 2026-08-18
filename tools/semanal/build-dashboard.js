@@ -25,6 +25,7 @@ const { agregarEquipesAtivoPorDia } = require('./compute-equipes-ativo-matriz.js
 const { agregarEquipesNaoProdutivas } = require('./compute-equipes-nao-produtivas.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const configDemandas = require('./config-demandas.js');
+const { lerAvisoAtualizacaoVolume } = require('./coordenacao-volume.js');
 
 // Mesmo logo/avatar do orçamento (tools/orcamento/build-dashboard.js) --
 // mesmos arquivos em assets/, mesma função de carregar, duplicada aqui de
@@ -512,9 +513,13 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   const sups = reconciliarSups(furosLidos, registros);
   console.log(`Demandas/SUP: ${sups.furosSemSupNaMatriz} furo(s) em ${sups.soNoAvancos.length} SUP(s) que a MATRIZ não tem (${sups.soNoAvancos.join(', ') || 'nenhum'}); ${sups.soNaMatriz.length} SUP(s) da MATRIZ sem nenhum furo (${sups.soNaMatriz.join(', ') || 'nenhum'}).`);
 
+  const CAMINHO_HEARTBEAT_VOLUME = path.join(__dirname, '..', '..', 'dist', 'heartbeat-atualizacao-volume.csv');
+  const avisoAtualizacao = lerAvisoAtualizacaoVolume(CAMINHO_HEARTBEAT_VOLUME);
+
   const html = renderSemanal({
     registros, baseline, demandas, periodos, senha, geradoEm: today,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
+    avisoAtualizacao,
   });
 
   const resolvedOutPath = outPath || path.join(__dirname, '..', '..', 'dist', 'planejamento-semanal.html');
