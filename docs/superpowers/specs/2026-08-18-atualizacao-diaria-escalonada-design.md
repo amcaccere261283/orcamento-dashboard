@@ -24,10 +24,18 @@ muda:
 | 2ª | Kairo | 08:15 |
 | 3ª | Américo (`amcac`) | 08:30 |
 
-O script não precisa saber "quem é": ele sempre pergunta primeiro "já teve sucesso
-hoje?" — às 8h a resposta é sempre não (é o primeiro disparo do dia em qualquer
-máquina), então o 1º a dispara sempre roda. Isso também significa que se a ordem
-precisar mudar um dia (reagendar o Task Scheduler de uma máquina), nada no código
+**2ª rodada de segurança, 1h depois, mesma ordem** (Patrick 09:00 → Kairo 09:15 →
+Américo 09:30) — cobre o cenário "as 3 máquinas falharam às 8h" (ninguém logado no
+Chrome em lugar nenhum, por exemplo). Não é código novo: é a MESMA checagem "já teve
+sucesso hoje?" da Decisão 3, então se a 1ª rodada já publicou, os 3 disparos das 9h
+saem cedo sem fazer nada — só mais 6 entradas no Task Scheduler (3 máquinas × 2
+rodadas), nenhuma lógica nova no script.
+
+O script não precisa saber "quem é" nem "que rodada é esta": ele sempre pergunta
+primeiro "já teve sucesso hoje?" — às 8h a resposta é sempre não (é o primeiro
+disparo do dia em qualquer máquina), então o 1º a disparar sempre roda; às 9h a
+resposta só é não se a rodada das 8h inteira falhou. Isso também significa que se a
+ordem precisar mudar um dia (reagendar o Task Scheduler de uma máquina), nada no código
 muda.
 
 ## Decisão 2 — arquivo de coordenação novo, separado do heartbeat existente
@@ -134,11 +142,13 @@ Sem elemento novo de HTML/CSS — só concatena no `subtitulo` que
 `ok` ainda (dashboard nunca passou por este mecanismo), a segunda parte simplesmente
 não aparece — `formatarMesAno(geradoEm)` sozinho, como é hoje.
 
-## Decisão 6 — se as 3 falharem no dia
+## Decisão 6 — se as 3 falharem na rodada das 8h
 
-Fica sem atualização nesse dia — mesmo cenário de hoje quando isso acontece. O
+A rodada das 9h (Decisão 1) cobre esse caso automaticamente. Só se as 6 tentativas
+do dia (3 máquinas × 2 rodadas) falharem é que o dia fica mesmo sem atualização — o
 alerta por e-mail existente (`alertas-email.yml`, baseado no heartbeat diário de
-`chrome_ok`) já cobre esse caso; nada novo precisa ser criado pra isso agora.
+`chrome_ok`) já cobre esse cenário residual; nada novo precisa ser criado pra isso
+agora.
 
 ## O que NÃO muda
 
@@ -154,10 +164,12 @@ alerta por e-mail existente (`alertas-email.yml`, baseado no heartbeat diário d
 - **Novo**: `tools/semanal/atualizar-diario-escalonado.ps1` (wrapper Task Scheduler —
   cópia de `atualizar-diario.ps1` com `--start-minimized` na abertura do Chrome e
   chamando o script novo em vez de `atualizar-arquivos.js` direto).
-- **Novo**: `docs/setup-atualizacao-escalonada.md` (passo a passo pra configurar o
-  Task Scheduler nas 3 máquinas com o horário certo cada uma — a sessão atual só
-  consegue configurar e testar de verdade a desta máquina, Patrick/`supor`; Kairo e
-  Américo precisam rodar isso localmente ou pedir pra Claude Code fazer na hora certa
+- **Novo**: `docs/setup-atualizacao-escalonada.md` (passo a passo pra configurar as
+  DUAS tarefas por máquina no Task Scheduler -- rodada das 8h e rodada de segurança
+  das 9h, mesmo script, só o horário muda -- 6 entradas no total entre as 3 máquinas.
+  A sessão atual só consegue configurar e testar de verdade as desta máquina,
+  Patrick/`supor`; Kairo e Américo precisam rodar isso localmente ou pedir pra Claude
+  Code fazer na hora certa
   em cada máquina).
 - **Alterado**: `tools/semanal/atualizar-arquivos.js` — exporta `rodarBuscas` e
   `publicar` (hoje internas) pra reaproveitar sem duplicar.
