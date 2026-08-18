@@ -1,10 +1,9 @@
 'use strict';
-const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const {
   parseHeartbeatVolume, jaAtualizadoHoje, decidirResultado, formatarLinhaHeartbeat,
-  CABECALHO_HEARTBEAT_VOLUME,
+  formatarAvisoAtualizacao, gravarLinhaHeartbeatVolume,
 } = require('./coordenacao-volume.js');
 const { rodarBuscas, publicarArquivos, ARQUIVOS_PUBLICAR } = require('./atualizar-arquivos.js');
 
@@ -32,17 +31,32 @@ function lerHeartbeatDoOrigin() {
     return parseHeartbeatVolume(texto);
   } catch (err) {
     // Arquivo ainda não existe no origin (1ª execução deste mecanismo) --
-    // trata como "nunca atualizado".
+    // trata como "nunca atualizado". Também cai aqui se o remote estiver
+    // mal configurado, o que é bem diferente: por isso o aviso.
+    console.warn('Aviso: git show falhou (' + err.message + ') -- tratando como "nunca atualizado". Se isso persistir, confira a configuração do remote.');
     return [];
   }
 }
 
-function gravarLinhaHeartbeat(linha) {
-  fs.mkdirSync(path.dirname(CAMINHO_HEARTBEAT_VOLUME), { recursive: true });
-  if (!fs.existsSync(CAMINHO_HEARTBEAT_VOLUME)) {
-    fs.writeFileSync(CAMINHO_HEARTBEAT_VOLUME, CABECALHO_HEARTBEAT_VOLUME + '\n');
+// true = ainda NÃO foi atualizado com sucesso hoje, precisa rodar.
+//
+// Chamada em DOIS momentos (ver o design): no início, pra decidir se vale a
+// pena começar, e de novo depois do build, logo antes de publicar. A segunda
+// checagem é o que fecha a corrida real entre as máquinas: as 5 buscas + o
+// build levam bem mais que os 15min que separam os horários agendados, então
+// Kairo (8h15) pode perfeitamente começar enquanto Patrick (8h) ainda está
+// rodando -- sem a re-checagem os dois publicariam, o CSV de heartbeat
+// conflitaria no rebase e quem perdesse a corrida ficaria travado.
+function precisaAtualizarHoje() {
+  try {
+    git(['fetch', 'origin', 'master']);
+  } catch (err) {
+    // Rede fora bem nesse instante não pode derrubar a execução inteira: o
+    // resto do fluxo já trata "não sei" como "melhor rodar". Segue com o que
+    // estiver em cache do último fetch bem-sucedido.
+    console.warn('Aviso: git fetch origin master falhou (' + err.message + ') -- seguindo com o que já está em cache local.');
   }
-  fs.appendFileSync(CAMINHO_HEARTBEAT_VOLUME, linha + '\n');
+  return !jaAtualizadoHoje(lerHeartbeatDoOrigin());
 }
 
 async function main() {
@@ -54,10 +68,8 @@ async function main() {
   }
 
   console.log('Checando (via git, sem abrir Chrome) se já houve atualização com sucesso hoje...');
-  git(['fetch', 'origin', 'master']);
-  const linhasOrigin = lerHeartbeatDoOrigin();
-  if (jaAtualizadoHoje(linhasOrigin)) {
-    console.log('Já atualizado hoje por outra máquina -- nada a fazer.');
+  if (!precisaAtualizarHoje()) {
+    console.log(`Já atualizado hoje (${formatarAvisoAtualizacao(lerHeartbeatDoOrigin())}) -- nada a fazer.`);
     return;
   }
   console.log('Ainda não atualizado hoje (ou a última tentativa falhou) -- prosseguindo.');
@@ -78,7 +90,10 @@ async function main() {
     console.log(`Resultado desta execução: ${resultado}${detalhe ? ` (${detalhe})` : ''}.`);
 
     const maquina = process.env.COMPUTERNAME || 'desconhecida';
-    gravarLinhaHeartbeat(formatarLinhaHeartbeat({ dataHora: new Date(), maquina, resultado, detalhe }));
+    gravarLinhaHeartbeatVolume(
+      CAMINHO_HEARTBEAT_VOLUME,
+      formatarLinhaHeartbeat({ dataHora: new Date(), maquina, resultado, detalhe })
+    );
 
     console.log('\n=== Reconstruindo a página (build-dashboard.js) ===');
     const { build } = require('./build-dashboard.js');
@@ -88,7 +103,18 @@ async function main() {
     const mensagem = `Atualização escalonada (${horario}, ${maquina}, ${resultado})`
       + (detalhe ? `\n\nFalha na busca de: ${detalhe}` : '');
 
-    publicarArquivos([...ARQUIVOS_PUBLICAR, NOME_HEARTBEAT_VOLUME], mensagem);
+    // Re-checagem antes de publicar: o trabalho acima leva minutos (bem mais
+    // que os 15min entre os horários agendados), então outra máquina pode ter
+    // publicado no meio do caminho. Publicar agora criaria o conflito de
+    // rebase no heartbeat que este mecanismo existe pra evitar.
+    if (!precisaAtualizarHoje()) {
+      console.log('Outra máquina publicou enquanto rodávamos -- descartando este trabalho local, não vamos publicar de novo.');
+      return;
+    }
+
+    // Set: desde 2026-08-18 o heartbeat também está em ARQUIVOS_PUBLICAR (pro
+    // comando manual publicá-lo) -- sem dedupe ele apareceria duas vezes aqui.
+    publicarArquivos([...new Set([...ARQUIVOS_PUBLICAR, NOME_HEARTBEAT_VOLUME])], mensagem);
 
     console.log(resultado === 'ok' ? '\n=== Concluído com sucesso ===' : '\n=== Concluído, mas todas as 5 buscas falharam (heartbeat registrado como "falhou" -- a próxima máquina da fila vai tentar) ===');
   } finally {
@@ -99,8 +125,24 @@ async function main() {
   }
 }
 
+// --checar: só responde "precisa rodar?" pelo código de saída, sem abrir
+// Chrome nem buscar nada. O wrapper .ps1 usa isso ANTES de abrir o Chrome --
+// sem ele, todo disparo que deveria só pular abria uma janela à toa.
+// Código 0 = já atualizado hoje, pode pular; 1 = precisa rodar OU a checagem
+// deu erro (em caso de dúvida, roda -- nunca fica preso pulando por engano).
 if (require.main === module) {
-  main().catch((err) => { console.error(err); process.exit(1); });
+  if (process.argv.includes('--checar')) {
+    try {
+      const precisa = precisaAtualizarHoje();
+      console.log(precisa ? 'PRECISA_ATUALIZAR' : 'JA_ATUALIZADO');
+      process.exit(precisa ? 1 : 0);
+    } catch (err) {
+      console.error(err);
+      process.exit(1);
+    }
+  } else {
+    main().catch((err) => { console.error(err); process.exit(1); });
+  }
 }
 
-module.exports = { main };
+module.exports = { main, precisaAtualizarHoje };

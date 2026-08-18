@@ -1,10 +1,12 @@
 # Wrapper para a atualizacao ESCALONADA (Task Scheduler, 2 horarios por dia --
 # ver docs/setup-atualizacao-escalonada.md). Diferenca para atualizar-diario.ps1
 # (que este arquivo substitui no agendamento das 3 maquinas):
-#   1. Abre o Chrome MINIMIZADO quando precisa abrir do zero (--start-minimized)
-#      -- nao deve aparecer na tela de quem estiver usando a maquina.
-#   2. Chama atualizar-diario-escalonado.js, que decide via git se ja rodou
-#      hoje ANTES de fazer qualquer coisa (nao abre Chrome se ja foi feito).
+#   1. Abre o Chrome MINIMIZADO quando precisa abrir do zero (via
+#      -WindowStyle Minimized do Start-Process) -- nao deve aparecer na tela
+#      de quem estiver usando a maquina.
+#   2. Chama atualizar-diario-escalonado.js --checar ANTES de qualquer outra
+#      coisa: se ja houve atualizacao com sucesso hoje, sai na hora sem nem
+#      abrir o Chrome.
 #
 # Sem acento de proposito neste arquivo inteiro (mesmo motivo de
 # atualizar-diario.ps1): PowerShell 5.1 le .ps1 sem BOM assumindo a codepage
@@ -43,6 +45,17 @@ if (-not $env:ORCAMENTO_SENHA) {
     Escrever "ERRO: ORCAMENTO_SENHA nao esta definida nesta sessao. Configure a variavel de ambiente persistente uma vez -- ver SETUP-ATUALIZACAO-DIARIA.md."
     exit 1
 }
+
+Escrever "Checando (via git, sem abrir Chrome) se ja houve atualizacao com sucesso hoje..."
+Push-Location $Raiz
+& node "tools\semanal\atualizar-diario-escalonado.js" --checar
+$jaAtualizado = ($LASTEXITCODE -eq 0)
+Pop-Location
+if ($jaAtualizado) {
+    Escrever "Ja atualizado hoje por outra maquina -- nada a fazer. Chrome nao sera aberto."
+    exit 0
+}
+Escrever "Ainda nao atualizado hoje -- prosseguindo."
 
 # Heartbeat diario de "Chrome alcancavel" (chrome_ok) -- mesmo mecanismo que
 # atualizar-diario.ps1 ja tinha, preservado aqui porque este script assume o
@@ -100,7 +113,10 @@ if (-not (PortaResponde)) {
         exit 1
     }
 
-    Start-Process $ChromeExe -ArgumentList "--remote-debugging-port=$PortaDebug", "--user-data-dir=`"$PerfilDebug`"", '--start-minimized'
+    # -WindowStyle Minimized e do Start-Process, nao uma flag do Chrome:
+    # --start-minimized NAO existe no Chrome (ele ignora em silencio e a
+    # janela abre visivel).
+    Start-Process $ChromeExe -ArgumentList "--remote-debugging-port=$PortaDebug", "--user-data-dir=`"$PerfilDebug`"" -WindowStyle Minimized
 
     $tentativas = 0
     while (-not (PortaResponde) -and $tentativas -lt 10) {

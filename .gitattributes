@@ -1,0 +1,3 @@
+dist/heartbeat-atualizacao-volume.csv merge=union
+docs/heartbeat-atualizacao-volume.csv merge=union
+docs/heartbeat-atualizacao-diaria.csv merge=union
