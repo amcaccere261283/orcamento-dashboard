@@ -12,7 +12,7 @@ name: Alertar se a atualizacao diaria falhar nas 3 maquinas
 
 on:
   schedule:
-    - cron: '45 11 * * *' # 08h45 de Brasilia -- ~45min de folga depois das 8h
+    - cron: '45 12 * * *' # 09h45 de Brasilia -- ~15min de folga depois da rodada de seguranca das 9h/9h15/9h30
   workflow_dispatch: {}
 
 jobs:

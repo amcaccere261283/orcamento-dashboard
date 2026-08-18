@@ -39,7 +39,7 @@ if (Get-ScheduledTask -TaskName $TarefaAntiga -ErrorAction SilentlyContinue) {
 $Trigger1 = New-ScheduledTaskTrigger -Daily -At (Get-Date -Hour 8 -Minute $MinutoOffset -Second 0)
 $Trigger2 = New-ScheduledTaskTrigger -Daily -At (Get-Date -Hour 9 -Minute $MinutoOffset -Second 0)
 $Action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$WrapperPath`""
-$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -DontStopOnIdleEnd -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -DontStopOnIdleEnd -ExecutionTimeLimit (New-TimeSpan -Minutes 90)
 $Principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 
 Register-ScheduledTask -TaskName 'OrcamentoDashboard-AtualizacaoEscalonada' -Action $Action -Trigger @($Trigger1, $Trigger2) -Settings $Settings -Principal $Principal -Description "Atualizacao escalonada do Planejamento Semanal (Patrick/Kairo/Americo) -- 2 disparos diarios, minuto $MinutoOffset." -Force | Out-Null

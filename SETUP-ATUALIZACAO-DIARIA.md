@@ -1,5 +1,19 @@
 # Atualização diária automática — setup por máquina
 
+> **⚠️ O agendamento mudou (2026-08-18) — não registre a tarefa deste guia.**
+> O mecanismo antigo (tarefa `OrcamentoDashboard-AtualizacaoDiaria`, via
+> `tools/semanal/configurar-tarefa-agendada.ps1`, as 3 máquinas às 8h em
+> ponto) foi substituído pela **atualização escalonada**: horários
+> diferentes por máquina + checagem via git de "já foi feito hoje", pra só
+> uma das três realmente rodar. Siga
+> [docs/setup-atualizacao-escalonada.md](docs/setup-atualizacao-escalonada.md)
+> para configurar uma máquina do zero.
+>
+> Este arquivo continua valendo para a parte de **`ORCAMENTO_SENHA`** e dos
+> pré-requisitos (acesso ao repositório, Chrome, perfil de depuração) — que
+> são pré-requisitos do guia novo também. Só **não** execute a seção que
+> registra a tarefa agendada antiga.
+
 A página semanal (`docs/planejamento-semanal.html`) busca dados do sond.com.br
 todo dia às 8h, sozinha, em até 3 máquinas (Americo, Kairo, Patrick) — qualquer
 uma que esteja ligada, logada e com a sessão do sond.com.br válida naquele
