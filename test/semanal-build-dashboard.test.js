@@ -279,3 +279,19 @@ test('sem espelho, osParaSup também fica null -- mesma regra de equipesCsv', ()
   const r = montarEquipesAtivas([], null);
   assert.strictEqual(r.osParaSup, null);
 });
+
+test('subtítulo do cabeçalho mostra o aviso de atualização quando informado', () => {
+  const html = renderSemanal({
+    registros: REGISTROS, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS,
+    senha: 'fake', geradoEm: new Date(0), avisoAtualizacao: 'Atualizado às 08:15 por Kairo',
+  });
+  assert.match(html, /Jan\/1970 · Atualizado às 08:15 por Kairo/);
+});
+
+test('subtítulo do cabeçalho mostra só mês/ano quando não há aviso', () => {
+  const html = renderSemanal({
+    registros: REGISTROS, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS,
+    senha: 'fake', geradoEm: new Date(0),
+  });
+  assert.match(html, /<div class="generated">Jan\/1970<\/div>/);
+});

@@ -2978,7 +2978,7 @@ inicializarInteracaoAlocacao();
 // nunca soltos no markup ou no JS de cliente -- porque SUP/Grupo/Tomador/
 // Tipologia são protegidos pela senha e este HTML vai pra um GitHub Pages
 // público.
-function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm, logoDataUri, iconDataUri }) {
+function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm, logoDataUri, iconDataUri, avisoAtualizacao }) {
   if (!senha) {
     throw new Error('renderSemanal requer "senha" -- os registros (SUP/Grupo/Tomador/Tipologia/valores) são cifrados com ela antes de ir pro HTML.');
   }
@@ -3049,7 +3049,7 @@ ${CSS_DEMANDAS}
   <main>
 ${markupCabecalho({
     titulo: 'Planejamento Semanal',
-    subtitulo: escapeHtml(formatarMesAno(geradoEm)),
+    subtitulo: escapeHtml(avisoAtualizacao ? `${formatarMesAno(geradoEm)} · ${avisoAtualizacao}` : formatarMesAno(geradoEm)),
     logo: logoImg,
     recuo: '  ',
   })}
