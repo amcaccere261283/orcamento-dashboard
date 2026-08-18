@@ -140,6 +140,7 @@ function publicar() {
 // atualizar-diario-escalonado.js, que decide os arquivos e a mensagem de
 // commit de um jeito um pouco diferente (inclui o heartbeat de coordenação).
 function publicarArquivos(nomes, mensagemCommit) {
+  console.log('\n=== Publicando em docs/ ===');
   let algumaCopia = false;
   const arquivosParaGit = [];
   for (const nome of nomes) {
