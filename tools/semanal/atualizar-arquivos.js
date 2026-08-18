@@ -135,6 +135,51 @@ function publicar() {
   }
 }
 
+// Copia os arquivos de dist/ pra docs/ (só os que mudaram), commita e publica.
+// Extraído de main() em 2026-08-18 pra ser reaproveitado por
+// atualizar-diario-escalonado.js, que decide os arquivos e a mensagem de
+// commit de um jeito um pouco diferente (inclui o heartbeat de coordenação).
+function publicarArquivos(nomes, mensagemCommit) {
+  let algumaCopia = false;
+  const arquivosParaGit = [];
+  for (const nome of nomes) {
+    const origem = path.join(DIST, nome);
+    const alvo = path.join(DOCS, nome);
+    if (!fs.existsSync(origem)) {
+      console.warn(`Pulando ${nome}: não existe em dist/.`);
+      continue;
+    }
+    arquivosParaGit.push(path.join('dist', nome), path.join('docs', nome));
+    const bufOrigem = fs.readFileSync(origem);
+    const bufAlvo = fs.existsSync(alvo) ? fs.readFileSync(alvo) : null;
+    if (bufAlvo && bufOrigem.equals(bufAlvo)) {
+      console.log(`${nome}: já estava igual em docs/, nada a copiar.`);
+      continue;
+    }
+    fs.copyFileSync(origem, alvo);
+    algumaCopia = true;
+    console.log(`Copiado: dist/${nome} -> docs/${nome}`);
+  }
+
+  if (!algumaCopia) {
+    console.log('\nNada mudou -- docs/ já estava sincronizado com dist/. Não há o que commitar.');
+    return { publicou: false };
+  }
+
+  console.log('\n=== git add / commit / push ===');
+  git(['add', ...arquivosParaGit]);
+  const status = git(['status', '--porcelain', '--', ...arquivosParaGit]).trim();
+  if (!status) {
+    console.log('git: nada ficou staged (os arquivos copiados já estavam commitados) -- pulando commit/push.');
+    return { publicou: false };
+  }
+
+  git(['commit', '-m', mensagemCommit]);
+  console.log('Commit criado.');
+  publicar();
+  return { publicou: true };
+}
+
 async function main() {
   if (!process.env.ORCAMENTO_SENHA) {
     throw new Error(
@@ -164,51 +209,12 @@ async function main() {
     const { build } = require('./build-dashboard.js');
     await build();
 
-    console.log('\n=== Publicando em docs/ ===');
-    let algumaCopia = false;
-    const arquivosParaGit = [];
-    for (const nome of ARQUIVOS_PUBLICAR) {
-      const origem = path.join(DIST, nome);
-      const alvo = path.join(DOCS, nome);
-      if (!fs.existsSync(origem)) {
-        console.warn(`Pulando ${nome}: não existe em dist/.`);
-        continue;
-      }
-      arquivosParaGit.push(path.join('dist', nome), path.join('docs', nome));
-      const bufOrigem = fs.readFileSync(origem);
-      const bufAlvo = fs.existsSync(alvo) ? fs.readFileSync(alvo) : null;
-      if (bufAlvo && bufOrigem.equals(bufAlvo)) {
-        console.log(`${nome}: já estava igual em docs/, nada a copiar.`);
-        continue;
-      }
-      fs.copyFileSync(origem, alvo);
-      algumaCopia = true;
-      console.log(`Copiado: dist/${nome} -> docs/${nome}`);
-    }
-
-    if (!algumaCopia) {
-      console.log('\nNada mudou -- docs/ já estava sincronizado com dist/. Não há o que commitar.');
-      relatarResumo(resultadosBuscas);
-      return;
-    }
-
-    console.log('\n=== git add / commit / push ===');
-    git(['add', ...arquivosParaGit]);
-    const status = git(['status', '--porcelain', '--', ...arquivosParaGit]).trim();
-    if (!status) {
-      console.log('git: nada ficou staged (os arquivos copiados já estavam commitados) -- pulando commit/push.');
-      relatarResumo(resultadosBuscas);
-      return;
-    }
-
     const horario = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     const falhas = resultadosBuscas.filter((r) => !r.ok);
     const mensagem = `Atualizar arquivos online (${horario})`
       + (falhas.length ? `\n\nFalha na busca de: ${falhas.map((f) => `${f.nome} (${f.erro})`).join('; ')}` : '');
-    git(['commit', '-m', mensagem]);
-    console.log('Commit criado.');
 
-    publicar();
+    publicarArquivos(ARQUIVOS_PUBLICAR, mensagem);
 
     relatarResumo(resultadosBuscas);
   } finally {
@@ -223,4 +229,4 @@ if (require.main === module) {
   main().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { main };
+module.exports = { main, rodarBuscas, publicarArquivos, ARQUIVOS_PUBLICAR };
