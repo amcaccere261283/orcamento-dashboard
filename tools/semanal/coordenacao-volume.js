@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('node:fs');
+const path = require('node:path');
 const { hojeNoFusoProjeto, agoraNoFusoProjeto } = require('../comum/datas.js');
 
 const CABECALHO_HEARTBEAT_VOLUME = 'data_hora,maquina,resultado,detalhe';
@@ -61,6 +62,20 @@ function formatarAvisoAtualizacao(linhas) {
   return `Atualizado às ${hh}:${mm} por ${nomeAmigavel(ultima.maquina)}`;
 }
 
+// Acrescenta uma linha ao heartbeat de volume, criando arquivo e cabeçalho na
+// primeira vez. Mora aqui (e não em atualizar-diario-escalonado.js, de onde
+// veio em 2026-08-18) porque o comando manual atualizar-arquivos.js precisa
+// gravar a MESMA linha: build-dashboard.js lê esse arquivo pro aviso do
+// cabeçalho, então uma publicação manual que não gravasse deixaria a página
+// dizendo "Atualizado às 08:00" com dado buscado às 15h.
+function gravarLinhaHeartbeatVolume(caminhoArquivo, linhaFormatada) {
+  fs.mkdirSync(path.dirname(caminhoArquivo), { recursive: true });
+  if (!fs.existsSync(caminhoArquivo)) {
+    fs.writeFileSync(caminhoArquivo, CABECALHO_HEARTBEAT_VOLUME + '\n');
+  }
+  fs.appendFileSync(caminhoArquivo, linhaFormatada + '\n');
+}
+
 function lerAvisoAtualizacaoVolume(caminhoArquivo) {
   if (!fs.existsSync(caminhoArquivo)) return '';
   return formatarAvisoAtualizacao(parseHeartbeatVolume(fs.readFileSync(caminhoArquivo, 'utf8')));
@@ -70,4 +85,5 @@ module.exports = {
   CABECALHO_HEARTBEAT_VOLUME, NOMES_AMIGAVEIS, nomeAmigavel,
   parseHeartbeatVolume, formatarLinhaHeartbeat, jaAtualizadoHoje,
   decidirResultado, formatarAvisoAtualizacao, lerAvisoAtualizacaoVolume,
+  gravarLinhaHeartbeatVolume,
 };

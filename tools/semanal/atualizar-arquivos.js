@@ -2,6 +2,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const {
+  decidirResultado, formatarLinhaHeartbeat, gravarLinhaHeartbeatVolume,
+} = require('./coordenacao-volume.js');
 
 // Atalho local pro pedido original (2026-08-07) de um botão "Atualizar
 // arquivos" na própria página publicada: não dá pra existir de verdade --
@@ -31,6 +34,7 @@ const { execFileSync } = require('node:child_process');
 const RAIZ = path.join(__dirname, '..', '..');
 const DIST = path.join(RAIZ, 'dist');
 const DOCS = path.join(RAIZ, 'docs');
+const CAMINHO_HEARTBEAT_VOLUME = path.join(DIST, 'heartbeat-atualizacao-volume.csv');
 
 const BUSCAS = [
   { nome: 'Avanços (furos)', modulo: './atualizar-avancos-online.js' },
@@ -61,6 +65,12 @@ const ARQUIVOS_PUBLICAR = [
   'equipes-roster-online.csv',
   'demandas-sondagem-online.csv',
   'demandas-lab-online.json',
+  // Heartbeat de coordenação (2026-08-18): build-dashboard.js lê este CSV pro
+  // aviso "Atualizado às HH:MM por Fulano" no cabeçalho da página. Publicá-lo
+  // aqui mantém o aviso coerente quando alguém roda o comando manual, e de
+  // quebra faz a rodada escalonada seguinte enxergar que hoje já foi
+  // atualizado e pular.
+  'heartbeat-atualizacao-volume.csv',
 ];
 
 async function rodarBuscas() {
@@ -205,6 +215,18 @@ async function main() {
   try {
     console.log('Buscando dados novos do sond.com.br -- exige Chrome aberto com --remote-debugging-port=9222, já logado.');
     const resultadosBuscas = await rodarBuscas();
+
+    // Mesma linha de heartbeat que atualizar-diario-escalonado.js grava. Sem
+    // isso, uma atualização manual às 15h publicava a página com o aviso
+    // "Atualizado às 08:00 por Patrick" no cabeçalho, apesar do dado fresco --
+    // build-dashboard.js sempre lê este CSV, e só a rodada escalonada
+    // escrevia nele.
+    const { resultado, detalhe } = decidirResultado(resultadosBuscas);
+    const maquina = process.env.COMPUTERNAME || 'desconhecida';
+    gravarLinhaHeartbeatVolume(
+      CAMINHO_HEARTBEAT_VOLUME,
+      formatarLinhaHeartbeat({ dataHora: new Date(), maquina, resultado, detalhe })
+    );
 
     console.log('\n=== Reconstruindo a página (build-dashboard.js) ===');
     const { build } = require('./build-dashboard.js');

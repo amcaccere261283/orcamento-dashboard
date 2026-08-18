@@ -81,6 +81,17 @@ const PARES = [
     publicado: path.join(RAIZ, 'docs', 'demandas-lab-online.json'),
     comando: 'cp dist/demandas-lab-online.json docs/demandas-lab-online.json',
   },
+  // Entrou em 2026-08-18 com a atualização escalonada: é o CSV que as 3
+  // máquinas usam pra combinar entre si quem já atualizou hoje, e que
+  // build-dashboard.js lê pro aviso "Atualizado às HH:MM por Fulano" no
+  // cabeçalho. Está em ARQUIVOS_PUBLICAR, então precisa da mesma rede de
+  // proteção dist/ <-> docs/ dos outros.
+  {
+    nome: 'CSV de heartbeat da atualização escalonada',
+    origem: path.join(RAIZ, 'dist', 'heartbeat-atualizacao-volume.csv'),
+    publicado: path.join(RAIZ, 'docs', 'heartbeat-atualizacao-volume.csv'),
+    comando: 'cp dist/heartbeat-atualizacao-volume.csv docs/heartbeat-atualizacao-volume.csv',
+  },
 ];
 
 function relativo(p) {
