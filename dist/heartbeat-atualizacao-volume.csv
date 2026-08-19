@@ -1,2 +1,3 @@
 data_hora,maquina,resultado,detalhe
 2026-08-18T20:33:28.267Z,COMPUTADOR053,ok,
+2026-08-19T11:01:15.003Z,COMPUTADOR053,ok,Avanços (furos) (O mês CORRENTE (2026-08) falhou ao buscar -- abortando SEM gravar C:\Users\supor\OneDrive\Área de Trabalho\AGENTES DE IA\Projetos IA\orcamento-dashboard\dist\avancos-online.csv pra não substituir o CSV bom já publicado por um sem o mês em curso (o Realizado ficaria perto de zero em silêncio). Erro original: Inspected target navigated or closed); Demandas de sondagem (furos não executados) (Execution context was destroyed.)
