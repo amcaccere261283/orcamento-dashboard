@@ -8,7 +8,10 @@ const RenderAbaAlertas = require('../tools/semanal/render-aba-alertas.js');
 
 const ANO = 2026;
 
-function registro({ sup, tipologia = 'ST', grupo = 'Grupo-A', tomador = 'Tomador-A', mesIdx, volume = 0, equipesTotal = 2 }) {
+// totalVolume (linha T do orçamento pra Volume): 0 por padrão, "T ausente" --
+// só os testes que precisam de uma Tendência não-nula (pra distinguir duas
+// semanas, por exemplo) passam um valor.
+function registro({ sup, tipologia = 'ST', grupo = 'Grupo-A', tomador = 'Tomador-A', mesIdx, volume = 0, equipesTotal = 2, totalVolume = 0 }) {
   const zeros = () => new Array(12).fill(0);
   const mk = (v) => { const a = zeros(); a[mesIdx] = v; return a; };
   const mkEquipes = (v) => { const a = zeros(); a[mesIdx] = v; return a; };
@@ -16,7 +19,7 @@ function registro({ sup, tipologia = 'ST', grupo = 'Grupo-A', tomador = 'Tomador
     sup, tipologia, grupo, tomador, origem: 'CONTRATO VIGENTE',
     previsto: { volume: mk(volume), financeiro: zeros(), equipes: mkEquipes(2), equipesResumo: { prod: 8 }, volumeResumo: { ticket: 1 } },
     realizado: { volume: zeros(), financeiro: zeros(), equipes: zeros(), equipesResumo: {}, volumeResumo: {} },
-    total: { volume: zeros(), financeiro: zeros(), equipes: mkEquipes(equipesTotal), equipesResumo: {}, volumeResumo: {} },
+    total: { volume: mk(totalVolume), financeiro: zeros(), equipes: mkEquipes(equipesTotal), equipesResumo: {}, volumeResumo: {} },
   };
 }
 
@@ -83,7 +86,11 @@ test('serieAcumulada usa exatamente a mesma janela "Acumulado até a semana atua
 test('janelasDoGrupo traz a SEMANA VIGENTE (semanas[indiceAtual]), não a semana seguinte', () => {
   const JULHO = 6;
   const semanas = semanasDoMes(ANO, JULHO);
-  const reg = registro({ sup: 'SUP-A', mesIdx: JULHO, volume: 70 });
+  // totalVolume = volume (T = Previsto) só pra ter uma Tendência que reparte
+  // o saldo pelos dias restantes e por isso DIFERE entre semanas -- sem T, a
+  // Tendência de ambas as semanas cai pra zero e o teste não provaria que
+  // pegou a semana certa (previsto/realizado por si só coincidem aqui).
+  const reg = registro({ sup: 'SUP-A', mesIdx: JULHO, volume: 70, totalVolume: 70 });
   const hojeEpoch = semanas[1].inicio; // início da 2ª semana -- a vigente é semanas[1]
   const indiceAtual = indiceSemanaAtual(semanas, hojeEpoch);
   const ctx = {

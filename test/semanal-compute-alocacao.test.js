@@ -70,16 +70,24 @@ test('faixas de ocupação', () => {
 function dia(ano, mes, d) { return Math.floor(Date.UTC(ano, mes - 1, d) / 86400000); }
 
 // Dois registros da MATRIZ: SP e ST no mesmo SUP, mais um SUP só com carteira.
+// total (linha T do orçamento) espelha previsto de propósito -- desde
+// 2026-08-20 a Tendência semanal fecha no T, não mais no Previsto/ritmo
+// automático (T ausente conta como zero, "não executa nada naquele local");
+// sem espelhar aqui, toda tendência desta fixture cairia pra zero e estes
+// testes deixariam de exercitar a lógica de alocação que é o assunto deles.
 function registrosDeTeste() {
   const zeros = () => new Array(12).fill(0);
   const volumeAgosto = (v) => { const a = zeros(); a[7] = v; return a; };
   return [
     { sup: 'SUP-A', tomador: 'Tomador A', tipologia: 'SP',
-      previsto: { volume: volumeAgosto(120), equipesResumo: { prod: 2 } } },
+      previsto: { volume: volumeAgosto(120), equipesResumo: { prod: 2 } },
+      total: { volume: volumeAgosto(120) } },
     { sup: 'SUP-A', tomador: 'Tomador A', tipologia: 'ST',
-      previsto: { volume: volumeAgosto(0), equipesResumo: { prod: 3 } } },
+      previsto: { volume: volumeAgosto(0), equipesResumo: { prod: 3 } },
+      total: { volume: volumeAgosto(0) } },
     { sup: 'SUP-B', tomador: 'Tomador B', tipologia: 'SP',
-      previsto: { volume: volumeAgosto(0), equipesResumo: { prod: 2 } } },
+      previsto: { volume: volumeAgosto(0), equipesResumo: { prod: 2 } },
+      total: { volume: volumeAgosto(0) } },
   ];
 }
 
@@ -453,10 +461,12 @@ test('PROPRIEDADE: o status da célula nunca contradiz o sinal do saldo', () => 
 
 function registrosFiltro() {
   const z = () => new Array(12).fill(0);
+  const volume100 = () => { const a = z(); a[7] = 100; return a; };
+  // total espelha previsto -- mesmo motivo do registrosDeTeste() acima.
   return ['SUP-A', 'SUP-B'].map((sup) => ({
     sup, tomador: 'T', tipologia: 'ST',
-    previsto: { volume: (() => { const a = z(); a[7] = 100; return a; })(),
-      equipesResumo: { prod: 2 } },
+    previsto: { volume: volume100(), equipesResumo: { prod: 2 } },
+    total: { volume: volume100() },
   }));
 }
 

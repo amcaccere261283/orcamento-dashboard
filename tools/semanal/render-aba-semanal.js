@@ -406,8 +406,16 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
     // sobem no retorno porque a aba Alertas monta os dois alertas novos em
     // cima deles, e recalcular a comparação lá deixaria as duas telas
     // discordarem sobre em que ramo o grupo caiu.
+    // T do orçamento (linha BASE=T da MATRIZ) pro mês selecionado -- mesma
+    // fonte/helper que a Tendência de Equipes já usa (somaMesVigente, ver
+    // bloco de Equipes logo abaixo e a seção "Tendência de Equipes: da linha
+    // BASE=T da MATRIZ" no CLAUDE.md). Estendida pra Volume/Financeiro em
+    // 2026-08-20: em vez de só decidir o ramo, agora também é o alvo que a
+    // curva persegue -- ver compute-tendencia-semanal.js.
+    var tendenciaMesVigenteFluxo = somaMesVigente(registros, indices, 'total', dimensao, vigenteIdx);
     var tendencia = calcularTendenciaSemanal({
       previstoMes: mesVigente,
+      tendenciaMes: tendenciaMesVigenteFluxo,
       semanasPrevisto: semanasPrevisto,
       semanasRealizado: semanasRealizado,
       semanas: semanas,

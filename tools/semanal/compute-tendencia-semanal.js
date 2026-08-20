@@ -1,15 +1,27 @@
 'use strict';
 const { diasNaSemana } = require('./compute-semanal.js');
 
-// Tendência semanal por RAMO -- pedido do dono do projeto em 2026-08-04, ver
-// docs/superpowers/specs/2026-08-04-semanal-tendencia-regras-e-alertas-design.md.
-// Substitui a calcularTendenciaSemanal que morava em render-aba-semanal.js e
-// tinha só DOIS ramos (saldo positivo / saldo não positivo).
+// Tendência semanal ANCORADA NA LINHA T DO ORÇAMENTO -- pedido do dono do
+// projeto em 2026-08-20. Volume/Financeiro projetavam o mês a partir de um
+// algoritmo automático por RAMO (igual/acima/abaixo, comparando Realizado x
+// Previsto -- ver docs/superpowers/specs/2026-08-04-semanal-tendencia-regras-
+// e-alertas-design.md e a evolução em 2026-08-17,
+// docs/superpowers/specs/2026-08-17-semanal-tendencia-ramo-acima-design.md).
+// Agora a curva projetada (o array 'semanas' devolvido) fecha sempre no valor
+// que o usuário digita na linha T da MATRIZ pro mês selecionado -- a MESMA
+// fonte que Equipes já lê via somaMesVigente(..., 'total', ...)
+// (render-aba-semanal.js) e que o dashboard MENSAL de orçamento usa como
+// Tendência (SERIE_LABELS, render-dashboard.js): o que falta pra chegar em T
+// é repartido pelos dias que restam do mês. T em branco conta como ZERO --
+// "não executar nada naquele local", nunca cai de volta no automático por
+// ritmo/Previsto.
 //
-// A projeção e o DIAGNÓSTICO saem da mesma função de propósito: os dois
-// alertas novos da aba Alertas precisam saber em que ramo o grupo caiu e com
-// que números, e recalcular isso lá abriria a porta para a Tabela projetar por
-// um ramo enquanto o alerta acusa outro, sem nada quebrar.
+// O RAMO/DIAGNÓSTICO continuam sendo calculados exatamente como antes,
+// comparando Realizado x Previsto (P): é sobre estar no ritmo do PLANO
+// original, pergunta que uma reestimativa manual (T) não responde, e a aba
+// Alertas depende desses dois campos (inclusive o novo 'realizadoVigente',
+// 2026-08-17) pra decidir qual alerta disparar. Só o array 'semanas' (a
+// curva/número exibido) mudou de fonte.
 
 // Igualdade exata em ponto flutuante nunca acontece -- sem tolerância, o ramo
 // "mantém o P" seria código morto. 1% do Previsto acumulado.
@@ -33,6 +45,10 @@ function calcularTendenciaSemanal(entrada) {
   var semanasPrevisto = e.semanasPrevisto || [];
   var semanas = e.semanas;
   var previstoMes = e.previstoMes;
+  // Linha T do orçamento pro mês selecionado (somaMesVigente(...,'total',...),
+  // render-aba-semanal.js) -- null/undefined (T em branco) é tratado como
+  // zero logo abaixo, em saldoTendencia.
+  var tendenciaMes = e.tendenciaMes;
   var hojeEpoch = e.hojeEpoch;
   var numSemanas = semanasRealizado.length;
 
@@ -78,40 +94,27 @@ function calcularTendenciaSemanal(entrada) {
   var primeiraFutura = indiceVigente >= 0 ? indiceVigente + 1 : fechadas;
   for (var fu = primeiraFutura; fu < numSemanas; fu++) diasRestantesMes += diasNaSemana(semanas[fu]);
 
+  // Ramo/diagnóstico: continuam comparando Realizado x Previsto (P) -- não
+  // decidem mais o valor de 'saida' abaixo. Continuam existindo porque a aba
+  // Alertas lê os dois (inclusive 'realizadoVigente', pro alerta de
+  // movimentação de equipe).
   var ramo = escolherRamo(realizadoAcumulado, previstoAcumulado);
   var ritmoPorDia = diasFechados > 0 ? realizadoAcumulado / diasFechados : 0;
   var saldo = previstoMes - realizadoAcumulado - realizadoVigente;
+
+  // O que falta pra fechar o mês no T do orçamento, repartido pelos dias que
+  // restam. max(0, ...) cobre os dois casos em que não há mais nada a
+  // projetar: T em branco (numero() já devolveu 0) e T já superado pelo
+  // Realizado -- nenhum dos dois pode gerar produção negativa.
+  var saldoTendencia = Math.max(0, numero(tendenciaMes) - realizadoAcumulado - realizadoVigente);
 
   var saida = [];
   for (var k = 0; k < numSemanas; k++) {
     if (k < fechadas) { saida.push(numero(semanasRealizado[k])); continue; }
     var ehVigente = (k === indiceVigente);
-
-    // Ramo 'acima' passou a mirar o Previsto de cada semana, igual ao ramo
-    // 'igual' -- pedido de 2026-08-17: estender o ritmo que já bateu o plano
-    // inflava a leitura da semana fechada e escondia semana vigente parada.
-    // Ver docs/superpowers/specs/2026-08-17-semanal-tendencia-ramo-acima-design.md.
-    if (ramo === 'igual' || ramo === 'acima') {
-      // "mantém o P na T": a fatia INTEIRA que a linha Previsto exibe, para as
-      // duas linhas mostrarem o mesmo número. Na vigente, nunca abaixo do que
-      // já é fato.
-      var previstoDaSemana = numero(semanasPrevisto[k]);
-      saida.push(ehVigente ? Math.max(previstoDaSemana, realizadoVigente) : previstoDaSemana);
-      continue;
-    }
-
-    // Só o ramo 'abaixo' chega aqui.
     var diasDaFatia = ehVigente ? diasRestantesVigente : diasNaSemana(semanas[k]);
     var base = ehVigente ? realizadoVigente : 0;
-
-    // saldo <= 0 dentro do ramo 'abaixo' acontece quando o Realizado parcial
-    // da vigente já cobriu sozinho o que faltava do mês -- seguir a fórmula do
-    // saldo ali produziria projeção NEGATIVA.
-    if (saldo <= 0) {
-      saida.push(base + ritmoPorDia * diasDaFatia);
-      continue;
-    }
-    saida.push(diasRestantesMes > 0 ? base + saldo * diasDaFatia / diasRestantesMes : base);
+    saida.push(diasRestantesMes > 0 ? base + saldoTendencia * diasDaFatia / diasRestantesMes : base);
   }
 
   return {

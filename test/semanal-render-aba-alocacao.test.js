@@ -8,12 +8,17 @@ const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
 
 const SEMANAS = semanasDoMes(2026, 7);
 
+// total espelha previsto -- desde 2026-08-20 a Tendência semanal fecha no T
+// do orçamento, não mais no Previsto/ritmo automático (T ausente conta como
+// zero); sem espelhar aqui, a Tendência desta fixture cairia pra zero e os
+// testes desta aba (que dependem dela) deixariam de exercitar o cenário real.
 function registros() {
   const zeros = () => new Array(12).fill(0);
   const vol = (v) => { const a = zeros(); a[7] = v; return a; };
   return [
     { sup: 'SUP-A', tomador: 'Tomador A', tipologia: 'SP',
-      previsto: { volume: vol(120), equipesResumo: { prod: 2 } } },
+      previsto: { volume: vol(120), equipesResumo: { prod: 2 } },
+      total: { volume: vol(120) } },
   ];
 }
 
@@ -460,6 +465,7 @@ test('buscar uma equipe esconde as linhas onde ela NÃO está', () => {
     sup: 'SUP-Z', tomador: 'Tomador Z', tipologia: 'SP',
     previsto: { volume: (() => { const a = new Array(12).fill(0); a[7] = 90; return a; })(),
       equipesResumo: { prod: 1 } },
+    total: { volume: (() => { const a = new Array(12).fill(0); a[7] = 90; return a; })() },
   }]);
   const o = opcoes({
     equipes: equipesVariadas(),
@@ -500,6 +506,7 @@ test('filtrar por uma tipologia deixa só a coluna dela na grade', () => {
     sup: 'SUP-A', tomador: 'Tomador A', tipologia: 'ST',
     previsto: { volume: (() => { const a = new Array(12).fill(0); a[7] = 80; return a; })(),
       equipesResumo: { prod: 8 } },
+    total: { volume: (() => { const a = new Array(12).fill(0); a[7] = 80; return a; })() },
   }]);
   const o = opcoes({
     equipes: equipesVariadas(), alocacao: {},

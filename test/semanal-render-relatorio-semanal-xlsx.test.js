@@ -12,14 +12,16 @@ const { buildXlsx } = require('../tools/semanal/xlsx-writer-browser.js');
 const ANO = 2026;
 const JULHO = 6;
 
-function registro({ sup, tipologia = 'ST', tomador = 'Tomador-A', volume = 0 }) {
+// totalVolume (linha T do orçamento): 0 por padrão ("T ausente"); só quem
+// precisa de uma Tendência de Volume não-nula passa um valor.
+function registro({ sup, tipologia = 'ST', tomador = 'Tomador-A', volume = 0, totalVolume = 0 }) {
   const zeros = () => new Array(12).fill(0);
   const mk = (v) => { const a = zeros(); a[JULHO] = v; return a; };
   return {
     sup, tipologia, grupo: 'Grupo-A', tomador, origem: 'CONTRATO VIGENTE',
     previsto: { volume: mk(volume), financeiro: zeros(), equipes: mk(2), equipesResumo: { prod: 8 }, volumeResumo: { ticket: 1 } },
     realizado: { volume: zeros(), financeiro: zeros(), equipes: zeros(), equipesResumo: {}, volumeResumo: {} },
-    total: { volume: zeros(), financeiro: zeros(), equipes: mk(2), equipesResumo: {}, volumeResumo: {} },
+    total: { volume: mk(totalVolume), financeiro: zeros(), equipes: mk(2), equipesResumo: {}, volumeResumo: {} },
   };
 }
 
@@ -57,8 +59,8 @@ function opcoesComDesvios() {
   const indiceAtual = indiceSemanaAtual(semanas, hojeEpoch);
   const diaAlvo = semanas[0].inicio + 1; // dentro da semana anterior (semanas[0])
   const registros = [
-    registro({ sup: 'SUP-A', volume: 100 }),
-    registro({ sup: 'SUP-B', volume: 50 }),
+    registro({ sup: 'SUP-A', volume: 100, totalVolume: 100 }),
+    registro({ sup: 'SUP-B', volume: 50, totalVolume: 50 }),
   ];
   const demandas = demandasCom({
     'SUP-A||ST': Array(6).fill(diaAlvo),

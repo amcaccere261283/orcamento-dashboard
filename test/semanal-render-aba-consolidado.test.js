@@ -16,7 +16,11 @@ const SEMANAS = semanasDoMes(ANO, JULHO);
 
 function diaJul(dia) { return diaEpoch(new Date(Date.UTC(ANO, JULHO, dia))); }
 
-function registro({ sup, tipologia = 'ST', grupo = 'Grupo-A', tomador = 'Tomador-A', volume = 0, financeiro = 0, equipes = 0, prod = null, ticket = null }) {
+// totalVolume/totalFinanceiro (linha T do orçamento): 0 por padrão, mesma
+// convenção de "T ausente" usada no resto da suíte -- só os testes que
+// precisam de uma Tendência não-nula (para distinguir dois cálculos, por
+// exemplo) passam um valor.
+function registro({ sup, tipologia = 'ST', grupo = 'Grupo-A', tomador = 'Tomador-A', volume = 0, financeiro = 0, equipes = 0, prod = null, ticket = null, totalVolume = 0, totalFinanceiro = 0 }) {
   const zeros = () => new Array(12).fill(0);
   const mk = (v) => { const a = zeros(); a[JULHO] = v; return a; };
   return {
@@ -26,7 +30,7 @@ function registro({ sup, tipologia = 'ST', grupo = 'Grupo-A', tomador = 'Tomador
       equipesResumo: { prod }, volumeResumo: { ticket },
     },
     realizado: { volume: zeros(), financeiro: zeros(), equipes: zeros(), equipesResumo: {}, volumeResumo: {} },
-    total: { volume: zeros(), financeiro: zeros(), equipes: zeros(), equipesResumo: {}, volumeResumo: {} },
+    total: { volume: mk(totalVolume), financeiro: mk(totalFinanceiro), equipes: zeros(), equipesResumo: {}, volumeResumo: {} },
   };
 }
 
@@ -162,9 +166,13 @@ test('semana encerrada e semana em curso trazem a data-ancora no cabecalho, sem 
 // não carrega nenhum Realizado dela mesma -- é a projeção que se fazia para
 // a semana inteira no dia em que ela começou.
 test('a Tendência congelada é recalculada na âncora: a semana ancorada não conta Realizado dela mesma', () => {
+  // T = 310 (igual ao Previsto usado no resto da bateria) só pra ter uma
+  // Tendência não-nula aqui -- sem T preenchido, a congelada e o Realizado
+  // exibido não têm nada a distinguir além de zero, e o teste não provaria nada.
+  const registrosComT = [registro({ sup: 'SUP-A', tipologia: 'ST', volume: 310, totalVolume: 310 })];
   const eventos = [];
   for (let i = 0; i < 30; i++) eventos.push(diaJul(6)); // 06/07 = 1º dia da S2
-  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+  const html = renderAbaConsolidado(registrosComT, [0], opcoes({
     semanaIdx: 1, demandas: demandasCom({ 'SUP-A||ST': eventos }), hojeEpoch: diaJul(15),
   }));
   const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
