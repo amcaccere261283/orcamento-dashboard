@@ -31,11 +31,19 @@ const fs = require('node:fs');
 // dono do projeto de NÃO contá-los por enquanto ("a princípio"). SEG.A e
 // SEG.V continuam com rótulo próprio (ver SO_QUANDO_ACIONADA acima); SN é
 // o único rótulo que sobra em 'Especiais'.
+//
+// PI.S acrescentado em 2026-08-20 (achado investigando furos pendentes sem
+// Contrato ainda no Link 3 -- OS 17920-26): rótulo novo visto pela primeira
+// vez no Link 2 (maps-sondagens), sem vínculo ainda no pipeline principal
+// (que só rotula depois do join com o Link 3). Contaria em 'PI', decisão
+// confirmada com o dono do projeto -- acrescentado agora pra não travar o
+// build quando essa OS for indexada pelo Link 3.
 // <<< INICIO CLIENTE
 const MAPA_TIPOLOGIAS = {
   SP: 'SP',
   ST: 'ST',
   PI: 'PI',
+  'PI.S': 'PI',
   BL: 'BL',
   SH: 'SH',
   VT: 'VT',
