@@ -7,7 +7,6 @@ const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
 const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
-const { agregarEquipesAtivoPorDia } = require('../tools/semanal/compute-equipes-ativo-matriz.js');
 
 // Task 8 originalmente deixou o módulo pronto no bundle mas NUNCA chamado --
 // a aba Semanal abria vazia no navegador (achado do coordenador). Este
@@ -789,88 +788,6 @@ test('atualizarDadosAoVivoSemanal: busca e mescla o backlog (demandas-sondagem-o
   // TODOS os meses a partir da chegada. dezembro (índice 11) é o último mês
   // do ano corrente na fixture PERIODOS_2026.
   assert.ok(demandas.totais.pendentes[11] >= 1, 'o furo pendente do backlog fica no estoque de Demandas Pendentes');
-});
-
-// Regressão: com avancosLabConfigurados=true (o caso normal desde
-// 2026-08-03), atualizarDadosAoVivoSemanal() reatribui `demandasNovas` pra um
-// objeto NOVO vindo de ComputeDemandas.computeDemandas() (linha ~1441) DEPOIS
-// de já ter escrito equipesAtivoPorDia no objeto ANTIGO (linha ~1420) -- o
-// campo fica órfão no objeto descartado e nunca é escrito de novo antes do
-// commit final em window.__DEMANDAS__. Resultado ao vivo: a linha Realizado
-// de Equipes da Tabela Semanal, calibrada em 85/83,75 (ver
-// tools/semanal/compute-equipes-ativo-matriz.js), fica em branco depois de
-// qualquer clique em "Atualizar dados" -- exatamente o sintoma relatado pelo
-// dono do projeto em 2026-08-06. Os testes de sucesso acima (linha ~506) não
-// pegam isso porque o fetch mockado ali não responde .json() pra
-// URL_ESPELHO_EQUIPES_ATIVO_MATRIZ -- o .catch(() => null) do próprio código
-// engole o TypeError e o campo nunca chega a ser setado, mascarando o bug.
-test('atualizarDadosAoVivoSemanal: equipesAtivoPorDia (Realizado de Equipes) sobrevive à atualização, não fica órfão quando Avanços/Lab também atualizam', async () => {
-  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  const geradoEm = new Date('2026-08-06T00:00:00Z');
-  const demandasComEquipesAntigas = Object.assign({}, DEMANDAS_VAZIAS, {
-    equipesAtivoPorDia: { [diaEpoch(new Date('2026-08-01T00:00:00Z'))]: 99 }, // valor velho, tem que sumir
-  });
-  const html = renderSemanal({
-    registros, baseline: [], demandas: demandasComEquipesAntigas,
-    periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm,
-  });
-
-  const csvMatriz = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERMINO,SONDAGEM,BASE,'
-    + Array(12).fill('mes').join(',') + ',PICO,MÉDIA,PROD.,DIAS,'
-    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,TICKET,'
-    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,OBS\n'
-    + 'Origem-B,Grupo-B,Tomador-Novo,SUP-0002-25,Escopo,Apoio,01/2026,12/2026,ST,P,'
-    + Array(12).fill('0').join(',') + ',2,2,8,25,'
-    + Array(12).fill('0').join(',') + ',100,100,9999,'
-    + Array(12).fill('0').join(',') + ',100,100,\n'
-    + ',,,,,,,,,T,'
-    + Array(12).fill('0').join(',') + ',0,0,0,0,'
-    + Array(12).fill('0').join(',') + ',0,0,0,'
-    + Array(12).fill('0').join(',') + ',0,0,\n';
-  const csvAvancos = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
-    + 'SUP-0002-25,46091,SP,CONCLUIDO,46093,Não,12.5,,17851-26,Sondador Sintético\n';
-  const csvLab = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n'
-    + 'SUP-0002-25,46091,LL,46091\n';
-  const historicoMatrizFresco = [
-    { data: '2026-08-05T23:00:00Z', ativo: 80 },
-    { data: '2026-08-06T23:00:00Z', ativo: 82 },
-  ];
-
-  const fetchMock = (url) => {
-    if (url.indexOf('historico.json') !== -1) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(historicoMatrizFresco) });
-    }
-    // Backlog (2026-08-10) fora do escopo deste teste -- 404 explícito, mesmo
-    // motivo do teste acima: sem isso, o fallback ': csvLab' corromperia o
-    // grid de Avanços com o CSV errado.
-    if (url.indexOf('demandas-sondagem-online.csv') !== -1 || url.indexOf('demandas-lab-online.json') !== -1) {
-      return Promise.resolve({ ok: false, status: 404 });
-    }
-    const texto = url.indexOf('pub?gid=609773455') !== -1 ? csvMatriz
-      : url.indexOf('avancos-configurado-teste') !== -1 ? csvAvancos
-      : csvLab;
-    return Promise.resolve({ ok: true, text: () => Promise.resolve(texto) });
-  };
-
-  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
-  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
-  await sandbox.tentarDesbloquear();
-
-  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'https://exemplo.com/avancos-configurado-teste.csv';
-  sandbox.URL_ESPELHO_LAB_SEMANAL = 'https://exemplo.com/lab-configurado-teste.csv';
-
-  await chamarEsperarAtualizacao(sandbox);
-
-  const esperado = agregarEquipesAtivoPorDia(historicoMatrizFresco);
-  // JSON.parse(JSON.stringify(...)) normaliza o objeto que saiu do vm.Context
-  // (protótipo diferente do realm do teste, deepStrictEqual comparando com um
-  // objeto criado aqui fora falharia por protótipo mesmo com conteúdo igual
-  // -- mesmo idioma de test/semanal-compute-demandas.test.js, "a saída
-  // sobrevive a JSON.stringify").
-  assert.deepStrictEqual(
-    JSON.parse(JSON.stringify(sandbox.window.__DEMANDAS__.equipesAtivoPorDia)), esperado,
-    'equipesAtivoPorDia precisa vir do historico.json fresco buscado nesta atualização, não ficar undefined nem preso ao valor antigo (99)'
-  );
 });
 
 test('atualizarDadosAoVivoSemanal: se qualquer um dos 3 fetches falhar, window.__REGISTROS__ NÃO muda e o status mostra o erro', async () => {
@@ -1736,11 +1653,25 @@ test('atualizarDadosAoVivoSemanal: com a aba EQ fora do ar mas o roster+produç�
 // nela (o modo de falha esperado: esquecer o
 // `cp dist/equipes-online.csv docs/`) rejeitava o Promise.all
 // INTEIRO e o botão morria com "Falha ao atualizar: HTTP 404", levando MATRIZ,
-// Avanços, Lab e EQ com ele. Este teste não mocka equipes-roster-online.csv
-// de propósito (rejeita -> .catch -> null): com produção também em 404,
-// REALIZADO exige os dois (textos[4] && textos[8]) e fica de fora --
-// exercitando o MESMO caminho de robustez para as duas metades da fonte.
-test('atualizarDadosAoVivoSemanal: se o CSV de produção (equipes-online.csv) dá 404, o refresh AINDA conclui e as outras 4 fontes atualizam', async () => {
+// Avanços, Lab e EQ com ele -- isso continua corrigido (.catch próprio).
+//
+// Reescrito em 2026-08-21: até aqui, sem REALIZADO (roster+produção), o Δ
+// equipes caía na aba EQ (ATIVAS) como reserva. Essa cascata saiu -- agora
+// sem Link 6+7, equipesPorDia preserva o que já estava em
+// window.__DEMANDAS__ antes desta atualização (nunca troca de fonte em
+// silêncio; ver o comentário em atualizarDadosAoVivoSemanal). Este teste
+// parte de demandas ANTIGAS com um Δ equipes conhecido, pra provar que ele
+// sobrevive intocado -- não que uma fonte alternativa assume.
+test('atualizarDadosAoVivoSemanal: se o CSV de produção (equipes-online.csv) dá 404, equipesPorDia preserva o valor anterior -- não cai pra ATIVAS/mobilizadas', async () => {
+  const demandasAntigas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesPorDia: { 'SUP-0002-25||SP': { [DIA_MOBILIZADAS]: 1 } },
+    equipesPeriodo: null,
+  });
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: demandasAntigas, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-03-15T00:00:00Z'),
+  });
   const fetchMock = (url) => {
     if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
     if (url.indexOf('avancos-configurado-teste') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_PRIORIDADE) });
@@ -1751,7 +1682,11 @@ test('atualizarDadosAoVivoSemanal: se o CSV de produção (equipes-online.csv) d
     return Promise.reject(new Error('URL inesperada no mock: ' + url));
   };
 
-  const { sandbox, documentoFalso } = await prepararRefreshPrioridade(fetchMock);
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'https://exemplo.com/avancos-configurado-teste.csv';
+  sandbox.URL_ESPELHO_LAB_SEMANAL = 'https://exemplo.com/lab-configurado-teste.csv';
   const baselineAntes = sandbox.window.__BASELINE__;
   await chamarEsperarAtualizacao(sandbox);
 
@@ -1775,17 +1710,14 @@ test('atualizarDadosAoVivoSemanal: se o CSV de produção (equipes-online.csv) d
   assert.strictEqual(demandas.totais.chegadas.reduce((a, b) => a + b, 0), 2, 'furo SP (Criação da OS) + ensaio LAB.C (Data Programada), ambos viram chegada');
   assert.ok(Object.keys(demandas.porRegistroEventos).length > 0, 'porRegistroEventos alimentado por furos + ensaios de Lab');
 
-  // E a aba EQ também: sem REALIZADO, o Δ equipes cai na RESERVA imediata
-  // (ativas), não nas mobilizadas nem no dado velho do build.
+  // equipesPorDia NÃO muda: sem REALIZADO, fica exatamente como veio de
+  // window.__DEMANDAS__ antes desta atualização -- nem ATIVAS (aba EQ, que
+  // respondeu neste mock) nem mobilizadas assumem no lugar dele.
   assert.deepStrictEqual(
-    diasDe(demandas.equipesPorDia), [DIA_ATIVAS],
-    'com REALIZADO fora, quem manda é a aba EQ (15/03) -- exatamente a reserva que existia antes desta branch'
+    diasDe(demandas.equipesPorDia), [DIA_MOBILIZADAS],
+    'sem REALIZADO, equipesPorDia preserva o valor anterior -- nenhuma fonte alternativa entra no lugar'
   );
-  // Campo a campo -- ver o comentário sobre realm no teste acima.
-  const periodoAtivas = demandas.equipesPeriodo;
-  assert.ok(periodoAtivas, 'equipesPeriodo tem de descrever a fonte que venceu (aba EQ), não ficar null');
-  assert.strictEqual(periodoAtivas.ano, 2026);
-  assert.strictEqual(periodoAtivas.mes, 3, 'o mês tem de ser o da aba EQ (03/2026)');
+  assert.strictEqual(demandas.equipesPeriodo, null, 'equipesPeriodo também preserva o valor anterior (null)');
 });
 
 // --- Alocação Equipes: a sétima aba, o blob cifrado e o invariante (Task 10,
@@ -1838,7 +1770,7 @@ test('osParaSup viaja dentro do blob cifrado e chega em equipesDoQuadro -- supRe
   const geradoEm = new Date('2026-08-01T00:00:00Z'); // vigenteIdx = 7 (agosto)
   const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
-    equipesPeriodo: { ano: 2026, mes: 8 },
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
   });
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
@@ -1889,7 +1821,7 @@ test('a semana abre semeada do realizado no PRIMEIRO desenho da aba, sem precisa
   const geradoEm = new Date('2026-08-01T00:00:00Z');
   const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
-    equipesPeriodo: { ano: 2026, mes: 8 },
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
   });
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
@@ -1925,7 +1857,7 @@ test('trocar para uma semana nunca vista (selecionarSemanaAlocacao) também seme
   const geradoEm = new Date('2026-08-01T00:00:00Z');
   const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
-    equipesPeriodo: { ano: 2026, mes: 8 },
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
   });
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
@@ -1946,7 +1878,7 @@ test('uma semana esvaziada de propósito ("Limpar alocação") NÃO volta a seme
   const geradoEm = new Date('2026-08-01T00:00:00Z');
   const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
-    equipesPeriodo: { ano: 2026, mes: 8 },
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
   });
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
@@ -1977,7 +1909,7 @@ test('uma semana esvaziada de propósito ("Limpar alocação") NÃO volta a seme
 test('sem equipesCsv (Sheet espelho da EQ não respondeu), a aba mostra a guarda semRoster, nunca um quadro vazio', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const geradoEm = new Date('2026-08-01T00:00:00Z');
-  const demandas = Object.assign({}, DEMANDAS_VAZIAS, { equipesCsv: null, equipesPeriodo: null, osParaSup: null });
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, { equipesCsv: null, equipesRosterPeriodo: null, osParaSup: null });
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
   const { sandbox, documentoFalso } = montarSandbox(html);
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
@@ -1991,7 +1923,7 @@ test('semana de um mês diferente do que o espelho da EQ cobre entra em somenteL
   const geradoEm = new Date('2026-07-01T00:00:00Z'); // vigenteIdx = 6 (julho) -- espelho cobre agosto
   const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
     equipesCsv: csvEqComOs('OK'),
-    equipesPeriodo: { ano: 2026, mes: 8 },
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: {},
   });
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
@@ -2084,7 +2016,7 @@ test('um arrasto que aterrissa ENQUANTO carregarAlocacaoDaSemana está em voo so
   const geradoEm = new Date('2026-08-01T00:00:00Z');
   const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
-    equipesPeriodo: { ano: 2026, mes: 8 },
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
   });
 
@@ -2137,7 +2069,7 @@ test('trocar de semana enquanto um carregamento anterior está em voo não deixa
   const geradoEm = new Date('2026-08-01T00:00:00Z');
   const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
-    equipesPeriodo: { ano: 2026, mes: 8 },
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
   });
 
@@ -2193,7 +2125,7 @@ function sandboxAlocacao() {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
-    equipesPeriodo: { ano: 2026, mes: 8 },
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
   });
   const html = renderSemanal({
@@ -2285,7 +2217,7 @@ test('em somenteLeitura nenhum cartão é arrastável -- nem alocar nem devolver
   const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
     // Espelho de JULHO com a página em agosto dispara somenteLeitura.
-    equipesPeriodo: { ano: 2026, mes: 7 },
+    equipesRosterPeriodo: { ano: 2026, mes: 7 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
   });
   const html = renderSemanal({ registros, baseline: [], demandas, periodos: PERIODOS_2026,

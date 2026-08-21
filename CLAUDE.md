@@ -1243,6 +1243,73 @@ inteiro, **pool inclusive**, e a única exceção é a equipe indisponível, que
   `celula-alvo`/`pool-alvo` — limpar em outro lugar deixaria o destaque preso em um
   dos quatro caminhos de saída do arrasto.
 
+## Aba Semanal: 1 origem por tipo de dado -- fim das cascatas de fallback (2026-08-21)
+
+Investigação pedida pelo dono do projeto: "de onde vem cada informação" do Realizado da
+Tabela Semanal, com o objetivo de que cada tipo de dado tenha **uma única origem de
+busca**. Achado: Volume já era assim (sempre `avancos-online.csv`, Link 1); Financeiro e
+Equipes tinham cascatas de 2-4 fontes concorrentes, e nenhuma avisava na tela qual tinha
+vencido. As três decisões abaixo fecham essa investigação para Volume/Financeiro/Equipes
+da aba Semanal -- Balanço de massa herdou o mesmo fix de Equipes de graça (mesmo campo,
+`demandas.equipesPorDia`); Demandas Pendentes e o mecanismo de atualização/publicação em
+si (múltiplas máquinas agendadas, heartbeat agregado) ficaram de fora desta rodada.
+
+**Financeiro Realizado volta a ser SEMPRE eventos do Avanço Sond x ticket médio**, em
+qualquer mês -- reverte a exceção de 2026-08-10 que usava `realizado.financeiro` da
+MATRIZ local (`G:\...`) em meses já fechados. Efeito aceito conscientemente: meses
+fechados deixam de bater exatamente com a MATRIZ (medido em 2026-08-10: R$ 9.832 online
+contra R$ 9.408 MATRIZ em julho/2026, ~4,5% de diferença) -- decisão do dono do projeto
+em 2026-08-21, com o número já mostrado antes de confirmar. `calcularSeriesSemanaisDimensao`
+(`render-aba-semanal.js`) perdeu o ramo `mesFechado`; `mesAtualReal` continua sendo
+recebido e repassado pelos chamadores (não vale a pena tocar em 4 arquivos só para tirar
+um parâmetro agora sem uso), só não tem mais consumidor dentro da função.
+
+**Equipes Realizado (`demandas.equipesPorDia`) passa a ter 1 fonte só: roster (Link 6) +
+produção (Link 7) online**, cruzados por `agregarEquipesRealizadoAlocado`
+(`compute-equipes-realizado-alocado.js`). Até aqui havia uma cascata de até 4 fontes:
+
+1. **`mobilizadas`** (`compute-equipes-mobilizadas.js`, coluna `Sondador` do Avanço
+   Sond) -- SAIU. A função `agregarEquipesPorDia` fica no módulo (sem chamador em
+   produção) porque `equipesEquivalentes`, do mesmo arquivo, continua em uso por
+   `compute-balanco.js` -- não é o mesmo dado nem a mesma pergunta.
+2. **`ATIVAS`** (Sheet espelho `URL_ESPELHO_EQ`/aba EQ, current-month-only) -- SAIU como
+   fonte de `equipesPorDia`. Investigação revelou que essa Sheet é a MESMA planilha que
+   o Link 6 já lê (melhor: ano inteiro, direto do export do Sheets, sem Apps Script no
+   meio) -- não era uma segunda opinião, era uma cópia pior da mesma fonte. Continua
+   sendo buscada (`montarEquipesAtivas`/`equipesAtivasCsv`) só para alimentar
+   `equipesCsv`/`osParaSup`/`equipesRosterPeriodo` (aba Alocação Equipes) e
+   `equipesNaoProdutivas` -- nenhum dos três é Realizado.
+3. **`historico.json`** (`compute-equipes-ativo-matriz.js`, headcount do dashboard
+   Matriz -- outro projeto deste repositório-mãe) -- REMOVIDO por completo (fetch +
+   campo `equipesAtivoPorDia`). Achado ao investigar: desde a troca para
+   REALIZADO (roster+produção, 2026-08-10) nada mais consumia esse campo -- só sobrava
+   a chamada de rede extra a cada build/refresh e o campo morto no blob. O módulo
+   `compute-equipes-ativo-matriz.js` continua no repositório (tem teste próprio testando
+   a função pura), só não é mais chamado de lugar nenhum.
+4. **`REALIZADO` (Link 6+7)** -- a única que sobrou.
+
+Sem Link 6+7 disponível (CSV faltando ou cruzamento sem nenhum par utilizável),
+`equipesPorDia` fica **sem dado** -- nunca troca de fonte em silêncio, mesma filosofia
+que Demandas Pendentes já seguia. No live-refresh (`atualizarDadosAoVivoSemanal`,
+`render-semanal.js`), isso significa **preservar** o `equipesPorDia`/`equipesPeriodo` que
+já estavam em `window.__DEMANDAS__` antes do clique, não apagar com um valor vazio.
+
+**`equipesPeriodo` virou dois campos**, achado ao revisar esta mudança:
+`compute-balanco.js` usa `demandas.equipesPeriodo` para decidir `foraDaCoberturaDeEquipes`
+(se o mês selecionado está dentro do que `equipesPorDia` cobre), e a aba Alocação usava o
+MESMO campo para decidir se o roster da Sheet EQ é do mês em tela (`somenteLeitura`). Os
+dois sentidos coincidiam enquanto ATIVAS alimentava `equipesPorDia`; agora que só Link 6+7
+faz isso (sempre "sem restrição de mês", período `null`), manter os dois no mesmo campo
+faria o Balanço ler a cobertura da Sheet EQ para um dado que não vem mais dela.
+**`equipesPeriodo`** continua descrevendo a cobertura do Realizado (sempre `null` com
+Link 6+7, ou o valor preservado do refresh anterior sem ele). **`equipesRosterPeriodo`**
+(novo) descreve a cobertura da Sheet EQ e é o que a Alocação lê agora. Build e
+live-refresh precisam continuar setando os dois em sincronia com suas fontes certas --
+não reuse um pelo outro numa mudança futura sem reler este parágrafo.
+
+Ver o histórico de commits datados 2026-08-21 (mensagem cita "1 origem por dado") para o
+desenho completo e a investigação de onde vinha cada fonte antes desta rodada.
+
 ## Atualizar Demandas ao clicar em "Atualizar dados" (2026-08-14)
 
 O botão "Atualizar dados" da Matriz de Orçamento (`tools/orcamento/render-dashboard.js`,

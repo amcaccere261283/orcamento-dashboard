@@ -771,28 +771,30 @@ test('mes corrente: o fechamento da Tendencia continua sendo o mes projetado, e 
     'o fechamento tem de ser a soma da serie completa -- e o invariante da curva Acumulada');
 });
 
-// --- Financeiro Realizado em mês FECHADO usa a MATRIZ (2026-08-10) --------
+// --- Financeiro Realizado: SEMPRE eventos x ticket médio (2026-08-21) -----
 //
-// Decisão do dono do projeto: no mês vigente o cálculo continua sendo
-// eventos x ticket médio (como sempre foi); em meses JÁ FECHADOS passa a
-// usar 'realizado.financeiro' da MATRIZ, repartido PROPORCIONALMENTE entre
-// as semanas (dividirEmSemanas, fracionária). Confirmado com exemplo real:
-// julho/2026 mostrava 9.832 pela conta de eventos contra 9.408 na MATRIZ.
+// Até 2026-08-10 meses JÁ FECHADOS usavam 'realizado.financeiro' da MATRIZ
+// (repartido proporcionalmente entre as semanas); revertido em 2026-08-21,
+// decisão do dono do projeto por "1 origem por tipo de dado" -- Financeiro
+// não pode ter fonte diferente dependendo de quando você olha o mesmo mês.
+// Confirmado com o mesmo exemplo real usado pra justificar a troca de 2026:
+// julho/2026 mostrava 9.832 pela conta de eventos contra 9.408 na MATRIZ --
+// a diferença (~4,5%) é aceita, agora Financeiro conta eventos em qualquer
+// mês, igual Volume sempre fez.
 //
-// mesAtualReal é o parâmetro NOVO que distingue "mês selecionado" (vigenteIdx)
-// de "mês real de hoje" -- só quem passa esse parâmetro (renderAbaSemanal)
-// aciona a troca de fonte; Consolidado/Alertas não passam, e continuam
-// intocados (é por isso que os testes deles não quebraram).
+// mesAtualReal (parâmetro que distinguia "mês selecionado" de "mês real de
+// hoje") não tem mais consumidor dentro desta função -- ver o comentário
+// em calcularSeriesSemanaisDimensao -- mas continua sendo aceito e
+// repassado pelos chamadores, então os testes abaixo continuam passando
+// ele para provar que ele já não faz diferença nenhuma.
 
-test('Financeiro Realizado: mês FECHADO usa a MATRIZ (realizado.financeiro), não eventos', () => {
+test('Financeiro Realizado: mês FECHADO conta eventos x ticket médio, igual qualquer outro mês (não usa mais a MATRIZ)', () => {
   const registroFinanceiro = registro(0);
   registroFinanceiro.realizado.financeiro = new Array(12).fill(0);
-  registroFinanceiro.realizado.financeiro[VIGENTE_JULHO] = 9408; // exemplo real do dono do projeto
-  // Eventos que, pela conta antiga, dariam um número BEM diferente (9832 no
-  // caso real) -- se a MATRIZ não estivesse sendo usada, o teste pegaria.
+  registroFinanceiro.realizado.financeiro[VIGENTE_JULHO] = 9408; // valor da MATRIZ -- tem que ser IGNORADO agora
   const demandasComEventos = {
     porRegistroEventos: {
-      'SUP-0001-24||ST': { sondagemRealizada: new Array(50).fill(diaJul(2)), chegada: [], saidaEstoque: [] },
+      'SUP-0001-24||ST': { sondagemRealizada: [diaJul(2), diaJul(8)], chegada: [], saidaEstoque: [] },
     },
   };
   const mesAtualReal = 7; // agosto -- julho (6) já fechou
@@ -801,14 +803,7 @@ test('Financeiro Realizado: mês FECHADO usa a MATRIZ (realizado.financeiro), n�
     true, indiceSemanaAtual(SEMANAS_JULHO, HOJE_15_JUL), demandasComEventos, HOJE_15_JUL, mesAtualReal
   );
   const soma = series.semanasRealizado.reduce((a, b) => a + (b || 0), 0);
-  assert.ok(Math.abs(soma - 9408) < 1e-9, `as 5 semanas devem somar exatamente o valor da MATRIZ (9408), deu ${soma}`);
-  // Repartição PROPORCIONAL aos dias de cada semana (dividirEmSemanas) --
-  // não por partes iguais nem "inteira" (Math.floor por semana).
-  const diasTotal = SEMANAS_JULHO.reduce((a, s) => a + (s.fim - s.inicio + 1), 0);
-  SEMANAS_JULHO.forEach((s, i) => {
-    const esperado = 9408 * (s.fim - s.inicio + 1) / diasTotal;
-    assert.ok(Math.abs(series.semanasRealizado[i] - esperado) < 1e-6, `semana ${i}`);
-  });
+  assert.strictEqual(soma, 2, '2 eventos x ticket médio 1 (fixture registro()) = 2 -- não os 9408 da MATRIZ, mesmo em mês fechado');
 });
 
 test('Financeiro Realizado: mês VIGENTE (selecionado == mesAtualReal) continua com a conta de eventos, ignora a MATRIZ', () => {

@@ -392,8 +392,9 @@ function construirPainelGraficoSemanalHtml(registros, indices, dimensao, vigente
 
   // Equipes é uma FOTO (ver compute-semanal.js), mas desde 2026-08-06/07
   // tem as 3 séries igual Volume/Financeiro: Realizado vem de
-  // demandas.equipesAtivoPorDia (roster do Matriz) e Tendência vem da
-  // própria MATRIZ (linha BASE=T) -- ver os dois blocos dedicados em
+  // demandas.equipesPorDia (roster Link 6 + produção Link 7 -- única fonte
+  // desde 2026-08-21, ver build-dashboard.js) e Tendência vem da própria
+  // MATRIZ (linha BASE=T) -- ver os dois blocos dedicados em
   // calcularSeriesSemanaisDimensao (render-aba-semanal.js). Até 2026-08-07
   // este painel só desenhava Previsto pra Equipes porque Realizado/
   // Tendência ainda não existiam quando o Gráfico foi escrito; a Tabela

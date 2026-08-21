@@ -1,5 +1,5 @@
 'use strict';
-const { semanasDoMes, indiceSemanaAtual, dividirEmSemanasInteiras, dividirEmSemanas, fecharMes, diasNaSemana } = require('./compute-semanal.js');
+const { semanasDoMes, indiceSemanaAtual, dividirEmSemanasInteiras, fecharMes, diasNaSemana } = require('./compute-semanal.js');
 const { calcularTendenciaSemanal } = require('./compute-tendencia-semanal.js');
 
 // Rótulo de exibição de cada dimensão -- só as 3 que a barra de filtros da
@@ -302,11 +302,13 @@ function renderLinhaSerie(rotulo, classeSerie, semanas, fechamento, casasOuForma
 // indiceAtual/demandas/hojeEpoch: mesmos parâmetros que
 // contarEventosNoIntervalo/calcularTendenciaSemanal já usavam inline.
 // 'mesAtualReal' (opcional, último parâmetro): o índice do mês REAL de hoje
-// (0-11), distinto de 'vigenteIdx' -- que aqui é o mês SELECIONADO na barra,
-// podendo ser qualquer mês do ano. Só quem precisa distinguir "mês
-// selecionado é um mês JÁ FECHADO" o passa (ver Financeiro/Realizado
-// abaixo); Consolidado e Alertas não passam, e o comportamento pra eles
-// fica idêntico ao de antes (undefined nunca é < vigenteIdx).
+// (0-11), distinto de 'vigenteIdx' -- que aqui é o mês SELECIONADO na barra.
+// SEM CONSUMIDOR dentro desta função desde 2026-08-21 (usava pra distinguir
+// mês fechado no Financeiro, ver o histórico daquela mudança) -- continua
+// sendo recebido e repassado pelos chamadores (renderAbaSemanal,
+// compute-relatorio-semanal.js) porque tirar o parâmetro tocaria vários
+// arquivos sem nenhum ganho de comportamento. Se um dia sumir de todo lugar
+// que chama, pode sair também daqui.
 function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx, semanas, numSemanas, temSemanasReais, indiceAtual, demandas, hojeEpoch, mesAtualReal, opcoesInternas) {
   // O REALIZADO conta até HOJE (D), inclusive -- pedido do dono do projeto em
   // 2026-08-17, ver docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md.
@@ -363,33 +365,25 @@ function calcularSeriesSemanaisDimensao(registros, indices, dimensao, vigenteIdx
   if ((dimensao === 'volume' || dimensao === 'financeiro') && temSemanasReais) {
     var pesoPorRegistro = dimensao === 'financeiro' ? ticketMedio : null;
 
-    // Financeiro num mês JÁ FECHADO (2026-08-10, pedido do dono do projeto):
-    // não conta mais eventos do Avanço Sond -- usa o valor de
-    // 'realizado.financeiro' da própria MATRIZ, repartido PROPORCIONALMENTE
-    // entre as semanas (dividirEmSemanas, fracionária -- a mesma que
-    // baseNasSemanas/Tendência já usam, não a "inteira" de Previsto).
-    // Confirmado com exemplo: julho/2026 a página mostrava 9.832 (furos x
-    // ticket médio) contra 9.408 na MATRIZ -- o 9.408 é o valor certo.
-    // Só Financeiro: Volume continua contando furos reais em qualquer mês,
-    // porque não há "valor mensal único" comparável pra ele na MATRIZ (furo
-    // é grandeza discreta, R$ é agregado). Só quando mesAtualReal é
-    // conhecido E o mês selecionado vem ANTES dele -- no mês vigente e em
-    // qualquer mês futuro (sem dado mesmo) segue o cálculo de sempre.
-    var mesFechado = dimensao === 'financeiro' && typeof mesAtualReal === 'number' && vigenteIdx < mesAtualReal;
-    if (mesFechado) {
-      var realizadoMatriz = somaMesVigente(registros, indices, 'realizado', dimensao, vigenteIdx);
-      semanasRealizado = dividirEmSemanas(realizadoMatriz, dimensao, numSemanas, semanas);
-    } else {
-      semanasRealizado = semanas.map(function (semana, i) {
-        // Semana em curso: conta até HOJE, inclusive. Se a semana começou
-        // hoje, o intervalo é de um dia só -- o que já tiver sido lançado
-        // até a captura das 8h.
-        if (i === indiceAtual) return contarEventosNoIntervalo(registros, indices, demandas, 'sondagemRealizada', semana.inicio, hojeEpoch, pesoPorRegistro);
-        // Semana já encerrada: o intervalo inteiro dela já passou.
-        if (semana.fim < hojeEpoch) return contarEventosNoIntervalo(registros, indices, demandas, 'sondagemRealizada', semana.inicio, semana.fim, pesoPorRegistro);
-        return 0; // semana futura -- nada aconteceu ainda
-      });
-    }
+    // Financeiro SEMPRE conta eventos do Avanço Sond x ticket médio, em
+    // qualquer mês (2026-08-21, revertendo a exceção de 2026-08-10 que usava
+    // 'realizado.financeiro' da MATRIZ em meses já fechados). Decisão: 1
+    // origem por tipo de dado -- Volume já fazia isso em qualquer mês, e
+    // Financeiro divergir por mês (online no corrente, MATRIZ no fechado)
+    // era o mesmo número com duas fontes possíveis dependendo de quando você
+    // olhava. Efeito aceito: meses fechados deixam de bater exatamente com a
+    // MATRIZ (medido em 2026-08-10: R$ 9.832 online x R$ 9.408 MATRIZ em
+    // julho/2026, ~4,5% de diferença) -- decisão explícita do dono do
+    // projeto em 2026-08-21, ciente do efeito.
+    semanasRealizado = semanas.map(function (semana, i) {
+      // Semana em curso: conta até HOJE, inclusive. Se a semana começou
+      // hoje, o intervalo é de um dia só -- o que já tiver sido lançado
+      // até a captura das 8h.
+      if (i === indiceAtual) return contarEventosNoIntervalo(registros, indices, demandas, 'sondagemRealizada', semana.inicio, hojeEpoch, pesoPorRegistro);
+      // Semana já encerrada: o intervalo inteiro dela já passou.
+      if (semana.fim < hojeEpoch) return contarEventosNoIntervalo(registros, indices, demandas, 'sondagemRealizada', semana.inicio, semana.fim, pesoPorRegistro);
+      return 0; // semana futura -- nada aconteceu ainda
+    });
     fechamentoRealizado = fecharMes(semanasRealizado, dimensao);
 
     // Contagem direta pelas DATAS, e não a partir de indiceAtual: são duas
@@ -605,9 +599,8 @@ function renderAbaSemanal(registros, indices, dimensoes, vigenteIdx, ano, realiz
   var indiceAtual = temSemanasReais ? indiceSemanaAtual(semanas, opts.hojeEpoch) : -1;
   // O mês REAL de hoje (0-11), pra distinguir do 'vigenteIdx' que aqui é o
   // mês SELECIONADO na barra -- ver o comentário em
-  // calcularSeriesSemanaisDimensao. -1/12 (ano inteiro no futuro/passado)
-  // nunca é > nem < um vigenteIdx válido no jeito que precisamos, então usar
-  // undefined nesses casos é seguro: mesFechado exige typeof === 'number'.
+  // calcularSeriesSemanaisDimensao (sem consumidor lá dentro desde
+  // 2026-08-21, mantido só porque a thread de parâmetros continua existindo).
   var mesAtualReal;
   if (typeof opts.hojeEpoch === 'number') {
     var hojeData = new Date(opts.hojeEpoch * 86400000);

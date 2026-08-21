@@ -18,10 +18,8 @@ const { parseAvancos } = require('./parse-avancos.js');
 const { parseCsvGrid } = require('./parse-matriz-cliente.js');
 const { parseLab } = require('./parse-lab.js');
 const { computeDemandas, reconciliarSups, redirecionarSupsDesconhecidos, resolverSupConhecido } = require('./compute-demandas.js');
-const { agregarEquipesPorDia } = require('./compute-equipes-mobilizadas.js');
 const { parseAbaEq, agregarEquipesAtivas, mesDaAbaEq } = require('./compute-equipes-ativas.js');
 const { agregarEquipesRealizadoAlocado } = require('./compute-equipes-realizado-alocado.js');
-const { agregarEquipesAtivoPorDia } = require('./compute-equipes-ativo-matriz.js');
 const { agregarEquipesNaoProdutivas } = require('./compute-equipes-nao-produtivas.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const configDemandas = require('./config-demandas.js');
@@ -368,38 +366,46 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // MATRIZ, então apareceria como "SUP conhecido" no relatório).
   const { itens: furos, redirecionados: furosRedirecionados } = redirecionarSupsDesconhecidos(furosLidos, registros);
   const demandas = computeDemandas(furos, periodos, ensaios);
-  // Equipes mobilizadas por (SUP, tipologia) e por dia -- alimenta o Δ equipes
-  // do Balanço de massa (ver compute-equipes-mobilizadas.js). Sai dos furos JÁ
-  // redirecionados, igual computeDemandas acima, para que "Diversos" agregue os
-  // mesmos SUPs nos dois lugares. Só de Sondagem: os ensaios de Lab não têm
-  // sondador (é outra operação, dentro do laboratório).
-  demandas.equipesPorDia = agregarEquipesPorDia(furos);
-  // As mobilizadas cobrem o ANO INTEIRO do Avanço Sond, então não há mês a
-  // restringir: equipesPeriodo null é o que diz "sem restrição" pra
-  // foraDaCoberturaDeEquipes (compute-balanco.js). As duas fontes de maior
-  // prioridade abaixo SOBRESCREVEM os dois campos JUNTOS -- separá-los é o bug
-  // que a revisão final de 2026-08-05 pegou: dado de um mês só com o gate
-  // desligado desenha Δ equipes quase zero, sem aviso, em qualquer mês passado.
+  // Equipes Realizado: 1 origem só (2026-08-21) -- roster (Link 6) + produção
+  // (Link 7) online, bloco "Δ equipes REALIZADO" logo abaixo. Até aqui havia
+  // uma cascata de 3 fontes (mobilizadas via Sondador do Avanço Sond ->
+  // ATIVAS via Sheet espelho da aba EQ -> REALIZADO via Link 6+7), e nenhuma
+  // delas avisava na tela qual tinha vencido -- decisão do dono do projeto:
+  // sem Link 6+7, a célula fica "sem dado" (nunca troca de fonte em
+  // silêncio), mesma filosofia que o projeto já aplica a Demandas Pendentes.
+  // 'mobilizadas (Avanço Sond)' (compute-equipes-mobilizadas.js) saiu de uso
+  // aqui -- ver o histórico da mudança se precisar recuperar essa fonte.
   demandas.equipesPeriodo = null;
-  let fonteEquipes = 'mobilizadas (Avanço Sond)';
-  // Δ equipes ATIVAS (2026-08-03): substitui as mobilizadas acima quando a
-  // Sheet espelho da aba EQ responde. Assíncrono e tolerante de propósito --
-  // ver buscarEquipesAtivas.
+  let fonteEquipes = 'sem dado';
+  // equipesCsv/osParaSup (Sheet espelho da aba EQ) continuam sendo buscados:
+  // a aba Alocação Equipes precisa deles (quadro de roster, popup de cada
+  // equipe, Equipes não-produtivas mais abaixo) -- só equipesPorDia
+  // (Realizado) parou de vir daqui. tipologiaPorSondador desestruturado À
+  // PARTE (nunca entra em 'demandas') porque 'demandas' é JSON.stringify'd
+  // por inteiro pro blob cifrado do HTML -- ver renderSemanal() mais abaixo;
+  // equipesPorDia sai fora do Object.assign pelo mesmo motivo prático:
+  // reservado exclusivamente para o bloco REALIZADO (Link 6+7) logo abaixo.
   //
-  // tipologiaPorSondador é desestruturado À PARTE (nunca entra em 'demandas')
-  // porque 'demandas' é JSON.stringify'd por inteiro pro blob cifrado do HTML
-  // -- ver renderSemanal() mais abaixo. Anexar essa chave inflaria o payload
-  // sem nenhum consumidor no cliente. Desde a Task 12 (2026-08-08, troca de
-  // equipes PRODUTIVAS por FRACIONADAS -- ver o bloco logo abaixo) o valor
-  // tampouco tem consumidor DENTRO de build(): equipes-online.csv já chega
-  // pré-agregado por (SUP, tipologia), então quem resolve o SUP desconhecido
-  // é resolverSupConhecido(registros), não mais tipologiaPorSondador. Mantido
-  // fora de 'demandas' mesmo assim, por segurança -- se um dia entrar outro
-  // consumidor Node dele, não deve viajar solto no payload sem decisão
-  // própria.
-  const { tipologiaPorSondador: _tipologiaPorSondador, ...resultadoEquipesAtivas } = montarEquipesAtivas(furos, equipesAtivasCsv);
+  // equipesPeriodo TAMBÉM sai fora e vira 'equipesRosterPeriodo' -- achado
+  // ao revisar esta mudança: compute-balanco.js usa demandas.equipesPeriodo
+  // pra decidir foraDaCoberturaDeEquipes (se o mês selecionado está DENTRO
+  // do que equipesPorDia cobre), e a aba Alocação usa o MESMO campo pra
+  // decidir se o roster da Sheet EQ é do mês em tela (somenteLeitura). Os
+  // dois sentidos coincidiam enquanto ATIVAS era fonte de equipesPorDia --
+  // agora que só o Link 6+7 alimenta o Realizado (sempre 'sem restrição de
+  // mês', period null), manter os dois no mesmo campo faria o Balanço LER
+  // cobertura da Sheet EQ para um dado que não vem mais dela. Alocação passa
+  // a ler 'equipesRosterPeriodo'; Balanço continua em 'equipesPeriodo',
+  // agora sempre null (nunca mais restringido por mês, e nunca aliás
+  // 'errado' quando faltar Link 6+7 -- ver o comentário 20 linhas abaixo).
+  const {
+    tipologiaPorSondador: _tipologiaPorSondador,
+    equipesPorDia: _equipesAtivasPorDia,
+    equipesPeriodo: equipesRosterPeriodo,
+    ...resultadoEquipesAtivas
+  } = montarEquipesAtivas(furos, equipesAtivasCsv);
   Object.assign(demandas, resultadoEquipesAtivas);
-  if (demandas.equipesPeriodo) fonteEquipes = 'ATIVAS (aba EQ)';
+  demandas.equipesRosterPeriodo = equipesRosterPeriodo;
 
   // Δ equipes REALIZADO (2026-08-10, recuperado e reintegrado em 2026-08-11
   // depois de um git reset --hard ter descartado esta branch -- ver
@@ -445,31 +451,16 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
       console.warn('Equipes REALIZADO: roster+produção não produziram nenhum par utilizável -- mantendo a fonte de reserva (ativas/mobilizadas).');
     }
   } else {
-    console.warn(`Equipes REALIZADO: falta ${CAMINHO_PRODUCAO_ONLINE} ou ${CAMINHO_ROSTER_ONLINE} -- rode "node tools/semanal/atualizar-equipes-online.js". Mantendo a fonte de reserva (ativas/mobilizadas).`);
+    console.warn(`Equipes REALIZADO: falta ${CAMINHO_PRODUCAO_ONLINE} ou ${CAMINHO_ROSTER_ONLINE} -- rode "node tools/semanal/atualizar-equipes-online.js". Sem fallback -- a Tabela Semanal fica sem dado de Equipes até o CSV existir (2026-08-21: fim da cascata de fontes, ver o comentário acima de 'fonteEquipes').`);
   }
 
-  // Realizado de equipes para a Tabela Semanal (2026-08-06, recalibrado no
-  // mesmo dia: a primeira versão usava produtivas+campoSemFuro -- atividade
-  // de campo -- e o dono do projeto pediu que batesse com o "Ativas (total)"
-  // que o dashboard Matriz (tools/matriz/, outro projeto deste repositório-mãe)
-  // já publica -- um headcount de roster, conceito diferente. Em vez de
-  // reproduzir aquele pipeline (datas de admissão/desmobilização, que a aba
-  // EQ deste projeto nem lê), busca DIRETO o retrato diário já publicado --
-  // JSON público, sem CDP nem login. Ver compute-equipes-ativo-matriz.js.
-  try {
-    const respostaAtivo = await fetch('https://amcaccere261283.github.io/suporte-infra-matriz-dashboard/historico.json');
-    if (!respostaAtivo.ok) throw new Error(`HTTP ${respostaAtivo.status}`);
-    const historicoAtivo = await respostaAtivo.json();
-    demandas.equipesAtivoPorDia = agregarEquipesAtivoPorDia(historicoAtivo);
-    const diasComDado = Object.keys(demandas.equipesAtivoPorDia).length;
-    if (diasComDado) {
-      console.log(`Equipes ativas (Matriz): ${diasComDado} dia(s) de retrato lido(s) de historico.json -- alimenta o Realizado de Equipes da Tabela Semanal.`);
-    } else {
-      console.warn('Equipes ativas (Matriz): historico.json respondeu mas não trouxe nenhum ponto com "ativo" numérico -- Realizado de Equipes fica sem dado.');
-    }
-  } catch (err) {
-    console.warn(`Equipes ativas (Matriz): falha ao buscar historico.json (${err.message}) -- Realizado de Equipes fica sem dado.`);
-  }
+  // 'equipesAtivoPorDia'/historico.json (retrato do dashboard Matriz, outro
+  // projeto deste repositório-mãe) foi REMOVIDO em 2026-08-21: desde a troca
+  // pra Realizado via roster+produção (Link 6+7, 2026-08-10) nenhum lugar do
+  // render consumia mais esse campo -- só sobrava a chamada de rede e o
+  // campo morto no payload. Se precisar recuperar, ver o histórico da
+  // mudança e compute-equipes-ativo-matriz.js (module ainda existe, só não é
+  // mais chamado daqui).
 
   // Equipes NÃO produtivas (2026-08-05): informação separada do Δ equipes,
   // nunca somada nele -- mesma fonte (aba EQ) que "ativas" já usa acima, sem
