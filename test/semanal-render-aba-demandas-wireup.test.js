@@ -66,7 +66,7 @@ function montarSandbox(html) {
   // Continua 6: a aba Demandas entra no bundle EXISTENTE (BUNDLE_ARQUIVOS) e
   // no SCRIPT_CLIENTE_SEMANAL existente -- não acrescenta <script> nenhum. Se
   // este número mudar, alguém injetou um script novo sem querer.
-  assert.equal(blocos.length, 6, 'esperava 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
+  assert.equal(blocos.length, 8, 'esperava 8 <script> (vigenteIdx, dados cifrados, aviso de atualização atrasada x2, gate, fonteParaCliente, bundle, cliente)');
   const documentoFalso = criarDocumentoFalso();
   const sandbox = { document: documentoFalso, atob, btoa, crypto, TextEncoder, TextDecoder, console };
   sandbox.window = sandbox;
@@ -172,7 +172,7 @@ test('trocar o seletor para acumulado redesenha a seção, e a segunda troca tam
 test('o addEventListener("change") de #demandas-modo está DENTRO de montarAbaDemandas -- prova estática de que a religação sobrevive a um refatoro', () => {
   const html = paginaComDemandas();
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptCliente = scripts[5][1]; // 6º <script>: SCRIPT_CLIENTE_SEMANAL
+  const scriptCliente = scripts[7][1]; // 8º <script>: SCRIPT_CLIENTE_SEMANAL
   const corpoFuncao = scriptCliente.match(/function montarAbaDemandas\(\) \{([\s\S]*?)\n\}/);
   assert.ok(corpoFuncao, 'função montarAbaDemandas não encontrada no script de cliente');
   assert.match(

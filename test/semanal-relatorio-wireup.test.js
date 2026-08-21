@@ -33,7 +33,7 @@ function registroSintetico(sup, tomador, tipologia, previstoVolumeMes) {
 // nenhum recurso anterior precisava criar elemento nenhum.
 function montarSandbox(html) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
-  assert.equal(blocos.length, 6);
+  assert.equal(blocos.length, 8);
   const codigo = blocos.join('\n;\n');
 
   const documentoFalso = criarDocumentoFalso();
@@ -183,7 +183,7 @@ test('um erro durante a geração aparece no status em vez de deixar "Gerando...
 test('a chamada a RenderRelatorioSemanalXlsx.gerarRelatorioSemanalXlsx e a HistoricoRelatorioSheet.criarClienteHistoricoRelatorio estão no código-fonte de gerarRelatorioExcel', () => {
   const html = renderSemanal({ registros: [], baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptCliente = scripts[5][1];
+  const scriptCliente = scripts[7][1];
   assert.match(scriptCliente, /RenderRelatorioSemanalXlsx\.gerarRelatorioSemanalXlsx\(/);
   assert.match(scriptCliente, /HistoricoRelatorioSheet\.criarClienteHistoricoRelatorio\(/);
 });

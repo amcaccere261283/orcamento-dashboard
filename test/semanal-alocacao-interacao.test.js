@@ -146,7 +146,7 @@ function montarClienteAlocacao() {
   });
 
   const blocos = extrairBlocos(html);
-  assert.equal(blocos.length, 6, 'esperava 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
+  assert.equal(blocos.length, 8, 'esperava 8 <script> (vigenteIdx, dados cifrados, aviso de atualização atrasada x2, gate, fonteParaCliente, bundle, cliente)');
 
   const documentoFalso = criarDocumentoFalso();
   const sandbox = {

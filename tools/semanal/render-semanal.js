@@ -383,6 +383,15 @@ const CSS_ABAS_SEMANAL = `
 // markup seria a outra saída, mas custaria a legibilidade do nome (a linha é
 // "Tendência", não um total) e traria junto o border-bottom.
 const CSS_SEMANAL = `
+  /* Aviso "sem atualização hoje" (2026-08-21) -- some por padrão
+     (display:none no HTML estático); o script de gate (sempre roda, mesmo
+     sem senha) decide se mostra, comparando window.__ULTIMA_ATUALIZACAO_OK__
+     com o relógio de quem abriu a página. Mesmo vermelho de .status-erro
+     (tools/comum/render-shell.js) -- é o alerta padrão do projeto inteiro. */
+  .aviso-atualizacao-atrasada {
+    background: #e0684f; color: #fff; font-size: 13px; font-weight: 600;
+    padding: 10px 20px; text-align: center;
+  }
   .linha-tendencia .serie-label, .linha-tendencia .celula-total-linha { color: #f6b53f; }
   .linha-tendencia .serie-label { border-left-color: #f6b53f; }
   .bloco-dimensao-semanal + .bloco-dimensao-semanal { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--border); }
@@ -906,6 +915,58 @@ const BUNDLE_ARQUIVOS = [
 // decifrados -- nunca em build (renderSemanal só cifra) nem antes do clique
 // em "Abrir", quando SUP/Grupo/Tomador/Tipologia ainda não existem em texto
 // plano no navegador.
+// Aviso "sem atualização hoje" (2026-08-21) -- roda ANTES da senha (mesmo
+// espírito de scriptDesbloqueio, tools/comum/render-shell.js: quem só olha o
+// cabeçalho, sem digitar a senha, também precisa ver o alerta). Por isso é
+// um <script> próprio, separado de SCRIPT_CLIENTE_SEMANAL (que só roda DEPOIS
+// da senha certa) e do bundle (que também é pós-senha).
+//
+// window.__ULTIMA_ATUALIZACAO_OK__ vem de coordenacao-volume.js
+// (ultimaAtualizacaoOk), o ISO da linha 'ok' mais recente de
+// heartbeat-atualizacao-volume.csv -- null se o arquivo não existe ou nunca
+// teve nenhum sucesso registrado (trata como "atrasado" também, não crasha).
+//
+// UTC-3 fixo, mesmo raciocínio de hojeEpochDoNavegador (SCRIPT_CLIENTE_SEMANAL,
+// mais abaixo) e de tools/comum/datas.js (agoraNoFusoProjeto): "hoje" é o dia
+// em São Paulo, não o fuso de quem está vendo a página, e o Brasil não tem
+// horário de verão desde 2019, então o deslocamento fixo é exato.
+//
+// Critério: já passou das 10h (Brasília) E a última atualização OK não é de
+// HOJE (comparando ano/mês/dia, não só timestamp -- uma atualização de ontem
+// às 23h50 não pode contar como "de hoje" só por estar a poucas horas).
+// Checado UMA VEZ no carregamento, sem setInterval -- nenhum outro script
+// deste projeto usa timer (nem no cliente, nem nos testes de sandbox, que
+// não simulam setInterval/clearInterval), e reavaliar a cada N minutos não
+// é essencial: quem deixa a aba aberta a manhã inteira normalmente recarrega
+// ou navega de novo antes das 10h de qualquer forma.
+const SCRIPT_AVISO_ATUALIZACAO_ATRASADA = `
+function avisoAtualizacaoComponentesBrasilia(data) {
+  var deslocado = new Date(data.getTime() - 3 * 60 * 60 * 1000);
+  return {
+    ano: deslocado.getUTCFullYear(), mes: deslocado.getUTCMonth() + 1,
+    dia: deslocado.getUTCDate(), hora: deslocado.getUTCHours(),
+  };
+}
+function avisoAtualizacaoChecar() {
+  var el = document.getElementById('aviso-atualizacao-atrasada');
+  if (!el) return;
+  var agora = avisoAtualizacaoComponentesBrasilia(new Date());
+  if (agora.hora < 10) { el.style.display = 'none'; return; }
+  var ultima = window.__ULTIMA_ATUALIZACAO_OK__ ? new Date(window.__ULTIMA_ATUALIZACAO_OK__) : null;
+  var ultimaComponentes = ultima ? avisoAtualizacaoComponentesBrasilia(ultima) : null;
+  var atualizouHoje = ultimaComponentes
+    && ultimaComponentes.ano === agora.ano && ultimaComponentes.mes === agora.mes && ultimaComponentes.dia === agora.dia;
+  if (atualizouHoje) { el.style.display = 'none'; return; }
+  var doisDigitos = function (n) { return (n < 10 ? '0' : '') + n; };
+  var descricaoUltima = ultimaComponentes
+    ? (doisDigitos(ultimaComponentes.dia) + '/' + doisDigitos(ultimaComponentes.mes) + ' às ' + doisDigitos(ultimaComponentes.hora) + 'h')
+    : 'nenhuma registrada ainda';
+  el.textContent = '⚠️ Sem atualização hoje até agora -- últimos dados de ' + descricaoUltima + '.';
+  el.style.display = '';
+}
+avisoAtualizacaoChecar();
+`;
+
 const SCRIPT_CLIENTE_SEMANAL = `
 // ComputeBalanco nunca é lido diretamente daqui em diante -- quem faz o
 // trabalho é RenderAbaBalanco, que o usa por dentro (chamada indireta,
@@ -2930,7 +2991,7 @@ inicializarInteracaoAlocacao();
 // nunca soltos no markup ou no JS de cliente -- porque SUP/Grupo/Tomador/
 // Tipologia são protegidos pela senha e este HTML vai pra um GitHub Pages
 // público.
-function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm, logoDataUri, iconDataUri, avisoAtualizacao }) {
+function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm, logoDataUri, iconDataUri, avisoAtualizacao, ultimaAtualizacaoOkIso }) {
   if (!senha) {
     throw new Error('renderSemanal requer "senha" -- os registros (SUP/Grupo/Tomador/Tipologia/valores) são cifrados com ela antes de ir pro HTML.');
   }
@@ -3005,6 +3066,7 @@ ${markupCabecalho({
     logo: logoImg,
     recuo: '  ',
   })}
+  <div id="aviso-atualizacao-atrasada" class="aviso-atualizacao-atrasada" style="display:none"></div>
 
   <div id="gate-senha" class="gate-senha">
     <div class="gate-senha-box">
@@ -3045,6 +3107,8 @@ ${markupFiltros(FILTROS_ALERTAS_SEMANAL, { recuo: '      ', classes: 'filtros-al
   </div>
   </main>
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx}; window.__ANO__ = ${periodos[0].getUTCFullYear()};</script>
+  <script>window.__ULTIMA_ATUALIZACAO_OK__ = ${ultimaAtualizacaoOkIso ? JSON.stringify(ultimaAtualizacaoOkIso) : 'null'};</script>
+  <script>${SCRIPT_AVISO_ATUALIZACAO_ATRASADA}</script>
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
   <script>${scriptDesbloqueio()}</script>
   <script>${fonteParaClienteEquipes()}${fonteParaClienteTipologiasAvancos()}${fonteParaClienteTipologiasLab()}${fonteParaClienteDatas()}${fonteParaClienteLinhaBase()}</script>

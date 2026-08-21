@@ -155,7 +155,7 @@ test('a costura fecha: o que baselineParaCliente produz é achado por chaveBasel
 
 function rodarPagina(html) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
-  assert.equal(blocos.length, 6, 'esperava 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
+  assert.equal(blocos.length, 8, 'esperava 8 <script> (vigenteIdx, dados cifrados, aviso de atualização atrasada x2, gate, fonteParaCliente, bundle, cliente)');
   const documentoFalso = criarDocumentoFalso();
   const sandbox = { document: documentoFalso, atob, btoa, crypto, TextEncoder, TextDecoder, console };
   sandbox.window = sandbox;

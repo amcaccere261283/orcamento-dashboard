@@ -87,7 +87,7 @@ function localStorageFalso() {
 
 function montarSandbox(html, fetchMock) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
-  assert.equal(blocos.length, 6, 'esperava exatamente 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
+  assert.equal(blocos.length, 8, 'esperava exatamente 8 <script> (vigenteIdx, dados cifrados, aviso de atualização atrasada x2, gate, fonteParaCliente, bundle, cliente)');
   const codigo = blocos.join('\n;\n');
 
   const documentoFalso = criarDocumentoFalso();
@@ -185,7 +185,7 @@ test('a chamada a RenderAbaSemanal.renderAbaSemanal, com injeção em #secao-sem
   const registros = [registroSintetico('SUP-0005-24', 'Tomador-Sintetico-Zeta', 1000)];
   const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptCliente = scripts[5][1]; // 6º <script>: SCRIPT_CLIENTE_SEMANAL
+  const scriptCliente = scripts[7][1]; // 8º <script>: SCRIPT_CLIENTE_SEMANAL
   // Task 5 (2026-08-04) trocou a chamada única por 'dimensoes.map(...)': o
   // filtro de ativos depende da dimensão (ver indicesDaAba), então cada
   // dimensão exibida precisa do seu próprio recorte de índices, o que exige
@@ -493,7 +493,7 @@ test('a chamada a RenderAbaGraficoSemanal.renderAbaGraficoSemanal, com indicesDa
   const registros = [registroSintetico('SUP-0005-24', 'Tomador-Sintetico-Zeta', 1000)];
   const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  const scriptCliente = scripts[5][1]; // 6º <script>: SCRIPT_CLIENTE_SEMANAL
+  const scriptCliente = scripts[7][1]; // 8º <script>: SCRIPT_CLIENTE_SEMANAL
   assert.match(
     scriptCliente,
     /dimensoes\.map\(function \(dimensao\) \{[\s\S]{0,200}RenderAbaGraficoSemanal\.renderAbaGraficoSemanal\(registros, indicesDaAba\(indices, dimensao\), \[dimensao\]/

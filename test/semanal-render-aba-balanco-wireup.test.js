@@ -95,7 +95,7 @@ test('depois da senha certa, a aba Balanço de massa desenha SVG de verdade em #
   assert.match(html, /<div id="secao-balanco" style="display:none"><\/div>/);
 
   const blocos = extrairBlocos(html);
-  assert.equal(blocos.length, 6, 'esperava 6 <script> (vigenteIdx, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
+  assert.equal(blocos.length, 8, 'esperava 8 <script> (vigenteIdx, dados cifrados, aviso de atualização atrasada x2, gate, fonteParaCliente, bundle, cliente)');
 
   const { sandbox, documentoFalso } = rodarBlocos(blocos);
 
@@ -186,15 +186,15 @@ test('SEM a injeção de fonteParaCliente() antes do bundle, a mesma senha certa
   const html = renderSemanal({ registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
   const blocos = extrairBlocos(html);
-  assert.equal(blocos.length, 6);
+  assert.equal(blocos.length, 8);
 
   // Remove especificamente o bloco que define mediaEquipesPonderada
   // (fonteParaCliente()) -- simula o esquecimento que a Task 9 avisou que
   // aconteceria se render-semanal.js não injetasse a global antes do
-  // bundle. Os outros 5 blocos (vigenteIdx, dados cifrados, gate, bundle,
-  // cliente) continuam intactos.
+  // bundle. Os outros 7 blocos (vigenteIdx, aviso de atualização atrasada
+  // x2, dados cifrados, gate, bundle, cliente) continuam intactos.
   const blocosSemInjecao = blocos.filter((b) => !/function mediaEquipesPonderada/.test(b));
-  assert.equal(blocosSemInjecao.length, 5, 'esperava remover exatamente 1 bloco (o de fonteParaCliente())');
+  assert.equal(blocosSemInjecao.length, 7, 'esperava remover exatamente 1 bloco (o de fonteParaCliente())');
 
   const { sandbox, documentoFalso } = rodarBlocos(blocosSemInjecao);
   assert.equal(typeof sandbox.mediaEquipesPonderada, 'undefined', 'pré-condição do teste: a global precisa estar mesmo ausente aqui');

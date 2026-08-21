@@ -52,10 +52,18 @@ function decidirResultado(resultadosBuscas) {
   return { resultado, detalhe };
 }
 
-function formatarAvisoAtualizacao(linhas) {
+// Extraída em 2026-08-21 (achado do aviso "sem atualização hoje" -- ver
+// ultimaAtualizacaoOkIso abaixo, que precisava do MESMO "mais recente com
+// resultado=ok" que formatarAvisoAtualizacao já calculava, sem duplicar o
+// filter+sort).
+function linhaOkMaisRecente(linhas) {
   const linhasOk = linhas.filter((l) => l.resultado === 'ok').sort((a, b) => b.dataHora - a.dataHora);
-  if (!linhasOk.length) return '';
-  const ultima = linhasOk[0];
+  return linhasOk.length ? linhasOk[0] : null;
+}
+
+function formatarAvisoAtualizacao(linhas) {
+  const ultima = linhaOkMaisRecente(linhas);
+  if (!ultima) return '';
   const local = agoraNoFusoProjeto(ultima.dataHora);
   const hh = String(local.getUTCHours()).padStart(2, '0');
   const mm = String(local.getUTCMinutes()).padStart(2, '0');
@@ -81,9 +89,23 @@ function lerAvisoAtualizacaoVolume(caminhoArquivo) {
   return formatarAvisoAtualizacao(parseHeartbeatVolume(fs.readFileSync(caminhoArquivo, 'utf8')));
 }
 
+// ISO da última linha 'ok' do heartbeat de volume, ou null (arquivo ausente
+// ou sem nenhum sucesso registrado ainda) -- alimenta
+// window.__ULTIMA_ATUALIZACAO_OK__ (render-semanal.js), que o script de
+// aviso "sem atualização hoje" usa pra comparar contra o relógio de quem
+// abre a página. Devolve o ISO cru (não formatado): quem lê decide o fuso
+// -- o cliente já faz esse cálculo em UTC-3 sozinho, sem precisar que o
+// build tenha decidido "hoje" no momento da geração (que pode ser ontem se
+// a página ficar aberta atravessando a virada do dia).
+function ultimaAtualizacaoOkIso(caminhoArquivo) {
+  if (!fs.existsSync(caminhoArquivo)) return null;
+  const ultima = linhaOkMaisRecente(parseHeartbeatVolume(fs.readFileSync(caminhoArquivo, 'utf8')));
+  return ultima ? ultima.dataHora.toISOString() : null;
+}
+
 module.exports = {
   CABECALHO_HEARTBEAT_VOLUME, NOMES_AMIGAVEIS, nomeAmigavel,
   parseHeartbeatVolume, formatarLinhaHeartbeat, jaAtualizadoHoje,
   decidirResultado, formatarAvisoAtualizacao, lerAvisoAtualizacaoVolume,
-  gravarLinhaHeartbeatVolume,
+  gravarLinhaHeartbeatVolume, ultimaAtualizacaoOkIso,
 };

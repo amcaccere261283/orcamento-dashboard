@@ -23,7 +23,7 @@ const { agregarEquipesRealizadoAlocado } = require('./compute-equipes-realizado-
 const { agregarEquipesNaoProdutivas } = require('./compute-equipes-nao-produtivas.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const configDemandas = require('./config-demandas.js');
-const { lerAvisoAtualizacaoVolume } = require('./coordenacao-volume.js');
+const { lerAvisoAtualizacaoVolume, ultimaAtualizacaoOkIso } = require('./coordenacao-volume.js');
 
 // Mesmo logo/avatar do orçamento (tools/orcamento/build-dashboard.js) --
 // mesmos arquivos em assets/, mesma função de carregar, duplicada aqui de
@@ -506,11 +506,15 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
 
   const CAMINHO_HEARTBEAT_VOLUME = path.join(__dirname, '..', '..', 'dist', 'heartbeat-atualizacao-volume.csv');
   const avisoAtualizacao = lerAvisoAtualizacaoVolume(CAMINHO_HEARTBEAT_VOLUME);
+  // Aviso "sem atualização hoje" (2026-08-21): ISO cru da última linha 'ok',
+  // pro cliente decidir se está atrasado comparando com o próprio relógio --
+  // ver o comentário em coordenacao-volume.js (ultimaAtualizacaoOkIso).
+  const ultimaAtualizacaoOkIsoValor = ultimaAtualizacaoOkIso(CAMINHO_HEARTBEAT_VOLUME);
 
   const html = renderSemanal({
     registros, baseline, demandas, periodos, senha, geradoEm: today,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
-    avisoAtualizacao,
+    avisoAtualizacao, ultimaAtualizacaoOkIso: ultimaAtualizacaoOkIsoValor,
   });
 
   const resolvedOutPath = outPath || path.join(__dirname, '..', '..', 'dist', 'planejamento-semanal.html');
