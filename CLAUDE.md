@@ -1216,11 +1216,14 @@ ida-e-volta de rede de verdade — a janela de corrida deixa de ser teórica.
 
 **Duas armadilhas para quem mexer aqui em seguida:**
 
-- **Um crase dentro dos template literals `SCRIPT_CLIENTE_SEMANAL`/`CSS_SEMANAL` trunca o
+- **Um crase dentro dos template literals `SCRIPT_CLIENTE_SEMANAL`/`CSS_SEMANAL`
+  (`render-semanal.js`) ou `SCRIPT_CLIENTE_ALOCACAO` (`render-alocacao-pagina.js`) trunca o
   script do cliente inteiro, em silêncio.** O build não levanta erro nenhum; o sintoma
   aparece longe, em teste de navegador falhando com `montarDashboard is not defined`.
   Se esse erro aparecer do nada, procure uma crase solta introduzida nesses literais antes
-  de suspeitar de outra coisa.
+  de suspeitar de outra coisa. Acontece de novo com facilidade: em 2026-08-25 uma crase
+  entrou num COMENTÁRIO adicionado dentro do `SCRIPT_CLIENTE_ALOCACAO` e truncou tudo —
+  vale para o texto dos comentários, não só para o código.
 - **`core.autocrlf=true` sem `.gitattributes` nesta máquina** — restaurar só um de
   `dist/`/`docs/` (`git checkout`, `git restore`) inverte a terminação de linha dele e
   quebra o teste de sincronia byte a byte sem mudar o conteúdo. Nunca faça `checkout`/
