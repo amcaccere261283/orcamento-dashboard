@@ -603,11 +603,14 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB no placeh
   await sandbox.tentarDesbloquear();
 
   // Volta as duas ao placeholder -- mesmo mecanismo (e mesma justificativa)
-  // que o teste do caminho completo usa para o contrário: `var URL_ESPELHO_...`
-  // vira propriedade do global do vm.Context, então sobrescrever aqui é o que
-  // atualizarDadosAoVivoSemanal() lê ao checar RE_URL_PENDENTE.
-  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS';
-  sandbox.URL_ESPELHO_LAB_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-LAB';
+  // que o teste do caminho completo usa para o contrário: desde a Task 3
+  // (2026-08-25, live-refresh.js compartilhado) as URL_ESPELHO_* não são
+  // mais vars desta página -- `LiveRefresh.URLS_PADRAO` (objeto exposto por
+  // MODULOS['live-refresh.js']) é o que atualizarDadosAoVivoSemanal() lê a
+  // cada clique, então mutar suas propriedades aqui é o jeito de forçar
+  // RE_URL_PENDENTE (agora dentro de live-refresh.js) a bater.
+  sandbox.LiveRefresh.URLS_PADRAO.avancos = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS';
+  sandbox.LiveRefresh.URLS_PADRAO.lab = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-LAB';
 
   const baselineAntes = sandbox.window.__BASELINE__;
   const demandasAntes = sandbox.window.__DEMANDAS__;
@@ -691,12 +694,12 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
   await sandbox.tentarDesbloquear();
 
   // Simula o dia em que o dono do projeto já publicou o Apps Script e trocou
-  // os dois placeholders pelas URLs reais -- `var URL_ESPELHO_...` no topo do
-  // script vira propriedade do objeto global do vm.Context (sandbox.window
-  // === sandbox), então sobrescrever aqui muda o valor que
-  // atualizarDadosAoVivoSemanal() lê na hora de checar RE_URL_PENDENTE.
-  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'https://exemplo.com/avancos-configurado-teste.csv';
-  sandbox.URL_ESPELHO_LAB_SEMANAL = 'https://exemplo.com/lab-configurado-teste.csv';
+  // os dois placeholders pelas URLs reais -- `LiveRefresh.URLS_PADRAO` (objeto
+  // exposto por MODULOS['live-refresh.js'], global no vm.Context desde a
+  // Task 3) é o que atualizarDadosAoVivoSemanal() lê na hora de checar
+  // RE_URL_PENDENTE, então mutar suas propriedades aqui muda o valor.
+  sandbox.LiveRefresh.URLS_PADRAO.avancos = 'https://exemplo.com/avancos-configurado-teste.csv';
+  sandbox.LiveRefresh.URLS_PADRAO.lab = 'https://exemplo.com/lab-configurado-teste.csv';
 
   const baselineAntes = sandbox.window.__BASELINE__;
   await chamarEsperarAtualizacao(sandbox);
@@ -776,8 +779,8 @@ test('atualizarDadosAoVivoSemanal: busca e mescla o backlog (demandas-sondagem-o
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
-  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'https://exemplo.com/avancos-configurado-teste.csv';
-  sandbox.URL_ESPELHO_LAB_SEMANAL = 'https://exemplo.com/lab-configurado-teste.csv';
+  sandbox.LiveRefresh.URLS_PADRAO.avancos = 'https://exemplo.com/avancos-configurado-teste.csv';
+  sandbox.LiveRefresh.URLS_PADRAO.lab = 'https://exemplo.com/lab-configurado-teste.csv';
 
   await chamarEsperarAtualizacao(sandbox);
 
@@ -844,8 +847,8 @@ test('atualizarDadosAoVivoSemanal NÃO reseta o mês selecionado pro vigente -- 
   // Placeholder forçado: este teste é sobre mesSelecionadoIdx, não sobre as
   // fontes -- com só a MATRIZ mockada, o caminho degradado mantém o cenário
   // mínimo (ver o teste do modo degradado acima, mesma técnica).
-  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS';
-  sandbox.URL_ESPELHO_LAB_SEMANAL = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-LAB';
+  sandbox.LiveRefresh.URLS_PADRAO.avancos = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-AVANCOS';
+  sandbox.LiveRefresh.URLS_PADRAO.lab = 'PENDENTE-AGUARDANDO-PUBLICACAO-DO-APPS-SCRIPT-LAB';
 
   // Usuário troca pra março (índice 2) ANTES de clicar em Atualizar dados.
   sandbox.mesSelecionadoIdx = 2;
@@ -1588,8 +1591,8 @@ async function prepararRefreshPrioridade(fetchMock) {
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
-  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'https://exemplo.com/avancos-configurado-teste.csv';
-  sandbox.URL_ESPELHO_LAB_SEMANAL = 'https://exemplo.com/lab-configurado-teste.csv';
+  sandbox.LiveRefresh.URLS_PADRAO.avancos = 'https://exemplo.com/avancos-configurado-teste.csv';
+  sandbox.LiveRefresh.URLS_PADRAO.lab = 'https://exemplo.com/lab-configurado-teste.csv';
   return { sandbox, documentoFalso };
 }
 
@@ -1689,8 +1692,8 @@ test('atualizarDadosAoVivoSemanal: se o CSV de produção (equipes-online.csv) d
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
-  sandbox.URL_ESPELHO_AVANCOS_SEMANAL = 'https://exemplo.com/avancos-configurado-teste.csv';
-  sandbox.URL_ESPELHO_LAB_SEMANAL = 'https://exemplo.com/lab-configurado-teste.csv';
+  sandbox.LiveRefresh.URLS_PADRAO.avancos = 'https://exemplo.com/avancos-configurado-teste.csv';
+  sandbox.LiveRefresh.URLS_PADRAO.lab = 'https://exemplo.com/lab-configurado-teste.csv';
   const baselineAntes = sandbox.window.__BASELINE__;
   await chamarEsperarAtualizacao(sandbox);
 

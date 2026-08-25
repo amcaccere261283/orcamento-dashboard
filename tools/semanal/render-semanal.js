@@ -856,8 +856,8 @@ const BUNDLE_ARQUIVOS = [
   // compute-equipes-produtivas.js SAIU desta lista na Task 12 (2026-08-08):
   // o botão "Atualizar dados" não roda mais agregação de equipes própria
   // sobre dado cru -- equipes-online.csv já chega pré-agregado (ver
-  // URL_ESPELHO_EQUIPES_SEMANAL acima). O módulo continua no repositório,
-  // sem consumidor aqui.
+  // URLS_PADRAO.producao em live-refresh.js, mais abaixo nesta lista). O
+  // módulo continua no repositório, sem consumidor aqui.
   'compute-equipes-nao-produtivas.js',
   // Equipes REALIZADO (2026-08-10, recuperado e reintegrado em 2026-08-11):
   // cruza roster (Link 6) + produção crua (Link 7) com carry-forward de 45
@@ -881,6 +881,17 @@ const BUNDLE_ARQUIVOS = [
   // diaEpoch de lá agora (require('./compute-semanal.js'), same-dir,
   // resolvido normalmente pelo bundler).
   'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js',
+  // live-refresh.js (Task 3, 2026-08-25) substitui a cópia local de
+  // atualizarDadosAoVivoSemanal -- consome parse-matriz-cliente/parse-avancos/
+  // parse-lab/compute-demandas/compute-equipes-ativas, todos já registrados
+  // acima, então entra por ÚLTIMO de propósito: o contrato de ordem de
+  // browser-bundle.js exige que tudo que ele faz require() já esteja
+  // registrado em MODULOS quando sua IIFE roda. compute-equipes-nao-
+  // produtivas.js e compute-equipes-realizado-alocado.js continuam no bundle
+  // (ao contrário da Alocação, que os tirou): esta página passa os dois via
+  // config.modulos, opcional -- live-refresh.js NUNCA faz require() direto
+  // deles (ver o comentário no topo de live-refresh.js).
+  'live-refresh.js',
 ];
 
 // O gate de senha (scriptDesbloqueio, casca compartilhada) sempre chama
@@ -990,11 +1001,14 @@ var RenderAbaGraficoSemanal = MODULOS['render-aba-grafico-semanal.js'];
 var ComputeBalanco = MODULOS['compute-balanco.js'];
 var RenderAbaBalanco = MODULOS['render-aba-balanco.js'];
 var RenderAbaDemandas = MODULOS['render-aba-demandas.js'];
-var ParseMatrizCliente = MODULOS['parse-matriz-cliente.js'];
-var ParseAvancos = MODULOS['parse-avancos.js'];
-var ParseLab = MODULOS['parse-lab.js'];
-var ComputeDemandas = MODULOS['compute-demandas.js'];
-var ComputeEquipesAtivas = MODULOS['compute-equipes-ativas.js'];
+// ParseMatrizCliente/ParseAvancos/ParseLab/ComputeDemandas/ComputeEquipesAtivas
+// saíram daqui em 2026-08-25 (Task 3): eram lidos só dentro da cópia local de
+// atualizarDadosAoVivoSemanal, agora em live-refresh.js -- ver LiveRefresh
+// logo abaixo, perto de onde a função vivia. Os dois módulos de equipes
+// abaixo (ComputeEquipesNaoProdutivas/ComputeEquipesRealizadoAlocado)
+// continuam vars daqui porque a página os passa pra dentro de
+// config.modulos -- são exclusivos do Δ equipes Realizado/Não produtivas,
+// que só esta página desenha (a Alocação nunca lê nenhum dos dois).
 var ComputeEquipesNaoProdutivas = MODULOS['compute-equipes-nao-produtivas.js'];
 var ComputeEquipesRealizadoAlocado = MODULOS['compute-equipes-realizado-alocado.js'];
 var FiltroAtivos = MODULOS['filtro-ativos.js'];
@@ -1849,55 +1863,6 @@ function montarDashboard(registros) {
   montarAbaDemandas();
 }
 
-// ---- Atualização ao vivo (busca as fontes publicadas, sem tocar nos
-// arquivos originais) -- ver docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md.
-// URL_ESPELHO_MATRIZ_SEMANAL é a MESMA Sheet publicada que o orçamento já
-// usa (tools/orcamento/render-dashboard.js) -- literal duplicado de
-// propósito, não hà como as duas páginas compartilharem uma constante JS
-// (são dois builds independentes).
-//
-// URL_ESPELHO_LAB_SEMANAL ainda vem da Sheet espelho do Avanço Sond.xlsx
-// (Apps Script copiando o .xlsx do Drive a cada 30 min, publicado como CSV,
-// aba "Lab Concluido" -- gid 213649864). Confira o cabeçalho antes de mexer
-// no gid se um dia essa Sheet for republicada: era a MESMA Sheet que também
-// publicava "Avanços" (gid 943230110), mas esse lado migrou pro CSV online
-// em 2026-08-05 (ver URL_ESPELHO_AVANCOS_SEMANAL abaixo) -- só Lab ainda usa
-// esse mecanismo.
-var URL_ESPELHO_MATRIZ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRaOjGxPYWKj-as9RwErptIND7PE_zxsND19PReV1MdOup1ZY3iAu_DGrQ0gatPyYFEy3hg-LWE2esw/pub?gid=609773455&single=true&output=csv';
-// 2026-08-05: trocado do espelho da Sheet (Apps Script copiando o .xlsx do
-// Drive) pro CSV combinado publicado junto com a própria página -- gerado
-// por tools/semanal/atualizar-avancos-online.js (roda à parte, não a cada
-// build). Caminho relativo: mesmo domínio do GitHub Pages, sem CORS, e sem
-// depender de um Apps Script rodando em outra conta. Ver
-// docs/superpowers/specs/2026-08-05-avancos-online-design.md.
-var URL_ESPELHO_AVANCOS_SEMANAL = 'avancos-online.csv';
-var URL_ESPELHO_EQ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7SaAZI8VwQaZD0nPxtOyw56b1XmKfqDTC6qSkj-1PAQr4A8ihTY4vZCOhF4PuMNIYm_-hN_CNdNrX/pub?gid=199381651&single=true&output=csv';
-// 2026-08-05: trocado do espelho da Sheet (Apps Script) pro CSV publicado
-// junto com a própria página -- mesmo padrão de URL_ESPELHO_AVANCOS_SEMANAL.
-// Ver docs/superpowers/specs/2026-08-05-lab-e-equipes-online-design.md.
-var URL_ESPELHO_LAB_SEMANAL = 'lab-online.csv';
-// 2026-08-10 (recuperado e reintegrado em 2026-08-11): produção CRUA do
-// Link 7 -- "IdEquipe,SUP,Tipo,DiaEpoch", uma linha por (equipe, dia,
-// contrato). Substitui o pré-agregado "SUP,Tipo,DiaEpoch,Fracao" de
-// 2026-08-08 (Task 12/equipes FRACIONADAS): a fração agora é calculada no
-// cruzamento com o roster (ComputeEquipesRealizadoAlocado.agregarEquipesRealizadoAlocado),
-// MESMA lógica que build-dashboard.js (montarEquipesRealizado) já faz --
-// os dois nunca podem divergir. Mesmo nome de arquivo/padrão de publicação
-// relativa dos outros dois -- só o formato do conteúdo mudou.
-var URL_ESPELHO_EQUIPES_SEMANAL = 'equipes-online.csv';
-// Roster (Link 6, multi-mês, já classificado por Estado) -- publicado junto
-// com equipes-online.csv por atualizar-equipes-online.js. Ver o comentário
-// acima e compute-equipes-realizado-alocado.js.
-var URL_ESPELHO_EQUIPES_ROSTER_SEMANAL = 'equipes-roster-online.csv';
-// 2026-08-10: os dois arquivos de BACKLOG (furos/ensaios ainda não
-// executados), que até então só alimentavam o build a partir de dist/ --
-// o botão nunca os buscava, e por isso zerava Demandas Pendentes a cada
-// clique (5.493 furos + 12.781 ensaios pendentes, medidos em 2026-08-10,
-// desapareciam com o status mostrando "Atualizado" em verde). Publicados
-// junto com a própria página, mesmo padrão relativo dos CSVs de cima.
-var URL_ESPELHO_DEMANDAS_SONDAGEM_SEMANAL = 'demandas-sondagem-online.csv';
-var URL_ESPELHO_DEMANDAS_LAB_SEMANAL = 'demandas-lab-online.json';
-
 function definirStatusAtualizacaoSemanal(texto, ehErro) {
   var el = document.getElementById('status-atualizacao');
   if (!el) return;
@@ -1905,274 +1870,49 @@ function definirStatusAtualizacaoSemanal(texto, ehErro) {
   el.classList.toggle('status-erro', !!ehErro);
 }
 
-function periodosDoAnoSemanal() {
-  var periodos = [];
-  for (var i = 0; i < 12; i++) periodos.push(new Date(Date.UTC(window.__ANO__, i, 1)));
-  return periodos;
-}
+// live-refresh.js (Task 3, 2026-08-25) é a fonte única desta lógica -- ver o
+// histórico completo da duplicação (e por que as duas páginas divergiam) no
+// cabeçalho de tools/semanal/live-refresh.js. Esta página passa as 8 fontes
+// (matriz/avancos/lab/eq/producao/roster/demandasSondagem/demandasLab) --
+// TODAS, ao contrário da Alocação (render-alocacao-pagina.js), que passa só
+// 6 -- e config.modulos: { ComputeEquipesRealizadoAlocado,
+// ComputeEquipesNaoProdutivas }, os dois módulos exclusivos do Δ equipes
+// Realizado/Não produtivas (Tabela Semanal) que só esta página desenha -- a
+// aba Alocação Equipes, extraída em 2026-08-25, nunca lê nenhum dos dois (a
+// Tendência dela é sempre 'volume', ver o comentário equivalente em
+// render-alocacao-pagina.js). rosterAlocacao fica de fora de propósito: os 3
+// campos exclusivos dela (equipesCsv/osParaSup/equipesRosterPeriodo) não são
+// lidos por nenhuma aba desta página.
+var LiveRefresh = MODULOS['live-refresh.js'];
 
-function buscarCsvSemanal(url) {
-  var comCacheBust = url + (url.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
-  return fetch(comCacheBust).then(function (resposta) {
-    if (!resposta.ok) throw new Error('HTTP ' + resposta.status + ' ao buscar ' + url);
-    return resposta.text();
-  });
-}
-
-// parseAvancos/parseLab consomem a grade 1-INDEXADA de readXlsxSheet
-// (tools/comum/xlsx-reader.js): grid[0] é sempre um buraco vazio, grid[1] é o
-// cabeçalho, o dado começa em grid[2]. parseCsvGrid devolve uma grade
-// 0-INDEXADA normal (grid[0] = cabeçalho, já que um CSV publicado não tem a
-// linha 0 vazia que o .xlsx real tem). Sem este deslocamento, os dois parsers
-// procurariam o cabeçalho na primeira linha de DADO e ou lançariam "Coluna não
-// encontrada" ou desalinhariam tudo em silêncio.
-//
-// parseMatrizCliente NÃO passa por aqui de propósito: ele já foi escrito pra
-// consumir a grade 0-indexada de parseCsvGrid direto (ver o comentário sobre
-// grid[0] em parse-matriz-cliente.js).
-function gridCsvComoXlsx(texto) {
-  var g = ParseMatrizCliente.parseCsvGrid(texto);
-  g.unshift(null);
-  return g;
-}
-
-// RE_URL_PENDENTE reconhece uma URL_ESPELHO_* ainda no literal placeholder
-// "PENDENTE-..." (ver o comentário delas acima) e degrada com graça em vez
-// de falhar tudo: enquanto QUALQUER uma das duas (Avanços/Lab) continuar
-// placeholder, o botão atualiza só a MATRIZ (Previsto/ticket médio) e deixa
-// window.__DEMANDAS__ como estava. URL_ESPELHO_AVANCOS_SEMANAL não bate mais
-// nesse padrão desde 2026-08-05 (é sempre um caminho relativo real,
-// 'avancos-online.csv') -- na prática só URL_ESPELHO_LAB_SEMANAL ainda pode
-// estar pendente hoje, mas o mecanismo continua genérico pras duas.
-var RE_URL_PENDENTE = /^PENDENTE-/;
-
-// ATENÇÃO -- esta função existe DUPLICADA em tools/semanal/render-alocacao-pagina.js
-// (mesmo nome, cópia independente desde a extração da página própria de
-// Alocação em 2026-08-25). As duas já nasceram diferentes (esta manteve
-// csvEq/periodoEq só para equipesNaoProdutivas; a de alocação manteve o
-// bloco osParaSup inteiro) -- não são mantidas em sincronia automática. O
-// contrato de índices posicionais textos[N] do Promise.all abaixo e a regra
-// de "escrever por ÚLTIMO em demandasNovas" (nunca sobrescrever um campo já
-// preenchido por engano) valem nas duas cópias: mexeu aqui, confira a outra.
-// Não refatorar para compartilhar sem uma rodada dedicada a isso.
-//
-// Tudo-ou-nada, mas só ENTRE as fontes que este refresh de fato tentou
-// atualizar: nenhum window.__REGISTROS__/window.__DEMANDAS__ é sobrescrito
-// antes de todos os fetches tentados E de todo o parsing terminarem com
-// sucesso -- uma falha parcial (ex.: MATRIZ ok, Avanços fora do ar) não pode
-// deixar os dois globais referindo momentos diferentes. baseline
-// (window.__BASELINE__) nunca é tocado aqui -- ver "Estado atual" no spec.
 function atualizarDadosAoVivoSemanal() {
-  definirStatusAtualizacaoSemanal('Atualizando…', false);
-  var avancosLabConfigurados = !RE_URL_PENDENTE.test(URL_ESPELHO_AVANCOS_SEMANAL)
-    && !RE_URL_PENDENTE.test(URL_ESPELHO_LAB_SEMANAL);
-
-  Promise.all([
-    buscarCsvSemanal(URL_ESPELHO_MATRIZ_SEMANAL),
-    avancosLabConfigurados ? buscarCsvSemanal(URL_ESPELHO_AVANCOS_SEMANAL) : Promise.resolve(null),
-    avancosLabConfigurados ? buscarCsvSemanal(URL_ESPELHO_LAB_SEMANAL) : Promise.resolve(null),
-    // Espelho da aba EQ (equipes ATIVAS). Falha sozinha: se esta única fonte
-    // cair, o refresh continua atualizando MATRIZ/Avanços/Lab e o Δ equipes
-    // fica com o dado do build -- em vez de o botão inteiro dar erro por causa
-    // da série secundária.
-    buscarCsvSemanal(URL_ESPELHO_EQ_SEMANAL).catch(function () { return null; }),
-    // Equipes FRACIONADAS (2026-08-08, Task 12 -- antes "produtivas"). Gated
-    // pelo MESMO avancosLabConfigurados dos dois de cima: o parse+soma abaixo
-    // roda depois de furos/ensaios estarem prontos, igual ao build.
-    //
-    // Falha sozinha, igual à aba EQ acima: este CSV é publicado à parte
-    // (cp dist/equipes-online.csv docs/), então um 404 por cópia esquecida é
-    // o modo de falha ESPERADO -- e sem o .catch ele derrubava o botão
-    // INTEIRO ("Falha ao atualizar: HTTP 404"), levando MATRIZ e Avanços com
-    // ele. Sem fracionadas o Δ equipes só volta pra reserva
-    // (ativas/mobilizadas), que é como era antes desta branch.
-    avancosLabConfigurados
-      ? buscarCsvSemanal(URL_ESPELHO_EQUIPES_SEMANAL).catch(function () { return null; })
-      : Promise.resolve(null),
-    // "Ativas (total)" do dashboard Matriz (historico.json, 2026-08-06) foi
-    // REMOVIDO em 2026-08-21: desde a troca do Realizado de Equipes pra
-    // roster+produção (Link 6+7, 2026-08-10) nada mais consumia esse fetch --
-    // ver o histórico da mudança e compute-equipes-ativo-matriz.js (module
-    // ainda existe, só não é mais chamado daqui). Removê-lo tirou um índice
-    // do array: os textos[6]/[7]/[8] de antes viraram [5]/[6]/[7] abaixo.
-    // Demandas pendentes de sondagem/lab (2026-08-10) -- OPCIONAIS, mesmo
-    // espírito de robustez que equipes/aba EQ: sem elas, Demandas Pendentes
-    // volta a ficar sem o backlog (como sempre foi até aqui), mas o resto do
-    // refresh conclui normalmente. Gated por avancosLabConfigurados: fazem
-    // sentido só quando furos/ensaios também estão sendo recalculados.
-    avancosLabConfigurados
-      ? buscarCsvSemanal(URL_ESPELHO_DEMANDAS_SONDAGEM_SEMANAL).catch(function () { return null; })
-      : Promise.resolve(null),
-    avancosLabConfigurados
-      ? fetch(URL_ESPELHO_DEMANDAS_LAB_SEMANAL).then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      }).catch(function () { return null; })
-      : Promise.resolve(null),
-    // Roster (Link 6, textos[7]) -- entra por ÚLTIMO no array de propósito,
-    // pra não deslocar os índices textos[4..6] já em uso por baixo. Gated
-    // pelo MESMO avancosLabConfigurados dos demais de equipes: o cruzamento
-    // com a produção (textos[4]) só roda depois de furos/registros prontos.
-    // Falha sozinha, mesmo padrão de todos os outros CSVs opcionais deste
-    // Promise.all -- sem roster, o Δ equipes fica sem dado (2026-08-21: sem
-    // fonte de reserva -- ver o comentário acima de fonteEquipes em
-    // build-dashboard.js), nunca derruba o botão inteiro.
-    avancosLabConfigurados
-      ? buscarCsvSemanal(URL_ESPELHO_EQUIPES_ROSTER_SEMANAL).catch(function () { return null; })
-      : Promise.resolve(null),
-  ]).then(function (textos) {
-    var registrosNovos = ParseMatrizCliente.parseMatrizCliente(ParseMatrizCliente.parseCsvGrid(textos[0]));
-    if (!registrosNovos.length) throw new Error('nenhum registro encontrado no espelho da MATRIZ -- confira se o Apps Script já rodou pelo menos uma vez');
-
-    var demandasNovas = window.__DEMANDAS__;
-
-    if (avancosLabConfigurados) {
-      // Demandas pendentes de sondagem (textos[5], OPCIONAL): mesmo tratamento
-      // que build-dashboard.js -- as linhas de dado são anexadas ao grid de
-      // Avanços ANTES do parse (mesmo formato de 10 colunas, HEADER_SAIDA),
-      // então parseAvancos as lê como furos PENDENTE normais, sem precisar de
-      // um caminho de código à parte.
-      var gridAvancosCliente = ParseMatrizCliente.parseCsvGrid(textos[1]);
-      if (textos[5]) {
-        var gridPendentesCliente = ParseMatrizCliente.parseCsvGrid(textos[5]);
-        for (var iP = 1; iP < gridPendentesCliente.length; iP++) gridAvancosCliente.push(gridPendentesCliente[iP]);
-      }
-      gridAvancosCliente.unshift(null);
-      var furosLidos = ParseAvancos.parseAvancos(gridAvancosCliente).furos;
-      var ensaiosLidos = ParseLab.parseLab(gridCsvComoXlsx(textos[2])).ensaios;
-      // Demandas pendentes de lab (textos[6], OPCIONAL): já chega no shape
-      // que parseLab produz ({sup, tipologia, concluido, criacao}) -- só
-      // reidrata 'criacao' de ISO string pra Date, mesmo que
-      // atualizar-demandas-lab-online.js grava. 'concluido' já vem null.
-      if (textos[6]) {
-        for (var iL = 0; iL < textos[6].length; iL++) {
-          var pend = textos[6][iL];
-          ensaiosLidos.push({
-            sup: pend.sup, tipologia: pend.tipologia, concluido: null,
-            criacao: pend.criacao ? new Date(pend.criacao) : null,
-          });
-        }
-      }
-
-      var furos = ComputeDemandas.redirecionarSupsDesconhecidos(furosLidos, registrosNovos).itens;
-      var ensaios = ComputeDemandas.redirecionarSupsDesconhecidos(ensaiosLidos, registrosNovos).itens;
-
-      // Falha alto em vez de reportar sucesso vazio: se vieram furos mas NENHUM
-      // deles tem uma única data legível, o formato de data do espelho mudou de
-      // um jeito que nem o serial nem o fallback dd/MM/yyyy de dataSaneada
-      // reconhecem -- e computeDemandas devolveria zeros em todas as séries com
-      // o status dizendo "Atualizado". Erro antes de qualquer atribuição, pra
-      // manter a atomicidade tudo-ou-nada.
-      var algumaData = furos.some(function (f) { return f.criacaoOS || f.executadoDia; });
-      if (furos.length > 0 && !algumaData) {
-        throw new Error('nenhuma data legível encontrada nos furos do espelho de Avanços -- confira se o formato de data mudou (serial vs texto)');
-      }
-
-      demandasNovas = ComputeDemandas.computeDemandas(furos, periodosDoAnoSemanal(), ensaios);
-      // Mesma agregação que o build faz (build-dashboard.js), sobre os MESMOS
-      // furos já redirecionados -- sem isso o refresh atualizaria volume e
-      // financeiro do Balanço e deixaria o Δ equipes preso ao dado do build.
-      // equipesPorDia (Realizado) só vem do bloco REALIZADO (Link 6+7,
-      // logo abaixo) desde 2026-08-21 -- sem cascata de mobilizadas/ATIVAS
-      // mais. equipesPeriodo (cobertura do Realizado, lida por
-      // compute-balanco.js) fica null até o bloco REALIZADO decidir; sem
-      // Link 6+7 utilizável, o refresh preserva o que já estava em
-      // window.__DEMANDAS__ (mesmo padrão dos outros campos opcionais deste
-      // Promise.all -- nunca apaga dado bom por falha de uma fonte só).
-      demandasNovas.equipesPorDia = window.__DEMANDAS__.equipesPorDia;
-      demandasNovas.equipesPeriodo = window.__DEMANDAS__.equipesPeriodo;
-
-      var csvEq = textos[3];
-      var periodoEq = csvEq ? ComputeEquipesAtivas.mesDaAbaEq(csvEq) : null;
-
-      // Δ equipes REALIZADO (2026-08-10, recuperado e reintegrado em
-      // 2026-08-11 depois de um git reset --hard ter descartado esta branch
-      // -- ver docs/superpowers/specs/2026-08-10-equipes-realizado-roster-link6-link7-design.md
-      // e docs/superpowers/plans/2026-08-10-equipes-realizado-roster-link6-link7.md).
-      // Única fonte de equipesPorDia (Realizado) desde 2026-08-21 -- se
-      // roster (textos[7]) + produção (textos[4]) não responderem ou o
-      // cruzamento não produzir nenhum par utilizável, equipesPorDia/
-      // equipesPeriodo ficam com o valor já preservado de window.__DEMANDAS__
-      // (setado logo no início deste bloco 'if (avancosLabConfigurados)'),
-      // nunca uma fonte alternativa. Substitui o bloco de equipes FRACIONADAS
-      // (2026-08-08): o CSV de produção deixou de vir pré-agregado
-      // ("SUP,Tipo,DiaEpoch,Fracao") -- agora é CRU ("IdEquipe,SUP,Tipo,
-      // DiaEpoch") e precisa ser cruzado com o roster aqui, via
-      // ComputeEquipesRealizadoAlocado.agregarEquipesRealizadoAlocado
-      // (carry-forward de 45 dias) -- MESMA função pura que
-      // build-dashboard.js (montarEquipesRealizado) chama; os dois caminhos
-      // nunca podem divergir sobre o número.
-      if (textos[4] && textos[7]) {
-        var rosterOnlineCliente = [];
-        textos[7].trim().split('\\n').slice(1).forEach(function (linha) {
-          if (!linha) return;
-          var p = linha.split(',');
-          var d = Number(p[1]);
-          if (!isFinite(d)) return;
-          rosterOnlineCliente.push({ idEquipe: p[0], diaEpoch: d, estado: p[2] });
-        });
-        var producaoOnlineCliente = [];
-        textos[4].trim().split('\\n').slice(1).forEach(function (linha) {
-          if (!linha) return;
-          var p2 = linha.split(',');
-          var d2 = Number(p2[3]);
-          if (!isFinite(d2)) return;
-          producaoOnlineCliente.push({ idEquipe: p2[0], sup: p2[1], tipo: p2[2], diaEpoch: d2 });
-        });
-        var resultadoRealizadoCliente = ComputeEquipesRealizadoAlocado.agregarEquipesRealizadoAlocado({
-          roster: rosterOnlineCliente, producao: producaoOnlineCliente,
-        });
-        if (Object.keys(resultadoRealizadoCliente.porDia).length) {
-          // MESMO redirecionamento que furos/ensaios levam nas duas linhas do
-          // topo deste bloco: par (contrato, tipologia) que a MATRIZ não
-          // conhece vira "Diversos" em vez de sumir do Δ equipes -- e
-          // REALIZADO é a fonte PRIMÁRIA dele. Ver o gêmeo em
-          // build-dashboard.js (montarEquipesRealizado). resolverSup
-          // construída UMA VEZ fora do loop, mesmo achado da revisão final
-          // de branch, 2026-08-08.
-          var resolverSupRealizado = ComputeDemandas.resolverSupConhecido(registrosNovos);
-          var porDiaRealizadoCliente = {};
-          Object.keys(resultadoRealizadoCliente.porDia).forEach(function (chave) {
-            var partes = chave.split('||');
-            var chaveResolvida = resolverSupRealizado(partes[0], partes[1]) + '||' + partes[1];
-            if (!porDiaRealizadoCliente[chaveResolvida]) porDiaRealizadoCliente[chaveResolvida] = {};
-            var mapaDia = resultadoRealizadoCliente.porDia[chave];
-            Object.keys(mapaDia).forEach(function (dia) {
-              porDiaRealizadoCliente[chaveResolvida][dia] = (porDiaRealizadoCliente[chaveResolvida][dia] || 0) + mapaDia[dia];
-            });
-          });
-          demandasNovas.equipesPorDia = porDiaRealizadoCliente;
-          // Roster cobre múltiplos meses (backfill anual) -- declarar um mês
-          // só aqui apagaria o Δ equipes de todos os outros, mesma regra que
-          // build-dashboard.js (montarEquipesRealizado) já documenta.
-          demandasNovas.equipesPeriodo = null;
-        }
-      }
-
-      // Equipes NÃO produtivas (2026-08-05): reusa o MESMO csvEq/periodoEq já
-      // obtidos acima para ativas -- nenhuma busca nova. Informação separada,
-      // nunca somada em equipesPorDia.
-      if (csvEq && periodoEq) {
-        demandasNovas.equipesNaoProdutivas = ComputeEquipesNaoProdutivas.agregarEquipesNaoProdutivas({
-          equipes: ComputeEquipesAtivas.parseAbaEq(csvEq), ano: periodoEq.ano, mes: periodoEq.mes,
-        }).porDiaPorMotivo;
-      }
-    }
-
-    window.__REGISTROS__ = registrosNovos;
-    window.__DEMANDAS__ = demandasNovas;
-    montarTodosFiltrosMultiSemanal(window.__REGISTROS__);
-    recalcularSemanal();
-    montarAbaDemandas();
-
-    var agora = new Date();
-    var horario = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    var statusTexto = avancosLabConfigurados
-      ? 'Atualizado às ' + horario
-      : 'Atualizado (só MATRIZ) às ' + horario + ' -- Avanços/Lab pendente de configuração do Apps Script';
-    definirStatusAtualizacaoSemanal(statusTexto, false);
-  }).catch(function (erro) {
-    definirStatusAtualizacaoSemanal('Falha ao atualizar: ' + erro.message, true);
+  return LiveRefresh.atualizarDadosAoVivo({
+    fontes: {
+      matriz: LiveRefresh.URLS_PADRAO.matriz,
+      avancos: LiveRefresh.URLS_PADRAO.avancos,
+      lab: LiveRefresh.URLS_PADRAO.lab,
+      eq: LiveRefresh.URLS_PADRAO.eq,
+      producao: LiveRefresh.URLS_PADRAO.producao,
+      roster: LiveRefresh.URLS_PADRAO.roster,
+      demandasSondagem: LiveRefresh.URLS_PADRAO.demandasSondagem,
+      demandasLab: LiveRefresh.URLS_PADRAO.demandasLab,
+    },
+    modulos: {
+      ComputeEquipesRealizadoAlocado: ComputeEquipesRealizadoAlocado,
+      ComputeEquipesNaoProdutivas: ComputeEquipesNaoProdutivas,
+    },
+    ano: window.__ANO__,
+    estadoAtual: function () {
+      return { registros: window.__REGISTROS__, demandas: window.__DEMANDAS__ };
+    },
+    aplicar: function (registrosNovos, demandasNovas) {
+      window.__REGISTROS__ = registrosNovos;
+      window.__DEMANDAS__ = demandasNovas;
+      montarTodosFiltrosMultiSemanal(window.__REGISTROS__);
+      recalcularSemanal();
+      montarAbaDemandas();
+    },
+    definirStatus: definirStatusAtualizacaoSemanal,
   });
 }
 
