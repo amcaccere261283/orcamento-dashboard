@@ -446,6 +446,23 @@ function renderBarraCobertura(cobertura) {
   return '<div class="cobertura-barra"><div class="cobertura-preenchida" style="width:' + largura.toFixed(0) + '%"></div></div>';
 }
 
+// "07 EQ | 05 LÍDER": quantidade de cartões na célula e quantidade de
+// líderes DISTINTOS entre eles -- um líder pode comandar mais de uma equipe
+// (ex.: Alex em duas), então os dois números divergem de propósito. Conta só
+// as equipes que de fato resolveram (mesmo filtro de `cartoes`, para o
+// número bater com o que está desenhado).
+function renderContagemEquipes(equipesResolvidas) {
+  if (!equipesResolvidas.length) return '';
+  var lideresUnicos = {};
+  equipesResolvidas.forEach(function (equipe) {
+    if (equipe.lider) lideresUnicos[equipe.lider] = true;
+  });
+  var pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
+  return '<span class="celula-contagem">' + pad2(equipesResolvidas.length) + ' EQ'
+    + ' <span class="celula-contagem-sep">|</span> '
+    + pad2(Object.keys(lideresUnicos).length) + ' LÍDER</span>';
+}
+
 function renderCelula(sup, coluna, celula, equipesPorId, resumoPorEquipe, aviso, somenteLeitura) {
   var c = celula || { tendencia: 0, carteira: 0, capacidadeAlocada: 0, saldo: 0, equipes: [] };
   var semTendencia = !c.tendencia;
@@ -455,13 +472,15 @@ function renderCelula(sup, coluna, celula, equipesPorId, resumoPorEquipe, aviso,
   if (aviso === 'aceso') classes.push('aviso-aceso');
   if (aviso === 'mudo') classes.push('aviso-mudo');
 
-  var cartoes = (c.equipes || []).map(function (id) {
-    var equipe = equipesPorId[id];
-    if (!equipe) return '';
+  var equipesResolvidas = (c.equipes || []).map(function (id) {
+    return equipesPorId[id];
+  }).filter(Boolean);
+
+  var cartoes = equipesResolvidas.map(function (equipe) {
     // A célula É de uma coluna -- o ponto da equipe polivalente aqui dentro
     // tem que dizer a coluna em que ela está trabalhando, não a primeira que
     // ela serve.
-    return renderCartaoEquipe(equipe, resumoPorEquipe[id] || null, somenteLeitura, false, coluna);
+    return renderCartaoEquipe(equipe, resumoPorEquipe[equipe.id] || null, somenteLeitura, false, coluna);
   }).join('');
 
   // A BARRA continua sendo cobertura (capacidade ÷ tendência): é o que ela
@@ -477,7 +496,10 @@ function renderCelula(sup, coluna, celula, equipesPorId, resumoPorEquipe, aviso,
   var situacaoCelula = classificarCelula(c.tendencia, c.capacidadeAlocada);
 
   return '<td class="' + classes.join(' ') + '" data-sup="' + escapeHtml(sup) + '" data-coluna="' + escapeHtml(coluna) + '">'
+    + '<div class="celula-cabeco">'
     + '<div class="celula-tendencia"><span class="celula-rotulo">tendência </span>' + formatarNumero(c.tendencia) + '</div>'
+    + renderContagemEquipes(equipesResolvidas)
+    + '</div>'
     + '<div class="celula-status ' + (CLASSE_SITUACAO[situacaoCelula] || '') + '">'
     + (ROTULO_SITUACAO[situacaoCelula] || situacaoCelula) + ' · saldo ' + formatarNumero(c.saldo) + '</div>'
     + renderBarraCobertura(cobertura)

@@ -649,11 +649,24 @@ const CSS_SEMANAL = `
      é o mesmo sinal visual de "sem dado real aqui", sem depender só de cor. */
   .celula-hachurada { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 6px, transparent 6px 12px); }
   .celula-falta { box-shadow: inset 3px 0 0 #e0684f; }
+  /* Cabeço da célula: tendência à esquerda, contagem de equipes/líderes à
+     direita -- align-items: baseline porque os dois têm tamanho de fonte
+     bem diferente (15px vs. 10px) e centralizar verticalmente deixava o
+     texto pequeno flutuando alto demais em relação ao número grande. */
+  .celula-cabeco { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
   .celula-tendencia { font-size: 15px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
   /* A Tendência era o único número da célula sem dizer o que é (saldo e
      carteira já diziam). O rótulo vem em peso e cor normais para o número
      continuar sendo o que a vista pega primeiro. */
   .celula-rotulo { font-size: 10px; font-weight: 400; color: var(--muted); }
+  /* Quantidade de equipes/líderes alocados na célula -- neutra (cinza mudo,
+     mesma receita de .carteira/.leitura-neutra): é contagem, não juízo, e
+     não deve competir com o semáforo de situação logo abaixo. */
+  .celula-contagem {
+    font-size: 10px; font-weight: 600; color: var(--muted); white-space: nowrap;
+    letter-spacing: 0.02em; font-variant-numeric: tabular-nums; flex-shrink: 0;
+  }
+  .celula-contagem-sep { font-weight: 400; opacity: 0.5; }
   .celula-status { font-size: 11px; margin: 2px 0 6px; }
   .situacao-livre, .situacao-fora { color: var(--muted); }
   /* Demanda sem ninguém designado: é o caso mais DESCOBERTO que existe, e até
