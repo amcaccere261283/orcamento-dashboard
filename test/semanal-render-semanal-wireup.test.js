@@ -71,11 +71,15 @@ function registroSintetico(sup, tomador, financeiroMes) {
 //
 // localStorage (Task 10, rodada de correção 1): um objeto real sempre tem
 // window.localStorage -- um vm.Context sem ele simula um ambiente que não
-// existe de verdade, e é o marcador de "semana já vista"
-// (ESTADO_ALOCACAO.semanaCarregada/semanaJaVista, render-semanal.js) que
-// depende dele para distinguir "nunca teve alocação salva" de "foi
-// esvaziada de propósito". Mock mínimo em memória, isolado por chamada
-// (cada montarSandbox começa com um armazenamento vazio, como uma aba nova).
+// existe de verdade. Desde a extração da Alocação Equipes pra página própria
+// (2026-08-25), ESTADO_ALOCACAO/o marcador de "semana já vista" não moram
+// mais aqui (ver render-alocacao-pagina.js) -- quem depende de
+// window.localStorage nesta página agora é clienteHistoricoRelatorio()
+// (HistoricoRelatorioSheet), pro histórico gravado no Apps Script. O helper
+// continua necessário pelo mesmo motivo original: um vm.Context sem
+// localStorage falha assim que qualquer código tenta lê-lo/gravá-lo. Mock
+// mínimo em memória, isolado por chamada (cada montarSandbox começa com um
+// armazenamento vazio, como uma aba nova).
 function localStorageFalso() {
   const dados = {};
   return {
@@ -87,7 +91,7 @@ function localStorageFalso() {
 
 function montarSandbox(html, fetchMock) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
-  assert.equal(blocos.length, 8, 'esperava exatamente 8 <script> (vigenteIdx, dados cifrados, aviso de atualização atrasada x2, gate, fonteParaCliente, bundle, cliente)');
+  assert.equal(blocos.length, 8, 'esperava exatamente 8 <script> (vigenteIdx, __ULTIMA_ATUALIZACAO_OK__, aviso de atualização atrasada, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
   const codigo = blocos.join('\n;\n');
 
   const documentoFalso = criarDocumentoFalso();
@@ -1718,5 +1722,37 @@ test('atualizarDadosAoVivoSemanal: se o CSV de produção (equipes-online.csv) d
     'sem REALIZADO, equipesPorDia preserva o valor anterior -- nenhuma fonte alternativa entra no lugar'
   );
   assert.strictEqual(demandas.equipesPeriodo, null, 'equipesPeriodo também preserva o valor anterior (null)');
+});
+
+// --- I-3 (revisão final de 2026-08-25): trava de regressão pedida pelo spec
+// (docs/superpowers/specs/2026-08-25-alocacao-equipes-pagina-propria-design.md,
+// seção Testes) -- "evita regressão silenciosa em que os dois arquivos saem
+// duplicados por engano". A remoção hoje é um rest-destructure isolado
+// (render-semanal.js: `const { equipesCsv, osParaSup, equipesRosterPeriodo,
+// ...demandasSemAlocacao } = demandas;`) -- um rename ou um re-add futuro
+// desses 3 campos, ou da entrada da aba em ABAS_VISUALIZACAO/#secao-alocacao,
+// não era pego por nenhum teste antes deste.
+test('o blob da página semanal NÃO carrega equipesCsv/osParaSup/equipesRosterPeriodo nem alocacaoUrl -- e o HTML não tem mais a aba Alocação', () => {
+  const { decifrarComSenha } = require('../tools/comum/criptografia.js');
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: 'ID,Equipe\n4,Equipe 4', osParaSup: { '16925-25': 'SUP-0001-24' },
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
+  });
+  const html = renderSemanal({
+    registros: [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)],
+    baseline: [], demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+
+  const match = html.match(/window\.__DADOS_CIFRADOS__\s*=\s*(\{[\s\S]*?\});/);
+  assert.ok(match, 'window.__DADOS_CIFRADOS__ não encontrado no HTML gerado');
+  const dados = JSON.parse(decifrarComSenha(JSON.parse(match[1]), SENHA_FAKE));
+
+  assert.strictEqual(dados.demandas.equipesCsv, undefined, 'equipesCsv não pode mais viajar no blob da semanal -- só a Alocação consome');
+  assert.strictEqual(dados.demandas.osParaSup, undefined, 'osParaSup idem');
+  assert.strictEqual(dados.demandas.equipesRosterPeriodo, undefined, 'equipesRosterPeriodo idem');
+  assert.strictEqual(dados.alocacaoUrl, undefined, 'a URL do Apps Script de Alocação não pertence mais a esta página');
+
+  assert.doesNotMatch(html, /id="secao-alocacao"/, 'a 7ª aba foi extraída para alocacao-equipes.html -- não pode reaparecer aqui');
+  assert.doesNotMatch(html, /id="aba-alocacao"/);
 });
 

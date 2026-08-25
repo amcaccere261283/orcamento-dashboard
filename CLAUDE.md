@@ -180,10 +180,21 @@ reais — segunda a domingo, cortadas SEMPRE dentro do mês, nenhum dia de um m�
 conta no acompanhamento do vizinho; ver `tools/semanal/compute-semanal.js` e
 `docs/superpowers/specs/2026-07-30-semanal-calendario-iso-design.md`), Gráficos,
 Balanço de massa (barras divergentes por tipologia), Demandas, Alertas e
-Consolidado. Build:
-`ORCAMENTO_SENHA='...' node tools/semanal/build-dashboard.js`, e **sempre**
-`cp dist/planejamento-semanal.html docs/planejamento-semanal.html` antes de commitar.
-`test/publicacao-docs-sincronizado.test.js` trava essa cópia para as duas páginas.
+Consolidado. A sétima aba (Alocação Equipes) saiu daqui em 2026-08-25 e virou página
+própria — ver `docs/alocacao-equipes.html` logo abaixo. Build:
+`ORCAMENTO_SENHA='...' node tools/semanal/build-dashboard.js` gera os DOIS HTMLs
+(`dist/planejamento-semanal.html` e `dist/alocacao-equipes.html`) na mesma execução, e
+**sempre** `cp dist/planejamento-semanal.html docs/planejamento-semanal.html` **e**
+`cp dist/alocacao-equipes.html docs/alocacao-equipes.html` antes de commitar — os dois
+juntos, nunca só um. `test/publicacao-docs-sincronizado.test.js` trava essa cópia byte a
+byte para cada par HTML (3 no total contando o orçamento: `index.html`,
+`planejamento-semanal.html`, `alocacao-equipes.html` — além de vários CSVs/JSON também
+travados por lá, ver o arquivo).
+
+`docs/alocacao-equipes.html` — página própria (2026-08-25) com o quadro SUP × tipologia
+de alocação de equipes, a antiga sétima aba. Ver a seção
+`### Aba Alocação Equipes` mais abaixo para as regras de conta, armadilhas e a trava de
+veículo — nenhuma delas mudou na extração, só o arquivo que hospeda o código.
 
 ### Avanços online (2026-08-05)
 
@@ -1077,9 +1088,16 @@ que ninguém tenha pedido naquele momento) — chegando por uma rota diferente: 
 passo de acumulação de histórico que não avisava quando faltava um arquivo; aqui é um
 push automático que não distingue o que está pronto do que não está.
 
-### Aba Alocação Equipes (2026-08-10)
+### Aba Alocação Equipes (2026-08-10; página própria desde 2026-08-25)
 
-Sétima aba do dashboard: um quadro SUP × tipologia onde equipes de campo são arrastadas
+Nasceu como a sétima aba de `planejamento-semanal.html`; desde 2026-08-25
+(`docs/superpowers/specs/2026-08-25-alocacao-equipes-pagina-propria-design.md`) é uma
+PÁGINA PRÓPRIA, `docs/alocacao-equipes.html`, construída pelo mesmo
+`tools/semanal/build-dashboard.js` na mesma execução (registros/demandas/ano já
+calculados, sem recomputar nada) -- o código de cliente mora em
+`tools/semanal/render-alocacao-pagina.js`, não mais em `render-semanal.js`.
+`planejamento-semanal.html` ficou com 6 abas; as duas páginas se linkam uma pra outra no
+cabeçalho. Um quadro SUP × tipologia onde equipes de campo são arrastadas
 para os contratos, com persistência opcional numa Sheet. Foi construída sobre uma base
 antiga; um esforço paralelo de outra pessoa levou `origin/master` ~90 commits à frente
 (novas fontes online, Tabela Semanal reescrita) enquanto esta aba era desenvolvida. O
@@ -1118,12 +1136,12 @@ sem nada na tela. A correção (`JA_TRADUZIDAS`, lista de rótulos que passam di
 tentar traduzir) **não existia no master antes deste branch** — foi encontrada e corrigida
 durante este trabalho, então este branch carrega uma correção que a base não tinha.
 
-**A aba não usa `filtro-ativos`** (ver comentário em `render-semanal.js`, função que monta
-`#secao-alocacao`): esse filtro esconderia exatamente as linhas "Parado c/ carteira", que
+**A aba não usa `filtro-ativos`** (ver comentário em `render-alocacao-pagina.js`, função que
+monta `#secao-alocacao`): esse filtro esconderia exatamente as linhas "Parado c/ carteira", que
 são o motivo da aba existir — um SUP inativo em Volume ainda pode ter carteira parada
 esperando uma equipe.
 
-**O espelho da EQ só cobre o mês corrente.** `somenteLeitura` (`render-semanal.js`) fica
+**O espelho da EQ só cobre o mês corrente.** `somenteLeitura` (`render-alocacao-pagina.js`) fica
 `'mes-diferente'` quando a semana exibida não é do mês que `demandas.equipesPeriodo`
 descreve — a grade desenha normalmente, mas nada é arrastável, com o motivo escrito na
 tela. Não há roster fresco de outro mês para validar um arraste contra ele.
@@ -1134,13 +1152,16 @@ tela. Não há roster fresco de outro mês para validar um arraste contra ele.
 algebricamente e não serve de referência independente. Não repetir a álgebra aqui;
 seguir a explicação de lá.
 
-**Setup pendente do lado do dono do projeto:** `tools/semanal/apps-script-alocacao.gs`
-ainda não foi publicado como Web App. Enquanto isso, `RE_URL_ALOCACAO_PENDENTE`
-(`alocacao-sheet.js`) casa o literal `PENDENTE-...` de `URL_ALOCACAO` e a aba roda inteira
-em `localStorage` (`modo() === 'local'`), avisando isso no status. Uma vez publicado o
-Apps Script, qualquer pessoa com a senha do dashboard passa a poder ESCREVER na planilha
-— é um trade-off aceito, não um descuido: a senha já protege o dashboard inteiro, e o
-Apps Script não teria como autenticar o usuário sem uma segunda credencial.
+**`tools/semanal/apps-script-alocacao.gs` já foi publicado como Web App** (confirmado em
+navegador rodando em modo `sheet`) — `URL_ALOCACAO` (`render-alocacao-pagina.js`, movida
+para lá na extração de 2026-08-25) é a URL real, não mais o literal `PENDENTE-...`.
+`RE_URL_ALOCACAO_PENDENTE` (`alocacao-sheet.js`) continua existindo como mecanismo
+genérico — casa qualquer `PENDENTE-...` e faria a aba rodar em `localStorage`
+(`modo() === 'local'`) se a URL um dia voltasse a ser placeholder (ex.: uma reimplantação
+do zero) — mas hoje não é o caminho ativo. Com o Apps Script no ar, qualquer pessoa com a
+senha do dashboard pode ESCREVER na planilha — é um trade-off aceito, não um descuido: a
+senha já protege o dashboard inteiro, e o Apps Script não teria como autenticar o usuário
+sem uma segunda credencial.
 
 **Cinco mudanças de 2026-08-11** (spec:
 `docs/superpowers/specs/2026-08-11-alocacao-devolucao-e-pool-por-tipologia-design.md`,
@@ -1183,11 +1204,12 @@ plano: `docs/superpowers/plans/2026-08-11-alocacao-devolucao-pool-filtro-busca-s
 ele passaria VAZIO. O helper ganhou `registrarCelulasAlocacao()` e
 `poolAlocacao()` em 2026-08-11 justamente por isso.
 
-**Precisa ser corrigido ANTES desse Apps Script ir ao ar:** um arraste que aterrissa
-durante o carregamento assíncrono inicial da alocação pode ser sobrescrito quando a
-promise resolve. `carregarAlocacaoDaSemana` (`render-semanal.js`) faz
+**Corrigido antes do Apps Script ir ao ar** (hoje já publicado, ver acima): um arraste
+que aterrissa durante o carregamento assíncrono inicial da alocação
+podia ser sobrescrito quando a promise resolvia. `carregarAlocacaoDaSemana`
+(`render-alocacao-pagina.js`) fazia
 `ESTADO_ALOCACAO.alocacao = mapa || {}` no `.then()` de `clienteAlocacao().carregar()` —
-uma ATRIBUIÇÃO, não um merge. Em modo local isso é inofensivo hoje: `carregar()` resolve
+uma ATRIBUIÇÃO, não um merge. Em modo local isso era inofensivo: `carregar()` resolve
 numa microtask (leitura síncrona de `localStorage` embrulhada em `async`), tempo pequeno
 demais para um clique de usuário colidir. Em modo `sheet`, `carregar()` vira uma
 ida-e-volta de rede de verdade — a janela de corrida deixa de ser teórica.

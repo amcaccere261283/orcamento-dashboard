@@ -369,6 +369,24 @@ const CSS_ABAS_SEMANAL = `
 // markup seria a outra saída, mas custaria a legibilidade do nome (a linha é
 // "Tendência", não um total) e traria junto o border-bottom.
 const CSS_SEMANAL = `
+  /* Link discreto entre as duas páginas irmãs (I-6, revisão de
+     2026-08-25): planejamento-semanal.html <-> alocacao-equipes.html.
+     Vive dentro do MESMO .header-bar flex de cssBase() (tools/comum/
+     render-shell.js, markupCabecalho 'extra') -- sem componente novo, sem
+     mexer no layout de filtros/abas. Mesmos tokens de --text-secondary/
+     --border/--text-primary e o âmbar de acento (#f6b53f) do resto da
+     página, no mesmo padrão de hover de #limpar-filtros (cssBase()). */
+  .link-pagina-irma {
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    white-space: nowrap;
+  }
+  .link-pagina-irma:hover { color: var(--text-primary); border-color: #f6b53f; }
+  .link-pagina-irma:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
   /* Aviso "sem atualização hoje" (2026-08-21) -- some por padrão
      (display:none no HTML estático); o script de gate (sempre roda, mesmo
      sem senha) decide se mostra, comparando window.__ULTIMA_ATUALIZACAO_OK__
@@ -446,14 +464,20 @@ const CSS_SEMANAL = `
   .titulo-alertas-tendencia { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
   .linha-nota-alertas td { color: var(--muted); font-size: 13px; padding: 12px 8px; }
 
-  /* Aba ALOCAÇÃO EQUIPES (2026-08-10, Task 9). render-aba-alocacao.js (Task 8)
-     emitiu o markup sem nenhuma regra própria de propósito -- as classes
-     abaixo cobrem o que ele desenha e o que a interação de arrasto desta
-     task liga/desliga. Mesmas variáveis de cssBase() (--surface-1/--border/
-     --text-primary/--text-secondary/--muted/--gridline) e o mesmo âmbar de
-     acento (#f6b53f) do resto da página -- table/th/td genéricos (também de
-     cssBase()) já cobrem .matriz-alocacao/.resumo-sup-alocacao/
-     .resumo-equipe-alocacao, então não são redeclarados aqui. */
+  /* CSS da Alocação Equipes. Desde 2026-08-25 essa aba não mora mais em
+     planejamento-semanal.html -- é a página própria alocacao-equipes.html,
+     renderizada por render-alocacao-pagina.js, que é quem CONSOME este
+     bloco (via CSS_SEMANAL, exportado abaixo). Ele mora aqui porque
+     CSS_SEMANAL é compartilhado entre os dois arquivos -- NÃO remova nem
+     mova ao mexer na semanal só porque a aba não aparece mais aqui.
+     render-aba-alocacao.js emitiu o markup sem nenhuma regra própria de
+     propósito -- as classes abaixo cobrem o que ele desenha e o que a
+     interação de arrasto liga/desliga. Mesmas variáveis de cssBase()
+     (--surface-1/--border/--text-primary/--text-secondary/--muted/
+     --gridline) e o mesmo âmbar de acento (#f6b53f) do resto da página --
+     table/th/td genéricos (também de cssBase()) já cobrem
+     .matriz-alocacao/.resumo-sup-alocacao/.resumo-equipe-alocacao, então
+     não são redeclarados aqui. */
   /* A marca d'água (.watermark, cssBase()) é position:fixed com z-index 0 --
      ou seja, um elemento POSICIONADO, que na ordem de pintura vem depois de
      todo conteúdo em fluxo normal. Ela não fica atrás do quadro: atravessa
@@ -1922,6 +1946,16 @@ function gridCsvComoXlsx(texto) {
 // estar pendente hoje, mas o mecanismo continua genérico pras duas.
 var RE_URL_PENDENTE = /^PENDENTE-/;
 
+// ATENÇÃO -- esta função existe DUPLICADA em tools/semanal/render-alocacao-pagina.js
+// (mesmo nome, cópia independente desde a extração da página própria de
+// Alocação em 2026-08-25). As duas já nasceram diferentes (esta manteve
+// csvEq/periodoEq só para equipesNaoProdutivas; a de alocação manteve o
+// bloco osParaSup inteiro) -- não são mantidas em sincronia automática. O
+// contrato de índices posicionais textos[N] do Promise.all abaixo e a regra
+// de "escrever por ÚLTIMO em demandasNovas" (nunca sobrescrever um campo já
+// preenchido por engano) valem nas duas cópias: mexeu aqui, confira a outra.
+// Não refatorar para compartilhar sem uma rodada dedicada a isso.
+//
 // Tudo-ou-nada, mas só ENTRE as fontes que este refresh de fato tentou
 // atualizar: nenhum window.__REGISTROS__/window.__DEMANDAS__ é sobrescrito
 // antes de todos os fetches tentados E de todo o parsing terminarem com
@@ -2230,6 +2264,7 @@ ${markupCabecalho({
     titulo: 'Planejamento Semanal',
     subtitulo: escapeHtml(avisoAtualizacao ? `${formatarMesAno(geradoEm)} · ${avisoAtualizacao}` : formatarMesAno(geradoEm)),
     logo: logoImg,
+    extra: '<a class="link-pagina-irma" href="alocacao-equipes.html">Ver Alocação Equipes →</a>',
     recuo: '  ',
   })}
   <div id="aviso-atualizacao-atrasada" class="aviso-atualizacao-atrasada" style="display:none"></div>
@@ -2283,9 +2318,17 @@ ${markupFiltros(FILTROS_ALERTAS_SEMANAL, { recuo: '      ', classes: 'filtros-al
 </html>`;
 }
 
-// CSS_SEMANAL sai junto para tools/semanal/snapshot-alocacao.js poder montar o
-// snapshot de revisão de design com o MESMO CSS que a página real emite. Sem
-// isso o gerador teria que recortar o template literal do fonte por regex, e
-// uma revisão feita sobre um CSS ligeiramente diferente do de produção julga
-// uma tela que não existe.
+// Exports além de renderSemanal, e por quê:
+// - CSS_SEMANAL: pra tools/semanal/snapshot-alocacao.js poder montar o
+//   snapshot de revisão de design com o MESMO CSS que a página real emite
+//   (sem isso o gerador teria que recortar o template literal do fonte por
+//   regex, e uma revisão feita sobre um CSS ligeiramente diferente do de
+//   produção julga uma tela que não existe) -- e, desde 2026-08-25, também
+//   pra render-alocacao-pagina.js, que reaproveita o MESMO CSS_SEMANAL como
+//   shell da página própria de Alocação (ver o comentário no bloco CSS da
+//   Alocação, acima).
+// - CSS_ABAS_SEMANAL, CSS_DEMANDAS, SCRIPT_AVISO_ATUALIZACAO_ATRASADA,
+//   opcoesMesSemanal: mesma razão -- render-alocacao-pagina.js importa os
+//   quatro direto daqui em vez de duplicá-los, já que os dois arquivos
+//   compõem o mesmo shell visual.
 module.exports = { renderSemanal, CSS_SEMANAL, CSS_ABAS_SEMANAL, CSS_DEMANDAS, SCRIPT_AVISO_ATUALIZACAO_ATRASADA, opcoesMesSemanal };

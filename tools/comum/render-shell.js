@@ -309,20 +309,29 @@ function cssBase() {
 // com o recuo, exatamente como o template original, que interpolava uma
 // string vazia ali.
 //
-// ESCAPE É DO CHAMADOR: 'titulo' e 'subtitulo' entram crus no HTML, sem
-// passar por escapeHtml. É assim porque o orçamento já escapa o que precisa
-// antes de chamar (o subtítulo tem data formatada), e escapar aqui mudaria o
-// texto gerado. Quem passar valor vindo de planilha ou de usuário escapa
-// antes.
-function markupCabecalho({ titulo, subtitulo, logo, recuo }) {
+// 'extra' (2026-08-25, I-6 da revisão de alocacao-equipes-pagina-propria):
+// markup pronto opcional, um irmão de .header-bar-title dentro do mesmo
+// .header-bar flex -- usado hoje só pelo link discreto entre
+// planejamento-semanal.html e alocacao-equipes.html. Omitido (undefined)
+// não acrescenta NADA à saída, nem um caractere: é o que mantém
+// test/orcamento-html-inalterado.test.js verde sem o orçamento (que não usa
+// este parâmetro) precisar mudar.
+//
+// ESCAPE É DO CHAMADOR: 'titulo', 'subtitulo' e 'extra' entram crus no HTML,
+// sem passar por escapeHtml. É assim porque o orçamento já escapa o que
+// precisa antes de chamar (o subtítulo tem data formatada), e escapar aqui
+// mudaria o texto gerado. Quem passar valor vindo de planilha ou de usuário
+// escapa antes.
+function markupCabecalho({ titulo, subtitulo, logo, extra, recuo }) {
   var r = recuo === undefined ? '' : recuo;
   var img = logo === undefined || logo === null ? '' : logo;
+  var extraMarkup = extra === undefined || extra === null || extra === '' ? '' : '\n' + r + '  ' + extra;
   return r + '<div class="header-bar">\n'
     + r + '  ' + img + '\n'
     + r + '  <div class="header-bar-title">\n'
     + r + '    <h1>' + titulo + '</h1>\n'
     + r + '    <div class="generated">' + subtitulo + '</div>\n'
-    + r + '  </div>\n'
+    + r + '  </div>' + extraMarkup + '\n'
     + r + '</div>';
 }
 

@@ -19,7 +19,9 @@ const crypto = require('node:crypto');
 // documentado, então qualquer diferença -- inclusive só de fim de linha --
 // significa que os dois arquivos não saíram da mesma cópia.
 //
-// Os dois pares são checados de forma independente. Se um par ainda não
+// Cada par abaixo é checado de forma independente (a lista cresce conforme
+// novos arquivos entram em ARQUIVOS_PUBLICAR -- não fixe esse comentário num
+// número, ele já ficou errado duas vezes). Se um par ainda não
 // existe neste worktree (a página semanal só é construída na tarefa de
 // publicação, e o build exige as planilhas em G:\ mais a senha), o teste
 // PULA com a razão explícita -- não reprova por ausência, que transformaria

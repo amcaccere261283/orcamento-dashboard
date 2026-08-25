@@ -528,7 +528,14 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
     avisoAtualizacao, ultimaAtualizacaoOkIso: ultimaAtualizacaoOkIsoValor,
   });
-  const outPathAlocacao = path.join(__dirname, '..', '..', 'dist', 'alocacao-equipes.html');
+  // Deriva do MESMO diretório de resolvedOutPath (não de um caminho fixo
+  // pra dist/) -- build({ outPath: '...' }) existe pra permitir redirecionar
+  // um build (ex.: testes), e um caminho fixo aqui ignoraria esse contrato
+  // em silêncio: escreveria o primeiro arquivo em outPath e mesmo assim
+  // sobrescreveria dist/alocacao-equipes.html do repositório. mkdirSync já
+  // rodou pra este diretório acima (é o mesmo de resolvedOutPath), então não
+  // precisa rodar de novo aqui.
+  const outPathAlocacao = path.join(path.dirname(resolvedOutPath), 'alocacao-equipes.html');
   fs.writeFileSync(outPathAlocacao, htmlAlocacao, 'utf8');
   console.log(`Wrote ${htmlAlocacao.length} bytes to ${outPathAlocacao}`);
 

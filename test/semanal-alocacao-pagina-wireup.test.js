@@ -10,9 +10,11 @@ const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 // esta página própria, quando a Alocação Equipes deixou de ser uma aba de
 // planejamento-semanal.html pra virar tools/semanal/render-alocacao-pagina.js
 // (ver docs/superpowers/sdd/2026-08-25-alocacao-equipes-pagina-propria).
-// A cópia ANTIGA continua rodando em semanal-render-semanal-wireup.test.js
-// até a Task 3 remover a aba de lá -- as duas suítes verdes ao mesmo tempo
-// são a prova de que esta migração não mudou nenhum comportamento.
+// A Task 3 já removeu a aba de lá (planejamento-semanal.html não tem mais
+// id="aba-alocacao"/id="secao-alocacao" nem os 3 campos exclusivos do blob --
+// ver o teste de regressão em semanal-render-semanal-wireup.test.js). As duas
+// suítes terem ficado verdes durante a migração é o que provou que ela não
+// mudou nenhum comportamento.
 
 // Senha fictícia -- nunca a real (ver CLAUDE.md/instruções do projeto).
 const SENHA_FAKE = 'senha-fake-de-teste-e2e-nao-e-a-real';
@@ -63,16 +65,17 @@ function localStorageFalso() {
 // HTML gerado, na mesma ordem em que um navegador executaria -- nenhum
 // reescrito, nenhum resumido. Versão LOCAL (não reaproveita a do arquivo
 // original): a página nova não tem markupAbas/sete abas, mas continua com os
-// mesmos 8 blocos de <script> do arquivo original (vigenteIdx, dados
-// cifrados, aviso de atualização atrasada, gate, fonteParaCliente, bundle,
-// cliente) -- markupAbas nunca foi um <script> à parte em nenhuma das duas
-// páginas, então a contagem não muda. Confirmado rodando
-// renderAlocacaoPagina({...}) e contando os pares <script>...</script> que
-// esta mesma regex extrai (não a contagem bruta de aberturas '<script>', que
-// inclui ocorrências do literal dentro do bundle de módulos) -- 8, não 7.
+// mesmos 8 blocos de <script> do arquivo original (vigenteIdx,
+// __ULTIMA_ATUALIZACAO_OK__, aviso de atualização atrasada, dados cifrados,
+// gate, fonteParaCliente, bundle, cliente) -- markupAbas nunca foi um
+// <script> à parte em nenhuma das duas páginas, então a contagem não muda.
+// Confirmado rodando renderAlocacaoPagina({...}) e contando os pares
+// <script>...</script> que esta mesma regex extrai (não a contagem bruta de
+// aberturas '<script>', que inclui ocorrências do literal dentro do bundle
+// de módulos) -- 8, não 7.
 function montarSandbox(html, fetchMock) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
-  assert.equal(blocos.length, 8, 'esperava exatamente 8 <script> (vigenteIdx, dados cifrados, aviso de atualização atrasada, gate, fonteParaCliente, bundle, cliente)');
+  assert.equal(blocos.length, 8, 'esperava exatamente 8 <script> (vigenteIdx, __ULTIMA_ATUALIZACAO_OK__, aviso de atualização atrasada, dados cifrados, gate, fonteParaCliente, bundle, cliente)');
   const codigo = blocos.join('\n;\n');
 
   const documentoFalso = criarDocumentoFalso();
@@ -160,6 +163,155 @@ test('osParaSup viaja dentro do blob cifrado e chega em equipesDoQuadro -- supRe
   assert.strictEqual(alocado.coluna, 'ST');
 });
 
+// --- I-1/I-2 (revisão final de 2026-08-25): o live-refresh copiado
+// (atualizarDadosAoVivoSemanal, ~250 linhas) não tinha nenhum teste nesta
+// página nova -- a página antiga mantém dois testes equivalentes em
+// test/semanal-render-semanal-wireup.test.js, esta não tinha nenhum. Monta o
+// mesmo csvMatriz/csvAvancos/csvLab mínimos que aquele arquivo já usa.
+function csvMatrizComSup(sup) {
+  return 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERMINO,SONDAGEM,BASE,'
+    + Array(12).fill('mes').join(',') + ',PICO,MÉDIA,PROD.,DIAS,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,TICKET,'
+    + Array(12).fill('mes').join(',') + ',TOTAL,TOTAL INICIAL,OBS\n'
+    + `Origem-B,Grupo-B,Tomador-Novo,${sup},Escopo,Apoio,01/2026,12/2026,ST,P,`
+    + Array(12).fill('0').join(',') + ',2,2,8,25,'
+    + Array(12).fill('0').join(',') + ',100,100,9999,'
+    + Array(12).fill('0').join(',') + ',100,100,\n'
+    + ',,,,,,,,,T,'
+    + Array(12).fill('0').join(',') + ',0,0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,0,'
+    + Array(12).fill('0').join(',') + ',0,0,\n';
+}
+const CSV_AVANCOS_VAZIO = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n';
+const CSV_LAB_VAZIO = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
+
+test('I-1: clicar em "Atualizar dados" redesenha #secao-alocacao com o roster NOVO -- equipesCsv atualizado chega em equipesDoQuadro', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-08-01T00:00:00Z'); // vigenteIdx = 7 (agosto)
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
+    osParaSup: { '16925-25': 'SUP-0001-24' },
+  });
+  const html = renderAlocacaoPagina({ registros, demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+
+  // Roster NOVO: equipe 77 no lugar da 4, mesma coluna do dia -- prova que o
+  // refresh TROCA o roster (não acrescenta) e que o quadro reflete o CSV que
+  // acabou de chegar do clique, não o do build.
+  const csvEqNovo = csvEqComOs('CCR RioSP (16925-25)').replace('4,José I. Amaral', '77,Equipe Setenta e Sete');
+
+  const fetchMock = (url) => {
+    if (url.indexOf('demandas-sondagem-online.csv') !== -1 || url.indexOf('demandas-lab-online.json') !== -1
+      || url.indexOf('equipes-online.csv') !== -1 || url.indexOf('equipes-roster-online.csv') !== -1) {
+      return Promise.resolve({ ok: false, status: 404 });
+    }
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(csvMatrizComSup('SUP-0001-24')) });
+    if (url.indexOf('pub?gid=199381651') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(csvEqNovo) });
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_VAZIO) });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_VAZIO) });
+    return Promise.reject(new Error('fetch inesperado neste teste: ' + url));
+  };
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  sandbox.ESTADO_ALOCACAO.semanaIdx = 0;
+  sandbox.montarAbaAlocacao();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const secaoAntes = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  assert.notStrictEqual(secaoAntes, '', 'pré-condição: a grade do roster inicial (build) já está desenhada');
+  assert.ok(sandbox.ESTADO_ALOCACAO.equipes.some((e) => e.id === '4'), 'pré-condição: a equipe do build (id 4) está no quadro antes do clique');
+
+  // Dispara o clique de verdade (não chama atualizarDadosAoVivoSemanal()
+  // direto) -- prova que o listener registrado em
+  // document.getElementById('atualizar-dashboard').addEventListener('click', ...)
+  // está de fato ligado nesta página nova, não só que a função existe.
+  documentoFalso.getElementById('atualizar-dashboard').listeners.click();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.match(sandbox.window.__DEMANDAS__.equipesCsv, /Equipe Setenta e Sete/, 'o roster novo (equipesCsv) precisa chegar em window.__DEMANDAS__ depois do clique');
+
+  const equipeNova = sandbox.ESTADO_ALOCACAO.equipes.find((e) => e.id === '77');
+  assert.ok(equipeNova, 'esperava a equipe 77 (do roster NOVO) em ESTADO_ALOCACAO.equipes -- prova que equipesDoQuadro recebeu o equipesCsv atualizado');
+  assert.strictEqual(sandbox.ESTADO_ALOCACAO.equipes.some((e) => e.id === '4'), false, 'a equipe antiga (do build) não pode sobreviver ao refresh -- o quadro reflete o roster NOVO');
+
+  const secaoDepois = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  assert.notStrictEqual(secaoDepois, secaoAntes, '#secao-alocacao precisa ser REDESENHADA pelo clique -- não pode ficar com o HTML de antes');
+});
+
+// I-2: uma falha na Sheet EQ (textos[3], catch(() => null)) não pode apagar
+// a grade que já estava na tela -- antes desta correção, csvEq null zerava
+// incondicionalmente equipesCsv/osParaSup/equipesRosterPeriodo em
+// demandasNovas (um objeto NOVO desde ComputeDemandas.computeDemandas, não
+// mais window.__DEMANDAS__), e montarAbaAlocacao via semRoster mostrava só a
+// guarda -- com o status dizendo "Atualizado" em verde.
+test('I-2: a Sheet EQ falhando no "Atualizar dados" preserva o roster que já estava na tela -- não esvazia a grade', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-08-01T00:00:00Z');
+  const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
+    equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
+    equipesRosterPeriodo: { ano: 2026, mes: 8 },
+    osParaSup: { '16925-25': 'SUP-0001-24' },
+  });
+  const html = renderAlocacaoPagina({ registros, demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
+
+  const fetchMock = (url) => {
+    if (url.indexOf('demandas-sondagem-online.csv') !== -1 || url.indexOf('demandas-lab-online.json') !== -1
+      || url.indexOf('equipes-online.csv') !== -1 || url.indexOf('equipes-roster-online.csv') !== -1) {
+      return Promise.resolve({ ok: false, status: 404 });
+    }
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(csvMatrizComSup('SUP-0001-24')) });
+    // A Sheet EQ (gid=199381651) está fora do ar -- atualizarDadosAoVivoSemanal
+    // engole isso com .catch(() => null), então textos[3] chega null aqui.
+    if (url.indexOf('pub?gid=199381651') !== -1) return Promise.reject(new Error('Sheet EQ fora do ar (simulado)'));
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_VAZIO) });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_VAZIO) });
+    return Promise.reject(new Error('fetch inesperado neste teste: ' + url));
+  };
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  sandbox.ESTADO_ALOCACAO.semanaIdx = 0;
+  sandbox.montarAbaAlocacao();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(sandbox.ESTADO_ALOCACAO.equipes.some((e) => e.id === '4'), 'pré-condição: a grade do build está desenhada com a equipe 4 antes do clique');
+
+  documentoFalso.getElementById('atualizar-dashboard').listeners.click();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.match(
+    sandbox.window.__DEMANDAS__.equipesCsv, /José I\. Amaral/,
+    'com a Sheet EQ fora do ar, equipesCsv precisa continuar sendo o CSV do build (preservado), nunca null'
+  );
+  // JSON.parse(JSON.stringify(...)), não deepStrictEqual direto: o objeto
+  // nasce dentro do vm.Context (outro Realm), e deepStrictEqual compara
+  // protótipo -- {} do sandbox não é === {} deste processo, mesmo com a
+  // MESMA estrutura de dados (mesmo achado registrado nos outros testes
+  // deste arquivo, ex. "semearDoRealizado").
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(sandbox.window.__DEMANDAS__.osParaSup)), { '16925-25': 'SUP-0001-24' },
+    'osParaSup também precisa ser preservado, mesma regra'
+  );
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(sandbox.window.__DEMANDAS__.equipesRosterPeriodo)), { ano: 2026, mes: 8 },
+    'equipesRosterPeriodo idem'
+  );
+
+  assert.strictEqual(
+    documentoFalso.getElementById('secao-alocacao').innerHTML.indexOf('Sheet espelho da aba EQ não respondeu') === -1,
+    true,
+    'a guarda semRoster NÃO pode aparecer -- a grade continua desenhada com o roster preservado, não em branco'
+  );
+  assert.ok(
+    sandbox.ESTADO_ALOCACAO.equipes.some((e) => e.id === '4'),
+    'a equipe 4 (do roster preservado) continua no quadro depois do clique, mesmo com a Sheet EQ fora do ar'
+  );
+});
+
 // --- Rodada de correção 1 (verificação em navegador real, 2026-08-10): o
 // quadro abria com 114 células vazias e 114 cartões no pool -- "Repor o
 // realizado" preenchia certo (provando que osParaSup/semearDoRealizado
@@ -169,7 +321,7 @@ test('osParaSup viaja dentro do blob cifrado e chega em equipesDoQuadro -- supRe
 // contrato: abrir SEM nada salvo semeia sozinho; abrir uma semana ESVAZIADA
 // de propósito (Limpar alocação) NÃO volta a semear -- as duas situações são
 // {} na hora de ler, e é o marcador 'alocacao-equipes:vista:<chave>'
-// (ESTADO_ALOCACAO.semanaCarregada/semanaJaVista, render-semanal.js) que as
+// (ESTADO_ALOCACAO.semanaCarregada/semanaJaVista, render-alocacao-pagina.js) que as
 // distingue.
 
 test('a semana abre semeada do realizado no PRIMEIRO desenho da aba, sem precisar clicar em "Repor o realizado" -- a regressão relatada', async () => {
@@ -326,12 +478,14 @@ test('window.__ALOCACAO_URL__ vem do blob cifrado (URL_ALOCACAO) -- nunca em tex
 // 'sheet' e SEGURAM a resposta do fetch aberta manualmente (o mock nunca
 // resolve sozinho) para provar que uma ação do usuário no meio do caminho
 // sobrevive -- sem a proteção de ESTADO_ALOCACAO.geracaoAlocacao
-// (carregarAlocacaoDaSemana, render-semanal.js) estes dois falhariam.
+// (carregarAlocacaoDaSemana, render-alocacao-pagina.js) estes dois falhariam.
 //
 // clienteAlocacao() memoiza o cliente na PRIMEIRA chamada (dentro do
 // primeiro montarAbaAlocacao, que já roda em modo local durante
-// tentarDesbloquear -- a URL do payload cifrado é sempre 'PENDENTE-...',
-// URL_ALOCACAO é uma constante fixa em render-semanal.js). Por isso os dois
+// tentarDesbloquear). URL_ALOCACAO é uma constante fixa em
+// render-alocacao-pagina.js -- a URL do Apps Script publicado, não mais
+// 'PENDENTE-...' (ver o teste logo acima, que confirma que ela chega ao
+// cliente pelo blob cifrado). Por isso os dois
 // testes resetam ESTADO_ALOCACAO.cliente pra null DEPOIS de desbloquear,
 // simulando o momento em que o dono do projeto publica o Apps Script e a
 // página é recarregada com a URL nova.

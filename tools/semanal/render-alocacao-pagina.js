@@ -63,9 +63,8 @@ const BUNDLE_ARQUIVOS_ALOCACAO = [
   'render-aba-alocacao.js',
 ];
 
-// Placeholder até a Task 2 -- será substituído pelo script cliente completo
-// (estado/arrasto/live-refresh). Mantém a página funcional (gate abre, seção
-// existe vazia) já nesta Task, testável por si só.
+// Script cliente completo da página: estado, filtros, arrasto, live-refresh
+// (atualizarDadosAoVivoSemanal) e a montagem da grade de Alocação.
 const SCRIPT_CLIENTE_ALOCACAO = `
 var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaAlocacao = MODULOS['render-aba-alocacao.js'];
@@ -120,25 +119,28 @@ function fecharTendenciaVigente(dados) {
   return dados && dados.registros ? dados.registros : dados;
 }
 
-// --- Alocação Equipes (Task 9/10, 2026-08-10) --------------------------------
+// --- Alocação Equipes -----------------------------------------------------
 // Arrastar equipe para contrato, recalculando na hora -- ver
-// docs/superpowers/specs/2026-08-10-semanal-alocacao-equipes-design.md. Task 9
-// deixou pronto o estado, aplicarMovimento, semearDoRealizado,
-// selecionarSemanaAlocacao e montarAbaAlocacao; a Task 10 ligou a sétima aba de
-// ponta a ponta: ABAS_VISUALIZACAO, o gancho no ciclo de redesenho de
-// recalcularSemanal, os filtros compartilhados (indicesFiltrados, não
-// indicesDaAba -- ver o comentário em montarAbaAlocacao) e os guardas
-// semRoster/somenteLeitura.
+// docs/superpowers/specs/2026-08-10-semanal-alocacao-equipes-design.md
+// (desenho original, quando isto era a 7ª aba de planejamento-semanal.html)
+// e docs/superpowers/specs/2026-08-25-alocacao-equipes-pagina-propria-design.md
+// (extração pra página própria). O estado (aplicarMovimento,
+// semearDoRealizado, selecionarSemanaAlocacao, montarAbaAlocacao), os filtros
+// compartilhados (indicesFiltrados, não indicesDaAba -- ver o comentário em
+// montarAbaAlocacao) e os guardas semRoster/somenteLeitura chamam
+// montarAbaAlocacao() direto a cada mudança de filtro/mês/semana -- esta
+// página não tem um ciclo tipo recalcularSemanal/ABAS_VISUALIZACAO (isso era
+// mecanismo da semanal, que hospedava 7 abas; aqui só existe esta).
 //
 // A URL do web app de alocação viaja DENTRO do blob cifrado (ver
-// renderSemanal, URL_ALOCACAO), não em texto puro no HTML: só quem destrava a
-// página a enxerga. Enquanto o Apps Script não for publicado, o literal fica
-// 'PENDENTE-...' e a aba roda inteira em localStorage -- mesmo padrão de
-// RE_URL_PENDENTE, e é o estado inicial do recurso.
+// renderAlocacaoPagina, URL_ALOCACAO), não em texto puro no HTML: só quem
+// destrava a página a enxerga. Enquanto o Apps Script não for publicado, o
+// literal fica 'PENDENTE-...' e a aba roda inteira em localStorage -- mesmo
+// padrão de RE_URL_PENDENTE, e é o estado inicial do recurso.
 // semanaCarregada: a chaveSemana (AlocacaoSheet.chaveSemana) cujo mapa já foi
 // buscado (e, se for o caso, semeado) -- ver carregarAlocacaoDaSemana logo
-// abaixo. Sem isto, montarAbaAlocacao (chamada a cada recalcularSemanal, ou
-// seja, a cada troca de filtro/mês) buscaria a alocação de novo em toda
+// abaixo. Sem isto, montarAbaAlocacao (chamada a cada troca de filtro/mês)
+// buscaria a alocação de novo em toda
 // tecla, sobrescrevendo movimentos locais em trânsito.
 //
 // geracaoAlocacao: contador incrementado toda vez que a INTENÇÃO do usuário
@@ -983,6 +985,16 @@ function gridCsvComoXlsx(texto) {
 // estar pendente hoje, mas o mecanismo continua genérico pras duas.
 var RE_URL_PENDENTE = /^PENDENTE-/;
 
+// ATENÇÃO -- esta função existe DUPLICADA em tools/semanal/render-semanal.js
+// (mesmo nome, cópia independente desde a extração desta página própria em
+// 2026-08-25). As duas já nasceram diferentes (a semanal manteve
+// csvEq/periodoEq só para equipesNaoProdutivas; esta manteve o bloco
+// osParaSup inteiro) -- não são mantidas em sincronia automática. O contrato
+// de índices posicionais textos[N] do Promise.all abaixo e a regra de
+// "escrever por ÚLTIMO em demandasNovas" (nunca sobrescrever um campo já
+// preenchido por engano) valem nas duas cópias: mexeu aqui, confira a outra.
+// Não refatorar para compartilhar sem uma rodada dedicada a isso.
+//
 // Tudo-ou-nada, mas só ENTRE as fontes que este refresh de fato tentou
 // atualizar: nenhum window.__REGISTROS__/window.__DEMANDAS__ é sobrescrito
 // antes de todos os fetches tentados E de todo o parsing terminarem com
@@ -1120,19 +1132,24 @@ function atualizarDadosAoVivoSemanal() {
       // A aba Alocação Equipes recomputa o roster a partir deste CSV a cada
       // troca de semana -- sem atualizá-lo aqui, o quadro continuaria
       // mostrando o roster do momento do build depois de um "Atualizar
-      // dados". null por padrão (nunca ''), mesma regra de
-      // montarEquipesAtivas (build-dashboard.js): sem {ano, mes} o cliente
-      // não sabe a que mês os dias pertencem, e roster sem calendário é
-      // pior que nenhum.
-      demandasNovas.equipesCsv = null;
-      // osParaSup segue a mesma regra -- ver o comentário simétrico em
-      // montarEquipesAtivas (build-dashboard.js).
-      demandasNovas.osParaSup = null;
+      // dados".
+      // Ao contrário de montarEquipesAtivas (build-dashboard.js, que roda no
+      // build e não tem valor anterior pra preservar), aqui PRESERVA o que já
+      // estava em window.__DEMANDAS__ por padrão -- mesma simetria de
+      // equipesPorDia/equipesPeriodo acima: esta é a ÚNICA página que consome
+      // estes 3 campos, e escrever null zeraria a grade inteira de Alocação
+      // com o status mostrando "Atualizado" em verde caso a Sheet EQ falhe
+      // (csvEq null). Só sobrescreve com o dado novo dentro do bloco
+      // if (periodoEq) abaixo.
+      demandasNovas.equipesCsv = window.__DEMANDAS__.equipesCsv;
+      // osParaSup segue a mesma regra de preservação.
+      demandasNovas.osParaSup = window.__DEMANDAS__.osParaSup;
       // equipesRosterPeriodo (2026-08-21): cobertura da Sheet EQ, separada
       // de equipesPeriodo (cobertura do Realizado/Link 6+7) -- ver o
       // comentário longo em build-dashboard.js sobre por que os dois campos
-      // não podem mais compartilhar o mesmo nome.
-      demandasNovas.equipesRosterPeriodo = null;
+      // não podem mais compartilhar o mesmo nome. Preservado pela mesma regra
+      // acima.
+      demandasNovas.equipesRosterPeriodo = window.__DEMANDAS__.equipesRosterPeriodo;
 
       // osParaSup: só depende de 'furos', usado pela aba Alocação Equipes
       // (equipesDoQuadro resolve supRealizado/colunaRealizada a partir dele).
@@ -1290,6 +1307,7 @@ ${markupCabecalho({
     titulo: 'Alocação Equipes',
     subtitulo: escapeHtml(avisoAtualizacao ? `${formatarMesAno(geradoEm)} · ${avisoAtualizacao}` : formatarMesAno(geradoEm)),
     logo: logoImg,
+    extra: '<a class="link-pagina-irma" href="planejamento-semanal.html">← Planejamento Semanal</a>',
     recuo: '  ',
   })}
   <div id="aviso-atualizacao-atrasada" class="aviso-atualizacao-atrasada" style="display:none"></div>

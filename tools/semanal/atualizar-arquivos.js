@@ -59,6 +59,7 @@ const BUSCAS = [
 // URL_ESPELHO_DEMANDAS_LAB).
 const ARQUIVOS_PUBLICAR = [
   'planejamento-semanal.html',
+  'alocacao-equipes.html',
   'avancos-online.csv',
   'lab-online.csv',
   'equipes-online.csv',

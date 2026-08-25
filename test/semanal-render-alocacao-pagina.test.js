@@ -32,3 +32,22 @@ test('não tem markup das outras 6 abas', () => {
   assert.doesNotMatch(html, /id="secao-semanal"/);
   assert.doesNotMatch(html, /id="secao-consolidado"/);
 });
+
+// I-3 (revisão final de 2026-08-25): trava de regressão pedida pelo spec
+// (docs/superpowers/specs/2026-08-25-alocacao-equipes-pagina-propria-design.md,
+// seção Testes) -- o blob desta página nunca teve "baseline" (renderAlocacaoPagina
+// monta `{ registros, demandas, alocacaoUrl }`, sem o campo), e nada travava
+// isso: um re-add futuro (ex.: copiar um trecho da semanal por engano)
+// passaria batido.
+test('o blob da página de Alocação NÃO carrega "baseline" -- essa página nunca teve linha de base', () => {
+  const { decifrarComSenha } = require('../tools/comum/criptografia.js');
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa')];
+  const html = renderAlocacaoPagina({ registros, demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
+
+  const match = html.match(/window\.__DADOS_CIFRADOS__\s*=\s*(\{[\s\S]*?\});/);
+  assert.ok(match, 'window.__DADOS_CIFRADOS__ não encontrado no HTML gerado');
+  const dados = JSON.parse(decifrarComSenha(JSON.parse(match[1]), SENHA_FAKE));
+
+  assert.strictEqual(dados.baseline, undefined, 'baseline não pertence à página de Alocação -- só à semanal');
+  assert.ok('registros' in dados && 'demandas' in dados && 'alocacaoUrl' in dados, 'pré-condição: o blob tem os 3 campos que ele DEVE ter');
+});
