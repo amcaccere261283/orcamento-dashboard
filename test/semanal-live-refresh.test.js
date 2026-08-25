@@ -2,6 +2,13 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { atualizarDadosAoVivo, URLS_PADRAO, RE_URL_PENDENTE } = require('../tools/semanal/live-refresh.js');
+// Revisão da Task 1 (Important #2): "nenhum teste exercita caminho positivo
+// de campo derivado" -- os módulos reais (não dublês) pra provar que o
+// cruzamento REALIZADO e o cálculo de equipesNaoProdutivas de fato rodam
+// quando injetados via config.modulos, não só que são pulados quando
+// ausentes (o que os outros testes deste arquivo já cobrem).
+const ComputeEquipesRealizadoAlocadoReal = require('../tools/semanal/compute-equipes-realizado-alocado.js');
+const ComputeEquipesNaoProdutivasReal = require('../tools/semanal/compute-equipes-nao-produtivas.js');
 
 // Task 1 (2026-08-25): live-refresh.js é a fonte única do que hoje existe
 // DUPLICADO em render-semanal.js e render-alocacao-pagina.js
@@ -35,12 +42,20 @@ const CSV_LAB_VAZIO = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n
 // CSV mínimo da aba EQ com cabeçalho de um único dia (01/08/2026) -- é o que
 // mesDaAbaEq reconhece como período {ano:2026, mes:8}. Mesmo formato de
 // test/semanal-alocacao-pagina-wireup.test.js (csvEqComOs).
-function csvEqComPeriodo() {
+function csvEqComTextoDia(textoDoDia) {
   return [
     'ID,Equipe,Habilitação,Serviços,Líderes,Veículo,Proprietário,Equipamento,Equipamento,Equipamento,Equipamento,Equipamento,Tenda,Tomador,sinalização 3P,01/08/2026',
     ',,do condutor,-,-,-,-,-,-,-,-,-,-,-,,SÁBADO',
-    '4,José I. Amaral,D,ST,Amaral,-,-,N/A,N/A,N/A,N/A,N/A,,CCR RioSP,,CCR RioSP (16925-25)',
+    '4,José I. Amaral,D,ST,Amaral,-,-,N/A,N/A,N/A,N/A,N/A,,CCR RioSP,,' + textoDoDia,
   ].join('\n');
+}
+function csvEqComPeriodo() {
+  return csvEqComTextoDia('CCR RioSP (16925-25)');
+}
+// Mesma conta que classificar-dia-equipe.js/compute-equipes-nao-produtivas.js
+// usam pra chavear porDiaPorMotivo -- dia local (ano, mesIndice0, dia) -> epoch.
+function diaEpochUtc(ano, mesIndice0, dia) {
+  return Math.floor(Date.UTC(ano, mesIndice0, dia) / 86400000);
 }
 
 // --- fetch dublê ---------------------------------------------------------
@@ -239,6 +254,64 @@ test('sem modulos.ComputeEquipesNaoProdutivas, equipesNaoProdutivas não é calc
 
   assert.strictEqual(espiao.aplicarChamado, true, 'sem o módulo, o refresh não pode lançar -- só pular o cálculo');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(espiao.demandasAplicadas, 'equipesNaoProdutivas'), false, 'equipesNaoProdutivas não pode aparecer no resultado');
+});
+
+// --- Reforço (revisão da Task 1, Important #2): caminho POSITIVO dos dois
+// módulos opcionais, com as implementações REAIS injetadas (não dublês) --
+// os cenários 4/5 acima só provam que faltando o módulo nada quebra; isto
+// prova que, presente, o cruzamento roda de verdade e produz o valor certo,
+// incluindo o redirecionamento resolverSupConhecido -> "Diversos" que só
+// aparece quando o cruzamento realmente executa.
+
+test('com os módulos reais injetados, equipesPorDia é recomputado via REALIZADO (com redirecionamento pra Diversos) e equipesNaoProdutivas é calculado', async () => {
+  const diaEpochProducao = diaEpochUtc(2026, 7, 10); // 10/08/2026, mesIndice0=7 (agosto)
+  const csvRoster = 'IdEquipe,DiaEpoch,Estado\nE1,' + diaEpochProducao + ',mobilizada\n';
+  // SUP-DESCONHECIDA não existe nos registros da MATRIZ (só SUP-0001-24) --
+  // ativaNaDefinicaoNova (compute-equipes-realizado-alocado.js:28-29) exige
+  // estado 'mobilizada' ou 'campoSemFuro'; 'ativa' (que não é nenhum dos
+  // dois) faria porDia sair vazio e o teste passaria sem exercitar nada --
+  // a armadilha que a revisão já sinalizou.
+  const csvProducao = 'IdEquipe,SUP,Tipo,DiaEpoch\nE1,SUP-DESCONHECIDA,ST,' + diaEpochProducao + '\n';
+  // 'Chuva' casa a exceção catalogada 'campoSemFuro' (classificar-dia-
+  // equipe.js) -- não some no default nem vira 'fora'.
+  const csvEqComChuva = csvEqComTextoDia('Chuva');
+
+  const { cfg, espiao } = configDublada({
+    fontes: {
+      matriz: URL_MATRIZ, avancos: URL_AVANCOS, lab: URL_LAB,
+      eq: URL_EQ, producao: URL_PRODUCAO, roster: URL_ROSTER,
+    },
+    modulos: {
+      ComputeEquipesRealizadoAlocado: ComputeEquipesRealizadoAlocadoReal,
+      ComputeEquipesNaoProdutivas: ComputeEquipesNaoProdutivasReal,
+    },
+  });
+  const fetchDouble = criarFetchDouble({
+    [URL_MATRIZ]: respostaCsvOk(csvMatrizComSup('SUP-0001-24')),
+    [URL_AVANCOS]: respostaCsvOk(CSV_AVANCOS_VAZIO),
+    [URL_LAB]: respostaCsvOk(CSV_LAB_VAZIO),
+    [URL_EQ]: respostaCsvOk(csvEqComChuva),
+    [URL_PRODUCAO]: respostaCsvOk(csvProducao),
+    [URL_ROSTER]: respostaCsvOk(csvRoster),
+  });
+
+  await comFetch(fetchDouble, () => atualizarDadosAoVivo(cfg));
+
+  assert.strictEqual(espiao.aplicarChamado, true);
+
+  // equipesPorDia: a equipe E1 ficou mobilizada em SUP-DESCONHECIDA/ST, que
+  // a MATRIZ não conhece -- resolverSupConhecido tem que redirecionar pra
+  // "Diversos", não deixar a chave crua nem descartar a fração.
+  assert.deepStrictEqual(espiao.demandasAplicadas.equipesPorDia, {
+    'Diversos||ST': { [diaEpochProducao]: 1 },
+  }, 'equipesPorDia precisa vir do cruzamento REALIZADO de verdade, com o par desconhecido redirecionado pra Diversos');
+  assert.strictEqual(espiao.demandasAplicadas.equipesPeriodo, null, 'roster cobre múltiplos meses -- equipesPeriodo fica null quando REALIZADO decide');
+
+  // equipesNaoProdutivas: 'Chuva' no dia 01/08/2026 -- 1 campoSemFuro, 0 fora.
+  const diaEpochChuva = diaEpochUtc(2026, 7, 1);
+  assert.deepStrictEqual(espiao.demandasAplicadas.equipesNaoProdutivas, {
+    [diaEpochChuva]: { campoSemFuro: 1, fora: 0 },
+  }, 'equipesNaoProdutivas precisa vir do módulo real, calculado a partir do mesmo csvEq');
 });
 
 // --- Cenário 6: rosterAlocacao true -- os 3 campos preservam/sobrescrevem --

@@ -6,14 +6,17 @@ const { computeDemandas, redirecionarSupsDesconhecidos, resolverSupConhecido } =
 const { mesDaAbaEq, parseAbaEq } = require('./compute-equipes-ativas.js');
 
 // live-refresh.js -- módulo COMPARTILHADO da lógica por trás do botão
-// "Atualizar dados" (2026-08-25). Até aqui esta função existia DUPLICADA,
-// byte-idêntica exceto em dois pontos, em tools/semanal/render-semanal.js
-// (atualizarDadosAoVivoSemanal, dentro de SCRIPT_CLIENTE_SEMANAL) e em
-// tools/semanal/render-alocacao-pagina.js (mesma função, dentro de
-// SCRIPT_CLIENTE_ALOCACAO) -- a segunda nasceu como cópia da primeira quando
-// a aba Alocação Equipes virou página própria. Este módulo é a fonte única:
-// as duas páginas passam a chamar atualizarDadosAoVivo(config) daqui (ver
-// Tasks 2/3 do plano), cada uma passando sua própria config.
+// "Atualizar dados" (2026-08-25). Desenho original do recurso inteiro (antes
+// de existir cópia nenhuma): ver
+// docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md. Até
+// aqui a função existia DUPLICADA, byte-idêntica exceto em dois pontos, em
+// tools/semanal/render-semanal.js (atualizarDadosAoVivoSemanal, dentro de
+// SCRIPT_CLIENTE_SEMANAL) e em tools/semanal/render-alocacao-pagina.js
+// (mesma função, dentro de SCRIPT_CLIENTE_ALOCACAO) -- a segunda nasceu como
+// cópia da primeira quando a aba Alocação Equipes virou página própria. Este
+// módulo é a fonte única: as duas páginas passam a chamar
+// atualizarDadosAoVivo(config) daqui (ver Tasks 2/3 do plano), cada uma
+// passando sua própria config.
 //
 // Roda tanto no Node (esta suíte de testes) quanto no navegador -- é por
 // isso que NADA aqui toca window/document/fetch no CORPO do módulo, só
@@ -50,8 +53,13 @@ const { mesDaAbaEq, parseAbaEq } = require('./compute-equipes-ativas.js');
 // URL_ESPELHO_MATRIZ_SEMANAL: espelho da MATRIZ (Previsto/ticket médio),
 // publicado pelo Apps Script que copia a planilha real -- ver
 // build-dashboard.js para o caminho completo (planilha -> Apps Script ->
-// Sheet publicada como CSV) e docs/superpowers/specs para o desenho
-// original.
+// Sheet publicada como CSV) e
+// docs/superpowers/specs/2026-07-31-semanal-atualizar-dados-design.md para o
+// desenho original. É a MESMA Sheet publicada que o orçamento já usa
+// (tools/orcamento/render-dashboard.js) -- literal duplicado de propósito,
+// não há como as duas páginas (dois builds independentes) compartilharem
+// uma constante JS. Quem mexer aqui pensando "já existe em algum lugar" tem
+// que mexer nos dois.
 var URL_ESPELHO_MATRIZ_SEMANAL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRaOjGxPYWKj-as9RwErptIND7PE_zxsND19PReV1MdOup1ZY3iAu_DGrQ0gatPyYFEy3hg-LWE2esw/pub?gid=609773455&single=true&output=csv';
 // 2026-08-05: trocado do espelho da Sheet (Apps Script copiando o .xlsx do
 // Drive) pro CSV combinado publicado junto com a própria página -- gerado
@@ -108,6 +116,15 @@ function periodosDoAno(ano) {
 }
 
 function buscarCsv(url) {
+  // Guarda contra url vazia ANTES de tocar url.indexOf: as duas páginas
+  // sempre passam uma URL de verdade pra 'matriz' (a única fonte sem
+  // .catch), então isso é defensivo, não um caminho normal -- mas
+  // buscarCsv(fontes.matriz) é avaliado na hora de montar o objeto
+  // promessasPorNome, fora de qualquer .then/.catch. Sem esta guarda, uma
+  // 'matriz' nula faria url.indexOf lançar SÍNCRONO ali, escapando do
+  // .catch no fim da cadeia de promises e deixando o status congelado em
+  // "Atualizando…" para sempre, em vez de reportar "Falha ao atualizar".
+  if (!url) return Promise.reject(new Error('buscarCsv chamado sem URL'));
   var comCacheBust = url + (url.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
   return fetch(comCacheBust).then(function (resposta) {
     if (!resposta.ok) throw new Error('HTTP ' + resposta.status + ' ao buscar ' + url);
@@ -158,7 +175,12 @@ var RE_URL_PENDENTE = /^PENDENTE-/;
 //             window.__REGISTROS__/window.__DEMANDAS__, lidos uma vez no
 //             início (o valor "antes" que os campos preservados usam).
 //   aplicar: (registrosNovos, demandasNovas) => void -- escreve os globais
-//             da página E dispara o redesenho (divergência B):
+//             da página, remonta os filtros multi-select
+//             (montarTodosFiltrosMultiSemanal(registrosNovos) -- comum às
+//             DUAS páginas, render-semanal.js:2164 e
+//             render-alocacao-pagina.js:1252, NÃO é a divergência B, é
+//             OBRIGATÓRIA nas duas) e dispara o redesenho (divergência B,
+//             essa sim específica de cada página):
 //             recalcularSemanal()+montarAbaDemandas() na Semanal,
 //             montarAbaAlocacao() na Alocação. Só é chamado depois que TODOS
 //             os fetches tentados e TODO o parsing terminaram com sucesso --
@@ -190,11 +212,20 @@ function atualizarDadosAoVivo(config) {
   // do meio da lista deslocava todos os textos[N] depois dela (ver o
   // histórico de comentários "os textos[6]/[7]/[8] de antes viraram
   // [5]/[6]/[7]" nas duas páginas), um jeito fácil de introduzir um bug
-  // silencioso. Aqui, adicionar/remover uma fonte nunca desloca as outras.
-  var nomesFontes = ['matriz', 'avancos', 'lab', 'eq', 'producao', 'demandasSondagem', 'demandasLab', 'roster'];
-
+  // silencioso. Aqui, adicionar/remover uma fonte nunca desloca as outras --
+  // e a lista de nomes é derivada de Object.keys(promessasPorNome) logo
+  // abaixo (não duplicada à mão), então um nome presente num objeto e
+  // esquecido no outro é IMPOSSÍVEL por construção, em vez de virar um
+  // undefined silencioso dentro do Promise.all.
   var promessasPorNome = {
     matriz: buscarCsv(fontes.matriz),
+    // avancos/lab NÃO têm .catch -- DELIBERADO, igual ao original (não é a
+    // simplificação "todas as fontes menos matriz degradam sozinhas" que o
+    // texto do brief desta task sugeria): com avancosLabConfigurados
+    // verdadeiro, uma falha de rede em qualquer uma das duas tem que
+    // derrubar o refresh inteiro, não só ficar de fora silenciosamente --
+    // computeDemandas nunca roda com furos OU ensaios pela metade. Não
+    // "consertar" isto pra bater com o brief.
     avancos: avancosLabConfigurados ? buscarCsv(fontes.avancos) : Promise.resolve(null),
     lab: avancosLabConfigurados ? buscarCsv(fontes.lab) : Promise.resolve(null),
     // Espelho da aba EQ (equipes ATIVAS). Falha sozinha: se esta única fonte
@@ -237,6 +268,7 @@ function atualizarDadosAoVivo(config) {
       ? buscarCsv(fontes.roster).catch(function () { return null; })
       : Promise.resolve(null),
   };
+  var nomesFontes = Object.keys(promessasPorNome);
 
   return Promise.all(nomesFontes.map(function (nome) { return promessasPorNome[nome]; }))
     .then(function (valores) {
@@ -314,6 +346,12 @@ function atualizarDadosAoVivo(config) {
         // com o status mostrando "Atualizado" em verde caso a Sheet EQ
         // falhe, csvEq null) e sobrescritos só dentro de if (periodoEq)
         // abaixo, exatamente como render-alocacao-pagina.js já fazia.
+        //
+        // A Sheet EQ (csvEq/periodoEq acima) alimenta SÓ estes 3 campos --
+        // NUNCA mais o Realizado da Tabela Semanal (equipesPorDia), que é
+        // exclusividade do bloco REALIZADO (Link 6+7) logo abaixo desde
+        // 2026-08-21. As duas coisas competiram pela mesma fonte antes
+        // disso; hoje são independentes de propósito.
         if (cfg.rosterAlocacao === true) {
           demandasNovas.equipesCsv = estado.demandas.equipesCsv;
           demandasNovas.osParaSup = estado.demandas.osParaSup;
@@ -321,7 +359,10 @@ function atualizarDadosAoVivo(config) {
 
           // osParaSup: só depende de 'furos', usado pela aba Alocação
           // Equipes (equipesDoQuadro resolve supRealizado/colunaRealizada a
-          // partir dele).
+          // partir dele). Declarado e populado FORA do if (periodoEq)
+          // abaixo, de propósito (escopo de FUNÇÃO): com periodoEq falso ele
+          // ainda precisa existir para a atribuição condicional lá dentro
+          // não lançar ReferenceError.
           var osParaSup = {};
           furos.forEach(function (f) {
             if (f.os && f.sup && !osParaSup[f.os]) osParaSup[f.os] = f.sup;
@@ -334,12 +375,14 @@ function atualizarDadosAoVivo(config) {
           }
         }
 
-        // Δ equipes REALIZADO (Link 6+7): única fonte de equipesPorDia
-        // desde 2026-08-21 -- se roster+produção não responderem, ou o
-        // cruzamento não produzir nenhum par utilizável, ou
-        // config.modulos.ComputeEquipesRealizadoAlocado não tiver sido
-        // passado, equipesPorDia/equipesPeriodo ficam com o valor já
-        // preservado acima, nunca uma fonte alternativa.
+        // Δ equipes REALIZADO (Link 6+7, 2026-08-10) -- ver
+        // docs/superpowers/specs/2026-08-10-equipes-realizado-roster-link6-link7-design.md
+        // e docs/superpowers/plans/2026-08-10-equipes-realizado-roster-link6-link7.md.
+        // Única fonte de equipesPorDia desde 2026-08-21 -- se roster+produção
+        // não responderem, ou o cruzamento não produzir nenhum par
+        // utilizável, ou config.modulos.ComputeEquipesRealizadoAlocado não
+        // tiver sido passado, equipesPorDia/equipesPeriodo ficam com o valor
+        // já preservado acima, nunca uma fonte alternativa.
         if (textos.producao && textos.roster && modulos.ComputeEquipesRealizadoAlocado) {
           var rosterOnlineCliente = [];
           textos.roster.trim().split('\n').slice(1).forEach(function (linha) {
