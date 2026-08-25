@@ -3136,4 +3136,4 @@ ${markupFiltros(FILTROS_ALERTAS_SEMANAL, { recuo: '      ', classes: 'filtros-al
 // isso o gerador teria que recortar o template literal do fonte por regex, e
 // uma revisão feita sobre um CSS ligeiramente diferente do de produção julga
 // uma tela que não existe.
-module.exports = { renderSemanal, CSS_SEMANAL };
+module.exports = { renderSemanal, CSS_SEMANAL, CSS_ABAS_SEMANAL, CSS_DEMANDAS, SCRIPT_AVISO_ATUALIZACAO_ATRASADA, opcoesMesSemanal };

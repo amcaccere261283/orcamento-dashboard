@@ -11,6 +11,7 @@ const { readXlsxSheet } = require('../comum/xlsx-reader.js');
 const { parseMatriz, locateColumns } = require('../orcamento/parse-matriz.js');
 const { parseBaseline } = require('../orcamento/parse-baseline.js');
 const { renderSemanal } = require('./render-semanal.js');
+const { renderAlocacaoPagina } = require('./render-alocacao-pagina.js');
 const { excelSerialParaData } = require('../comum/datas.js');
 const { reconciliarLinhaBase, chaveMatriz } = require('../comum/linha-base.js');
 const config = require('../orcamento/config.js');
@@ -521,6 +522,16 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   fs.mkdirSync(path.dirname(resolvedOutPath), { recursive: true });
   fs.writeFileSync(resolvedOutPath, html, 'utf8');
   console.log(`Wrote ${html.length} bytes to ${resolvedOutPath}`);
+
+  const htmlAlocacao = renderAlocacaoPagina({
+    registros, demandas, periodos, senha, geradoEm: today,
+    logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
+    avisoAtualizacao, ultimaAtualizacaoOkIso: ultimaAtualizacaoOkIsoValor,
+  });
+  const outPathAlocacao = path.join(__dirname, '..', '..', 'dist', 'alocacao-equipes.html');
+  fs.writeFileSync(outPathAlocacao, htmlAlocacao, 'utf8');
+  console.log(`Wrote ${htmlAlocacao.length} bytes to ${outPathAlocacao}`);
+
   return resolvedOutPath;
 }
 
