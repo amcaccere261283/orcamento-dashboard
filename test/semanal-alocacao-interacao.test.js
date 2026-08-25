@@ -2,31 +2,35 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const vm = require('node:vm');
-const { renderSemanal } = require('../tools/semanal/render-semanal.js');
+const { renderAlocacaoPagina } = require('../tools/semanal/render-alocacao-pagina.js');
 const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
 const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 
 // Task 9 liga a interação de arrasto (Pointer Events) e as funções de estado
 // da aba Alocação Equipes -- ESTADO_ALOCACAO, aplicarMovimento,
-// semearDoRealizado, selecionarSemanaAlocacao, montarAbaAlocacao. Mesmo
-// molde de test/semanal-render-aba-balanco-wireup.test.js (o precedente
-// real -- o nome citado no brief, "semanal-render-semanal-cliente.test.js",
-// não existe): extrai os <script> do HTML gerado por renderSemanal() e roda
-// dentro de um vm.Context com o DOM falso, provando que o SCRIPT DE CLIENTE
-// de verdade (não uma cópia isolada da lógica) se comporta como o spec pede.
-// Porque o script declara tudo com 'var'/'function', essas declarações
-// pousam no objeto do Realm (sandbox.window === sandbox), e o teste chama
+// semearDoRealizado, selecionarSemanaAlocacao, montarAbaAlocacao. Extrai os
+// <script> do HTML gerado por renderAlocacaoPagina() e roda dentro de um
+// vm.Context com o DOM falso, provando que o SCRIPT DE CLIENTE de verdade
+// (não uma cópia isolada da lógica) se comporta como o spec pede. Porque o
+// script declara tudo com 'var'/'function', essas declarações pousam no
+// objeto do Realm (sandbox.window === sandbox), e o teste chama
 // aplicarMovimento/ESTADO_ALOCACAO/etc. direto nele.
 //
-// Diferente do teste do Balanço, este NÃO passa pelo gate de senha: as
-// funções desta task só precisam de window.__REGISTROS__/__DEMANDAS__ -- os
-// mesmos dois globais que tentarDesbloquear() atribuiria depois de decifrar
-// (ver fecharTendenciaVigente). Atribuí-los direto evita depender da página
-// inteira (Alertas, Consolidado, Gráficos, Balanço) renderizar sem erro só
-// para testar a aba nova, que ainda nem está pendurada no ciclo de
-// montarDashboard (isso é Task 10). window.__ANO__/__VIGENTE_IDX__ continuam
-// vindo do PRIMEIRO <script> do HTML (texto puro, nunca cifrado) -- é dele
-// que mesSelecionadoIdx tira o valor inicial no load do script de cliente.
+// Migrado de renderSemanal() (planejamento-semanal.html) para
+// renderAlocacaoPagina() (a página própria, ver
+// docs/superpowers/sdd/2026-08-25-alocacao-equipes-pagina-propria) quando a
+// Task 3 daquele plano apagou o bloco de estado/interação da Alocação de
+// tools/semanal/render-semanal.js -- ele agora só existe dentro de
+// tools/semanal/render-alocacao-pagina.js. Continua NÃO passando pelo gate de
+// senha: as funções desta task só precisam de window.__REGISTROS__/
+// __DEMANDAS__ -- os mesmos dois globais que tentarDesbloquear() atribuiria
+// depois de decifrar (ver fecharTendenciaVigente). Atribuí-los direto evita
+// depender do gate/cifragem só para testar a interação de arrasto -- ver
+// test/semanal-alocacao-pagina-wireup.test.js para os testes que PASSAM pelo
+// gate de verdade (blob cifrado, osParaSup atravessando, semeadura
+// automática). window.__ANO__/__VIGENTE_IDX__ continuam vindo do PRIMEIRO
+// <script> do HTML (texto puro, nunca cifrado) -- é dele que
+// mesSelecionadoIdx tira o valor inicial no load do script de cliente.
 
 const SENHA_FAKE = 'senha-fake-de-teste-alocacao-nao-e-a-real';
 const PERIODOS_2026 = Array.from({ length: 12 }, (_, mes) => new Date(Date.UTC(2026, mes, 1)));
@@ -92,7 +96,7 @@ function demandasTeste() {
     equipesCsv: CSV_EQ_TESTE,
     equipesAtivasPeriodo: { ano: 2026, mes: 8 },
     // osParaSup ainda não viaja pelo build/live-refresh real (ver o
-    // comentário de pendência em montarAbaAlocacao, render-semanal.js) --
+    // comentário de pendência em montarAbaAlocacao, render-alocacao-pagina.js) --
     // aqui o teste o injeta direto, porque ele controla o payload inteiro.
     osParaSup: { [OS_SUP_A]: 'SUP-A' },
   };
@@ -122,12 +126,12 @@ function armazenamentoFalso() {
 // Rodada de correção pós-verificação em navegador real (2026-08-10): abrir uma
 // semana sem alocação salva agora SEMEIA sozinha a partir do realizado
 // (Decisão 9 do spec) -- ver o marcador 'alocacao-equipes:vista:<chave>' em
-// render-semanal.js. Os testes ABAIXO que não são sobre semeadura pré-marcam a
-// semana como "já vista" nesta mesma chave, no MESMO armazenamento falso que o
-// cliente usa -- assim eles continuam testando só o que testavam antes (o
-// movimento manual, o isolamento entre semanas), sem o efeito colateral da
-// semeadura automática se misturando no meio. A semeadura em si é testada à
-// parte, em test/semanal-render-semanal-wireup.test.js.
+// render-alocacao-pagina.js. Os testes ABAIXO que não são sobre semeadura
+// pré-marcam a semana como "já vista" nesta mesma chave, no MESMO
+// armazenamento falso que o cliente usa -- assim eles continuam testando só o
+// que testavam antes (o movimento manual, o isolamento entre semanas), sem o
+// efeito colateral da semeadura automática se misturando no meio. A semeadura
+// em si é testada à parte, em test/semanal-alocacao-pagina-wireup.test.js.
 function marcarSemanasVistas(cliente, ...indices) {
   indices.forEach((idx) => {
     const chave = cliente.AlocacaoSheet.chaveSemana(2026, SEMANAS_AGOSTO[idx].inicio);
@@ -140,8 +144,8 @@ function marcarSemanasVistas(cliente, ...indices) {
 // propósito (ver o comentário grande no topo do arquivo).
 function montarClienteAlocacao() {
   const registros = [registroSintetico('SUP-A', 'SP', 120)];
-  const html = renderSemanal({
-    registros, baseline: [], demandas: demandasTeste(), periodos: PERIODOS_2026,
+  const html = renderAlocacaoPagina({
+    registros, demandas: demandasTeste(), periodos: PERIODOS_2026,
     senha: SENHA_FAKE, geradoEm: new Date('2026-08-01T00:00:00Z'),
   });
 
@@ -155,7 +159,7 @@ function montarClienteAlocacao() {
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(blocos.join('\n;\n'), sandbox, { filename: 'planejamento-semanal-alocacao.js' });
+  vm.runInContext(blocos.join('\n;\n'), sandbox, { filename: 'alocacao-equipes-cliente.js' });
 
   // window.__VIGENTE_IDX__/__ANO__ já foram atribuídos pelo 1º <script>
   // (texto puro, roda sempre). __REGISTROS__/__DEMANDAS__ normalmente vêm do

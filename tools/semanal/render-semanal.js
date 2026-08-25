@@ -12,19 +12,9 @@ const { fonteParaCliente: fonteParaClienteTipologiasLab } = require('../comum/ti
 const { fonteParaCliente: fonteParaClienteDatas } = require('../comum/datas.js');
 const { fonteParaCliente: fonteParaClienteLinhaBase } = require('../comum/linha-base.js');
 
-// Web app do Apps Script que guarda a alocação (tools/semanal/apps-script-alocacao.gs).
-// Enquanto não for publicado, o literal PENDENTE- mantém a aba em modo local,
-// dizendo isso na tela -- mesmo padrão de URL_ESPELHO_AVANCOS_SEMANAL. Viaja
-// DENTRO do blob cifrado (ver renderSemanal), não em texto puro no HTML: só
-// quem destrava a página a enxerga -- mesmo raciocínio de registros/baseline/
-// demandas, mas aqui é uma URL de escrita, não dado protegido por senha.
-// Publicado em 2026-08-11. Reimplantar o .gs mantém esta URL (Gerenciar
-// implantações > Nova versão); só uma implantação NOVA do zero a trocaria.
-const URL_ALOCACAO = 'https://script.google.com/macros/s/AKfycby3jOFa1eOZ9Rtu7mRq8iZWtZdKdg-7ATqzbU-fBba5eLuV5_U69nAe7-Md_3-l_ciB/exec';
-
 // Web app do Apps Script que guarda o histórico do relatório semanal
 // (tools/semanal/apps-script-historico-relatorio.gs). PENDENTE- até o dono
-// do projeto publicar -- mesmo mecanismo de URL_ALOCACAO acima.
+// do projeto publicar -- mesmo padrão de URL_ESPELHO_AVANCOS_SEMANAL.
 const URL_HISTORICO_RELATORIO = 'PENDENTE-publicar-o-apps-script-historico-relatorio';
 
 // Página da spec com as duas abas (Semanal / Balanço de massa), agora com a
@@ -64,10 +54,6 @@ const ABAS_VISUALIZACAO = [
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.9 21h16.2a2 2 0 0 0 1.79-2.96L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' },
   { id: 'aba-consolidado', rotulo: 'Consolidado', ativa: false,
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>' },
-  // Alocação Equipes (2026-08-10, Task 10). Ícone: pessoas num quadro --
-  // distinto dos 6 que já existem nesta barra.
-  { id: 'aba-alocacao', rotulo: 'Alocação Equipes', ativa: false,
-    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M5 17c0-2 2-3 4-3s4 1 4 3"/><path d="M16 9h3M16 13h3"/></svg>' },
 ];
 
 // Os 5 seletores próprios da aba Alertas -- mesmos ids do orçamento, porque o
@@ -687,8 +673,9 @@ const CSS_SEMANAL = `
   .aviso-mudo { box-shadow: inset 0 0 0 1px var(--border); }
 
   /* Estado do ARRASTO -- ligadas/desligadas só pela interação (Pointer
-     Events, ver inicializarInteracaoAlocacao em SCRIPT_CLIENTE_SEMANAL),
-     nunca pelo render puro (render-aba-alocacao.js não conhece estas duas).
+     Events, ver inicializarInteracaoAlocacao em render-alocacao-pagina.js,
+     SCRIPT_CLIENTE_ALOCACAO), nunca pelo render puro (render-aba-alocacao.js
+     não conhece estas duas).
      Sempre limpas ao final de todo caminho de saída do arrasto -- soltura
      aceita, recusada, ou solta fora da grade. */
   .celula-alvo { background-color: rgba(246,181,63,0.14); box-shadow: inset 0 0 0 2px #f6b53f; }
@@ -870,25 +857,6 @@ const BUNDLE_ARQUIVOS = [
   // diaEpoch de lá agora (require('./compute-semanal.js'), same-dir,
   // resolvido normalmente pelo bundler).
   'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js',
-  // Alocação Equipes (2026-08-10, Task 9 -- a integração completa da aba
-  // é a Task 10, mas o bundle e o wireup mínimo que o TESTE de interação
-  // exige já entram aqui, ver a nota no topo do plano/progress.md).
-  // equipes-alocaveis.js consome compute-equipes-ativas.js e
-  // classificar-dia-equipe.js -- os dois já estão registrados acima.
-  // compute-alocacao.js consome equipes-alocaveis.js, render-aba-semanal.js,
-  // render-alertas-tendencia.js e compute-semanal.js, todos acima, mais um
-  // require de '../comum/calculo-equipes.js' que o bundler REMOVE
-  // (DIAS_PREMISSA_MES chega como global pelo <script> de fonteParaCliente(),
-  // já injetado antes do bundle -- mesmo mecanismo que compute-balanco.js e
-  // compute-alertas-tendencia.js já usam). alocacao-sheet.js não consome
-  // nada same-dir. render-aba-alocacao.js consome compute-alocacao.js,
-  // equipes-alocaveis.js e, desde a trava de veículo (2026-08-12, Task 6),
-  // grupos-veiculo.js direto (conflitosDeVeiculo) -- por isso vem por último.
-  // grupos-veiculo.js (2026-08-12) não consome nada same-dir (é matemática pura
-  // sobre a coluna Veículo da aba EQ), mas equipes-alocaveis.js e
-  // render-aba-alocacao.js o consomem -- por isso vem ANTES dos dois. A ordem
-  // desta lista é o contrato de dependência.
-  'grupos-veiculo.js', 'equipes-alocaveis.js', 'compute-alocacao.js', 'alocacao-sheet.js', 'render-aba-alocacao.js',
 ];
 
 // O gate de senha (scriptDesbloqueio, casca compartilhada) sempre chama
@@ -1006,12 +974,8 @@ var ComputeEquipesAtivas = MODULOS['compute-equipes-ativas.js'];
 var ComputeEquipesNaoProdutivas = MODULOS['compute-equipes-nao-produtivas.js'];
 var ComputeEquipesRealizadoAlocado = MODULOS['compute-equipes-realizado-alocado.js'];
 var FiltroAtivos = MODULOS['filtro-ativos.js'];
-var EquipesAlocaveis = MODULOS['equipes-alocaveis.js'];
-var GruposVeiculo = MODULOS['grupos-veiculo.js'];
-var AlocacaoSheet = MODULOS['alocacao-sheet.js'];
 var RenderRelatorioSemanalXlsx = MODULOS['render-relatorio-semanal-xlsx.js'];
 var HistoricoRelatorioSheet = MODULOS['historico-relatorio-sheet.js'];
-var RenderAbaAlocacao = MODULOS['render-aba-alocacao.js'];
 
 var MODO_DEMANDAS = 'mensal';
 
@@ -1177,11 +1141,6 @@ function indicesDaAba(indices, dimensao) {
 function fecharTendenciaVigente(dados) {
   window.__BASELINE__ = dados && dados.baseline;
   window.__DEMANDAS__ = dados && dados.demandas;
-  // A URL do web app de alocação (Task 10) -- mesmo mecanismo de
-  // window.__DEMANDAS__ acima: só existe depois que a senha certa decifra o
-  // blob (ver URL_ALOCACAO/renderSemanal). clienteAlocacao() (ESTADO_ALOCACAO,
-  // acima) lê window.__ALOCACAO_URL__ na primeira vez que precisa dele.
-  window.__ALOCACAO_URL__ = dados && dados.alocacaoUrl;
   window.__HISTORICO_RELATORIO_URL__ = dados && dados.historicoRelatorioUrl;
   return dados && dados.registros ? dados.registros : dados;
 }
@@ -1193,14 +1152,12 @@ function alternarAba(aba) {
   document.getElementById('secao-demandas').style.display = aba === 'demandas' ? '' : 'none';
   document.getElementById('secao-alertas').style.display = aba === 'alertas' ? '' : 'none';
   document.getElementById('secao-consolidado').style.display = aba === 'consolidado' ? '' : 'none';
-  document.getElementById('secao-alocacao').style.display = aba === 'alocacao' ? '' : 'none';
   document.getElementById('aba-semanal').classList.toggle('aba-ativa', aba === 'semanal');
   document.getElementById('aba-grafico-semanal').classList.toggle('aba-ativa', aba === 'grafico-semanal');
   document.getElementById('aba-balanco').classList.toggle('aba-ativa', aba === 'balanco');
   document.getElementById('aba-demandas').classList.toggle('aba-ativa', aba === 'demandas');
   document.getElementById('aba-alertas').classList.toggle('aba-ativa', aba === 'alertas');
   document.getElementById('aba-consolidado').classList.toggle('aba-ativa', aba === 'consolidado');
-  document.getElementById('aba-alocacao').classList.toggle('aba-ativa', aba === 'alocacao');
 }
 
 // Redesenha só o CONTEÚDO de #secao-grafico-semanal (não a div inteira --
@@ -1392,120 +1349,6 @@ function montarAbaBalanco(registros, indices) {
   }
 }
 
-// --- Alocação Equipes (Task 9/10, 2026-08-10) --------------------------------
-// Arrastar equipe para contrato, recalculando na hora -- ver
-// docs/superpowers/specs/2026-08-10-semanal-alocacao-equipes-design.md. Task 9
-// deixou pronto o estado, aplicarMovimento, semearDoRealizado,
-// selecionarSemanaAlocacao e montarAbaAlocacao; a Task 10 ligou a sétima aba de
-// ponta a ponta: ABAS_VISUALIZACAO, o gancho no ciclo de redesenho de
-// recalcularSemanal, os filtros compartilhados (indicesFiltrados, não
-// indicesDaAba -- ver o comentário em montarAbaAlocacao) e os guardas
-// semRoster/somenteLeitura.
-//
-// A URL do web app de alocação viaja DENTRO do blob cifrado (ver
-// renderSemanal, URL_ALOCACAO), não em texto puro no HTML: só quem destrava a
-// página a enxerga. Enquanto o Apps Script não for publicado, o literal fica
-// 'PENDENTE-...' e a aba roda inteira em localStorage -- mesmo padrão de
-// RE_URL_PENDENTE, e é o estado inicial do recurso.
-// semanaCarregada: a chaveSemana (AlocacaoSheet.chaveSemana) cujo mapa já foi
-// buscado (e, se for o caso, semeado) -- ver carregarAlocacaoDaSemana logo
-// abaixo. Sem isto, montarAbaAlocacao (chamada a cada recalcularSemanal, ou
-// seja, a cada troca de filtro/mês) buscaria a alocação de novo em toda
-// tecla, sobrescrevendo movimentos locais em trânsito.
-//
-// geracaoAlocacao: contador incrementado toda vez que a INTENÇÃO do usuário
-// muda -- um arrasto aplicado (aplicarMovimento), "Repor o realizado"
-// (semearDoRealizado), "Limpar alocação" (limparAlocacao), ou a própria troca
-// de semana (selecionarSemanaAlocacao / o gatilho automático em
-// montarAbaAlocacao). Existe para carregarAlocacaoDaSemana (logo abaixo)
-// poder descartar uma resposta que chegou TARDE DEMAIS -- ver o comentário
-// grande lá, é a correção do achado "arrasto sobrescrito pela promise que
-// resolve depois" (CLAUDE.md, "Precisa ser corrigido ANTES desse Apps
-// Script ir ao ar").
-var ESTADO_ALOCACAO = {
-  semanaIdx: -1, alocacao: {}, equipes: [], foraDoQuadro: [], cliente: null,
-  semanaCarregada: null, geracaoAlocacao: 0, busca: '', tipologia: '',
-};
-
-// MARCADOR DE SEMANA JÁ VISTA (Decisão 9 do spec, correção pós-verificação em
-// navegador real: "ao abrir uma semana sem alocação salva, o quadro é
-// semeado com onde as equipes estão de fato" nunca disparava sozinho -- só o
-// clique manual em "Repor o realizado" preenchia, e o quadro abria com 114
-// células vazias e 114 cartões no pool).
-//
-// O PROBLEMA que o marcador resolve: "nunca teve alocação salva" e "foi
-// esvaziada de propósito" (botão "Limpar alocação") são indistinguíveis só
-// olhando o mapa que carregar() devolve -- as duas são {}. Semear toda vez
-// que o mapa vier vazio reencheria o quadro atrás de quem acabou de limpar.
-//
-// Por isso o marcador NÃO é derivado da chave de DADO que AlocacaoSheet já
-// grava (PREFIXO_ARMAZENAMENTO + chave, em alocacao-sheet.js) -- aquela
-// chave é escrita mesmo quando o valor gravado é {} (aplicarLocal grava
-// sempre, e carregar() em modo 'sheet' também grava um cache local a cada
-// fetch, VAZIO OU NÃO, só para não bater na rede de novo). Se o marcador
-// fosse "a chave de dado existe", um simples carregar() de uma semana nunca
-// tocada por ninguém (mapa vazio vindo da Sheet) já marcaria "vista" antes
-// de qualquer decisão de semear -- o mesmo bug, um nível abaixo. Por isso
-// este marcador vive numa chave PRÓPRIA, gravada só depois que
-// carregarAlocacaoDaSemana decide o que fazer (semear ou não), nunca como
-// efeito colateral de uma leitura.
-//
-// Por que isto vale nos DOIS modos:
-// - Modo LOCAL (o que a aba usa hoje -- URL_ALOCACAO ainda é 'PENDENTE-...'):
-//   localStorage já É a fonte de verdade inteira neste modo -- não existe
-//   nenhuma outra máquina para desincronizar. "Este navegador já viu esta
-//   semana antes" e "existe alocação salva para esta semana" são a MESMA
-//   pergunta, sempre.
-// - Modo SHEET (quando o Apps Script for publicado): o marcador é POR
-//   NAVEGADOR, não compartilhado pela Sheet -- um navegador abrindo uma
-//   semana pela primeira vez busca o mapa de verdade da Sheet; se vier
-//   com equipes, usa (nunca semeia por cima de dado real, não importa o
-//   marcador). Só semeia quando a Sheet devolve vazio. A limitação
-//   conhecida: o Apps Script atual (apps-script-alocacao.gs,
-//   linhasDaSemana) filtra fora as linhas com sup vazio, então uma semana
-//   ESVAZIADA de propósito por um colega noutro navegador e uma semana
-//   NUNCA TOCADA por ninguém respondem o mesmo {linhas:[]} -- um terceiro
-//   navegador abrindo aquela semana pela PRIMEIRA VEZ reintroduziria a
-//   semeadura que o colega tinha limpado. Corrigir isso de vez pede um
-//   sinal novo do lado da Sheet (linhasDaSemana teria que devolver "existe
-//   linha" separado de "sup preenchido") -- fora do escopo desta correção,
-//   que é sobre o CLIENTE, e sem efeito enquanto a aba roda em modo local.
-function chaveSemanaVista(chaveSemana) {
-  return 'alocacao-equipes:vista:' + chaveSemana;
-}
-
-// Sem window.localStorage (ambiente sem storage nenhum -- não deveria
-// acontecer num navegador real, mas é o caso de alguns testes que não
-// simulam nenhum), NADA sobrevive entre recargas mesmo -- inclusive o que
-// "Limpar alocação" tentaria lembrar. Nesse cenário "sem onde lembrar" é
-// igual a "nunca vista": semear de novo a cada abertura é o comportamento
-// mais consistente (é literalmente o que Decisão 9 pede -- "abrir uma
-// semana SEM alocação salva"), não o mais raro. Isto não insiste em loop:
-// só é consultada uma vez por TROCA de semana (ver semanaCarregada em
-// carregarAlocacaoDaSemana), nunca a cada redesenho da mesma semana.
-function semanaJaVista(chaveSemana) {
-  if (!chaveSemana || !window.localStorage) return false;
-  try { return window.localStorage.getItem(chaveSemanaVista(chaveSemana)) === '1'; }
-  catch (err) { return false; }
-}
-
-function marcarSemanaVista(chaveSemana) {
-  if (!chaveSemana || !window.localStorage) return;
-  try { window.localStorage.setItem(chaveSemanaVista(chaveSemana), '1'); } catch (err) { /* cota cheia -- sem drama, só não lembra na próxima */ }
-}
-
-function clienteAlocacao() {
-  if (!ESTADO_ALOCACAO.cliente) {
-    ESTADO_ALOCACAO.cliente = AlocacaoSheet.criarClienteAlocacao({
-      url: (window.__ALOCACAO_URL__ || 'PENDENTE-publicar-o-apps-script'),
-      fetch: function (u, o) { return fetch(u, o); },
-      armazenamento: window.localStorage,
-      autor: (window.__ALOCACAO_AUTOR__ || 'dashboard'),
-    });
-  }
-  return ESTADO_ALOCACAO.cliente;
-}
-
 var ESTADO_RELATORIO_SEMANAL = { cliente: null };
 
 function clienteHistoricoRelatorio() {
@@ -1631,641 +1474,6 @@ async function gerarRelatorioExcel() {
     ESTADO_RELATORIO_SEMANAL.gerando = false;
     if (botao) botao.disabled = false;
   }
-}
-
-function chaveSemanaAtual() {
-  var semanas = semanasDoMesSelecionado();
-  var semana = semanas[ESTADO_ALOCACAO.semanaIdx];
-  return semana ? AlocacaoSheet.chaveSemana(window.__ANO__, semana.inicio) : null;
-}
-
-// Recusa fora do conjunto de colunas da equipe e equipe indisponível. Devolve
-// true quando aplicou -- é o que o handler de soltura usa para decidir se
-// redesenha ou mostra o motivo. Repare que NÃO consulta a grade/tendência: uma
-// célula hachurada (sem tendência), mas dentro do conjunto de colunas da
-// equipe, é aceita igual -- é o caso de "antecipar carteira" que a aba existe
-// para servir (Decisão 6 do spec de 2026-08-10).
-//
-// TRAVA DE VEÍCULO (2026-08-12): quem decide o que se move é destinoDoGrupo
-// (grupos-veiculo.js), função pura -- equipes que dividem veículo não podem
-// ficar em SUPs diferentes, então o destino do gesto vale para o grupo inteiro,
-// pool inclusive. Esta função virou o laço que APLICA a lista. As duas recusas
-// continuam existindo, agora dentro dela, e recusa move zero equipes.
-//
-// A trava mora aqui de propósito: é o funil por onde os DOIS gestos (arrasto e
-// clique-clique) já passam. Espalhá-la pelos handlers deixaria um caminho sem
-// ela. E semearDoRealizado/limparAlocacao NÃO passam por aqui, também de
-// propósito (Decisão 4 do spec): a semeadura é o retrato do realizado, não um
-// plano a validar.
-function aplicarMovimento(equipeId, sup, coluna) {
-  var movimentos = GruposVeiculo.destinoDoGrupo(
-    ESTADO_ALOCACAO.equipes, ESTADO_ALOCACAO.alocacao, equipeId, sup, coluna);
-  if (!movimentos.length) return false;
-
-  movimentos.forEach(function (m) {
-    if (!m.sup) delete ESTADO_ALOCACAO.alocacao[m.id];
-    else ESTADO_ALOCACAO.alocacao[m.id] = { sup: m.sup, coluna: m.coluna };
-  });
-  // Invalida qualquer carregarAlocacaoDaSemana em voo -- ver o comentário
-  // grande em ESTADO_ALOCACAO. UMA vez para o gesto inteiro, não uma por
-  // equipe: o grupo é um gesto só.
-  ESTADO_ALOCACAO.geracaoAlocacao++;
-
-  montarAbaAlocacao();
-  // A gravação vem DEPOIS do redesenho, e não é esperada: a tela nunca trava
-  // por causa da rede, e uma falha não desfaz o que o usuário acabou de ver.
-  // Uma gravação por equipe movida, mesmo laço de semearDoRealizado.
-  var chave = chaveSemanaAtual();
-  movimentos.forEach(function (m) {
-    clienteAlocacao().gravar({
-      chaveSemana: chave, equipeId: m.id,
-      sup: m.sup || null, coluna: m.coluna || null,
-    }).then(function () { montarAbaAlocacao(); });
-  });
-  return true;
-}
-
-// "Repor o realizado" (Decisão 9 do spec): a equipe some da alocação atual e
-// reaparece no SUP/coluna de onde ela REALMENTE trabalhou na semana --
-// supRealizado/colunaRealizada, que equipesDoQuadro (Task 1) já calcula a
-// partir da ÚLTIMA OS vista na aba EQ (o vínculo não se rompe nos dias ativos
-// sem OS). Equipe sem OS na semana, ou indisponível, fica de fora -- nasce no
-// pool, nunca é chutada. SUBSTITUI a alocação inteira (é reposição, não
-// mescla): é o botão "Repor", não "Completar".
-function semearDoRealizado() {
-  var nova = {};
-  ESTADO_ALOCACAO.equipes.forEach(function (e) {
-    if (e.disponivel && e.supRealizado && e.colunaRealizada) {
-      nova[e.id] = { sup: e.supRealizado, coluna: e.colunaRealizada };
-    }
-  });
-  ESTADO_ALOCACAO.alocacao = nova;
-  // Ver o comentário em aplicarMovimento -- mesmo raciocínio, "Repor o
-  // realizado" também é uma mudança de intenção que uma resposta tardia de
-  // carregarAlocacaoDaSemana não pode desfazer.
-  ESTADO_ALOCACAO.geracaoAlocacao++;
-  montarAbaAlocacao();
-  var chave = chaveSemanaAtual();
-  Object.keys(nova).forEach(function (id) {
-    clienteAlocacao().gravar({
-      chaveSemana: chave, equipeId: id, sup: nova[id].sup, coluna: nova[id].coluna,
-    }).then(function () { montarAbaAlocacao(); });
-  });
-}
-
-// "Limpar alocação": esvazia a semana inteira -- a outra ação destrutiva da
-// aba (Decisão 9). Grava a remoção de cada equipe que estava alocada, uma por
-// uma, no mesmo padrão de aplicarMovimento (redesenha antes, grava depois).
-// Marca a semana como vista explicitamente: é o próprio ato de esvaziar de
-// propósito que o marcador existe para lembrar (embora, na prática, ela já
-// tenha sido marcada quando a semana foi carregada -- este botão só aparece
-// depois disso). Ver o comentário grande em ESTADO_ALOCACAO.
-function limparAlocacao() {
-  var idsAlocados = Object.keys(ESTADO_ALOCACAO.alocacao);
-  ESTADO_ALOCACAO.alocacao = {};
-  // Ver o comentário em aplicarMovimento -- mesmo raciocínio.
-  ESTADO_ALOCACAO.geracaoAlocacao++;
-  montarAbaAlocacao();
-  var chave = chaveSemanaAtual();
-  marcarSemanaVista(chave);
-  idsAlocados.forEach(function (id) {
-    clienteAlocacao().gravar({ chaveSemana: chave, equipeId: id, sup: null, coluna: null })
-      .then(function () { montarAbaAlocacao(); });
-  });
-}
-
-// Busca a alocação salva de 'chave' e decide se semeia do realizado
-// (Decisão 9 do spec: "ao abrir uma semana sem alocação salva, o quadro é
-// semeado com onde as equipes estão de fato"). Chamada tanto pela troca
-// explícita de semana (selecionarSemanaAlocacao) quanto pelo primeiro
-// desenho da aba (montarAbaAlocacao, achado da verificação em navegador
-// real -- antes disto NADA carregava a alocação salva no primeiro render,
-// só ao clicar num botão de semana).
-//
-// CORREÇÃO (antes do Apps Script ir ao ar -- ver CLAUDE.md): esta busca é
-// ASSÍNCRONA (clienteAlocacao().carregar) e o redesenho é SÍNCRONO. Em modo
-// local carregar() resolve numa microtask -- rápido demais para um clique de
-// usuário colidir. Em modo 'sheet' vira uma ida-e-volta de rede de verdade
-// (centenas de ms), e QUALQUER coisa pode acontecer nesse intervalo: um
-// arrasto (aplicarMovimento), "Repor o realizado", "Limpar alocação", ou o
-// usuário trocando de semana de novo antes desta resposta chegar. Sem
-// proteção, ESTADO_ALOCACAO.alocacao = mapa || {} no .then() é uma
-// ATRIBUIÇÃO -- sobrescreveria qualquer uma dessas ações com uma resposta
-// que já está desatualizada (o arrasto "pula de volta" pro lugar antigo,
-// sem erro nenhum na tela), ou pior, aplicaria a resposta de UMA semana no
-// quadro de OUTRA (trocar de semana rápido demais). geracaoAlocacao
-// (ESTADO_ALOCACAO) é o token que resolve os dois: capturado no INÍCIO desta
-// função, comparado no fim -- se algo mudou a intenção do usuário nesse
-// meio-tempo (o contador só anda em aplicarMovimento/semearDoRealizado/
-// limparAlocacao/troca de semana), a resposta chegou tarde demais e é
-// descartada, silenciosa e inteiramente (nem redesenha, nem semeia, nem
-// marca a semana como vista -- quem bateu por cima já deixou a tela e o
-// armazenamento num estado consistente por conta própria).
-//
-// A ORDEM (quando a resposta AINDA é válida) importa: desenha primeiro com
-// o que veio salvo (ou vazio) -- é o que popula ESTADO_ALOCACAO.equipes (o
-// roster da semana), e semearDoRealizado precisa dele pronto antes de
-// rodar. Só semeia quando o mapa salvo veio vazio E a semana nunca foi
-// vista antes (semanaJaVista) -- uma semana ESVAZIADA de propósito (Limpar
-// alocação) também chega aqui com o mapa vazio, mas o marcador já foi
-// gravado da primeira vez que ela foi aberta, e é isso que impede reencher
-// o quadro atrás do usuário. marcarSemanaVista no fim roda em QUALQUER ramo
-// válido -- inclusive quando não havia nada para semear -- para não
-// insistir em buscar/semear de novo a cada redesenho.
-function carregarAlocacaoDaSemana(chave) {
-  var geracaoNoInicio = ESTADO_ALOCACAO.geracaoAlocacao;
-  return clienteAlocacao().carregar(chave).then(function (mapa) {
-    if (ESTADO_ALOCACAO.geracaoAlocacao !== geracaoNoInicio) return;
-
-    var vazio = !mapa || !Object.keys(mapa).length;
-    ESTADO_ALOCACAO.alocacao = mapa || {};
-    montarAbaAlocacao();
-    if (vazio && !semanaJaVista(chave)) {
-      semearDoRealizado();
-    }
-    marcarSemanaVista(chave);
-  });
-}
-
-// Troca a semana exibida e RECARREGA a alocação daquela semana do cliente
-// (Sheet ou localStorage, conforme o modo) -- nunca herda o que estava na
-// semana anterior: cada semana tem sua própria chave (chaveSemana), e
-// ESTADO_ALOCACAO.alocacao é SUBSTITUÍDO pelo que carregar() devolve, nunca
-// mesclado. Devolve a Promise de carregarAlocacaoDaSemana para quem chama
-// poder esperar o estado (e a semeadura, se houver) assentarem antes de agir
-// (o teste de troca de semana depende disso). semanaCarregada é marcada
-// ANTES de disparar a busca, não depois: o redesenho dentro de
-// carregarAlocacaoDaSemana chama montarAbaAlocacao(), que checaria de novo
-// se a semana já foi carregada -- sem marcar aqui primeiro, isso disparia
-// uma segunda busca redundante para a mesma semana. geracaoAlocacao também
-// avança aqui: trocar de semana invalida qualquer carregarAlocacaoDaSemana
-// da semana ANTERIOR que ainda esteja em voo -- sem isto, a resposta atrasada
-// de uma semana já abandonada aterrissaria no quadro da semana nova (ver o
-// comentário grande em carregarAlocacaoDaSemana).
-function selecionarSemanaAlocacao(idx) {
-  ESTADO_ALOCACAO.semanaIdx = idx;
-  var chave = chaveSemanaAtual();
-  ESTADO_ALOCACAO.semanaCarregada = chave;
-  ESTADO_ALOCACAO.geracaoAlocacao++;
-  return carregarAlocacaoDaSemana(chave);
-}
-
-// Recomputa o roster da semana (equipesDoQuadro, Task 1 -- disponibilidade e
-// vínculo com o SUP mudam a cada semana, mesmo sem novo build) e redesenha
-// #secao-alocacao inteira com o estado atual de ESTADO_ALOCACAO.alocacao. NÃO
-// mexe em persistência -- quem muda o que está alocado é
-// aplicarMovimento/semearDoRealizado/limparAlocacao/selecionarSemanaAlocacao,
-// cada um decidindo por si quando ler ou gravar; esta função só desenha o que
-// já está em ESTADO_ALOCACAO.
-//
-// 'indices' sai de indicesFiltrados, NÃO de indicesDaAba: o filtro de ativos
-// esconderia justamente as linhas "Parado c/ carteira", que são o motivo de
-// a aba existir (um SUP inativo em Volume ainda pode ter carteira parada e
-// merecer uma equipe).
-//
-// osParaSup (Task 10) agora viaja no payload cifrado, dentro de
-// window.__DEMANDAS__ (build-dashboard.js/montarEquipesAtivas e o
-// live-refresh, ver atualizarDadosAoVivoSemanal) -- sem ele,
-// supRealizado/colunaRealizada ficam sempre null e "Repor o realizado" não
-// tem o que semear. O fallback '|| {}' continua como default seguro para HTML
-// de um build anterior a esta task (degrada para "pool vazio de sugestão",
-// nunca quebra).
-function montarAbaAlocacao() {
-  var semanas = semanasDoMesSelecionado();
-  if (ESTADO_ALOCACAO.semanaIdx < 0 || ESTADO_ALOCACAO.semanaIdx >= semanas.length) {
-    ESTADO_ALOCACAO.semanaIdx = Math.max(0, ComputeSemanal.indiceSemanaAtual(semanas, hojeEpochDoNavegador()));
-  }
-  var semana = semanas[ESTADO_ALOCACAO.semanaIdx];
-
-  var demandas = window.__DEMANDAS__ || {};
-  // equipesRosterPeriodo (2026-08-21), não equipesPeriodo -- este último
-  // agora descreve a cobertura do Realizado (Link 6+7), que a Alocação não
-  // usa; o roster arrastável vem sempre da Sheet EQ (equipesCsv), e é a
-  // cobertura DELA que decide se a semana em tela é "só leitura".
-  var periodo = demandas.equipesRosterPeriodo;
-  // semRoster: a Sheet espelho da aba EQ não respondeu (build ou live-refresh
-  // falharam) -- equipesCsv null é a MESMA convenção de montarEquipesAtivas
-  // (build-dashboard.js), nunca string vazia (que parsearia para "zero
-  // equipes", indistinguível de "a planilha está vazia").
-  var semRoster = demandas.equipesCsv === null || demandas.equipesCsv === undefined;
-  // somenteLeitura: o espelho da EQ só cobre o MÊS que ele descreve
-  // (periodo.mes) -- uma semana de outro mês não tem roster fresco, então a
-  // grade continua desenhada mas nada é arrastável.
-  var somenteLeitura = (!semRoster && periodo && (periodo.mes - 1) !== mesSelecionadoIdx)
-    ? 'mes-diferente' : null;
-  var roster = EquipesAlocaveis.equipesDoQuadro(demandas.equipesCsv || '', {
-    ano: window.__ANO__,
-    mes: periodo ? periodo.mes : (mesSelecionadoIdx + 1),
-    semana: semana,
-    osParaSup: demandas.osParaSup || {},
-  });
-  ESTADO_ALOCACAO.equipes = roster.equipes;
-  ESTADO_ALOCACAO.foraDoQuadro = roster.foraDoQuadro;
-
-  var indices = indicesFiltrados(
-    window.__REGISTROS__,
-    filtrosSelecionadosSemanal.tipologia, filtrosSelecionadosSemanal.categoria,
-    filtrosSelecionadosSemanal.grupo, filtrosSelecionadosSemanal.sup, filtrosSelecionadosSemanal.origem
-  );
-
-  var cliente = clienteAlocacao();
-  document.getElementById('secao-alocacao').innerHTML = RenderAbaAlocacao.renderAbaAlocacao(
-    window.__REGISTROS__, indices, {
-      mesIdx: mesSelecionadoIdx, ano: window.__ANO__,
-      semanas: semanas, semana: semana,
-      demandas: window.__DEMANDAS__,
-      semRoster: semRoster, somenteLeitura: somenteLeitura,
-      equipes: ESTADO_ALOCACAO.equipes, foraDoQuadro: ESTADO_ALOCACAO.foraDoQuadro,
-      alocacao: ESTADO_ALOCACAO.alocacao,
-      // Não é estado persistido -- vive só aqui e no DOM, como a busca da aba
-      // Alertas. Trocar de semana ou de mês não o preserva.
-      buscaEquipe: ESTADO_ALOCACAO.busca,
-      tipologiaAlocacao: ESTADO_ALOCACAO.tipologia,
-      hojeEpoch: hojeEpochDoNavegador(),
-      modoPersistencia: cliente.modo(),
-      pendentes: cliente.pendentes().length,
-    }
-  );
-
-  // Primeiro desenho de uma semana nova (boot da aba, ou troca de mês que
-  // muda a semana em curso) -- busca a alocação salva e, se for o caso,
-  // semeia do realizado (Decisão 9 do spec, ver o comentário grande em
-  // ESTADO_ALOCACAO). NÃO dispara de novo a cada redesenho por filtro:
-  // 'chave' só muda quando a semana em si muda, e semanaCarregada é marcada
-  // ANTES do fetch assíncrono -- o redesenho que carregarAlocacaoDaSemana
-  // dispara chama montarAbaAlocacao() de novo, e sem marcar aqui primeiro
-  // isso repetiria a busca. Pulado quando semRoster: sem roster não há
-  // equipe nenhuma para semear, e sem este corte o guard repetiria a busca
-  // em todo redesenho enquanto a Sheet espelho da EQ não responder.
-  // geracaoAlocacao avança junto com semanaCarregada -- mesmo raciocínio de
-  // selecionarSemanaAlocacao: uma resposta em voo da semana ANTERIOR não
-  // pode aterrissar no quadro desta semana nova.
-  var chaveDaSemana = semana ? AlocacaoSheet.chaveSemana(window.__ANO__, semana.inicio) : null;
-  if (chaveDaSemana && chaveDaSemana !== ESTADO_ALOCACAO.semanaCarregada && !semRoster) {
-    ESTADO_ALOCACAO.semanaCarregada = chaveDaSemana;
-    ESTADO_ALOCACAO.geracaoAlocacao++;
-    carregarAlocacaoDaSemana(chaveDaSemana);
-  }
-}
-
-// Pointer Events, não o drag-and-drop nativo do HTML5: o nativo não funciona
-// em toque nenhum, e este quadro precisa servir num tablet. O mesmo caminho
-// atende mouse e dedo.
-//
-// Um clique curto (sem mover) SELECIONA a equipe (fica destacada e as células
-// compatíveis continuam acesas); o clique seguinte numa célula a solta ali.
-// Isso é o atalho de teclado/precisão.
-//
-// FIX (revisão do Task 9, achado Critical 1): a seleção NÃO é decidida em
-// 'pointerup' -- um toque simples dispara pointerdown -> pointerup -> click
-// como UM gesto só, e o 'click' final desse MESMO gesto chegaria logo depois
-// do pointerup que acabou de marcar a seleção, consumindo-a na hora (o clique
-// se autocancelava, e o atalho de precisão/teclado nunca funcionava de
-// verdade num navegador -- só parecia funcionar no DOM falso, que nunca
-// sintetiza o 'click' seguinte). Agora a seleção nasce e morre inteiramente
-// dentro do handler de 'click': o clique de um toque sem movimento SELECIONA
-// (se nada estava selecionado), e o clique seguinte, numa célula, SOLTA. O
-// clique final de um ARRASTO de verdade (moveu=true, já resolvido dentro de
-// 'pointerup') é suprimido via SUPRIMIR_PROXIMO_CLICK_ALOCACAO, para não ser
-// tratado de novo.
-var ARRASTO_ALOCACAO = { pointerId: null, cartao: null, equipeId: null, fantasma: null, moveu: false };
-var SELECAO_ALOCACAO = { equipeId: null };
-var SUPRIMIR_PROXIMO_CLICK_ALOCACAO = false;
-
-function equipeAlocavelPeloId(id) {
-  for (var i = 0; i < ESTADO_ALOCACAO.equipes.length; i++) {
-    if (ESTADO_ALOCACAO.equipes[i].id === id) return ESTADO_ALOCACAO.equipes[i];
-  }
-  return null;
-}
-
-// TRAVA DE VEÍCULO (2026-08-12): "devolver" move o GRUPO inteiro
-// (destinoDoGrupo), pool inclusive -- então soltar no pool tem efeito mesmo
-// quando a equipe ARRASTADA está no pool, desde que uma COMPANHEIRA esteja
-// alocada (ela seria puxada pro pool junto). Por isso o pool tem de acender
-// quando a arrastada OU qualquer companheira dela está alocada, não só a
-// arrastada -- achado da revisão final de 2026-08-12, o motivo desta rodada.
-function podeDevolverGrupo(equipeId, companheiros) {
-  if (ESTADO_ALOCACAO.alocacao[equipeId]) return true;
-  return (companheiros || []).some(function (id) {
-    return !!ESTADO_ALOCACAO.alocacao[id];
-  });
-}
-
-// Acende as células compatíveis com a equipe (celula-alvo) e esmaece as
-// demais (celula-inerte). Limpa sempre pelo par abaixo -- em TODO caminho de
-// saída do arrasto, inclusive recusa, senão o quadro fica preso num estado de
-// "arrastando" que nunca existiu de verdade.
-// podeDevolver: acende o POOL quando a equipe arrastada OU alguma companheira
-// de veículo dela já está alocada (ver podeDevolverGrupo acima) -- com a
-// trava no ar, arrastar uma equipe do POOL de volta pro pool ainda pode
-// devolver uma companheira que estava alocada, então "não faz nada" seria
-// mentira nesse caso.
-function destacarCelulasCompativeis(colunas, podeDevolver, companheiros) {
-  var celulas = document.querySelectorAll('.celula-alocacao');
-  for (var i = 0; i < celulas.length; i++) {
-    var coluna = celulas[i].getAttribute ? celulas[i].getAttribute('data-coluna') : null;
-    if (colunas.indexOf(coluna) !== -1) celulas[i].classList.add('celula-alvo');
-    else celulas[i].classList.add('celula-inerte');
-  }
-  // As companheiras de veículo (trava de 2026-08-12): quem vai junto tem de
-  // aparecer ANTES da soltura, não depois. O cartão de uma equipe polivalente
-  // se repete em cada grupo do pool, então acende TODAS as instâncias dele.
-  // Achado Minor 4 (revisão final): id interpolado cru dentro do seletor
-  // lançaria DOMException se algum dia carregasse aspas -- ANTES do
-  // setPointerCapture, matando o gesto inteiro. Em vez de montar seletor
-  // nenhum, busca todo cartão com data-equipe e compara o valor em JS.
-  var todosOsCartoes = document.querySelectorAll('[data-equipe]');
-  (companheiros || []).forEach(function (idBruto) {
-    var id = String(idBruto);
-    for (var j = 0; j < todosOsCartoes.length; j++) {
-      if (todosOsCartoes[j].getAttribute('data-equipe') === id) {
-        todosOsCartoes[j].classList.add('cartao-companheiro');
-      }
-    }
-  });
-  if (!podeDevolver) return;
-  var pool = document.querySelector('.pool-alocacao');
-  if (pool) pool.classList.add('pool-alvo');
-}
-
-// Chamava-se limparDestaqueCelulas, e o nome virou mentira em 2026-08-11,
-// quando o pool passou a acender junto -- e mais ainda em 2026-08-12, com as
-// companheiras de veículo. É chamada dos CINCO pontos que encerram um gesto, e
-// todos querem a limpeza COMPLETA: limpar qualquer uma dessas marcas em outro
-// lugar a deixaria acesa para sempre em pelo menos um dos quatro caminhos de
-// saída do arrasto (soltura aceita, recusada, pointercancel, ou solta fora de
-// tudo). Ver o comentário de encerrarArrastoAlocacao.
-function limparDestaquesAlocacao() {
-  var celulas = document.querySelectorAll('.celula-alocacao');
-  for (var i = 0; i < celulas.length; i++) {
-    celulas[i].classList.remove('celula-alvo');
-    celulas[i].classList.remove('celula-inerte');
-  }
-  var companheiros = document.querySelectorAll('.cartao-companheiro');
-  for (var j = 0; j < companheiros.length; j++) {
-    companheiros[j].classList.remove('cartao-companheiro');
-  }
-  var pool = document.querySelector('.pool-alocacao');
-  if (pool) pool.classList.remove('pool-alvo');
-}
-
-function criarFantasmaArrasto(equipeId) {
-  var fantasma = document.createElement('div');
-  fantasma.className = 'fantasma-arrasto';
-  fantasma.textContent = equipeId;
-  document.body.appendChild(fantasma);
-  return fantasma;
-}
-
-function posicionarFantasmaArrasto(fantasma, x, y) {
-  fantasma.style.left = x + 'px';
-  fantasma.style.top = y + 'px';
-}
-
-function removerFantasmaArrasto() {
-  if (ARRASTO_ALOCACAO.fantasma && ARRASTO_ALOCACAO.fantasma.parentNode) {
-    ARRASTO_ALOCACAO.fantasma.parentNode.removeChild(ARRASTO_ALOCACAO.fantasma);
-  }
-  ARRASTO_ALOCACAO.fantasma = null;
-}
-
-// Único ponto de saída do ARRASTO (não da seleção por clique, que é estado
-// separado) -- os QUATRO caminhos (soltura aceita, recusada, cancelada por
-// pointercancel, ou solta fora de qualquer célula) passam por aqui, e todos
-// deixam o quadro exatamente igual: sem fantasma, sem destaque, sem captura
-// de ponteiro presa, e ARRASTO_ALOCACAO de volta ao repouso.
-function encerrarArrastoAlocacao() {
-  if (ARRASTO_ALOCACAO.cartao && ARRASTO_ALOCACAO.pointerId !== null
-    && typeof ARRASTO_ALOCACAO.cartao.releasePointerCapture === 'function') {
-    try { ARRASTO_ALOCACAO.cartao.releasePointerCapture(ARRASTO_ALOCACAO.pointerId); } catch (err) { /* já liberada, ou o alvo sumiu do DOM -- sem problema */ }
-  }
-  removerFantasmaArrasto();
-  ARRASTO_ALOCACAO.pointerId = null;
-  ARRASTO_ALOCACAO.cartao = null;
-  ARRASTO_ALOCACAO.equipeId = null;
-  ARRASTO_ALOCACAO.moveu = false;
-  limparDestaquesAlocacao();
-}
-
-// Resolve a .celula-alocacao sob o ponto do soltar.
-//
-// FIX (revisão do Task 9, achado Critical 2): a resolução agora prioriza
-// document.elementFromPoint(clientX, clientY), não mais e.target -- porque
-// pointerdown passou a capturar o ponteiro no cartão (setPointerCapture, ver
-// inicializarInteracaoAlocacao), e com o ponteiro CAPTURADO o navegador
-// retarget-a e.target para o elemento que capturou, não para o que está
-// fisicamente sob o dedo/cursor no momento de soltar. Usar e.target aqui
-// resolveria sempre para o próprio cartão (ou a célula de ORIGEM), nunca o
-// destino. elementFromPoint continua funcionando porque lê a posição real na
-// tela, ignorando quem capturou o quê. Cai para e.target.closest só em
-// ambiente sem elementFromPoint (não deveria acontecer em navegador real).
-// Resolve o ALVO do soltar: uma célula, o pool, ou nada.
-//
-// Era resolverCelulaAlocacao, que só conhecia célula e devolvia null para todo
-// o resto -- por isso soltar no pool não fazia nada. A devolução (2026-08-11)
-// precisa distinguir "soltou no pool" de "soltou no vazio": o primeiro devolve
-// a equipe ao pool, o segundo não faz NADA, de propósito. Alocar é trabalho do
-// usuário; um solte impreciso não pode desfazê-lo.
-function resolverAlvoAlocacao(e) {
-  var sob = null;
-  if (typeof document.elementFromPoint === 'function' && typeof e.clientX === 'number') {
-    sob = document.elementFromPoint(e.clientX, e.clientY);
-  }
-  if (!sob) sob = e.target;
-  if (!sob || !sob.closest) return null;
-  // A célula ganha prioridade: se por layout as duas casarem, o destino
-  // específico vence o genérico.
-  var celula = sob.closest('.celula-alocacao');
-  if (celula) return { tipo: 'celula', el: celula };
-  if (sob.closest('.pool-alocacao')) return { tipo: 'pool', el: null };
-  return null;
-}
-
-// Um único listener delegado em #secao-alocacao, montado UMA VEZ (a seção
-// nunca é recriada -- mesmo padrão do listener do Balanço, ver
-// inicializarTooltipBalanco acima). #secao-alocacao existe no HTML estático
-// desde o load (ver renderSemanal), então este wireup pode rodar
-// incondicionalmente, antes até da senha ser digitada -- só reage a eventos
-// que, na prática, só acontecem depois que montarAbaAlocacao() já desenhou
-// algo lá dentro.
-function inicializarInteracaoAlocacao() {
-  var secao = document.getElementById('secao-alocacao');
-
-  secao.addEventListener('pointerdown', function (e) {
-    var cartao = e.target && e.target.closest ? e.target.closest('[data-equipe][data-arrastavel="sim"]') : null;
-    if (!cartao) return;
-    // FIX (revisão do Task 9, achado Important 3): um arrasto já em
-    // andamento (outro pointerId) NÃO é sequestrado por um segundo dedo --
-    // a aba move uma equipe por vez. O segundo pointerdown é ignorado até o
-    // primeiro terminar (pointerup/pointercancel).
-    if (ARRASTO_ALOCACAO.pointerId !== null) return;
-    var equipeId = cartao.getAttribute('data-equipe');
-    var equipe = equipeAlocavelPeloId(equipeId);
-    if (!equipe) return;
-    // Limpa qualquer resíduo ANTES de acender de novo -- uma seleção anterior
-    // abandonada (clicou numa equipe e apertou outra sem soltar) deixaria o
-    // destaque da primeira somado ao da segunda, senão.
-    SELECAO_ALOCACAO.equipeId = null;
-    limparDestaquesAlocacao();
-
-    ARRASTO_ALOCACAO.pointerId = e.pointerId;
-    ARRASTO_ALOCACAO.cartao = cartao;
-    ARRASTO_ALOCACAO.equipeId = equipeId;
-    ARRASTO_ALOCACAO.moveu = false;
-    ARRASTO_ALOCACAO.fantasma = criarFantasmaArrasto(equipeId);
-    posicionarFantasmaArrasto(ARRASTO_ALOCACAO.fantasma, e.clientX, e.clientY);
-    destacarCelulasCompativeis(equipe.colunas || [], podeDevolverGrupo(equipeId, equipe.companheiros), equipe.companheiros || []);
-
-    // FIX (revisão do Task 9, achado Critical 2): captura o ponteiro no
-    // cartão -- garante que pointermove/pointerup/pointercancel CONTINUAM
-    // chegando a este elemento (e, por bolha, em #secao-alocacao, que é
-    // ancestral dele) mesmo que o ponteiro saia fisicamente da seção antes de
-    // soltar (arrastar pra cima do cabeçalho, ou a seção não preencher a
-    // viewport num tablet). Sem isso nenhum dos dois evento dispara, e o
-    // fantasma/destaque ficam presos na tela para sempre.
-    if (typeof cartao.setPointerCapture === 'function') {
-      try { cartao.setPointerCapture(e.pointerId); } catch (err) { /* alvo removido entre o evento e a chamada -- sem problema */ }
-    }
-  });
-
-  // O campo de busca de equipe. montarAbaAlocacao refaz a seção inteira, então
-  // o input é OUTRO elemento a cada tecla -- sem devolver o foco e o cursor, só
-  // daria pra digitar um caractere por vez.
-  secao.addEventListener('input', function (e) {
-    var campo = e.target && e.target.id === 'busca-equipe' ? e.target : null;
-    if (!campo) return;
-    ESTADO_ALOCACAO.busca = campo.value || '';
-    montarAbaAlocacao();
-    var novo = document.getElementById('busca-equipe');
-    if (novo && typeof novo.focus === 'function') {
-      novo.focus();
-      if (typeof novo.setSelectionRange === 'function') {
-        novo.setSelectionRange(novo.value.length, novo.value.length);
-      }
-    }
-  });
-
-  // O filtro de tipologia da aba. <select> dispara 'change'; o 'input' acima
-  // tambem o ve, mas sai fora porque o id nao bate.
-  secao.addEventListener('change', function (e) {
-    var sel = e.target && e.target.id === 'filtro-tipologia-alocacao' ? e.target : null;
-    if (!sel) return;
-    ESTADO_ALOCACAO.tipologia = sel.value || '';
-    montarAbaAlocacao();
-  });
-
-  secao.addEventListener('pointermove', function (e) {
-    if (ARRASTO_ALOCACAO.pointerId === null || e.pointerId !== ARRASTO_ALOCACAO.pointerId) return;
-    ARRASTO_ALOCACAO.moveu = true;
-    if (ARRASTO_ALOCACAO.fantasma) posicionarFantasmaArrasto(ARRASTO_ALOCACAO.fantasma, e.clientX, e.clientY);
-  });
-
-  secao.addEventListener('pointerup', function (e) {
-    if (ARRASTO_ALOCACAO.pointerId === null || e.pointerId !== ARRASTO_ALOCACAO.pointerId) return;
-    var equipeId = ARRASTO_ALOCACAO.equipeId;
-    var moveu = ARRASTO_ALOCACAO.moveu;
-    encerrarArrastoAlocacao();
-
-    if (!moveu) {
-      // Clique sem mover: NÃO decide nada aqui (ver o comentário grande sobre
-      // Critical 1, acima de ARRASTO_ALOCACAO) -- quem seleciona é o 'click'
-      // que o navegador dispara a seguir, para este MESMO gesto.
-      return;
-    }
-
-    // Arrasto de verdade: resolve o alvo e aplica -- sempre, inclusive quando
-    // não há célula sob o ponto (soltou fora da grade) ou quando
-    // aplicarMovimento recusa. O destaque/fantasma já foram limpos por
-    // encerrarArrastoAlocacao() acima.
-    // Célula aloca; pool DEVOLVE; vazio não faz nada.
-    var alvo = resolverAlvoAlocacao(e);
-    if (alvo && alvo.tipo === 'celula') {
-      aplicarMovimento(equipeId, alvo.el.getAttribute('data-sup'), alvo.el.getAttribute('data-coluna'));
-    } else if (alvo && alvo.tipo === 'pool') {
-      aplicarMovimento(equipeId, '', '');
-    }
-    // O 'click' que o navegador dispara logo depois, para este MESMO gesto de
-    // arrasto, já foi resolvido aqui -- suprime esse click específico (ver o
-    // handler de 'click' abaixo) para não reaplicar nem tentar selecionar.
-    SUPRIMIR_PROXIMO_CLICK_ALOCACAO = true;
-  });
-
-  // pointercancel: o navegador interrompe o gesto (rolagem do sistema, troca
-  // de app, toque cancelado) sem nunca disparar pointerup. Mesma limpeza de
-  // uma recusa -- nunca aplica nada, e nunca deixa uma seleção pendente (o
-  // gesto foi interrompido, não completado).
-  secao.addEventListener('pointercancel', function (e) {
-    if (ARRASTO_ALOCACAO.pointerId === null || e.pointerId !== ARRASTO_ALOCACAO.pointerId) return;
-    encerrarArrastoAlocacao();
-  });
-
-  secao.addEventListener('click', function (e) {
-    // O clique final de um ARRASTO de verdade (pointerup com moveu=true) já
-    // foi resolvido lá -- este é o mesmo gesto, ignora e consome a flag.
-    if (SUPRIMIR_PROXIMO_CLICK_ALOCACAO) {
-      SUPRIMIR_PROXIMO_CLICK_ALOCACAO = false;
-      return;
-    }
-
-    var acaoEl = e.target && e.target.closest ? e.target.closest('[data-acao]') : null;
-    if (acaoEl) {
-      var nome = acaoEl.getAttribute('data-acao');
-      if (nome === 'repor-realizado') {
-        if (Object.keys(ESTADO_ALOCACAO.alocacao).length
-          && typeof window.confirm === 'function'
-          && !window.confirm('Repor o realizado substitui a alocação atual desta semana. Continuar?')) return;
-        semearDoRealizado();
-      } else if (nome === 'limpar-alocacao') {
-        if (Object.keys(ESTADO_ALOCACAO.alocacao).length
-          && typeof window.confirm === 'function'
-          && !window.confirm('Limpar toda a alocação desta semana?')) return;
-        limparAlocacao();
-      } else if (nome === 'tentar-de-novo') {
-        clienteAlocacao().tentarDeNovo().then(montarAbaAlocacao);
-      }
-      return;
-    }
-
-    var botaoSemana = e.target && e.target.closest ? e.target.closest('[data-semana]') : null;
-    if (botaoSemana) {
-      selecionarSemanaAlocacao(parseInt(botaoSemana.getAttribute('data-semana'), 10));
-      return;
-    }
-
-    // Já havia uma equipe selecionada (1º clique de um gesto ANTERIOR, feito
-    // e concluído -- não pode ser o mesmo clique atual, que já teria sido
-    // suprimido acima se pertencesse a um arrasto, e a seleção só nasce aqui
-    // embaixo, nunca em pointerup): este clique é o 2º passo, solta na
-    // célula (se houver) e encerra a seleção -- aceita ou recusa, sempre
-    // limpa o destaque.
-    if (SELECAO_ALOCACAO.equipeId) {
-      var equipeIdSelecionado = SELECAO_ALOCACAO.equipeId;
-      SELECAO_ALOCACAO.equipeId = null;
-      limparDestaquesAlocacao();
-      // Mesmo alvo do arrasto: clicar no pool com uma equipe selecionada
-      // devolve, exatamente como soltá-la ali.
-      var alvoClique = resolverAlvoAlocacao(e);
-      if (alvoClique && alvoClique.tipo === 'celula') {
-        aplicarMovimento(equipeIdSelecionado, alvoClique.el.getAttribute('data-sup'), alvoClique.el.getAttribute('data-coluna'));
-      } else if (alvoClique && alvoClique.tipo === 'pool') {
-        aplicarMovimento(equipeIdSelecionado, '', '');
-      }
-      return;
-    }
-
-    // Sem seleção pendente: um clique sem movimento (o pointerup acima só
-    // limpou o ARRASTO, nunca aplicou nada) num cartão arrastável é o 1º
-    // passo do atalho -- SELECIONA e mantém o destaque aceso, esperando o
-    // próximo clique numa célula.
-    var cartaoClicado = e.target && e.target.closest ? e.target.closest('[data-equipe][data-arrastavel="sim"]') : null;
-    if (!cartaoClicado) return;
-    var equipeIdClicado = cartaoClicado.getAttribute('data-equipe');
-    var equipeClicada = equipeAlocavelPeloId(equipeIdClicado);
-    if (!equipeClicada) return;
-    SELECAO_ALOCACAO.equipeId = equipeIdClicado;
-    destacarCelulasCompativeis(equipeClicada.colunas || [], podeDevolverGrupo(equipeIdClicado, equipeClicada.companheiros), equipeClicada.companheiros || []);
-  });
 }
 
 // Redesenha #secao-demandas inteira (controles + tabelas) com o modo atual
@@ -2542,11 +1750,6 @@ function recalcularSemanal() {
   // em 2026-08-04. O RECORTE de registros continua sendo o mesmo das outras
   // abas.
   montarAbaConsolidado(window.__REGISTROS__, indices, dimensoes);
-  // A aba Alocação Equipes também segue a barra compartilhada -- ela mesma
-  // recalcula 'indices' com indicesFiltrados (não indicesDaAba, ver o
-  // comentário em montarAbaAlocacao), então basta chamá-la aqui para que
-  // filtro/mês/limpar-filtros a redesenhem junto com as demais.
-  montarAbaAlocacao();
 }
 
 // Callback de mudança de filtro (aoMudar, ver montarFiltroMulti em
@@ -2595,7 +1798,6 @@ function montarDashboard(registros) {
   document.getElementById('aba-demandas').addEventListener('click', function () { alternarAba('demandas'); });
   document.getElementById('aba-alertas').addEventListener('click', function () { alternarAba('alertas'); });
   document.getElementById('aba-consolidado').addEventListener('click', function () { alternarAba('consolidado'); });
-  document.getElementById('aba-alocacao').addEventListener('click', function () { alternarAba('alocacao'); });
   document.getElementById('busca-alertas').addEventListener('input', aplicarBuscaAlertasSemanal);
   document.getElementById('limpar-filtros').addEventListener('click', limparFiltrosSemanal);
   document.getElementById('somente-ativos').addEventListener('change', function (e) {
@@ -2846,52 +2048,8 @@ function atualizarDadosAoVivoSemanal() {
       demandasNovas.equipesPorDia = window.__DEMANDAS__.equipesPorDia;
       demandasNovas.equipesPeriodo = window.__DEMANDAS__.equipesPeriodo;
 
-      // Equipes ATIVAS (Sheet espelho da aba EQ): mesma montagem que o build
-      // faz (build-dashboard.js, montarEquipesAtivas), sobre os MESMOS furos
-      // já redirecionados. Alimenta só equipesCsv/osParaSup/
-      // equipesRosterPeriodo (consumidos pela aba Alocação Equipes) --
-      // NUNCA mais o Realizado da Tabela Semanal (equipesPorDia), que é
-      // exclusividade do bloco REALIZADO abaixo desde 2026-08-21.
       var csvEq = textos[3];
       var periodoEq = csvEq ? ComputeEquipesAtivas.mesDaAbaEq(csvEq) : null;
-      // A aba Alocação Equipes recomputa o roster a partir deste CSV a cada
-      // troca de semana -- sem atualizá-lo aqui, o quadro continuaria
-      // mostrando o roster do momento do build depois de um "Atualizar
-      // dados". null por padrão (nunca ''), mesma regra de
-      // montarEquipesAtivas (build-dashboard.js): sem {ano, mes} o cliente
-      // não sabe a que mês os dias pertencem, e roster sem calendário é
-      // pior que nenhum.
-      demandasNovas.equipesCsv = null;
-      // osParaSup segue a mesma regra -- ver o comentário simétrico em
-      // montarEquipesAtivas (build-dashboard.js).
-      demandasNovas.osParaSup = null;
-      // equipesRosterPeriodo (2026-08-21): cobertura da Sheet EQ, separada
-      // de equipesPeriodo (cobertura do Realizado/Link 6+7) -- ver o
-      // comentário longo em build-dashboard.js sobre por que os dois campos
-      // não podem mais compartilhar o mesmo nome.
-      demandasNovas.equipesRosterPeriodo = null;
-
-      // osParaSup: só depende de 'furos', usado pela aba Alocação Equipes
-      // (equipesDoQuadro resolve supRealizado/colunaRealizada a partir dele).
-      // 'var' fora do if (periodoEq) de propósito (escopo de FUNÇÃO): com
-      // periodoEq falso ele ainda precisa existir para a atribuição
-      // condicional abaixo não lançar ReferenceError.
-      //
-      // tipologiaPorSondador/agregarEquipesAtivas (que só serviam pra montar
-      // equipesPorDia a partir da Sheet ATIVAS) saíram em 2026-08-21 --
-      // equipesPorDia é exclusividade do bloco REALIZADO (Link 6+7) agora, e
-      // a Sheet ATIVAS só alimenta equipesCsv/equipesRosterPeriodo/
-      // osParaSup pra Alocação (ver comentário acima da declaração de csvEq).
-      var osParaSup = {};
-      furos.forEach(function (f) {
-        if (f.os && f.sup && !osParaSup[f.os]) osParaSup[f.os] = f.sup;
-      });
-
-      if (periodoEq) {
-        demandasNovas.equipesRosterPeriodo = periodoEq;
-        demandasNovas.equipesCsv = csvEq;
-        demandasNovas.osParaSup = osParaSup;
-      }
 
       // Δ equipes REALIZADO (2026-08-10, recuperado e reintegrado em
       // 2026-08-11 depois de um git reset --hard ter descartado esta branch
@@ -2985,12 +2143,6 @@ function atualizarDadosAoVivoSemanal() {
 }
 
 document.getElementById('atualizar-dashboard').addEventListener('click', atualizarDadosAoVivoSemanal);
-
-// Wireup incondicional, no load do script -- #secao-alocacao já existe no
-// HTML estático (ver renderSemanal), e o listener delegado não depende de
-// senha nem de a aba já ter sido desenhada (mesmo raciocínio do listener de
-// #atualizar-dashboard acima).
-inicializarInteracaoAlocacao();
 `;
 
 // registros: array de registros da MATRIZ (mesmo formato do orçamento --
@@ -3018,7 +2170,8 @@ function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoE
     throw new Error('renderSemanal requer "demandas.porRegistroEventos" (de tools/semanal/compute-demandas.js) -- sem isso Realizado/Tendência/Demandas Pendentes desapareceriam da Tabela Semanal sem nenhum erro no build.');
   }
 
-  const dadosJson = JSON.stringify({ registros, baseline, demandas, alocacaoUrl: URL_ALOCACAO, historicoRelatorioUrl: URL_HISTORICO_RELATORIO });
+  const { equipesCsv, osParaSup, equipesRosterPeriodo, ...demandasSemAlocacao } = demandas;
+  const dadosJson = JSON.stringify({ registros, baseline, demandas: demandasSemAlocacao, historicoRelatorioUrl: URL_HISTORICO_RELATORIO });
   const dadosCifrados = cifrarComSenha(dadosJson, senha);
   const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');
 
@@ -3116,7 +2269,6 @@ ${markupFiltros(FILTROS_ALERTAS_SEMANAL, { recuo: '      ', classes: 'filtros-al
       </div>
     </div>
     <div id="secao-consolidado" style="display:none"></div>
-    <div id="secao-alocacao" style="display:none"></div>
   </div>
   </main>
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx}; window.__ANO__ = ${periodos[0].getUTCFullYear()};</script>

@@ -41,6 +41,12 @@ const PARES = [
     comando: 'cp dist/planejamento-semanal.html docs/planejamento-semanal.html',
   },
   {
+    nome: 'alocação equipes',
+    origem: path.join(RAIZ, 'dist', 'alocacao-equipes.html'),
+    publicado: path.join(RAIZ, 'docs', 'alocacao-equipes.html'),
+    comando: 'cp dist/alocacao-equipes.html docs/alocacao-equipes.html',
+  },
+  {
     nome: 'CSV combinado de Avanços',
     origem: path.join(RAIZ, 'dist', 'avancos-online.csv'),
     publicado: path.join(RAIZ, 'docs', 'avancos-online.csv'),
