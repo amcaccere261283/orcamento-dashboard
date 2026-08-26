@@ -660,3 +660,64 @@ test('aplicarMovimentoNoPino não lança quando o SUP não tem linha na grade --
   assert.strictEqual(ok, true);
   assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['4']), { sup: 'SUP-INEXISTENTE', coluna: 'SP' });
 });
+
+// --- Task 14: o GESTO COMPLETO de arrasto até o pino ------------------------
+//
+// A Task 13 provou resolverAlvoAlocacao/aplicarMovimentoNoPino chamando as
+// duas DIRETO. O que faltava era a ponta: até a Task 14,
+// inicializarInteracaoAlocacao só ligava #secao-kanban-alocacao, onde pino
+// nenhum aparece -- ou seja, todo o código da Task 13 estava correto e
+// INALCANÇÁVEL no app real. Este teste é a prova de que a ponta foi ligada:
+// ele dispara os listeners REAIS de #secao-mapa-alocacao (pointerdown ->
+// pointermove -> pointerup), nunca aplicarMovimentoNoPino direto.
+//
+// O DOM falso não implementa elementFromPoint, então resolverAlvoAlocacao cai
+// no fallback e.target (comportamento documentado na própria função) -- por
+// isso o pointerup carrega o marcador como target.
+function eventoPointerNoCartao(equipeId, pointerId) {
+  return {
+    pointerId: pointerId,
+    clientX: 0,
+    clientY: 0,
+    target: {
+      closest(sel) {
+        if (sel === '[data-equipe][data-arrastavel="sim"]') {
+          return { getAttribute: (attr) => (attr === 'data-equipe' ? equipeId : null) };
+        }
+        return null;
+      },
+    },
+  };
+}
+
+test('GESTO COMPLETO: arrastar o cartão do pool até o pino do mapa aloca a equipe no SUP do pino', async () => {
+  const cliente = montarClienteAlocacao();
+  marcarSemanasVistas(cliente, 1); // sem isto a semeadura automática já alocaria a 4
+  await cliente.selecionarSemanaAlocacao(1);
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined, 'pré-condição: a 4 está no pool');
+
+  const [pino] = cliente.document.registrarMarcadoresAlocacao(['SUP-A']);
+  const secaoMapa = cliente.document.getElementById('secao-mapa-alocacao');
+  assert.ok(secaoMapa.listeners.pointerdown,
+    'pré-condição: #secao-mapa-alocacao tem que ter listeners -- é o que a Task 14 liga');
+
+  secaoMapa.listeners.pointerdown(eventoPointerNoCartao('4', 1));
+  secaoMapa.listeners.pointermove({ pointerId: 1, clientX: 10, clientY: 10 });
+  secaoMapa.listeners.pointerup({ pointerId: 1, clientX: 10, clientY: 10, target: pino });
+
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].sup, 'SUP-A');
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].coluna, 'SP');
+});
+
+// Guarda contra uma regressão sutil da parametrização: ligar a MESMA função
+// duas vezes não pode ter deixado o Kanban sem listener (ex.: uma refatoração
+// que trocasse o parâmetro por um id fixo do Mapa).
+test('a parametrização de inicializarInteracaoAlocacao ligou as DUAS seções, não só a do Mapa', () => {
+  const cliente = montarClienteAlocacao();
+  const kanban = cliente.document.getElementById('secao-kanban-alocacao');
+  const mapa = cliente.document.getElementById('secao-mapa-alocacao');
+  ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'click'].forEach((tipo) => {
+    assert.ok(kanban.listeners[tipo], 'Kanban precisa do listener de ' + tipo);
+    assert.ok(mapa.listeners[tipo], 'Mapa precisa do listener de ' + tipo);
+  });
+});

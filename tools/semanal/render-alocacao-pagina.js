@@ -1020,18 +1020,32 @@ function aplicarMovimentoNoPino(equipeId, sup) {
   return aplicarMovimento(equipeId, sup, coluna);
 }
 
-// Um único listener delegado em #secao-kanban-alocacao, montado UMA VEZ (a
-// seção nunca é recriada -- mesmo padrão do listener do Balanço, ver
-// inicializarTooltipBalanco acima). #secao-kanban-alocacao existe no HTML
-// estático desde o load (ver renderAlocacaoPagina), então este wireup pode
-// rodar incondicionalmente, antes até da senha ser digitada -- só reage a
-// eventos que, na prática, só acontecem depois que montarAbaAlocacao() já
-// desenhou algo lá dentro. Renomeada de #secao-alocacao pra #secao-kanban-alocacao
-// na Task 9 (2026-08-26), quando a nav Kanban/Mapa dividiu a seção única em
-// duas -- a interação de arrasto (Pointer Events) só existe na grade Kanban,
-// nunca na aba Mapa.
-function inicializarInteracaoAlocacao() {
-  var secao = document.getElementById('secao-kanban-alocacao');
+// Um único listener delegado por SEÇÃO, montado UMA VEZ (a seção nunca é
+// recriada -- mesmo padrão do listener do Balanço, ver
+// inicializarTooltipBalanco acima). As duas seções existem no HTML estático
+// desde o load (ver renderAlocacaoPagina), então este wireup pode rodar
+// incondicionalmente, antes até da senha ser digitada -- só reage a eventos
+// que, na prática, só acontecem depois que montarAbaAlocacao() já desenhou
+// algo lá dentro.
+//
+// Renomeada de #secao-alocacao pra #secao-kanban-alocacao na Task 9
+// (2026-08-26), quando a nav Kanban/Mapa dividiu a seção única em duas.
+// PARAMETRIZADA na Task 14 (mesmo dia): o gesto de arrasto passou a existir
+// TAMBÉM na aba Mapa (soltar a equipe sobre o pino do SUP, ver
+// aplicarMovimentoNoPino), e os pinos vivem dentro de #secao-mapa-alocacao --
+// fora da árvore de #secao-kanban-alocacao, então o listener do Kanban nunca
+// os veria. Chamada uma vez por seção no wireup do fim do script.
+//
+// O ESTADO DO GESTO (ARRASTO_ALOCACAO/SELECAO_ALOCACAO/
+// SUPRIMIR_PROXIMO_CLICK_ALOCACAO) é de MÓDULO, compartilhado pelas duas
+// chamadas de propósito: é "o gesto em andamento na página", não "o gesto
+// desta seção". As duas seções são mutuamente exclusivas em display (a nav
+// mostra uma e esconde a outra), então não há gesto que comece numa e termine
+// na outra -- e, se um dia houvesse, o estado único é o que garante que a aba
+// continua movendo UMA equipe por vez, em vez de dois arrastos paralelos
+// disputando a mesma alocação.
+function inicializarInteracaoAlocacao(idSecao) {
+  var secao = document.getElementById(idSecao);
 
   secao.addEventListener('pointerdown', function (e) {
     var cartao = e.target && e.target.closest ? e.target.closest('[data-equipe][data-arrastavel="sim"]') : null;
@@ -1302,10 +1316,15 @@ function atualizarDadosAoVivoSemanal() {
 
 document.getElementById('atualizar-dashboard').addEventListener('click', atualizarDadosAoVivoSemanal);
 
-// Wireup incondicional, no load do script -- #secao-kanban-alocacao já existe
-// no HTML estático (ver renderAlocacaoPagina), e o listener delegado não
-// depende de senha nem de a aba já ter sido desenhada.
-inicializarInteracaoAlocacao();
+// Wireup incondicional, no load do script -- as duas seções já existem no
+// HTML estático (ver renderAlocacaoPagina), e os listeners delegados não
+// dependem de senha nem de a aba já ter sido desenhada.
+//
+// DUAS chamadas (Task 14): a aba Mapa também aceita arrasto, e os pinos
+// (.marcador-alocacao-mapa) ficam dentro de #secao-mapa-alocacao -- fora da
+// árvore do Kanban, então o listener dele nunca os alcançaria.
+inicializarInteracaoAlocacao('secao-kanban-alocacao');
+inicializarInteracaoAlocacao('secao-mapa-alocacao');
 
 // Nav Kanban/Mapa -- markupAbas() (tools/comum/render-shell.js) já desenha
 // o <div class="abas-visualizacao"> com os dois <button>; aqui só liga o
