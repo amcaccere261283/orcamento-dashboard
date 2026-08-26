@@ -100,3 +100,56 @@ test('exclusão não conta em semContrato -- são contadores separados', () => {
   assert.strictEqual(excluidos, 1, 'a linha SN é excluída, não "sem contrato"');
   assert.strictEqual(semContrato, 1, 'a linha de OS inexistente no Link 3 é "sem contrato", não excluída');
 });
+
+// COORDENADAS (2026-08-26). A fonte (Link 2) NÃO tem duas colunas separadas:
+// tem UMA célula 'Latitude/Longitude' no formato "-25.55667703 / -49.34752807",
+// que separarLatLong parte em duas. Medido na fonte real: 5.724 de 5.724 furos
+// pendentes trazem o par preenchido.
+//
+// Estes testes travam o formato de ENTRADA, que foi exatamente a suposição que
+// um trabalho paralelo errou (assumiu duas colunas 'Latitude'/'Longitude' na
+// linha crua, o que devolveria vazio em silêncio -- sem pino e sem erro).
+test('a célula única "Latitude/Longitude" do Link 2 é separada em duas colunas', () => {
+  const { HEADER_SAIDA } = require('../tools/semanal/mapear-producao-total.js');
+  const colLat = HEADER_SAIDA.indexOf('Latitude');
+  const colLon = HEADER_SAIDA.indexOf('Longitude');
+  const { rows } = juntarPendentesSondagem(
+    [linhaLink2({ 'Latitude/Longitude': '-25.55667703 / -49.34752807' })],
+    [linhaLink3()],
+  );
+  assert.strictEqual(rows[0][colLat], '-25.55667703');
+  assert.strictEqual(rows[0][colLon], '-49.34752807');
+});
+
+test('célula vazia ou sem a barra vira vazio nas DUAS colunas -- nunca 0/0 nem coordenada pela metade', () => {
+  const { HEADER_SAIDA } = require('../tools/semanal/mapear-producao-total.js');
+  const colLat = HEADER_SAIDA.indexOf('Latitude');
+  const colLon = HEADER_SAIDA.indexOf('Longitude');
+  [undefined, '', '   ', '-25.5', 'sem barra nenhuma'].forEach((valor) => {
+    const { rows } = juntarPendentesSondagem(
+      [linhaLink2({ 'Latitude/Longitude': valor })],
+      [linhaLink3()],
+    );
+    assert.strictEqual(rows[0][colLat], '', 'lat vazia para: ' + String(valor));
+    assert.strictEqual(rows[0][colLon], '', 'lon vazia para: ' + String(valor));
+  });
+});
+
+// Ponta a ponta com o consumidor: o que juntarPendentesSondagem grava tem que
+// ser exatamente o que resolverCoordenadasPorSup (coordenadas-sup.js) consegue
+// ler de volta. É o par produtor/consumidor que o mapa depende, e ele cruza a
+// fronteira de dois trabalhos independentes -- sem este teste, um renomear de
+// coluna de um lado quebraria o outro em silêncio.
+test('as colunas gravadas são lidas de volta por resolverCoordenadasPorSup', () => {
+  const { HEADER_SAIDA } = require('../tools/semanal/mapear-producao-total.js');
+  const { resolverCoordenadasPorSup } = require('../tools/semanal/coordenadas-sup.js');
+  const { header, rows } = juntarPendentesSondagem(
+    [linhaLink2({ 'Latitude/Longitude': '-25.55667703 / -49.34752807' })],
+    [linhaLink3()],
+  );
+  assert.deepStrictEqual(header, HEADER_SAIDA);
+  assert.deepStrictEqual(
+    resolverCoordenadasPorSup(header, rows),
+    { 'SUP-7133-24': { lat: -25.55667703, lon: -49.34752807 } },
+  );
+});

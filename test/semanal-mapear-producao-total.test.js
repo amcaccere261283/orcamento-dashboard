@@ -124,3 +124,22 @@ test('linhas normais (sem Tomador excluído nem Tipo SEG/SN) continuam entrando,
   assert.strictEqual(rows.length, 1);
   assert.strictEqual(excluidos, 1);
 });
+
+// O Link 1 (produção/realizado) NÃO traz coordenadas na fonte -- só o Link 2
+// (furos pendentes) tem. As duas colunas existem no HEADER_SAIDA compartilhado
+// e saem SEMPRE vazias por aqui. Trava o contrato: se um dia alguém preencher
+// isto sem que a fonte tenha o dado, é invenção de coordenada.
+test('Latitude/Longitude saem sempre vazias no Link 1 -- a fonte de produção não tem coordenada', () => {
+  const { mapearProducaoTotal, HEADER_SAIDA } = require('../tools/semanal/mapear-producao-total.js');
+  const colLat = HEADER_SAIDA.indexOf('Latitude');
+  const colLon = HEADER_SAIDA.indexOf('Longitude');
+  assert.notStrictEqual(colLat, -1);
+  assert.notStrictEqual(colLon, -1);
+  assert.strictEqual(HEADER_SAIDA.length, 12, 'Latitude/Longitude entram no FIM, sem deslocar as 10 originais');
+
+  const linha = { Tipo: 'SP', 'ID Contrato': 'SUP-A', 'Criação da OS': '', 'Status Atual': '', 'Executado Dia': '', Deslocamento: '', 'Total (m)': '', 'Observações de campo': '', OS: '1', Sondador: '' };
+  const { rows } = mapearProducaoTotal([linha]);
+  assert.strictEqual(rows[0][colLat], '');
+  assert.strictEqual(rows[0][colLon], '');
+  assert.strictEqual(rows[0].length, HEADER_SAIDA.length, 'a linha tem que ter exatamente uma célula por coluna do header');
+});
