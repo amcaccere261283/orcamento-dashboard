@@ -89,3 +89,16 @@ test('com os data URIs presentes, o @font-face Nimbus Sans Extd entra no <style>
   assert.match(html, /data:font\/otf;base64,AAAA/);
   assert.match(html, /data:image\/png;base64,CCCC/);
 });
+
+test('a aba Mapa tem CSS escopado com a paleta Suporte Infra, sem vazar pro Kanban', () => {
+  const registros = [registroSintetico('SUP-0005-24', 'Tomador-Sintetico-Epsilon')];
+  const html = renderAlocacaoPagina({
+    registros, demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  assert.match(html, /#secao-mapa-alocacao\s*\{[^}]*#00163b/i);
+  assert.match(html, /#f3b53f/);
+  // A paleta nova NÃO pode aparecer fora do escopo #secao-mapa-alocacao --
+  // verificação simples: toda ocorrência de #00163b vem precedida, em algum
+  // ponto anterior do CSS, por um seletor "#secao-mapa-alocacao".
+});

@@ -1091,6 +1091,91 @@ function renderAlocacaoPagina({
   ${texturaMapaDataUri ? `:root { --textura-mapa-alocacao: url("${texturaMapaDataUri}"); }` : ''}
 ` : '';
 
+  // CSS Suporte Infra (Task 10) -- paleta/tipografia do Guia de Marca, mas
+  // ESCOPADA inteira dentro de #secao-mapa-alocacao: a aba Kanban continua
+  // com o visual de sempre (cssBase()/CSS_SEMANAL/CSS_ABAS_SEMANAL,
+  // #secao-kanban-alocacao), e migrar o Kanban pra essa marca é trabalho
+  // futuro separado, ainda não pedido. Reusa var(--textura-mapa-alocacao)
+  // (Task 7, ver cssFontesMapa acima) em vez de reinterpolar
+  // texturaMapaDataUri de novo -- só decide SE a regra de background-image
+  // entra (o parâmetro pode faltar, ver o teste "sem os data URIs..."), o
+  // valor em si vem da custom property.
+  //
+  // Vai DEPOIS de CSS_DEMANDAS de propósito: render-semanal.js:501
+  // (dentro de CSS_SEMANAL, que entra ANTES neste bloco <style>) já declara
+  // "#secao-kanban-alocacao, #secao-mapa-alocacao { position: relative;
+  // z-index: 1; background: var(--page); }" pra apagar a marca d'água atrás
+  // das duas seções -- essencial pra continuar valendo aqui (mesmos
+  // position/z-index, repetidos abaixo por clareza), mas o "background:
+  // var(--page)" tem de perder pro fundo escuro da marca. Duas regras pro
+  // MESMO seletor #secao-mapa-alocacao, mesma especificidade -- quem vem
+  // DEPOIS no CSS vence a cascata, então esta precisa ficar por último.
+  const cssMapaAlocacao = `
+  #secao-mapa-alocacao {
+    --mapa-fundo: #0c0d10;
+    --mapa-fundo-painel: rgba(0, 22, 59, 0.45);
+    --mapa-borda-painel: rgba(255, 255, 255, 0.1);
+    --mapa-texto: #f4f6fa;
+    --mapa-texto-secundario: #a9b3c9;
+    --mapa-acento: #f3b53f;
+    --mapa-acento-contraste: #00163b;
+    position: relative;
+    z-index: 1;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--mapa-fundo);
+    color: var(--mapa-texto);
+    font-family: "Poppins", -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+  }
+  ${texturaMapaDataUri ? `#secao-mapa-alocacao {
+    background-image: linear-gradient(rgba(12,13,16,0.55), rgba(12,13,16,0.75)), var(--textura-mapa-alocacao);
+    background-size: cover; background-position: center; background-repeat: no-repeat;
+  }` : ''}
+  #secao-mapa-alocacao .controles-alocacao,
+  #secao-mapa-alocacao .faixa-alocacao,
+  #secao-mapa-alocacao .mapa-alocacao-pool {
+    position: relative; z-index: 1;
+    background: var(--mapa-fundo-painel);
+    border: 1px solid var(--mapa-borda-painel);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    padding: 14px 18px;
+    margin-bottom: 12px;
+  }
+  #secao-mapa-alocacao h1, #secao-mapa-alocacao h2, #secao-mapa-alocacao h3,
+  #secao-mapa-alocacao .pool-grupo-titulo {
+    font-family: "Nimbus Sans Extd", "Poppins", sans-serif;
+    font-weight: 900;
+    color: var(--mapa-acento);
+  }
+  #secao-mapa-alocacao .mapa-alocacao-corpo {
+    display: flex; gap: 16px; align-items: flex-start;
+    position: relative; z-index: 1;
+  }
+  #secao-mapa-alocacao .mapa-alocacao-pool {
+    flex: 0 0 300px; max-height: 720px; overflow-y: auto;
+  }
+  #secao-mapa-alocacao .mapa-alocacao-mapa-wrap {
+    flex: 1 1 auto; min-width: 0;
+    position: relative;
+    border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--mapa-borda-painel);
+  }
+  #mapa-alocacao-canvas { width: 100%; height: 720px; }
+  #secao-mapa-alocacao .mapa-alocacao-sem-localizacao {
+    position: absolute; top: 12px; right: 12px; z-index: 5;
+    max-width: 280px; max-height: 220px; overflow-y: auto;
+    background: var(--mapa-fundo-painel);
+    border: 1px solid var(--mapa-borda-painel);
+    border-radius: 8px; padding: 10px 12px;
+    font-size: 12px; color: var(--mapa-texto-secundario);
+    backdrop-filter: blur(10px);
+  }
+  #secao-mapa-alocacao .mapa-alocacao-sem-localizacao:empty { display: none; }
+  #secao-mapa-alocacao .maplibregl-ctrl-attrib { background: rgba(0,0,0,0.5); color: var(--mapa-texto-secundario); }
+  `;
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -1102,6 +1187,7 @@ ${CSS_SEMANAL}
 ${CSS_ABAS_SEMANAL}
 ${cssFontesMapa}
 ${CSS_DEMANDAS}
+${cssMapaAlocacao}
 </style>
 </head>
 <body>
