@@ -200,9 +200,19 @@ test('I-1: clicar em "Atualizar dados" redesenha #secao-alocacao com o roster NO
   // acabou de chegar do clique, não o do build.
   const csvEqNovo = csvEqComOs('CCR RioSP (16925-25)').replace('4,José I. Amaral', '77,Equipe Setenta e Sete');
 
+  // Grava toda URL requisitada (Achado #4 da revisão final, 2026-08-25): as
+  // rotas de 'equipes-online.csv'/'equipes-roster-online.csv' SAÍRAM daqui --
+  // eram 404 morto, porque o wrapper desta página (atualizarDadosAoVivoSemanal
+  // em render-alocacao-pagina.js) nunca passa producao/roster em fontes (só
+  // alimentam equipesPorDia/equipesNaoProdutivas, que esta página não lê -- ver
+  // o comentário lá). Se algum dia alguém acrescentar essas duas linhas de
+  // volta, o 404 morto faria este mock continuar "funcionando" (o fetch bateria
+  // no 404 esperado por ele) sem revelar que a intenção era nunca pedir aquilo
+  // -- por isso a asserção abaixo prova a ausência da URL, não só o resultado.
+  const urlsRequisitadas = [];
   const fetchMock = (url) => {
-    if (url.indexOf('demandas-sondagem-online.csv') !== -1 || url.indexOf('demandas-lab-online.json') !== -1
-      || url.indexOf('equipes-online.csv') !== -1 || url.indexOf('equipes-roster-online.csv') !== -1) {
+    urlsRequisitadas.push(url);
+    if (url.indexOf('demandas-sondagem-online.csv') !== -1 || url.indexOf('demandas-lab-online.json') !== -1) {
       return Promise.resolve({ ok: false, status: 404 });
     }
     if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(csvMatrizComSup('SUP-0001-24')) });
@@ -239,6 +249,9 @@ test('I-1: clicar em "Atualizar dados" redesenha #secao-alocacao com o roster NO
 
   const secaoDepois = documentoFalso.getElementById('secao-alocacao').innerHTML;
   assert.notStrictEqual(secaoDepois, secaoAntes, '#secao-alocacao precisa ser REDESENHADA pelo clique -- não pode ficar com o HTML de antes');
+
+  assert.ok(!urlsRequisitadas.some((u) => String(u).indexOf('equipes-online') !== -1), 'a URL de produção (equipes-online.csv) nunca pode ter sido pedida -- producao fica de fora de fontes de propósito');
+  assert.ok(!urlsRequisitadas.some((u) => String(u).indexOf('equipes-roster-online') !== -1), 'a URL de roster (equipes-roster-online.csv) nunca pode ter sido pedida -- roster fica de fora de fontes de propósito');
 });
 
 // I-2: uma falha na Sheet EQ (textos[3], catch(() => null)) não pode apagar
@@ -257,9 +270,14 @@ test('I-2: a Sheet EQ falhando no "Atualizar dados" preserva o roster que já es
   });
   const html = renderAlocacaoPagina({ registros, demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
+  // Grava toda URL requisitada (Achado #4 da revisão final, 2026-08-25): ver o
+  // comentário equivalente no teste I-1 acima -- mesmo motivo pra remover as
+  // rotas de 404 de 'equipes-online.csv'/'equipes-roster-online.csv' e provar
+  // a ausência da URL em vez de confiar num 404 que nunca deveria acontecer.
+  const urlsRequisitadas = [];
   const fetchMock = (url) => {
-    if (url.indexOf('demandas-sondagem-online.csv') !== -1 || url.indexOf('demandas-lab-online.json') !== -1
-      || url.indexOf('equipes-online.csv') !== -1 || url.indexOf('equipes-roster-online.csv') !== -1) {
+    urlsRequisitadas.push(url);
+    if (url.indexOf('demandas-sondagem-online.csv') !== -1 || url.indexOf('demandas-lab-online.json') !== -1) {
       return Promise.resolve({ ok: false, status: 404 });
     }
     if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(csvMatrizComSup('SUP-0001-24')) });
@@ -310,6 +328,9 @@ test('I-2: a Sheet EQ falhando no "Atualizar dados" preserva o roster que já es
     sandbox.ESTADO_ALOCACAO.equipes.some((e) => e.id === '4'),
     'a equipe 4 (do roster preservado) continua no quadro depois do clique, mesmo com a Sheet EQ fora do ar'
   );
+
+  assert.ok(!urlsRequisitadas.some((u) => String(u).indexOf('equipes-online') !== -1), 'a URL de produção (equipes-online.csv) nunca pode ter sido pedida -- producao fica de fora de fontes de propósito');
+  assert.ok(!urlsRequisitadas.some((u) => String(u).indexOf('equipes-roster-online') !== -1), 'a URL de roster (equipes-roster-online.csv) nunca pode ter sido pedida -- roster fica de fora de fontes de propósito');
 });
 
 // --- Rodada de correção 1 (verificação em navegador real, 2026-08-10): o

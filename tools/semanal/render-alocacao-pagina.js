@@ -48,7 +48,7 @@ const MARKUP_ACOES_ALOCACAO = `      <div class="filtros-acoes">
         <span id="status-atualizacao" class="status-atualizacao"></span>
       </div>`;
 
-// Reduzido de BUNDLE_ARQUIVOS (render-semanal.js:795-892): só as 18 entradas
+// Reduzido de BUNDLE_ARQUIVOS (render-semanal.js:806-895): só as 17 entradas
 // que compute-alocacao.js/render-aba-alocacao.js/equipes-alocaveis.js/
 // alocacao-sheet.js/grupos-veiculo.js e o live-refresh (Task 2) precisam,
 // SUBSEQUÊNCIA da lista original preservando a ordem relativa (contrato de

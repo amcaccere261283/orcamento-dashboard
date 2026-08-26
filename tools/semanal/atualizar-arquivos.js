@@ -55,8 +55,8 @@ const BUSCAS = [
 // sondagem + 12.781 ensaios pendentes de lab, medidos em 2026-08-10), e o
 // estoque despencava pra perto de zero com o status mostrando "Atualizado"
 // em verde -- sem erro nenhum. Publicar os dois arquivos é o que permite ao
-// botão buscá-los -- ver render-semanal.js (URL_ESPELHO_DEMANDAS_SONDAGEM/
-// URL_ESPELHO_DEMANDAS_LAB).
+// botão buscá-los -- ver tools/semanal/live-refresh.js
+// (URL_ESPELHO_DEMANDAS_SONDAGEM_SEMANAL/URL_ESPELHO_DEMANDAS_LAB_SEMANAL).
 const ARQUIVOS_PUBLICAR = [
   'planejamento-semanal.html',
   'alocacao-equipes.html',

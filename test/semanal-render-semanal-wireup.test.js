@@ -552,16 +552,16 @@ test('mesSelecionadoIdx nasce clampado em 0 quando window.__VIGENTE_IDX__ vem -1
 // verdade dentro do MESMO vm.Context que os testes acima, com fetch()
 // mockado (montarSandbox agora aceita um 2º argumento, ver acima).
 //
-// atualizarDadosAoVivoSemanal() NÃO devolve a Promise.all() interna (o
-// listener de clique não precisa dela) -- não dá pra `await
-// sandbox.atualizarDadosAoVivoSemanal()` diretamente, esse await resolveria
-// no próximo microtask e a cadeia fetch->text()->parse ainda não teria
-// terminado (comprovado à parte: um `await` sobre uma função que dispara
-// uma Promise sem devolvê-la adianta o continuation da função-mãe antes do
-// .then() interno rodar). Como o fetchMock abaixo resolve tudo de forma
-// síncrona (sem I/O real, sem setTimeout), um único boundary de macrotask
-// (setImmediate) garante que toda a cadeia de microtasks já esvaziou antes
-// de checarmos o resultado.
+// atualizarDadosAoVivoSemanal() HOJE devolve a Promise.all() interna
+// (render-semanal.js:1889 e render-alocacao-pagina.js:936 fazem `return
+// LiveRefresh.atualizarDadosAoVivo(...)`) -- mas este helper não depende
+// disso, e continua funcionando do jeito que está: em vez de `await
+// sandbox.atualizarDadosAoVivoSemanal()` diretamente, ele dispara a chamada
+// e resolve por um boundary de macrotask (setImmediate). Como o fetchMock
+// abaixo resolve tudo de forma síncrona (sem I/O real, sem setTimeout), esse
+// boundary já garante que toda a cadeia de microtasks (fetch->text()->parse)
+// esvaziou antes de checarmos o resultado -- equivalente, aqui, a esperar o
+// retorno direto.
 function chamarEsperarAtualizacao(sandbox) {
   sandbox.atualizarDadosAoVivoSemanal();
   return new Promise((resolve) => setImmediate(resolve));
@@ -648,8 +648,9 @@ test('atualizarDadosAoVivoSemanal: com URL_ESPELHO_AVANCOS_SEMANAL/LAB já confi
     + Array(12).fill('0').join(',') + ',0,0,\n';
   // parseAvancos/parseLab (tools/semanal/parse-avancos.js, parse-lab.js)
   // leem o cabeçalho em grid[1], não grid[0] -- quem faz esse deslocamento
-  // agora é gridCsvComoXlsx() (render-semanal.js), não um '\n' sintético no
-  // começo do CSV mockado. Estes dois CSVs trazem UMA linha de dado real cada
+  // agora é gridCsvComoXlsx() (tools/semanal/live-refresh.js), não um '\n'
+  // sintético no começo do CSV mockado. Estes dois CSVs trazem UMA linha de
+  // dado real cada
   // (as 9 colunas obrigatórias de Avanços, as 3 de Lab), pra este teste de
   // sucesso exercitar os dois parsers com dado de verdade em vez de só
   // cabeçalho -- sem isso, um desalinhamento de índice passaria despercebido.

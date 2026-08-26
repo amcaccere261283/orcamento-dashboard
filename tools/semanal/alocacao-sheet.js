@@ -9,9 +9,10 @@
 // Ver docs/superpowers/specs/2026-08-10-semanal-alocacao-equipes-design.md,
 // Decisão 8.
 
-// Mesmo padrão de RE_URL_PENDENTE (render-semanal.js): enquanto o Apps Script
-// não estiver publicado, o literal fica 'PENDENTE-...' e a aba roda inteira em
-// armazenamento local, dizendo isso no status. É o ESTADO INICIAL do recurso.
+// Mesmo padrão de RE_URL_PENDENTE (tools/semanal/live-refresh.js:160):
+// enquanto o Apps Script não estiver publicado, o literal fica 'PENDENTE-...'
+// e a aba roda inteira em armazenamento local, dizendo isso no status. É o
+// ESTADO INICIAL do recurso.
 var RE_URL_ALOCACAO_PENDENTE = /^PENDENTE-/;
 
 var PREFIXO_ARMAZENAMENTO = 'alocacao-equipes:';

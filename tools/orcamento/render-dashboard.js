@@ -1680,8 +1680,8 @@ var URL_ESPELHO_LAB = 'lab-online.csv';
 var URL_ESPELHO_DEMANDAS_SONDAGEM = 'demandas-sondagem-online.csv';
 var URL_ESPELHO_DEMANDAS_LAB = 'demandas-lab-online.json';
 
-// Réplica cliente de periodosDoAnoSemanal() (tools/semanal/render-
-// semanal.js) -- chegadasMensaisPorRegistro/saldoAberturaPorRegistro só
+// Réplica cliente de periodosDoAno() (tools/semanal/live-refresh.js:112) --
+// chegadasMensaisPorRegistro/saldoAberturaPorRegistro só
 // precisam do ano de periodos[0] (12 meses janeiro-dezembro consecutivos),
 // baked em window.__ANO_ORCAMENTO__ pelo build (ver renderDashboard) em vez
 // de recalculado a partir do cabeçalho do espelho ao vivo -- evitaria um
@@ -1712,7 +1712,7 @@ function buscarJsonOrcamento(url) {
 // parseAvancos/parseLab consomem a grade 1-INDEXADA de readXlsxSheet:
 // grid[0] é um buraco vazio, grid[1] é o cabeçalho. parseCsvGrid devolve
 // 0-indexada (grid[0] = cabeçalho) -- mesmo deslocamento que
-// tools/semanal/render-semanal.js (gridCsvComoXlsx) já precisa fazer.
+// tools/semanal/live-refresh.js (gridCsvComoXlsx) já precisa fazer.
 function gridCsvComoXlsxOrcamento(texto) {
   var g = parseCsvGrid(texto);
   g.unshift(null);

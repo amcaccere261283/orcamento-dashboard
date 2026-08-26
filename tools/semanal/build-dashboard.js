@@ -279,7 +279,7 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // tools/semanal/atualizar-avancos-online.js (roda à parte, não a cada
   // build -- ver docs/superpowers/specs/2026-08-05-avancos-online-design.md).
   // O unshift(null) reproduz a mesma diferença de indexação que
-  // gridCsvComoXlsx() já trata no navegador (render-semanal.js): o CSV
+  // gridCsvComoXlsx() já trata no navegador (live-refresh.js): o CSV
   // combinado tem cabeçalho na linha 0, mas parseAvancos espera cabeçalho em
   // grid[1] (o formato do .xlsx original, que tem uma linha em branco antes).
   const CAMINHO_AVANCOS_ONLINE = path.join(__dirname, '..', '..', 'dist', 'avancos-online.csv');
