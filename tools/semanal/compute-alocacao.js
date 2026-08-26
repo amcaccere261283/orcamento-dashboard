@@ -535,9 +535,34 @@ function capacidadeDeReferencia(grade, equipe, mesIdx, diasDoMes) {
   return capacidadeDaEquipe(equipe, somaPonderada / somaPeso, mesIdx, diasDoMes);
 }
 
+// Decide, entre as colunas que a equipe atende, qual delas o PINO do mapa
+// representa quando ela é solta ali -- só existe porque o mapa tem UM pino
+// por SUP (não uma célula por coluna, como a tabela). Prefere a candidata
+// com célula REAL naquele SUP (algo já aconteceu ali -- tendência, carteira
+// ou equipe) e o MAIOR déficit (saldo mais negativo, a mais carente); sem
+// nenhuma candidata com célula real, cai na primeira da lista (que já
+// chega na ordem de COLUNAS_ALOCACAO, via equipe.colunas).
+//
+// Não valida se a equipe PODE ir pra essa coluna -- quem recusa é
+// aplicarMovimento/destinoDoGrupo, como sempre. Esta função só decide QUAL
+// das colunas válidas propor.
+function escolherColunaAutomatica(colunasEquipe, celulasDaLinha) {
+  var candidatas = (colunasEquipe || []).filter(function (c) {
+    return celulasDaLinha && celulasDaLinha[c];
+  });
+  if (candidatas.length) {
+    candidatas.sort(function (a, b) {
+      return celulasDaLinha[a].saldo - celulasDaLinha[b].saldo;
+    });
+    return candidatas[0];
+  }
+  return (colunasEquipe && colunasEquipe[0]) || null;
+}
+
 module.exports = {
   FAIXA_OCUPACAO, PRODUTIVIDADE_POR_COLUNA, diasPremissaDaSemana, capacidadeDaEquipe, ratearCarga, classificarOcupacao,
   classificarCelula,
   montarGradeAlocacao, ancoraDaSemana,
   resumirAlocacao, leituraDoSup, LEITURAS_SUP,
+  escolherColunaAutomatica,
 };

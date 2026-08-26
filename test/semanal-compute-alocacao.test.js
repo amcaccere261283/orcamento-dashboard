@@ -653,3 +653,33 @@ test('a Tendência do grupo é a soma das tipologias, não uma projeção do agr
   assert.ok(Math.abs(junto - (so_sp + so_cptu)) < 1e-6,
     `o total (${junto}) tem que ser a soma das tipologias (${so_sp} + ${so_cptu} = ${so_sp + so_cptu})`);
 });
+
+// --- escolherColunaAutomatica: qual coluna o pino do mapa representa --------
+
+const { escolherColunaAutomatica } = require('../tools/semanal/compute-alocacao.js');
+
+test('escolherColunaAutomatica escolhe a coluna candidata com maior déficit (saldo mais negativo)', () => {
+  const celulas = {
+    ST: { saldo: -2 },
+    PI: { saldo: -10 },
+    BL: { saldo: 3 },
+  };
+  assert.strictEqual(escolherColunaAutomatica(['ST', 'PI', 'BL'], celulas), 'PI');
+});
+
+test('escolherColunaAutomatica ignora coluna sem célula real naquele SUP', () => {
+  const celulas = { PI: { saldo: -1 } }; // ST/BL não têm célula NESTE sup
+  assert.strictEqual(escolherColunaAutomatica(['ST', 'PI', 'BL'], celulas), 'PI');
+});
+
+test('escolherColunaAutomatica cai na primeira candidata quando NENHUMA tem célula real ali', () => {
+  assert.strictEqual(escolherColunaAutomatica(['ST', 'PI', 'BL'], {}), 'ST');
+});
+
+test('escolherColunaAutomatica com equipe de coluna única devolve essa coluna direto', () => {
+  assert.strictEqual(escolherColunaAutomatica(['SP'], {}), 'SP');
+});
+
+test('escolherColunaAutomatica sem nenhuma coluna devolve null', () => {
+  assert.strictEqual(escolherColunaAutomatica([], {}), null);
+});
