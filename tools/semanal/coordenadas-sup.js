@@ -39,6 +39,7 @@ function acharColuna(header, candidatos) {
 function numeroOuNull(valor) {
   var texto = String(valor === null || valor === undefined ? '' : valor).trim();
   if (texto === '') return null;
+  if (!/^-?\d+(\.\d+)?$/.test(texto)) return null;
   var n = parseFloat(texto);
   return isNaN(n) ? null : n;
 }

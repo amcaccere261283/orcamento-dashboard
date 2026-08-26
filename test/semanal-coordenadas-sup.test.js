@@ -56,3 +56,9 @@ test('linha sem Contrato preenchido é ignorada', () => {
   const rows = [['', '-25.5', '-49.2']];
   assert.deepStrictEqual(resolverCoordenadasPorSup(header, rows), {});
 });
+
+test('valor com vírgula decimal (formato PT-BR) é rejeitado, não truncado silenciosamente', () => {
+  const header = ['Contrato', 'Latitude', 'Longitude'];
+  const rows = [['SUP-I', '-25,5', '-49.2']];
+  assert.deepStrictEqual(resolverCoordenadasPorSup(header, rows), {});
+});
