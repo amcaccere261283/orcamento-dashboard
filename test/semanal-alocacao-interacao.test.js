@@ -527,3 +527,60 @@ test('o destaque das companheiras morre em limparDestaquesAlocacao -- o único p
 
   assert.ok(!cliente.document.cartaoAlocacao('77').classList.contains('cartao-companheiro'));
 });
+
+// --- Regressão CRITICAL (revisão pós-Task 11): o mapa não pode ser destruído
+// pelo próprio redesenho -----------------------------------------------------
+//
+// Achado do revisor: montarMapaAlocacao (render-alocacao-pagina.js) reescrevia
+// secao.innerHTML inteiro a cada chamada, mesmo com o MapLibre já ligado a
+// #mapa-alocacao-canvas -- e mapa.on('load', function () { montarAbaAlocacao();
+// }) (dentro de inicializarMapaAlocacao) dispara essa MESMA cadeia poucos
+// instantes depois do clique na aba, trocando o container real por um NOVO e
+// vazio. O mapa continua "vivo" (segura um contexto WebGL) mas nada dele
+// aparece mais na tela, e só um F5 resolve -- a checagem de idempotência de
+// inicializarMapaAlocacao só olha MAPA_ALOCACAO.instancia, que continua um
+// objeto válido mesmo com o container órfão.
+//
+// Este teste não precisa do MapLibre de verdade (não roda em vm.Context) --
+// só precisa provar a propriedade de DOM: o NÓ de #mapa-alocacao-canvas que
+// existia ANTES de um redesenho continua sendo o MESMO nó depois, uma vez que
+// MAPA_ALOCACAO.instancia (aqui, um dublê -- não precisa ser um mapa de
+// verdade, só precisa ser truthy) já existe. O DOM falso
+// (test/helpers/dom-falso-semanal.js) ganhou suporte a essa identidade
+// especificamente pros 4 ids da região do mapa -- ver o comentário lá.
+test('CRITICAL: com o mapa já inicializado, redesenhar a aba NÃO recria #mapa-alocacao-canvas', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1); // 1º desenho da aba Mapa -- cria o canvas pela 1ª vez
+
+  const canvasAntes = cliente.document.getElementById('mapa-alocacao-canvas');
+  assert.ok(canvasAntes, 'pré-condição: o 1º desenho tem que ter criado o container do mapa');
+
+  // Simula o mapa já ligado ao container (o que inicializarMapaAlocacao
+  // faria de verdade depois do clique na aba Mapa) -- um dublê qualquer
+  // serve, o teste não precisa do MapLibre de verdade.
+  cliente.MAPA_ALOCACAO.instancia = { resize() {} };
+
+  // Qualquer redesenho normal passa por montarAbaAlocacao -> montarMapaAlocacao
+  // -- usa aplicarMovimento como gatilho concreto, mas o achado do revisor
+  // vale pra QUALQUER caminho que chegue lá (troca de filtro/semana/mês,
+  // "Atualizar dados", ou o próprio handler de 'load' do mapa).
+  cliente.aplicarMovimento('4', 'SUP-B', 'SP');
+
+  const canvasDepois = cliente.document.getElementById('mapa-alocacao-canvas');
+  assert.strictEqual(canvasDepois, canvasAntes,
+    'o container do mapa foi RECRIADO por um redesenho -- o MapLibre ficaria preso a um nó órfão, fora do documento');
+});
+
+test('com o mapa já inicializado, o pool e os controles da aba Mapa continuam sendo redesenhados normalmente', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  cliente.MAPA_ALOCACAO.instancia = { resize() {} };
+
+  // Move a equipe 4 pra fora do pool -- se #mapa-alocacao-pool não fosse mais
+  // redesenhado (efeito colateral bobo de "preservar o mapa"), o cartão dela
+  // continuaria aparecendo lá como se nada tivesse mudado.
+  cliente.aplicarMovimento('4', 'SUP-B', 'SP');
+
+  const poolHtml = cliente.document.getElementById('mapa-alocacao-pool').innerHTML;
+  assert.match(poolHtml, /pool-alocacao/, 'o pool continua sendo redesenhado, só o wrap do mapa é que é preservado');
+});

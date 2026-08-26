@@ -33,6 +33,53 @@ function criarDocumentoFalso() {
     return lista;
   }
 
+  // --- Identidade de nó da região do MAPA (Task 11, correção pós-revisão) ---
+  //
+  // Este DOM falso é FLAT/global: getElementById(id) memoiza e devolve
+  // SEMPRE o MESMO objeto pro mesmo id, não importa quantas vezes o
+  // innerHTML de um ancestral tenha sido reescrito -- diferente do DOM real,
+  // onde reatribuir o innerHTML de um elemento DESTRÓI e recria todos os
+  // descendentes, mesmo que o HTML novo tenha um id igual ao antigo. Isso é
+  // inócuo pro resto da suíte (nada até aqui testava identidade de nó através
+  // de um redesenho), mas é EXATAMENTE a propriedade que o bug Critical da
+  // Task 11 quebra: montarMapaAlocacao reescrevia secao.innerHTML inteiro a
+  // cada redesenho, mesmo com o mapa MapLibre já ligado ao
+  // #mapa-alocacao-canvas existente -- trocando esse container por um NOVO
+  // e vazio, com o mapa continuando "vivo" mas nunca mais visível. Sem
+  // modelar a recriação de nó aqui, um teste que prova "o container do mapa
+  // sobrevive a um redesenho" passaria mesmo com o bug presente (o singleton
+  // sempre devolveria o mesmo objeto, não importa o que o código de produção
+  // fizesse) -- pior que não existir, mesma lição do comentário de
+  // celulasAlocacao/cartoesAlocacao logo abaixo.
+  //
+  // Escopo DELIBERADAMENTE estreito: só os 4 ids da região do mapa, não
+  // TODO id do documento -- generalizar arriscaria quebrar testes existentes
+  // que hoje dependem do singleton persistente (ex.: #busca-equipe, mantido
+  // de propósito pelo comentário em inicializarInteracaoAlocacao sobre
+  // "refazer o campo a cada tecla").
+  const IDS_MAPA_RECRIADOS_POR_INNERHTML = [
+    'mapa-alocacao-canvas', 'mapa-alocacao-sem-localizacao',
+    'mapa-alocacao-topo', 'mapa-alocacao-pool',
+  ];
+
+  // Chamado toda vez que ALGUM elemento tem seu innerHTML reatribuído.
+  // 'html' é o novo conteúdo; 'idProprio' é o id do elemento que está sendo
+  // escrito (pra nunca invalidar o próprio elemento por causa do seu
+  // conteúdo -- não é o caso de uso real de qualquer forma, ver o
+  // comentário acima). Para cada id "do mapa" que APARECE no HTML novo,
+  // invalida (deleta) o registro existente em `elementos` -- a próxima
+  // getElementById(id) cria um objeto NOVO, simulando a recriação real do
+  // nó. Se o id não aparecer no HTML novo (caso de montarMapaAlocacao
+  // reescrevendo só #mapa-alocacao-topo/#mapa-alocacao-pool depois que o
+  // mapa existe, Task 11), nada é invalidado -- é exatamente essa
+  // preservação que o teste de regressão prova.
+  function recriarIdsDoMapaMencionados(html, idProprio) {
+    IDS_MAPA_RECRIADOS_POR_INNERHTML.forEach((id) => {
+      if (id === idProprio) return;
+      if (elementos[id] && new RegExp('id="' + id + '"').test(html || '')) delete elementos[id];
+    });
+  }
+
   // --- Elementos de ARRASTO da aba Alocação (2026-08-11) ---------------------
   //
   // destacarCelulasCompativeis/limparDestaquesAlocacao (render-alocacao-pagina.js)
@@ -133,7 +180,6 @@ function criarDocumentoFalso() {
         focus() {},
         value: '',
         textContent: '',
-        innerHTML: '',
         disabled: false,
         closest() { return el; },
         appendChild() {}, // atualizarRotuloFiltro chama trigger.appendChild(seta) pra recolocar a seta depois de reescrever o textContent
@@ -161,6 +207,17 @@ function criarDocumentoFalso() {
           return viaAlocacao === null ? [] : viaAlocacao;
         },
       };
+      // innerHTML vira um par get/set (era um campo simples) só para poder
+      // reagir à ESCRITA -- ver recriarIdsDoMapaMencionados acima. Leitura
+      // continua idêntica a antes (devolve o último HTML atribuído); nenhum
+      // outro comportamento deste helper muda.
+      let _innerHTML = '';
+      Object.defineProperty(el, 'innerHTML', {
+        get() { return _innerHTML; },
+        set(html) { _innerHTML = html; recriarIdsDoMapaMencionados(html, id); },
+        enumerable: true,
+        configurable: true,
+      });
       elementos[id] = el;
     }
     return elementos[id];

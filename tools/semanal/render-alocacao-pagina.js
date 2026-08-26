@@ -615,6 +615,34 @@ function montarAbaAlocacao() {
 // os PINOS só são desenhados se o mapa já foi inicializado (Task 11/12) --
 // evita inicializar o MapLibre num container ainda invisível (display:none
 // enquanto a aba Kanban está ativa).
+//
+// CRITICAL corrigido pós-revisão da Task 11: antes desta correção, esta
+// função fazia sempre secao.innerHTML = renderAbaAlocacaoMapa(...) inteiro,
+// mesmo com o mapa JÁ inicializado. Isso troca #mapa-alocacao-canvas por um
+// container NOVO e vazio a cada chamada -- e mapa.on('load', function () {
+// montarAbaAlocacao(); }) (inicializarMapaAlocacao, perto do topo deste
+// arquivo) dispara essa MESMA cadeia poucos instantes depois do clique na
+// aba, destruindo o container ao qual o MapLibre acabou de se ligar. O mapa
+// continua "existindo" (segura um contexto WebGL) mas nada dele aparece na
+// tela, e a checagem de idempotência de inicializarMapaAlocacao (que só olha
+// MAPA_ALOCACAO.instancia, ainda um objeto válido) nunca detecta o container
+// órfão -- só um F5 resolve. E não é só o handler de 'load': QUALQUER
+// redesenho normal (troca de filtro/semana/mês, arrasto aplicado, "Atualizar
+// dados") passa por montarAbaAlocacao -> montarMapaAlocacao e destruiria o
+// canvas do mesmo jeito, então a correção tem que estar aqui, não só no
+// handler de 'load'.
+//
+// Fix: com o mapa já inicializado, secao.innerHTML NUNCA mais é reatribuído
+// -- só os dois pedaços que de fato mudam a cada redesenho
+// (#mapa-alocacao-topo: controles/faixa/aviso; #mapa-alocacao-pool: o pool
+// de equipes) são reescritos, cada um por dentro do PRÓPRIO innerHTML. O
+// wrap do mapa (.mapa-alocacao-mapa-wrap, com #mapa-alocacao-canvas e
+// #mapa-alocacao-sem-localizacao dentro) nunca é tocado depois do primeiro
+// desenho -- é ele que carrega o container real que o MapLibre se ligou.
+// Ver os dois testes 'CRITICAL: com o mapa já inicializado...' e 'com o mapa
+// já inicializado, o pool e os controles...' em
+// test/semanal-alocacao-interacao.test.js para a prova (RED antes desta
+// correção, GREEN depois).
 function montarMapaAlocacao(prep) {
   var secao = document.getElementById('secao-mapa-alocacao');
   if (prep.semRoster) {
@@ -622,7 +650,17 @@ function montarMapaAlocacao(prep) {
     return;
   }
   var dados = RenderAbaAlocacao.prepararDadosAlocacao(window.__REGISTROS__, prep.indices, prep.o);
-  secao.innerHTML = RenderAbaAlocacaoMapa.renderAbaAlocacaoMapa(dados, prep.o);
+  if (!MAPA_ALOCACAO.instancia) {
+    // Primeiro desenho (ou qualquer desenho ANTES do mapa existir): markup
+    // completo, incluindo um #mapa-alocacao-canvas novo -- é nele que
+    // inicializarMapaAlocacao() vai se ligar no primeiro clique da aba Mapa.
+    secao.innerHTML = RenderAbaAlocacaoMapa.renderAbaAlocacaoMapa(dados, prep.o);
+  } else {
+    document.getElementById('mapa-alocacao-topo').innerHTML =
+      RenderAbaAlocacaoMapa.renderAbaAlocacaoMapaTopo(dados, prep.o);
+    document.getElementById('mapa-alocacao-pool').innerHTML =
+      RenderAbaAlocacaoMapa.renderAbaAlocacaoMapaPool(dados, prep.o);
+  }
   // desenharPinosMapa/atualizarPainelSemLocalizacao entram na Task 12 -- até
   // lá esta função só desenha o shell (controles/pool/resumo).
   if (typeof desenharPinosMapa === 'function' && MAPA_ALOCACAO.instancia) {
