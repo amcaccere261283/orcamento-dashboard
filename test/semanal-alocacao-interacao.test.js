@@ -177,6 +177,14 @@ function montarClienteAlocacao() {
   return sandbox;
 }
 
+test('prepararOpcoesAlocacao devolve o MESMO roster que montarAbaAlocacao usa pro Kanban', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  const prep = cliente.prepararOpcoesAlocacao();
+  assert.deepStrictEqual(normalizar(prep.o.equipes), normalizar(cliente.ESTADO_ALOCACAO.equipes));
+  assert.strictEqual(prep.semana.inicio, cliente.ESTADO_ALOCACAO.semanaIdx >= 0 ? prep.semana.inicio : undefined);
+});
+
 test('soltar uma equipe na coluna dela aplica o movimento', async () => {
   const cliente = montarClienteAlocacao();
   await cliente.selecionarSemanaAlocacao(1);
@@ -245,11 +253,11 @@ test('trocar de semana recarrega a alocação daquela semana, sem misturar', asy
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].sup, 'SUP-A', 'voltar pra S2 reencontra o que foi gravado lá');
 });
 
-test('aplicarMovimento redesenha #secao-alocacao com o cartão no destino', async () => {
+test('aplicarMovimento redesenha #secao-kanban-alocacao com o cartão no destino', async () => {
   const cliente = montarClienteAlocacao();
   await cliente.selecionarSemanaAlocacao(1);
   cliente.aplicarMovimento('4', 'SUP-A', 'SP');
-  const html = cliente.document.getElementById('secao-alocacao').innerHTML;
+  const html = cliente.document.getElementById('secao-kanban-alocacao').innerHTML;
   assert.match(html, /data-sup="SUP-A"[^>]*data-coluna="SP"/);
   assert.match(html, /data-equipe="4"/);
 });
@@ -334,7 +342,7 @@ test('gesto recusado não move NINGUÉM do grupo', async () => {
     'a companheira tem que continuar EXATAMENTE onde estava -- a recusa não pode ter mexido nela');
 });
 
-// Evento de clique falso pro handler DELEGADO de #secao-alocacao (clique-clique
+// Evento de clique falso pro handler DELEGADO de #secao-kanban-alocacao (clique-clique
 // -- o 2º call site de destacarCelulasCompativeis apontado pelo achado
 // Important 1). e.target.closest só precisa resolver o seletor do cartão; os
 // outros ([data-acao], [data-semana]) devolvem null, como um clique fora
@@ -372,10 +380,10 @@ test('o pool acende ao arrastar (clique-clique) uma equipe do POOL que tem compa
 
   cliente.document.registrarCelulasAlocacao(['SP']);
   cliente.document.registrarCartoesAlocacao(['4', '77']);
-  // Dispara o handler de 'click' REAL de #secao-alocacao (não uma chamada
+  // Dispara o handler de 'click' REAL de #secao-kanban-alocacao (não uma chamada
   // isolada de destacarCelulasCompativeis) -- é o call site onde o achado
   // achou o bug, e é ele que a prova por mutação abaixo precisa pegar.
-  cliente.document.getElementById('secao-alocacao').listeners.click(eventoCliqueNoCartao('4'));
+  cliente.document.getElementById('secao-kanban-alocacao').listeners.click(eventoCliqueNoCartao('4'));
 
   assert.ok(cliente.document.poolAlocacao().classList.contains('pool-alvo'),
     'a tela tem que dizer que soltar no pool TEM efeito -- devolveria a 77 junto');
@@ -393,7 +401,7 @@ test('o pool NÃO acende (clique-clique) quando nem a equipe arrastada nem a com
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined, 'pré-condição: a 4 está no pool');
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['77'], undefined, 'pré-condição: a 77 também está no pool');
 
-  cliente.document.getElementById('secao-alocacao').listeners.click(eventoCliqueNoCartao('4'));
+  cliente.document.getElementById('secao-kanban-alocacao').listeners.click(eventoCliqueNoCartao('4'));
 
   assert.ok(!cliente.document.poolAlocacao().classList.contains('pool-alvo'));
 });

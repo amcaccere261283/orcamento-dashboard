@@ -3,7 +3,7 @@ const path = require('node:path');
 const { formatarMesAno, calcularVigenteIdx } = require('../comum/datas.js');
 const { cifrarComSenha } = require('../comum/criptografia.js');
 const {
-  cssBase, markupCabecalho, markupFiltros, scriptDesbloqueio, scriptFiltros,
+  cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio, scriptFiltros,
 } = require('../comum/render-shell.js');
 const { buildBrowserBundle } = require('../comum/browser-bundle.js');
 const { fonteParaCliente: fonteParaClienteEquipes } = require('../comum/calculo-equipes.js');
@@ -59,7 +59,7 @@ const BUNDLE_ARQUIVOS_ALOCACAO = [
   'parse-matriz-cliente.js', 'classificar-dia-equipe.js', 'compute-equipes-ativas.js',
   'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js',
   'grupos-veiculo.js', 'equipes-alocaveis.js', 'coordenadas-sup.js', 'compute-alocacao.js', 'alocacao-sheet.js',
-  'render-aba-alocacao.js',
+  'render-aba-alocacao.js', 'render-aba-alocacao-mapa.js',
   // live-refresh.js (Task 2, 2026-08-25) substitui a cópia local de
   // atualizarDadosAoVivoSemanal -- consome só os 5 módulos comuns já
   // listados acima (parse-matriz-cliente/compute-equipes-ativas/
@@ -81,8 +81,11 @@ const BUNDLE_ARQUIVOS_ALOCACAO = [
 const SCRIPT_CLIENTE_ALOCACAO = `
 var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaAlocacao = MODULOS['render-aba-alocacao.js'];
+var RenderAbaAlocacaoMapa = MODULOS['render-aba-alocacao-mapa.js'];
+var CoordenadasSup = MODULOS['coordenadas-sup.js'];
 var EquipesAlocaveis = MODULOS['equipes-alocaveis.js'];
 var GruposVeiculo = MODULOS['grupos-veiculo.js'];
+var ComputeAlocacao = MODULOS['compute-alocacao.js'];
 var AlocacaoSheet = MODULOS['alocacao-sheet.js'];
 // ParseMatrizCliente/ParseAvancos/ParseLab/ComputeDemandas/ComputeEquipesAtivas
 // (e os dois de equipes-não-produtivas/realizado-alocado) saíram daqui em
@@ -424,13 +427,10 @@ function selecionarSemanaAlocacao(idx) {
   return carregarAlocacaoDaSemana(chave);
 }
 
-// Recomputa o roster da semana (equipesDoQuadro, Task 1 -- disponibilidade e
-// vínculo com o SUP mudam a cada semana, mesmo sem novo build) e redesenha
-// #secao-alocacao inteira com o estado atual de ESTADO_ALOCACAO.alocacao. NÃO
-// mexe em persistência -- quem muda o que está alocado é
-// aplicarMovimento/semearDoRealizado/limparAlocacao/selecionarSemanaAlocacao,
-// cada um decidindo por si quando ler ou gravar; esta função só desenha o que
-// já está em ESTADO_ALOCACAO.
+// Preparo COMPARTILHADO entre a aba Kanban e a aba Mapa -- as duas leem o
+// MESMO roster, os MESMOS filtros e a MESMA semana; só desenham de jeitos
+// diferentes. Extraído (2026-08-26) pra aba Mapa não duplicar este bloco --
+// era o corpo inteiro de montarAbaAlocacao antes desta task.
 //
 // 'indices' sai de indicesFiltrados, NÃO de indicesDaAba: o filtro de ativos
 // esconderia justamente as linhas "Parado c/ carteira", que são o motivo de
@@ -446,7 +446,7 @@ function selecionarSemanaAlocacao(idx) {
 // ver docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md.
 // O fallback '|| []' é o default seguro para HTML de um build anterior a essa
 // troca (degrada para "pool vazio de sugestão", nunca quebra).
-function montarAbaAlocacao() {
+function prepararOpcoesAlocacao() {
   var semanas = semanasDoMesSelecionado();
   if (ESTADO_ALOCACAO.semanaIdx < 0 || ESTADO_ALOCACAO.semanaIdx >= semanas.length) {
     ESTADO_ALOCACAO.semanaIdx = Math.max(0, ComputeSemanal.indiceSemanaAtual(semanas, hojeEpochDoNavegador()));
@@ -485,23 +485,38 @@ function montarAbaAlocacao() {
   );
 
   var cliente = clienteAlocacao();
-  document.getElementById('secao-alocacao').innerHTML = RenderAbaAlocacao.renderAbaAlocacao(
-    window.__REGISTROS__, indices, {
-      mesIdx: mesSelecionadoIdx, ano: window.__ANO__,
-      semanas: semanas, semana: semana,
-      demandas: window.__DEMANDAS__,
-      semRoster: semRoster, somenteLeitura: somenteLeitura,
-      equipes: ESTADO_ALOCACAO.equipes, foraDoQuadro: ESTADO_ALOCACAO.foraDoQuadro,
-      alocacao: ESTADO_ALOCACAO.alocacao,
-      // Não é estado persistido -- vive só aqui e no DOM, como a busca da aba
-      // Alertas. Trocar de semana ou de mês não o preserva.
-      buscaEquipe: ESTADO_ALOCACAO.busca,
-      tipologiaAlocacao: ESTADO_ALOCACAO.tipologia,
-      hojeEpoch: hojeEpochDoNavegador(),
-      modoPersistencia: cliente.modo(),
-      pendentes: cliente.pendentes().length,
-    }
+  var o = {
+    mesIdx: mesSelecionadoIdx, ano: window.__ANO__,
+    semanas: semanas, semana: semana,
+    demandas: demandas,
+    semRoster: semRoster, somenteLeitura: somenteLeitura,
+    equipes: ESTADO_ALOCACAO.equipes, foraDoQuadro: ESTADO_ALOCACAO.foraDoQuadro,
+    alocacao: ESTADO_ALOCACAO.alocacao,
+    // Não é estado persistido -- vive só aqui e no DOM, como a busca da aba
+    // Alertas. Trocar de semana ou de mês não o preserva.
+    buscaEquipe: ESTADO_ALOCACAO.busca,
+    tipologiaAlocacao: ESTADO_ALOCACAO.tipologia,
+    hojeEpoch: hojeEpochDoNavegador(),
+    modoPersistencia: cliente.modo(),
+    pendentes: cliente.pendentes().length,
+  };
+  return { semanas: semanas, semana: semana, indices: indices, o: o, semRoster: semRoster };
+}
+
+// Recomputa o roster da semana (equipesDoQuadro, Task 1 -- disponibilidade e
+// vínculo com o SUP mudam a cada semana, mesmo sem novo build) e redesenha
+// #secao-kanban-alocacao inteira com o estado atual de ESTADO_ALOCACAO.alocacao.
+// NÃO mexe em persistência -- quem muda o que está alocado é
+// aplicarMovimento/semearDoRealizado/limparAlocacao/selecionarSemanaAlocacao,
+// cada um decidindo por si quando ler ou gravar; esta função só desenha o que
+// já está em ESTADO_ALOCACAO.
+function montarAbaAlocacao() {
+  var prep = prepararOpcoesAlocacao();
+
+  document.getElementById('secao-kanban-alocacao').innerHTML = RenderAbaAlocacao.renderAbaAlocacao(
+    window.__REGISTROS__, prep.indices, prep.o
   );
+  montarMapaAlocacao(prep);
 
   // Primeiro desenho de uma semana nova (boot da aba, ou troca de mês que
   // muda a semana em curso) -- busca a alocação salva e, se for o caso,
@@ -516,11 +531,32 @@ function montarAbaAlocacao() {
   // geracaoAlocacao avança junto com semanaCarregada -- mesmo raciocínio de
   // selecionarSemanaAlocacao: uma resposta em voo da semana ANTERIOR não
   // pode aterrissar no quadro desta semana nova.
-  var chaveDaSemana = semana ? AlocacaoSheet.chaveSemana(window.__ANO__, semana.inicio) : null;
-  if (chaveDaSemana && chaveDaSemana !== ESTADO_ALOCACAO.semanaCarregada && !semRoster) {
+  var chaveDaSemana = prep.semana ? AlocacaoSheet.chaveSemana(window.__ANO__, prep.semana.inicio) : null;
+  if (chaveDaSemana && chaveDaSemana !== ESTADO_ALOCACAO.semanaCarregada && !prep.semRoster) {
     ESTADO_ALOCACAO.semanaCarregada = chaveDaSemana;
     ESTADO_ALOCACAO.geracaoAlocacao++;
     carregarAlocacaoDaSemana(chaveDaSemana);
+  }
+}
+
+// A aba Mapa: mesmo preparo (prep) que o Kanban acabou de usar -- reusa
+// prepararDadosAlocacao (render-aba-alocacao.js) pra ter grade/resumo sem
+// recalcular a mão. Sempre redesenha o HTML (controles/pool/resumo, barato);
+// os PINOS só são desenhados se o mapa já foi inicializado (Task 11/12) --
+// evita inicializar o MapLibre num container ainda invisível (display:none
+// enquanto a aba Kanban está ativa).
+function montarMapaAlocacao(prep) {
+  var secao = document.getElementById('secao-mapa-alocacao');
+  if (prep.semRoster) {
+    secao.innerHTML = RenderAbaAlocacaoMapa.renderAbaAlocacaoMapa(null, { semRoster: true });
+    return;
+  }
+  var dados = RenderAbaAlocacao.prepararDadosAlocacao(window.__REGISTROS__, prep.indices, prep.o);
+  secao.innerHTML = RenderAbaAlocacaoMapa.renderAbaAlocacaoMapa(dados, prep.o);
+  // desenharPinosMapa/atualizarPainelSemLocalizacao entram na Task 12 -- até
+  // lá esta função só desenha o shell (controles/pool/resumo).
+  if (typeof desenharPinosMapa === 'function' && MAPA_ALOCACAO.instancia) {
+    desenharPinosMapa(dados, (window.__DEMANDAS__ || {}).coordenadasPorSup || {});
   }
 }
 
@@ -698,15 +734,18 @@ function resolverAlvoAlocacao(e) {
   return null;
 }
 
-// Um único listener delegado em #secao-alocacao, montado UMA VEZ (a seção
-// nunca é recriada -- mesmo padrão do listener do Balanço, ver
-// inicializarTooltipBalanco acima). #secao-alocacao existe no HTML estático
-// desde o load (ver renderSemanal), então este wireup pode rodar
-// incondicionalmente, antes até da senha ser digitada -- só reage a eventos
-// que, na prática, só acontecem depois que montarAbaAlocacao() já desenhou
-// algo lá dentro.
+// Um único listener delegado em #secao-kanban-alocacao, montado UMA VEZ (a
+// seção nunca é recriada -- mesmo padrão do listener do Balanço, ver
+// inicializarTooltipBalanco acima). #secao-kanban-alocacao existe no HTML
+// estático desde o load (ver renderAlocacaoPagina), então este wireup pode
+// rodar incondicionalmente, antes até da senha ser digitada -- só reage a
+// eventos que, na prática, só acontecem depois que montarAbaAlocacao() já
+// desenhou algo lá dentro. Renomeada de #secao-alocacao pra #secao-kanban-alocacao
+// na Task 9 (2026-08-26), quando a nav Kanban/Mapa dividiu a seção única em
+// duas -- a interação de arrasto (Pointer Events) só existe na grade Kanban,
+// nunca na aba Mapa.
 function inicializarInteracaoAlocacao() {
-  var secao = document.getElementById('secao-alocacao');
+  var secao = document.getElementById('secao-kanban-alocacao');
 
   secao.addEventListener('pointerdown', function (e) {
     var cartao = e.target && e.target.closest ? e.target.closest('[data-equipe][data-arrastavel="sim"]') : null;
@@ -735,7 +774,7 @@ function inicializarInteracaoAlocacao() {
 
     // FIX (revisão do Task 9, achado Critical 2): captura o ponteiro no
     // cartão -- garante que pointermove/pointerup/pointercancel CONTINUAM
-    // chegando a este elemento (e, por bolha, em #secao-alocacao, que é
+    // chegando a este elemento (e, por bolha, em #secao-kanban-alocacao, que é
     // ancestral dele) mesmo que o ponteiro saia fisicamente da seção antes de
     // soltar (arrastar pra cima do cabeçalho, ou a seção não preencher a
     // viewport num tablet). Sem isso nenhum dos dois evento dispara, e o
@@ -965,10 +1004,30 @@ function atualizarDadosAoVivoSemanal() {
 
 document.getElementById('atualizar-dashboard').addEventListener('click', atualizarDadosAoVivoSemanal);
 
-// Wireup incondicional, no load do script -- #secao-alocacao já existe no
-// HTML estático (ver renderAlocacaoPagina), e o listener delegado não depende
-// de senha nem de a aba já ter sido desenhada.
+// Wireup incondicional, no load do script -- #secao-kanban-alocacao já existe
+// no HTML estático (ver renderAlocacaoPagina), e o listener delegado não
+// depende de senha nem de a aba já ter sido desenhada.
 inicializarInteracaoAlocacao();
+
+// Nav Kanban/Mapa -- markupAbas() (tools/comum/render-shell.js) já desenha
+// o <div class="abas-visualizacao"> com os dois <button>; aqui só liga o
+// clique. Lazy-init do MapLibre no primeiro clique na aba Mapa (Task 11) --
+// aqui só troca o display e redesenha; a inicialização do mapa em si mora
+// em inicializarMapaAlocacao(), chamada por este mesmo handler quando ainda
+// não existir instância.
+document.getElementById('aba-kanban-alocacao').addEventListener('click', function () {
+  document.getElementById('aba-kanban-alocacao').classList.add('aba-ativa');
+  document.getElementById('aba-mapa-alocacao').classList.remove('aba-ativa');
+  document.getElementById('secao-kanban-alocacao').style.display = '';
+  document.getElementById('secao-mapa-alocacao').style.display = 'none';
+});
+document.getElementById('aba-mapa-alocacao').addEventListener('click', function () {
+  document.getElementById('aba-mapa-alocacao').classList.add('aba-ativa');
+  document.getElementById('aba-kanban-alocacao').classList.remove('aba-ativa');
+  document.getElementById('secao-kanban-alocacao').style.display = 'none';
+  document.getElementById('secao-mapa-alocacao').style.display = '';
+  if (typeof inicializarMapaAlocacao === 'function') inicializarMapaAlocacao();
+});
 `;
 
 function renderAlocacaoPagina({
@@ -1039,7 +1098,12 @@ ${markupCabecalho({
 
   <div id="conteudo-protegido" style="display:none">
 ${markupFiltros(FILTROS_ALOCACAO, { recuo: '    ', acoes: MARKUP_ACOES_ALOCACAO })}
-    <div id="secao-alocacao"></div>
+${markupAbas([
+    { id: 'aba-kanban-alocacao', rotulo: 'Kanban', ativa: true },
+    { id: 'aba-mapa-alocacao', rotulo: 'Mapa', svg: '' },
+  ], '    ')}
+    <div id="secao-kanban-alocacao"></div>
+    <div id="secao-mapa-alocacao" style="display:none"></div>
   </div>
   </main>
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx}; window.__ANO__ = ${periodos[0].getUTCFullYear()};</script>

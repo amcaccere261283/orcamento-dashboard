@@ -76,8 +76,9 @@ function localStorageFalso() {
 // Extrai e roda, num Realm isolado (vm.Context), TODOS os <script> inline do
 // HTML gerado, na mesma ordem em que um navegador executaria -- nenhum
 // reescrito, nenhum resumido. Versão LOCAL (não reaproveita a do arquivo
-// original): a página nova não tem markupAbas/sete abas, mas continua com os
-// mesmos 8 blocos de <script> do arquivo original (vigenteIdx,
+// original): a página nova, desde a Task 9 (2026-08-26), tem markupAbas
+// (nav Kanban/Mapa, só duas abas -- não as sete da migrada), mas continua
+// com os mesmos 8 blocos de <script> do arquivo original (vigenteIdx,
 // __ULTIMA_ATUALIZACAO_OK__, aviso de atualização atrasada, dados cifrados,
 // gate, fonteParaCliente, bundle, cliente) -- markupAbas nunca foi um
 // <script> à parte em nenhuma das duas páginas, então a contagem não muda.
@@ -123,7 +124,7 @@ function csvEqComOs(textoDoDia) {
   ].join('\n');
 }
 
-test('depois da senha certa, #secao-alocacao é montada de verdade -- não fica um <div> vazio', async () => {
+test('depois da senha certa, #secao-kanban-alocacao é montada de verdade -- não fica um <div> vazio', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const html = renderAlocacaoPagina({
     registros, demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
@@ -133,7 +134,7 @@ test('depois da senha certa, #secao-alocacao é montada de verdade -- não fica 
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
   assert.equal(documentoFalso.getElementById('conteudo-protegido').style.display, '');
-  assert.notEqual(documentoFalso.getElementById('secao-alocacao').innerHTML, '');
+  assert.notEqual(documentoFalso.getElementById('secao-kanban-alocacao').innerHTML, '');
 });
 
 test('osParaSup viaja dentro do blob cifrado e chega em equipesDoQuadro -- supRealizado/colunaRealizada não ficam null numa página real', async () => {
@@ -198,7 +199,7 @@ function csvMatrizComSup(sup) {
 const CSV_AVANCOS_VAZIO = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n';
 const CSV_LAB_VAZIO = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
 
-test('I-1: clicar em "Atualizar dados" redesenha #secao-alocacao com o roster NOVO -- equipesCsv atualizado chega em equipesDoQuadro', async () => {
+test('I-1: clicar em "Atualizar dados" redesenha #secao-kanban-alocacao com o roster NOVO -- equipesCsv atualizado chega em equipesDoQuadro', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const geradoEm = new Date('2026-08-01T00:00:00Z'); // vigenteIdx = 7 (agosto)
   const demandas = Object.assign({}, DEMANDAS_VAZIAS, {
@@ -244,7 +245,7 @@ test('I-1: clicar em "Atualizar dados" redesenha #secao-alocacao com o roster NO
   sandbox.montarAbaAlocacao();
   await new Promise((resolve) => setImmediate(resolve));
 
-  const secaoAntes = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  const secaoAntes = documentoFalso.getElementById('secao-kanban-alocacao').innerHTML;
   assert.notStrictEqual(secaoAntes, '', 'pré-condição: a grade do roster inicial (build) já está desenhada');
   assert.ok(sandbox.ESTADO_ALOCACAO.equipes.some((e) => e.id === '4'), 'pré-condição: a equipe do build (id 4) está no quadro antes do clique');
 
@@ -261,8 +262,8 @@ test('I-1: clicar em "Atualizar dados" redesenha #secao-alocacao com o roster NO
   assert.ok(equipeNova, 'esperava a equipe 77 (do roster NOVO) em ESTADO_ALOCACAO.equipes -- prova que equipesDoQuadro recebeu o equipesCsv atualizado');
   assert.strictEqual(sandbox.ESTADO_ALOCACAO.equipes.some((e) => e.id === '4'), false, 'a equipe antiga (do build) não pode sobreviver ao refresh -- o quadro reflete o roster NOVO');
 
-  const secaoDepois = documentoFalso.getElementById('secao-alocacao').innerHTML;
-  assert.notStrictEqual(secaoDepois, secaoAntes, '#secao-alocacao precisa ser REDESENHADA pelo clique -- não pode ficar com o HTML de antes');
+  const secaoDepois = documentoFalso.getElementById('secao-kanban-alocacao').innerHTML;
+  assert.notStrictEqual(secaoDepois, secaoAntes, '#secao-kanban-alocacao precisa ser REDESENHADA pelo clique -- não pode ficar com o HTML de antes');
 
   assert.ok(!urlsRequisitadas.some((u) => String(u).indexOf('equipes-online') !== -1), 'a URL de produção (equipes-online.csv) nunca pode ter sido pedida -- producao fica de fora de fontes de propósito');
   assert.ok(!urlsRequisitadas.some((u) => String(u).indexOf('equipes-roster-online') !== -1), 'a URL de roster (equipes-roster-online.csv) nunca pode ter sido pedida -- roster fica de fora de fontes de propósito');
@@ -335,7 +336,7 @@ test('I-2: a Sheet EQ falhando no "Atualizar dados" preserva o roster que já es
   );
 
   assert.strictEqual(
-    documentoFalso.getElementById('secao-alocacao').innerHTML.indexOf('Sheet espelho da aba EQ não respondeu') === -1,
+    documentoFalso.getElementById('secao-kanban-alocacao').innerHTML.indexOf('Sheet espelho da aba EQ não respondeu') === -1,
     true,
     'a guarda semRoster NÃO pode aparecer -- a grade continua desenhada com o roster preservado, não em branco'
   );
@@ -462,7 +463,7 @@ test('sem equipesCsv (Sheet espelho da EQ não respondeu), a aba mostra a guarda
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
 
-  assert.match(documentoFalso.getElementById('secao-alocacao').innerHTML, /Sheet espelho da aba EQ não respondeu/);
+  assert.match(documentoFalso.getElementById('secao-kanban-alocacao').innerHTML, /Sheet espelho da aba EQ não respondeu/);
 });
 
 test('semana de um mês diferente do que o espelho da EQ cobre entra em somenteLeitura -- a grade desenha, mas nada é arrastável', async () => {
@@ -479,7 +480,7 @@ test('semana de um mês diferente do que o espelho da EQ cobre entra em somenteL
   await sandbox.tentarDesbloquear();
 
   assert.strictEqual(sandbox.mesSelecionadoIdx, 6, 'pré-condição: a página abre em julho, mês diferente do espelho');
-  assert.match(documentoFalso.getElementById('secao-alocacao').innerHTML, /Somente leitura: o espelho da/);
+  assert.match(documentoFalso.getElementById('secao-kanban-alocacao').innerHTML, /Somente leitura: o espelho da/);
 });
 
 test('window.__ALOCACAO_URL__ vem do blob cifrado (URL_ALOCACAO) -- nunca em texto puro no HTML cru, mesmo padrão de window.__DEMANDAS__', async () => {
@@ -779,7 +780,7 @@ test('em somenteLeitura nenhum cartão é arrastável -- nem alocar nem devolver
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
 
-  const secao = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  const secao = documentoFalso.getElementById('secao-kanban-alocacao').innerHTML;
   assert.match(secao, /Somente leitura/);
   assert.doesNotMatch(secao, /data-arrastavel="sim"/);
 });
@@ -801,7 +802,7 @@ test('digitar no campo de busca poda a GRADE, não só o pool', async () => {
   await sandbox.tentarDesbloquear();
   await sandbox.selecionarSemanaAlocacao(0);
 
-  const secao = documentoFalso.getElementById('secao-alocacao');
+  const secao = documentoFalso.getElementById('secao-kanban-alocacao');
   const antes = secao.innerHTML;
   const cartoes = (h) => (h.match(/data-equipe="/g) || []).length;
   const linhas = (h) => (h.match(/data-sup="/g) || []).length;
@@ -813,7 +814,7 @@ test('digitar no campo de busca poda a GRADE, não só o pool', async () => {
   assert.strictEqual(typeof handler, 'function');
   handler({ target: { id: 'busca-equipe', value: 'zzzznaoexiste' } });
 
-  const depois = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  const depois = documentoFalso.getElementById('secao-kanban-alocacao').innerHTML;
   assert.strictEqual(cartoes(depois), 0, 'nenhuma equipe casa -- nenhum cartão pode sobrar');
   assert.strictEqual(linhas(depois), 0, 'e a grade tem que esvaziar junto');
 });
@@ -824,14 +825,14 @@ test('limpar a busca traz o quadro inteiro de volta', async () => {
   await sandbox.tentarDesbloquear();
   await sandbox.selecionarSemanaAlocacao(0);
 
-  const secao = documentoFalso.getElementById('secao-alocacao');
+  const secao = documentoFalso.getElementById('secao-kanban-alocacao');
   const original = secao.innerHTML;
   const handler = secao.listeners.input;
 
   handler({ target: { id: 'busca-equipe', value: 'zzzznaoexiste' } });
   handler({ target: { id: 'busca-equipe', value: '' } });
 
-  const voltou = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  const voltou = documentoFalso.getElementById('secao-kanban-alocacao').innerHTML;
   assert.strictEqual(voltou, original, 'a poda é de exibição -- limpar restaura tudo');
 });
 
@@ -841,13 +842,13 @@ test('o filtro de tipologia da aba recorta as colunas', async () => {
   await sandbox.tentarDesbloquear();
   await sandbox.selecionarSemanaAlocacao(0);
 
-  const secao = documentoFalso.getElementById('secao-alocacao');
+  const secao = documentoFalso.getElementById('secao-kanban-alocacao');
   assert.match(secao.innerHTML, /id="filtro-tipologia-alocacao"/);
 
   const handler = secao.listeners.change;
   assert.strictEqual(typeof handler, 'function', 'precisa haver listener de change');
   handler({ target: { id: 'filtro-tipologia-alocacao', value: 'PI' } });
 
-  const depois = documentoFalso.getElementById('secao-alocacao').innerHTML;
+  const depois = documentoFalso.getElementById('secao-kanban-alocacao').innerHTML;
   assert.doesNotMatch(depois, /data-coluna="ST"/, 'só a coluna escolhida sobrevive');
 });

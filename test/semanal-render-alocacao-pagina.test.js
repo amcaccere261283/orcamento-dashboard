@@ -18,10 +18,12 @@ test('renderAlocacaoPagina exige senha e periodos', () => {
   assert.throws(() => renderAlocacaoPagina({ registros: [], demandas: DEMANDAS_VAZIAS, periodos: [], senha: SENHA_FAKE, geradoEm: new Date() }));
 });
 
-test('o HTML cru tem #secao-alocacao vazia e nenhum dado de registro em texto puro', () => {
+test('o HTML cru tem a nav Kanban/Mapa e as duas seções vazias, sem nenhum dado de registro em texto puro', () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa')];
   const html = renderAlocacaoPagina({ registros, demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z') });
-  assert.match(html, /<div id="secao-alocacao"><\/div>/);
+  assert.match(html, /<div id="secao-kanban-alocacao"><\/div>/);
+  assert.match(html, /<div id="secao-mapa-alocacao"[^>]*><\/div>/);
+  assert.match(html, /class="abas-visualizacao"/);
   assert.doesNotMatch(html, /Tomador-Sintetico-Alfa/);
   assert.match(html, /<title>ALOCAÇÃO EQUIPES<\/title>/);
 });
