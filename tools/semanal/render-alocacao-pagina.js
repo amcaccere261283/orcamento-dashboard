@@ -79,6 +79,76 @@ const BUNDLE_ARQUIVOS_ALOCACAO = [
 // Script cliente completo da página: estado, filtros, arrasto, live-refresh
 // (atualizarDadosAoVivoSemanal) e a montagem da grade de Alocação.
 const SCRIPT_CLIENTE_ALOCACAO = `
+// Setup MapLibre -- réplica EXATA do que está em produção no projeto Mapa
+// Sondagens (http://192.168.1.53:8080/, js/app.js), incluindo as 3 fontes
+// Esri/ArcGIS Online (World_Imagery base + Reference/World_Transportation +
+// Reference/World_Boundaries_and_Places sempre visíveis, sem toggle -- é
+// assim que o Mapa Sondagens já roda), a atribuição, e o zoom só com Ctrl
+// pressionado (scroll normal continua rolando a PÁGINA, não o mapa).
+//
+// Inicializado LAZY (só no primeiro clique na aba Mapa, não no load da
+// página): o MapLibre precisa que o container já tenha tamanho real
+// (largura/altura != 0) pra calcular a projeção certo -- inicializar com
+// #secao-mapa-alocacao ainda em display:none produziria um mapa quebrado
+// (tiles no lugar errado até um resize forçar o recálculo).
+var MAPA_ALOCACAO = { instancia: null };
+
+var URL_ESRI_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+var URL_ESRI_TRANSPORTE = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
+var URL_ESRI_LIMITES = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
+
+function inicializarMapaAlocacao() {
+  if (MAPA_ALOCACAO.instancia) {
+    // Já existe -- só garante que o tamanho está certo (a aba pode ter sido
+    // aberta a 1ª vez com uma largura, e a janela redimensionada depois
+    // enquanto a aba Kanban estava ativa e o mapa invisível).
+    MAPA_ALOCACAO.instancia.resize();
+    return;
+  }
+  var mapa = new maplibregl.Map({
+    container: 'mapa-alocacao-canvas',
+    style: {
+      version: 8,
+      sources: {
+        'esri-imagery': { type: 'raster', tiles: [URL_ESRI_IMAGERY], tileSize: 256, maxzoom: 19, attribution: 'Tiles &copy; Esri' },
+        'esri-transporte': { type: 'raster', tiles: [URL_ESRI_TRANSPORTE], tileSize: 256, maxzoom: 19 },
+        'esri-limites': { type: 'raster', tiles: [URL_ESRI_LIMITES], tileSize: 256, maxzoom: 19 },
+      },
+      layers: [
+        { id: 'esri-imagery', type: 'raster', source: 'esri-imagery' },
+        { id: 'esri-transporte', type: 'raster', source: 'esri-transporte' },
+        { id: 'esri-limites', type: 'raster', source: 'esri-limites' },
+      ],
+    },
+    // Centro/zoom iniciais: mesma região do Mapa Sondagens (Paraná) --
+    // ajustado sozinho na Task 12 pra enquadrar os pinos reais assim que
+    // eles existirem (fitBounds).
+    center: [-49.2, -25.5],
+    zoom: 7,
+    pitch: 0, bearing: 0, dragRotate: false, touchPitch: false,
+    attributionControl: { compact: true },
+  });
+  mapa.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
+  mapa.scrollZoom.disable();
+  mapa.getContainer().addEventListener('wheel', function (evento) {
+    if (!evento.ctrlKey) return;
+    evento.preventDefault();
+    var retangulo = mapa.getContainer().getBoundingClientRect();
+    var lngLat = mapa.unproject([evento.clientX - retangulo.left, evento.clientY - retangulo.top]);
+    mapa.easeTo({ zoom: mapa.getZoom() + (evento.deltaY < 0 ? 1 : -1), around: lngLat, duration: 0 });
+  }, { passive: false });
+
+  MAPA_ALOCACAO.instancia = mapa;
+  MAPA_ALOCACAO.marcadores = {};
+
+  // Assim que o estilo carrega, desenha os pinos com o dado que JÁ existe
+  // em ESTADO_ALOCACAO (o mapa pode ter sido aberto bem depois do 1º
+  // montarAbaAlocacao) -- ver Task 12 pra desenharPinosMapa.
+  mapa.on('load', function () {
+    montarAbaAlocacao();
+  });
+}
+
 var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaAlocacao = MODULOS['render-aba-alocacao.js'];
 var RenderAbaAlocacaoMapa = MODULOS['render-aba-alocacao-mapa.js'];
@@ -1181,6 +1251,7 @@ function renderAlocacaoPagina({
 <head>
 <meta charset="UTF-8">
 <title>ALOCAÇÃO EQUIPES</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
 ${cssBase()}
 ${CSS_SEMANAL}
@@ -1227,6 +1298,7 @@ ${markupAbas([
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
   <script>${scriptDesbloqueio()}</script>
   <script>${fonteParaClienteEquipes()}${fonteParaClienteTipologiasAvancos()}${fonteParaClienteTipologiasLab()}${fonteParaClienteDatas()}${fonteParaClienteLinhaBase()}</script>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>${bundle}</script>
   <script>${scriptFiltros()}${SCRIPT_CLIENTE_ALOCACAO}</script>
 </body>
