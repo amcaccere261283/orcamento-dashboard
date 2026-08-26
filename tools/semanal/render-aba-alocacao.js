@@ -621,20 +621,20 @@ function marcarConflitos(equipes, alocacao) {
   });
 }
 
-// registros/indices: os de sempre. opcoes:
-//   { mesIdx, ano, semanas, semana, demandas, equipes, foraDoQuadro, alocacao,
-//     hojeEpoch, modoPersistencia, pendentes, semRoster, somenteLeitura }
-// semRoster: a Sheet espelho da EQ não respondeu -- guarda, sem grade nenhuma.
-// somenteLeitura: 'mes-diferente' quando a semana pedida é de outro mês que
-//   não o que o espelho da EQ cobre -- desenha a grade, mas nada é arrastável.
-function renderAbaAlocacao(registros, indices, opcoes) {
+// registros/indices: os de sempre. opcoes: mesmo shape que renderAbaAlocacao
+// recebia antes desta extração -- ver o comentário que já existia ali.
+// Devolve null quando opcoes.semRoster: esta função é só sobre CALCULAR
+// grade/resumo, não sobre decidir o que desenhar na ausência de roster --
+// essa decisão continua em renderAbaAlocacao (a tabela) e, a partir desta
+// tarefa, também no chamador da aba Mapa.
+//
+// Extraída (2026-08-26) para a aba Mapa poder desenhar pinos por SUP sem
+// duplicar montarGradeAlocacao/resumirAlocacao -- ver
+// docs/superpowers/specs/2026-08-26-alocacao-equipes-mapa-design.md,
+// Decisão 2.
+function prepararDadosAlocacao(registros, indices, opcoes) {
   var o = opcoes || {};
-
-  // A guarda vem ANTES de qualquer grade -- um quadro vazio leria como "nada
-  // alocado", que é uma afirmação diferente e falsa de "não sabemos".
-  if (o.semRoster) {
-    return renderControles(o, true) + renderGuardaSemRoster();
-  }
+  if (o.semRoster) return null;
 
   var somenteLeitura = o.somenteLeitura || null;
   var equipesBrutas = o.equipes || [];
@@ -642,9 +642,6 @@ function renderAbaAlocacao(registros, indices, opcoes) {
   var equipesPorId = {};
   equipes.forEach(function (e) { equipesPorId[e.id] = e; });
 
-  // A busca poda a GRADE também, não só o pool -- ver o comentário em
-  // montarGradeAlocacao. `equipesVisiveis` fica null quando não há busca, e
-  // null significa "não filtra", nunca "nenhuma".
   var termoBusca = normalizarBusca(o.buscaEquipe || '');
   var equipesVisiveis = null;
   if (termoBusca) {
@@ -664,18 +661,42 @@ function renderAbaAlocacao(registros, indices, opcoes) {
   var porEquipeMap = {};
   resumo.porEquipe.forEach(function (e) { porEquipeMap[e.id] = e; });
 
+  return {
+    somenteLeitura: somenteLeitura, equipes: equipes, equipesPorId: equipesPorId,
+    grade: grade, resumo: resumo, porEquipeMap: porEquipeMap,
+  };
+}
+
+// registros/indices: os de sempre. opcoes:
+//   { mesIdx, ano, semanas, semana, demandas, equipes, foraDoQuadro, alocacao,
+//     hojeEpoch, modoPersistencia, pendentes, semRoster, somenteLeitura }
+// semRoster: a Sheet espelho da EQ não respondeu -- guarda, sem grade nenhuma.
+// somenteLeitura: 'mes-diferente' quando a semana pedida é de outro mês que
+//   não o que o espelho da EQ cobre -- desenha a grade, mas nada é arrastável.
+function renderAbaAlocacao(registros, indices, opcoes) {
+  var o = opcoes || {};
+
+  // A guarda vem ANTES de qualquer grade -- um quadro vazio leria como "nada
+  // alocado", que é uma afirmação diferente e falsa de "não sabemos".
+  if (o.semRoster) {
+    return renderControles(o, true) + renderGuardaSemRoster();
+  }
+
+  var dados = prepararDadosAlocacao(registros, indices, opcoes);
+  var somenteLeitura = dados.somenteLeitura;
+
   var html = renderControles(o, somenteLeitura);
-  html += renderFaixaAlocacao(resumo.totais);
+  html += renderFaixaAlocacao(dados.resumo.totais);
   if (somenteLeitura === 'mes-diferente') html += renderAvisoSomenteLeitura();
-  html += renderPool(equipes, o.foraDoQuadro, porEquipeMap, somenteLeitura, o.alocacao, o.buscaEquipe, o.tipologiaAlocacao || null);
-  html += renderMatriz(grade, resumo, equipesPorId, somenteLeitura);
-  html += renderResumoSup(resumo.porSup);
-  html += renderResumoEquipe(resumo.porEquipe);
+  html += renderPool(dados.equipes, o.foraDoQuadro, dados.porEquipeMap, somenteLeitura, o.alocacao, o.buscaEquipe, o.tipologiaAlocacao || null);
+  html += renderMatriz(dados.grade, dados.resumo, dados.equipesPorId, somenteLeitura);
+  html += renderResumoSup(dados.resumo.porSup);
+  html += renderResumoEquipe(dados.resumo.porEquipe);
   return html;
 }
 
 module.exports = {
-  renderAbaAlocacao, CLASSE_LEITURA, ROTULO_LEITURA, CLASSE_SITUACAO, ROTULO_SITUACAO,
+  renderAbaAlocacao, prepararDadosAlocacao, CLASSE_LEITURA, ROTULO_LEITURA, CLASSE_SITUACAO, ROTULO_SITUACAO,
   renderCartaoEquipe, renderCelula, renderMatriz, renderPool, renderFaixaAlocacao,
   // Os dois resumos e as duas guardas saem para snapshot-alocacao.js montar a
   // aba INTEIRA a partir de uma grade sintética, sem passar pelo pipeline de
