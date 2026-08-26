@@ -35,6 +35,13 @@ const { lerAvisoAtualizacaoVolume, ultimaAtualizacaoOkIso } = require('./coorden
 const LOGO_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-suporte-infra-negativo.png');
 const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-alvo.png');
 
+// Assets da marca Suporte Infra pra aba Mapa (fonte Nimbus Sans Extd + textura de
+// fundo), tirados do site ao vivo do projeto irmão "Mapa Sondagens" -- mesma marca.
+// Mesmo padrão de ausência não quebra o build (loadDataUri devolve undefined).
+const NIMBUS_REGULAR_PATH = path.join(__dirname, '..', '..', 'assets', 'mapa-alocacao', 'nimbus-sans-extd.otf');
+const NIMBUS_BLACK_PATH = path.join(__dirname, '..', '..', 'assets', 'mapa-alocacao', 'nimbus-sans-extd-black.otf');
+const TEXTURA_MAPA_PATH = path.join(__dirname, '..', '..', 'assets', 'mapa-alocacao', 'textura-fundo.png');
+
 function loadDataUri(filePath) {
   if (!fs.existsSync(filePath)) return undefined;
   const buf = fs.readFileSync(filePath);
@@ -544,6 +551,9 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
     registros, demandas, periodos, senha, geradoEm: today,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
     avisoAtualizacao, ultimaAtualizacaoOkIso: ultimaAtualizacaoOkIsoValor,
+    nimbusRegularDataUri: loadDataUri(NIMBUS_REGULAR_PATH),
+    nimbusBlackDataUri: loadDataUri(NIMBUS_BLACK_PATH),
+    texturaMapaDataUri: loadDataUri(TEXTURA_MAPA_PATH),
   });
   // Deriva do MESMO diretório de resolvedOutPath (não de um caminho fixo
   // pra dist/) -- build({ outPath: '...' }) existe pra permitir redirecionar

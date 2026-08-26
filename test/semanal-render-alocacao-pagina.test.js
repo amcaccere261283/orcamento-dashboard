@@ -51,3 +51,27 @@ test('o blob da página de Alocação NÃO carrega "baseline" -- essa página nu
   assert.strictEqual(dados.baseline, undefined, 'baseline não pertence à página de Alocação -- só à semanal');
   assert.ok('registros' in dados && 'demandas' in dados && 'alocacaoUrl' in dados, 'pré-condição: o blob tem os 3 campos que ele DEVE ter');
 });
+
+test('sem os data URIs de fonte/textura, o build não quebra -- degrada pra sem @font-face/sem textura', () => {
+  const registros = [registroSintetico('SUP-0003-24', 'Tomador-Sintetico-Gama')];
+  const html = renderAlocacaoPagina({
+    registros, demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+    // nimbusRegularDataUri/nimbusBlackDataUri/texturaMapaDataUri OMITIDOS de propósito
+  });
+  assert.ok(html); // não lança
+});
+
+test('com os data URIs presentes, o @font-face Nimbus Sans Extd entra no <style>', () => {
+  const registros = [registroSintetico('SUP-0004-24', 'Tomador-Sintetico-Delta')];
+  const html = renderAlocacaoPagina({
+    registros, demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+    nimbusRegularDataUri: 'data:font/otf;base64,AAAA',
+    nimbusBlackDataUri: 'data:font/otf;base64,BBBB',
+    texturaMapaDataUri: 'data:image/png;base64,CCCC',
+  });
+  assert.match(html, /Nimbus Sans Extd/);
+  assert.match(html, /data:font\/otf;base64,AAAA/);
+  assert.match(html, /data:image\/png;base64,CCCC/);
+});

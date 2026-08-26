@@ -971,7 +971,11 @@ document.getElementById('atualizar-dashboard').addEventListener('click', atualiz
 inicializarInteracaoAlocacao();
 `;
 
-function renderAlocacaoPagina({ registros, demandas, periodos, senha, geradoEm, logoDataUri, iconDataUri, avisoAtualizacao, ultimaAtualizacaoOkIso }) {
+function renderAlocacaoPagina({
+  registros, demandas, periodos, senha, geradoEm, logoDataUri, iconDataUri,
+  avisoAtualizacao, ultimaAtualizacaoOkIso,
+  nimbusRegularDataUri, nimbusBlackDataUri, texturaMapaDataUri,
+}) {
   if (!senha) {
     throw new Error('renderAlocacaoPagina requer "senha" -- os registros são cifrados com ela antes de ir pro HTML.');
   }
@@ -988,6 +992,17 @@ function renderAlocacaoPagina({ registros, demandas, periodos, senha, geradoEm, 
   const vigenteIdx = calcularVigenteIdx(periodos, geradoEm);
   const bundle = buildBrowserBundle(path.join(__dirname), BUNDLE_ARQUIVOS_ALOCACAO);
 
+  // @font-face da marca Suporte Infra (Nimbus Sans Extd) -- só as declarações;
+  // o CSS que USA essas fontes na aba Mapa chega na Task 10. A custom property
+  // --textura-mapa-alocacao carrega a textura pro mesmo <style> desde já (pra
+  // não depender do build ler o arquivo de novo), mas ainda não é usada por
+  // nenhuma regra -- Task 10 consome via var(--textura-mapa-alocacao).
+  const cssFontesMapa = (nimbusRegularDataUri || nimbusBlackDataUri || texturaMapaDataUri) ? `
+  ${nimbusRegularDataUri ? `@font-face { font-family: "Nimbus Sans Extd"; src: url("${nimbusRegularDataUri}") format("opentype"); font-weight: 400; }` : ''}
+  ${nimbusBlackDataUri ? `@font-face { font-family: "Nimbus Sans Extd"; src: url("${nimbusBlackDataUri}") format("opentype"); font-weight: 900; }` : ''}
+  ${texturaMapaDataUri ? `:root { --textura-mapa-alocacao: url("${texturaMapaDataUri}"); }` : ''}
+` : '';
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -997,6 +1012,7 @@ function renderAlocacaoPagina({ registros, demandas, periodos, senha, geradoEm, 
 ${cssBase()}
 ${CSS_SEMANAL}
 ${CSS_ABAS_SEMANAL}
+${cssFontesMapa}
 ${CSS_DEMANDAS}
 </style>
 </head>
