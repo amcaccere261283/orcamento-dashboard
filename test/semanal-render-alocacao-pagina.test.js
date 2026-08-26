@@ -24,6 +24,18 @@ test('o HTML cru tem a nav Kanban/Mapa e as duas seções vazias, sem nenhum dad
   assert.match(html, /<div id="secao-kanban-alocacao"><\/div>/);
   assert.match(html, /<div id="secao-mapa-alocacao"[^>]*><\/div>/);
   assert.match(html, /class="abas-visualizacao"/);
+
+  // Achado Critical 1 da revisão do Task 9: markupAbas() (render-shell.js) faz
+  // '>' + aba.svg + aba.rotulo + '</button>' SEM default -- uma entrada sem a
+  // chave 'svg' faz 'undefined' ser stringificado no rótulo do botão
+  // ("undefinedKanban"). O regex acima só provava que a nav EXISTE, não que o
+  // texto dos botões está certo -- por isso não pegou o bug sozinho.
+  const navMatch = html.match(/<div class="abas-visualizacao">[\s\S]*?<\/div>/);
+  assert.ok(navMatch, 'esperava encontrar o bloco <div class="abas-visualizacao"> completo');
+  assert.match(navMatch[0], />Kanban</);
+  assert.match(navMatch[0], />Mapa</);
+  assert.doesNotMatch(navMatch[0], /undefined/);
+
   assert.doesNotMatch(html, /Tomador-Sintetico-Alfa/);
   assert.match(html, /<title>ALOCAÇÃO EQUIPES<\/title>/);
 });

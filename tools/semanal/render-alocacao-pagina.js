@@ -613,8 +613,22 @@ function podeDevolverGrupo(equipeId, companheiros) {
 // trava no ar, arrastar uma equipe do POOL de volta pro pool ainda pode
 // devolver uma companheira que estava alocada, então "não faz nada" seria
 // mentira nesse caso.
-function destacarCelulasCompativeis(colunas, podeDevolver, companheiros) {
-  var celulas = document.querySelectorAll('.celula-alocacao');
+//
+// raiz (achado Important 3 da revisão do Task 9): renderControles emite
+// #status-alocacao/#busca-equipe/#filtro-tipologia-alocacao, e desde que a
+// aba Mapa passou a chamar renderControles TAMBÉM (render-aba-alocacao-mapa.js),
+// esses ids -- e as classes .celula-alocacao/[data-equipe]/.pool-alocacao --
+// existem DUAS vezes no documento assim que montarAbaAlocacao roda, uma vez
+// por seção. Um document.querySelectorAll (sem raiz) varreria as duas, e um
+// arrasto no Kanban carimbaria/apagaria destaque na aba Mapa escondida
+// também. Todo call site de dentro de inicializarInteracaoAlocacao já
+// conhece a seção que disparou o gesto (a variável 'secao' do closure) e
+// passa ela aqui -- default 'document' só para não quebrar quem chama esta
+// função direto (testes, ex. test/semanal-alocacao-interacao.test.js), que
+// não têm duas seções competindo pelo mesmo id/classe no DOM falso.
+function destacarCelulasCompativeis(colunas, podeDevolver, companheiros, raiz) {
+  var r = raiz || document;
+  var celulas = r.querySelectorAll('.celula-alocacao');
   for (var i = 0; i < celulas.length; i++) {
     var coluna = celulas[i].getAttribute ? celulas[i].getAttribute('data-coluna') : null;
     if (colunas.indexOf(coluna) !== -1) celulas[i].classList.add('celula-alvo');
@@ -627,7 +641,7 @@ function destacarCelulasCompativeis(colunas, podeDevolver, companheiros) {
   // lançaria DOMException se algum dia carregasse aspas -- ANTES do
   // setPointerCapture, matando o gesto inteiro. Em vez de montar seletor
   // nenhum, busca todo cartão com data-equipe e compara o valor em JS.
-  var todosOsCartoes = document.querySelectorAll('[data-equipe]');
+  var todosOsCartoes = r.querySelectorAll('[data-equipe]');
   (companheiros || []).forEach(function (idBruto) {
     var id = String(idBruto);
     for (var j = 0; j < todosOsCartoes.length; j++) {
@@ -637,7 +651,7 @@ function destacarCelulasCompativeis(colunas, podeDevolver, companheiros) {
     }
   });
   if (!podeDevolver) return;
-  var pool = document.querySelector('.pool-alocacao');
+  var pool = r.querySelector('.pool-alocacao');
   if (pool) pool.classList.add('pool-alvo');
 }
 
@@ -648,17 +662,20 @@ function destacarCelulasCompativeis(colunas, podeDevolver, companheiros) {
 // lugar a deixaria acesa para sempre em pelo menos um dos quatro caminhos de
 // saída do arrasto (soltura aceita, recusada, pointercancel, ou solta fora de
 // tudo). Ver o comentário de encerrarArrastoAlocacao.
-function limparDestaquesAlocacao() {
-  var celulas = document.querySelectorAll('.celula-alocacao');
+//
+// raiz: mesmo motivo/mesmo default de destacarCelulasCompativeis acima.
+function limparDestaquesAlocacao(raiz) {
+  var r = raiz || document;
+  var celulas = r.querySelectorAll('.celula-alocacao');
   for (var i = 0; i < celulas.length; i++) {
     celulas[i].classList.remove('celula-alvo');
     celulas[i].classList.remove('celula-inerte');
   }
-  var companheiros = document.querySelectorAll('.cartao-companheiro');
+  var companheiros = r.querySelectorAll('.cartao-companheiro');
   for (var j = 0; j < companheiros.length; j++) {
     companheiros[j].classList.remove('cartao-companheiro');
   }
-  var pool = document.querySelector('.pool-alocacao');
+  var pool = r.querySelector('.pool-alocacao');
   if (pool) pool.classList.remove('pool-alvo');
 }
 
@@ -687,7 +704,11 @@ function removerFantasmaArrasto() {
 // pointercancel, ou solta fora de qualquer célula) passam por aqui, e todos
 // deixam o quadro exatamente igual: sem fantasma, sem destaque, sem captura
 // de ponteiro presa, e ARRASTO_ALOCACAO de volta ao repouso.
-function encerrarArrastoAlocacao() {
+//
+// raiz: repassada pra limparDestaquesAlocacao (achado Important 3, ver o
+// comentário lá) -- os dois call sites (pointerup/pointercancel, dentro de
+// inicializarInteracaoAlocacao) já têm a seção certa em mãos.
+function encerrarArrastoAlocacao(raiz) {
   if (ARRASTO_ALOCACAO.cartao && ARRASTO_ALOCACAO.pointerId !== null
     && typeof ARRASTO_ALOCACAO.cartao.releasePointerCapture === 'function') {
     try { ARRASTO_ALOCACAO.cartao.releasePointerCapture(ARRASTO_ALOCACAO.pointerId); } catch (err) { /* já liberada, ou o alvo sumiu do DOM -- sem problema */ }
@@ -697,7 +718,7 @@ function encerrarArrastoAlocacao() {
   ARRASTO_ALOCACAO.cartao = null;
   ARRASTO_ALOCACAO.equipeId = null;
   ARRASTO_ALOCACAO.moveu = false;
-  limparDestaquesAlocacao();
+  limparDestaquesAlocacao(raiz);
 }
 
 // Resolve a .celula-alocacao sob o ponto do soltar.
@@ -762,7 +783,7 @@ function inicializarInteracaoAlocacao() {
     // abandonada (clicou numa equipe e apertou outra sem soltar) deixaria o
     // destaque da primeira somado ao da segunda, senão.
     SELECAO_ALOCACAO.equipeId = null;
-    limparDestaquesAlocacao();
+    limparDestaquesAlocacao(secao);
 
     ARRASTO_ALOCACAO.pointerId = e.pointerId;
     ARRASTO_ALOCACAO.cartao = cartao;
@@ -770,7 +791,7 @@ function inicializarInteracaoAlocacao() {
     ARRASTO_ALOCACAO.moveu = false;
     ARRASTO_ALOCACAO.fantasma = criarFantasmaArrasto(equipeId);
     posicionarFantasmaArrasto(ARRASTO_ALOCACAO.fantasma, e.clientX, e.clientY);
-    destacarCelulasCompativeis(equipe.colunas || [], podeDevolverGrupo(equipeId, equipe.companheiros), equipe.companheiros || []);
+    destacarCelulasCompativeis(equipe.colunas || [], podeDevolverGrupo(equipeId, equipe.companheiros), equipe.companheiros || [], secao);
 
     // FIX (revisão do Task 9, achado Critical 2): captura o ponteiro no
     // cartão -- garante que pointermove/pointerup/pointercancel CONTINUAM
@@ -787,12 +808,20 @@ function inicializarInteracaoAlocacao() {
   // O campo de busca de equipe. montarAbaAlocacao refaz a seção inteira, então
   // o input é OUTRO elemento a cada tecla -- sem devolver o foco e o cursor, só
   // daria pra digitar um caractere por vez.
+  //
+  // FIX (revisão do Task 9, achado Important 3): a busca por
+  // document.getElementById('busca-equipe') resolvia pro campo do Kanban só
+  // por ACIDENTE de ordem no documento -- desde que renderAbaAlocacaoMapa
+  // também chama renderControles (a aba Mapa tem o mesmo #busca-equipe), há
+  // dois na página assim que montarAbaAlocacao roda. secao.querySelector
+  // escopa pro campo DESTA seção (a que disparou o 'input'), por construção,
+  // não por ordem.
   secao.addEventListener('input', function (e) {
     var campo = e.target && e.target.id === 'busca-equipe' ? e.target : null;
     if (!campo) return;
     ESTADO_ALOCACAO.busca = campo.value || '';
     montarAbaAlocacao();
-    var novo = document.getElementById('busca-equipe');
+    var novo = secao.querySelector('#busca-equipe');
     if (novo && typeof novo.focus === 'function') {
       novo.focus();
       if (typeof novo.setSelectionRange === 'function') {
@@ -820,7 +849,7 @@ function inicializarInteracaoAlocacao() {
     if (ARRASTO_ALOCACAO.pointerId === null || e.pointerId !== ARRASTO_ALOCACAO.pointerId) return;
     var equipeId = ARRASTO_ALOCACAO.equipeId;
     var moveu = ARRASTO_ALOCACAO.moveu;
-    encerrarArrastoAlocacao();
+    encerrarArrastoAlocacao(secao);
 
     if (!moveu) {
       // Clique sem mover: NÃO decide nada aqui (ver o comentário grande sobre
@@ -852,7 +881,7 @@ function inicializarInteracaoAlocacao() {
   // gesto foi interrompido, não completado).
   secao.addEventListener('pointercancel', function (e) {
     if (ARRASTO_ALOCACAO.pointerId === null || e.pointerId !== ARRASTO_ALOCACAO.pointerId) return;
-    encerrarArrastoAlocacao();
+    encerrarArrastoAlocacao(secao);
   });
 
   secao.addEventListener('click', function (e) {
@@ -897,7 +926,7 @@ function inicializarInteracaoAlocacao() {
     if (SELECAO_ALOCACAO.equipeId) {
       var equipeIdSelecionado = SELECAO_ALOCACAO.equipeId;
       SELECAO_ALOCACAO.equipeId = null;
-      limparDestaquesAlocacao();
+      limparDestaquesAlocacao(secao);
       // Mesmo alvo do arrasto: clicar no pool com uma equipe selecionada
       // devolve, exatamente como soltá-la ali.
       var alvoClique = resolverAlvoAlocacao(e);
@@ -919,7 +948,7 @@ function inicializarInteracaoAlocacao() {
     var equipeClicada = equipeAlocavelPeloId(equipeIdClicado);
     if (!equipeClicada) return;
     SELECAO_ALOCACAO.equipeId = equipeIdClicado;
-    destacarCelulasCompativeis(equipeClicada.colunas || [], podeDevolverGrupo(equipeIdClicado, equipeClicada.companheiros), equipeClicada.companheiros || []);
+    destacarCelulasCompativeis(equipeClicada.colunas || [], podeDevolverGrupo(equipeIdClicado, equipeClicada.companheiros), equipeClicada.companheiros || [], secao);
   });
 }
 
@@ -1099,7 +1128,7 @@ ${markupCabecalho({
   <div id="conteudo-protegido" style="display:none">
 ${markupFiltros(FILTROS_ALOCACAO, { recuo: '    ', acoes: MARKUP_ACOES_ALOCACAO })}
 ${markupAbas([
-    { id: 'aba-kanban-alocacao', rotulo: 'Kanban', ativa: true },
+    { id: 'aba-kanban-alocacao', rotulo: 'Kanban', svg: '', ativa: true },
     { id: 'aba-mapa-alocacao', rotulo: 'Mapa', svg: '' },
   ], '    ')}
     <div id="secao-kanban-alocacao"></div>

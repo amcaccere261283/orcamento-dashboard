@@ -214,10 +214,11 @@ const ESTADOS_COBERTOS = {
   // Os dois abaixo não são da aba -- são o CONTEXTO em que ela vive. Sem eles
   // o snapshot não enxergaria nada de empilhamento: a marca d'água é
   // position:fixed com z-index 0, o que a faz pintar ACIMA de todo conteúdo em
-  // fluxo normal, e é #secao-alocacao que precisa criar o contexto para
-  // escapar dela. Revisar a aba fora da seção é revisar uma tela que a página
-  // não tem.
-  'id="secao-alocacao"': 'a seção que embrulha a aba na página real',
+  // fluxo normal, e é #secao-kanban-alocacao/#secao-mapa-alocacao que
+  // precisam criar o contexto para escapar dela (Task 9, 2026-08-26 --
+  // #secao-alocacao virou os dois). Revisar a aba fora da seção é revisar uma
+  // tela que a página não tem.
+  'id="secao-kanban-alocacao"': 'a seção que embrulha a aba na página real',
   'class="watermark"': "a marca d'água fixa do fundo",
 };
 
@@ -311,9 +312,12 @@ function gerar() {
     + 'Todos os números, SUPs, equipes e tomadores são inventados. '
     + "A marca d'água é um placeholder com a geometria e a opacidade da real. "
     + 'Gerado por tools/semanal/snapshot-alocacao.js.</p>'
-    // O mesmo id que render-semanal.js dá à seção da aba -- é nele que a
-    // regra de empilhamento pega.
-    + '<div id="secao-alocacao">' + corpo + '</div>';
+    // O mesmo id que render-semanal.js dá à seção do Kanban (Task 9,
+    // 2026-08-26 -- #secao-alocacao virou #secao-kanban-alocacao +
+    // #secao-mapa-alocacao, e a regra de empilhamento em render-semanal.js
+    // casa os dois) -- é nele que a regra de empilhamento pega. O snapshot só
+    // demonstra o conteúdo do Kanban, então usa esse id, não o do Mapa.
+    + '<div id="secao-kanban-alocacao">' + corpo + '</div>';
 
   const html = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
     + '<meta name="viewport" content="width=device-width, initial-scale=1">'

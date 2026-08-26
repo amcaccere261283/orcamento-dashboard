@@ -33,6 +33,80 @@ function criarDocumentoFalso() {
     return lista;
   }
 
+  // --- Elementos de ARRASTO da aba Alocação (2026-08-11) ---------------------
+  //
+  // destacarCelulasCompativeis/limparDestaquesAlocacao (render-alocacao-pagina.js)
+  // varrem por classe/atributo. Sem estes stubs, querySelectorAll devolveria
+  // [] e querySelector devolveria null, as duas funções virariam no-op, e um
+  // teste sobre elas passaria VAZIO -- pior que não existir, porque daria a
+  // impressão de cobertura. É exatamente o destaque preso na tela que a
+  // Decisão 3 do spec quer travar.
+  //
+  // Os testes registram as células que querem com registrarCelulasAlocacao().
+  // Declarados ANTES de elemento() (abaixo) porque elemento()'s querySelector/
+  // querySelectorAll também resolvem estes seletores -- ver o comentário lá
+  // (achado Important 3 da revisão do Task 9, 2026-08-26).
+  const celulasAlocacao = [];
+  const cartoesAlocacao = [];
+  let poolAlocacao = null;
+
+  function comClassList(extra) {
+    const classes = new Set();
+    return Object.assign({
+      classList: {
+        add: (c) => classes.add(c),
+        remove: (c) => classes.delete(c),
+        contains: (c) => classes.has(c),
+        toggle: (c, forcar) => {
+          const presente = forcar === undefined ? !classes.has(c) : !!forcar;
+          if (presente) classes.add(c); else classes.delete(c);
+          return presente;
+        },
+      },
+      classes,
+    }, extra || {});
+  }
+
+  function obterPoolAlocacao() {
+    if (!poolAlocacao) poolAlocacao = comClassList({});
+    return poolAlocacao;
+  }
+
+  // Seletores de ARRASTO/companheiras que tanto o documento quanto QUALQUER
+  // elemento resolvido por getElementById precisam entender -- ver o
+  // comentário grande acima de celulasAlocacao. Compartilhado pelos dois
+  // pontos de entrada (querySelector/querySelectorAll do documento E de
+  // elemento()) porque este DOM falso é FLAT (uma seção lógica só, sem
+  // hierarquia real): "buscar dentro da seção X" e "buscar no documento
+  // inteiro" resolvem pro MESMO registro global aqui, de propósito -- nenhum
+  // teste deste helper simula duas seções (Kanban/Mapa) com conteúdo
+  // concorrente ao mesmo tempo.
+  function querySelectorAlocacao(sel) {
+    if (sel === '.pool-alocacao') return obterPoolAlocacao();
+    // '#algum-id' PURO (sem combinador) -- suporta
+    // secao.querySelector('#busca-equipe') (achado Important 3 da revisão do
+    // Task 9): resolve pro MESMO objeto memoizado que getElementById(id)
+    // devolveria. Só o id sozinho -- '#algum-id .filtro-multi-trigger' (com
+    // espaço) continua caindo no regex mais abaixo, que já tratava esse caso.
+    const idPuro = /^#([\w-]+)$/.exec(sel);
+    if (idPuro) return elemento(idPuro[1]);
+    return null;
+  }
+
+  function querySelectorAllAlocacao(sel) {
+    if (sel === '.celula-alocacao') return celulasAlocacao;
+    if (sel === '.cartao-companheiro') return cartoesAlocacao.filter((c) => c.classes.has('cartao-companheiro'));
+    // Achado Minor 4 (revisão final de 2026-08-12): destacarCelulasCompativeis
+    // parou de montar '[data-equipe="X"]' com id cru interpolado (risco de
+    // DOMException) e passou a buscar '[data-equipe]' (seletor de presença,
+    // sem valor) e filtrar em JS -- mantém o regex velho por compatibilidade
+    // com qualquer outro chamador que ainda monte o seletor com valor.
+    if (sel === '[data-equipe]') return cartoesAlocacao;
+    const porEquipe = /^\[data-equipe="([^"]+)"\]$/.exec(sel);
+    if (porEquipe) return cartoesAlocacao.filter((c) => c.equipeId === porEquipe[1]);
+    return null; // null, não [] -- sinaliza "não é um seletor de alocação", ver os chamadores
+  }
+
   function elemento(id) {
     if (!elementos[id]) {
       // classList de verdade (Set), não um stub -- Task 12 precisa provar
@@ -65,54 +139,31 @@ function criarDocumentoFalso() {
         appendChild() {}, // atualizarRotuloFiltro chama trigger.appendChild(seta) pra recolocar a seta depois de reescrever o textContent
         // Só os 5 seletores que montarFiltroMulti/configurarAberturaFiltrosMulti
         // chamam sobre um elemento já resolvido (o gatilho, o painel, e o
-        // que existe dentro do painel).
+        // que existe dentro do painel), MAIS os seletores de arrasto/busca da
+        // aba Alocação (achado Important 3 da revisão do Task 9, 2026-08-26):
+        // destacarCelulasCompativeis/limparDestaquesAlocacao/o handler de
+        // 'input' de #busca-equipe passaram a escopar suas consultas pela
+        // SEÇÃO que disparou o gesto (secao.querySelector(...)), em vez do
+        // document inteiro -- sem isto aqui, esse escopo devolveria sempre
+        // null/[] neste DOM falso, e os testes que exercitam o caminho REAL
+        // do listener (não a chamada direta às funções) passariam vazios.
         querySelector(sel) {
           if (sel === '.filtro-multi-trigger') return elemento(id + '-trigger');
           if (sel === '.filtro-multi-painel') return elemento(id + '-painel');
           if (sel === '.filtro-multi-seta') return {};
           if (sel === '.filtro-multi-busca') return null; // sem busca digitada nestes testes
           if (sel === '.filtro-multi-vazio-busca') return { hidden: false };
-          return null;
+          return querySelectorAlocacao(sel);
         },
         querySelectorAll(sel) {
           if (sel === 'input[type="checkbox"]') return checkboxesDoPainel(el);
-          return [];
+          const viaAlocacao = querySelectorAllAlocacao(sel);
+          return viaAlocacao === null ? [] : viaAlocacao;
         },
       };
       elementos[id] = el;
     }
     return elementos[id];
-  }
-
-  // --- Elementos de ARRASTO da aba Alocação (2026-08-11) ---------------------
-  //
-  // destacarCelulasCompativeis/limparDestaquesAlocacao (render-semanal.js)
-  // varrem o DOCUMENTO por classe. Sem estes stubs, querySelectorAll devolveria
-  // [] e querySelector devolveria null, as duas funções virariam no-op, e um
-  // teste sobre elas passaria VAZIO -- pior que não existir, porque daria a
-  // impressão de cobertura. É exatamente o destaque preso na tela que a
-  // Decisão 3 do spec quer travar.
-  //
-  // Os testes registram as células que querem com registrarCelulasAlocacao().
-  const celulasAlocacao = [];
-  const cartoesAlocacao = [];
-  let poolAlocacao = null;
-
-  function comClassList(extra) {
-    const classes = new Set();
-    return Object.assign({
-      classList: {
-        add: (c) => classes.add(c),
-        remove: (c) => classes.delete(c),
-        contains: (c) => classes.has(c),
-        toggle: (c, forcar) => {
-          const presente = forcar === undefined ? !classes.has(c) : !!forcar;
-          if (presente) classes.add(c); else classes.delete(c);
-          return presente;
-        },
-      },
-      classes,
-    }, extra || {});
   }
 
   return {
@@ -129,10 +180,7 @@ function criarDocumentoFalso() {
       });
       return celulasAlocacao;
     },
-    poolAlocacao() {
-      if (!poolAlocacao) poolAlocacao = comClassList({});
-      return poolAlocacao;
-    },
+    poolAlocacao: obterPoolAlocacao,
     // Os cartões que os testes de destaque querem observar. Mesmo motivo de
     // registrarCelulasAlocacao: sem isto querySelectorAll devolve [] e o teste
     // de destaque das companheiras passaria VAZIO.
@@ -151,9 +199,11 @@ function criarDocumentoFalso() {
     },
     // document.querySelector só é chamado como '#algum-id .filtro-multi-trigger'
     // ou '#algum-id .filtro-multi-painel' (ver atualizarRotuloFiltro/montarFiltroMulti
-    // em scriptFiltros()) -- resolve pro mesmo elemento(id) e delega.
+    // em scriptFiltros()), OU um dos seletores de alocação (.pool-alocacao,
+    // '#algum-id') -- resolve pro mesmo elemento(id) e delega.
     querySelector(sel) {
-      if (sel === '.pool-alocacao') return this.poolAlocacao();
+      const viaAlocacao = querySelectorAlocacao(sel);
+      if (viaAlocacao !== null) return viaAlocacao;
       const m = /^#([\w-]+) (\.filtro-multi-(?:trigger|painel))$/.exec(sel);
       return m ? elemento(m[1]).querySelector(m[2]) : null;
     },
@@ -162,21 +212,14 @@ function criarDocumentoFalso() {
     // percorre para esconder/mostrar. Sintetizadas do innerHTML de
     // #corpo-alertas pelo mesmo mecanismo (e com o mesmo cache por innerHTML)
     // que checkboxesDoPainel usa -- sem isso a busca "passaria" num array
-    // vazio e o teste não provaria nada.
+    // vazio e o teste não provaria nada. Mais os seletores de alocação
+    // (.celula-alocacao, [data-equipe], .cartao-companheiro).
     //
     // Os demais (.filtro-multi-trigger, .filtro-multi.aberto) continuam
     // vazios de propósito: nenhum teste depende de achar outro filtro aberto.
     querySelectorAll(sel) {
-      if (sel === '.celula-alocacao') return celulasAlocacao;
-      if (sel === '.cartao-companheiro') return cartoesAlocacao.filter((c) => c.classes.has('cartao-companheiro'));
-      // Achado Minor 4 (revisão final de 2026-08-12): destacarCelulasCompativeis
-      // parou de montar '[data-equipe="X"]' com id cru interpolado (risco de
-      // DOMException) e passou a buscar '[data-equipe]' (seletor de presença,
-      // sem valor) e filtrar em JS -- mantém o regex velho por compatibilidade
-      // com qualquer outro chamador que ainda monte o seletor com valor.
-      if (sel === '[data-equipe]') return cartoesAlocacao;
-      var porEquipe = /^\[data-equipe="([^"]+)"\]$/.exec(sel);
-      if (porEquipe) return cartoesAlocacao.filter((c) => c.equipeId === porEquipe[1]);
+      const viaAlocacao = querySelectorAllAlocacao(sel);
+      if (viaAlocacao !== null) return viaAlocacao;
       if (sel !== '#tabela-alertas tbody tr') return [];
       const corpo = elemento('corpo-alertas');
       const cache = linhasPorTabela.get(corpo);

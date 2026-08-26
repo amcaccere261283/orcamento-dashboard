@@ -177,12 +177,84 @@ function montarClienteAlocacao() {
   return sandbox;
 }
 
-test('prepararOpcoesAlocacao devolve o MESMO roster que montarAbaAlocacao usa pro Kanban', async () => {
+// Achado do revisor do Task 9: a versão anterior deste teste não provava
+// nada -- `prep.o.equipes`/`ESTADO_ALOCACAO.equipes` são a MESMA referência
+// por construção (prepararOpcoesAlocacao atribui ESTADO_ALOCACAO.equipes e
+// embute essa MESMA referência em `o`), então o deepStrictEqual não tinha
+// como falhar; e o `assert.strictEqual(prep.semana.inicio, cond ? X : undefined)`
+// comparava X consigo mesmo (o ternário é sempre verdadeiro, porque
+// prepararOpcoesAlocacao já clampa semanaIdx >= 0 antes de devolver). Esta
+// versão usa só valores conhecidos DE FORA da função (constantes do fixture,
+// ou chamadas diretas e independentes aos módulos que ela consome) -- cada
+// asserção falharia se prepararOpcoesAlocacao computasse algo diferente do
+// que montarAbaAlocacao computava inline antes da extração.
+test('prepararOpcoesAlocacao devolve o MESMO roster e as MESMAS opções que montarAbaAlocacao usa pro Kanban', async () => {
   const cliente = montarClienteAlocacao();
   await cliente.selecionarSemanaAlocacao(1);
   const prep = cliente.prepararOpcoesAlocacao();
-  assert.deepStrictEqual(normalizar(prep.o.equipes), normalizar(cliente.ESTADO_ALOCACAO.equipes));
-  assert.strictEqual(prep.semana.inicio, cliente.ESTADO_ALOCACAO.semanaIdx >= 0 ? prep.semana.inicio : undefined);
+
+  // prep.o precisa ter EXATAMENTE as 15 chaves que o objeto de opções tinha
+  // antes da extração -- nem a mais (campo vazando à toa), nem a menos (um
+  // consumidor -- Kanban ou Mapa -- ficaria sem o que precisa).
+  const CHAVES_ESPERADAS = [
+    'mesIdx', 'ano', 'semanas', 'semana', 'demandas', 'semRoster',
+    'somenteLeitura', 'equipes', 'foraDoQuadro', 'alocacao', 'buscaEquipe',
+    'tipologiaAlocacao', 'hojeEpoch', 'modoPersistencia', 'pendentes',
+  ];
+  assert.deepStrictEqual(Object.keys(prep.o).sort(), [...CHAVES_ESPERADAS].sort());
+
+  // Valores conhecidos de fora (constantes do fixture, independentes de
+  // qualquer cálculo interno de prepararOpcoesAlocacao):
+  assert.strictEqual(prep.o.ano, 2026); // PERIODOS_2026
+  assert.strictEqual(prep.o.mesIdx, 7); // vigenteIdx de agosto/2026 (geradoEm do fixture)
+  assert.strictEqual(prep.o.semRoster, false, 'este fixture TEM roster (equipesCsv preenchido)');
+  assert.strictEqual(prep.o.somenteLeitura, null); // equipesRosterPeriodo não vem setado neste fixture
+  assert.strictEqual(prep.o.buscaEquipe, '', 'cliente novo, busca nunca digitada');
+  assert.strictEqual(prep.o.tipologiaAlocacao, '', 'cliente novo, filtro de tipologia nunca tocado');
+  assert.strictEqual(prep.semana.inicio, SEMANAS_AGOSTO[1].inicio, 'a semana 1 de agosto, calculada de forma independente por semanasDoMes()');
+  assert.strictEqual(prep.semana.fim, SEMANAS_AGOSTO[1].fim);
+  assert.deepStrictEqual(normalizar(prep.semana), normalizar(prep.o.semana), 'prep.semana e prep.o.semana têm que ser a mesma semana');
+
+  // Referência (não cópia) para os dois campos que prepararOpcoesAlocacao só
+  // repassa, sem transformar -- provar isso por referência é mais forte que
+  // por valor: uma cópia acidental também passaria num deepStrictEqual.
+  assert.strictEqual(prep.o.demandas, cliente.window.__DEMANDAS__);
+  assert.strictEqual(prep.o.alocacao, cliente.ESTADO_ALOCACAO.alocacao);
+
+  // modoPersistencia/pendentes: comparados contra uma chamada independente
+  // à API pública do cliente de persistência (clienteAlocacao() memoiza,
+  // então é a MESMA instância -- mas a asserção prova que prep.o reflete o
+  // que ela reporta agora, não um valor congelado ou inventado).
+  assert.strictEqual(prep.o.modoPersistencia, cliente.clienteAlocacao().modo());
+  assert.strictEqual(prep.o.pendentes, cliente.clienteAlocacao().pendentes().length);
+
+  // hojeEpoch: comparado contra uma chamada independente à mesma função pura.
+  assert.strictEqual(prep.o.hojeEpoch, cliente.hojeEpochDoNavegador());
+
+  // Roster: recomputado por uma chamada DIRETA e independente a
+  // EquipesAlocaveis.equipesDoQuadro, com os parâmetros que o fixture
+  // determina de fora (mês 8, semana 1, osParaSup cru) -- não os que
+  // prepararOpcoesAlocacao resolveu internamente. Se a extração tivesse
+  // trocado ano/mês/semana/osParaSup por engano, esta comparação pegaria.
+  const rosterEsperado = cliente.EquipesAlocaveis.equipesDoQuadro(cliente.window.__DEMANDAS__.equipesCsv, {
+    ano: 2026, mes: 8, semana: SEMANAS_AGOSTO[1], osParaSup: cliente.window.__DEMANDAS__.osParaSup,
+  });
+  assert.ok(rosterEsperado.equipes.length > 0, 'pré-condição: o roster esperado não pode estar vazio, senão a comparação abaixo seria vácua');
+  assert.deepStrictEqual(normalizar(prep.o.equipes), normalizar(rosterEsperado.equipes));
+  assert.deepStrictEqual(normalizar(prep.o.foraDoQuadro), normalizar(rosterEsperado.foraDoQuadro));
+  // E prova que ESTADO_ALOCACAO foi atualizado com o MESMO roster (efeito
+  // colateral que montarAbaAlocacao dependia antes da extração).
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.equipes), normalizar(rosterEsperado.equipes));
+
+  // Indices: recomputados por uma chamada DIRETA e independente a
+  // indicesFiltrados, com os 5 filtros vazios (nenhum foi tocado neste
+  // teste) -- não confiando na leitura interna que prepararOpcoesAlocacao
+  // faz de filtrosSelecionadosSemanal.
+  const indicesEsperados = cliente.indicesFiltrados(
+    cliente.window.__REGISTROS__, new Set(), new Set(), new Set(), new Set(), new Set()
+  );
+  assert.ok(indicesEsperados.length > 0, 'pré-condição: precisa sobrar pelo menos 1 registro, senão a comparação abaixo seria vácua');
+  assert.deepStrictEqual(normalizar(prep.indices), normalizar(indicesEsperados));
 });
 
 test('soltar uma equipe na coluna dela aplica o movimento', async () => {

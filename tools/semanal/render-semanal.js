@@ -498,7 +498,7 @@ const CSS_SEMANAL = `
      var(--page) é exatamente a cor que o body já tem, então nada muda de
      aparência além do sumiço da marca -- as tabelas continuam em
      rgba(26,26,25,0.68) sobre o mesmo #0d0d0d de antes. */
-  #secao-alocacao { position: relative; z-index: 1; background: var(--page); }
+  #secao-kanban-alocacao, #secao-mapa-alocacao { position: relative; z-index: 1; background: var(--page); }
 
   .controles-alocacao { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
   .controles-alocacao button {
