@@ -62,11 +62,17 @@ const CSV_EQ = [
 const SEMANA = { inicio: diaEpochDe(2026, 8, 10), fim: diaEpochDe(2026, 8, 16) };
 function diaEpochDe(ano, mes, dia) { return Math.floor(Date.UTC(ano, mes - 1, dia) / 86400000); }
 
-const OS_PARA_SUP = { '16925-25': 'SUP-7128-24', '17746-26': 'SUP-7133-24' };
+// Produção crua do Link 7 (dist/equipes-online.csv), formato
+// {idEquipe, sup, tipo, diaEpoch} -- desde 2026-08-26 é a fonte de
+// supRealizado/colunaRealizada, no lugar do texto da Sheet EQ + osParaSup.
+const PRODUCAO_ONLINE = [
+  { idEquipe: '4', sup: 'SUP-7128-24', tipo: 'SM', diaEpoch: diaEpochDe(2026, 8, 11) },
+  { idEquipe: '88', sup: 'SUP-7133-24', tipo: 'ST', diaEpoch: diaEpochDe(2026, 8, 12) },
+];
 
 test('equipesDoQuadro monta as equipes com colunas, disponibilidade e popup', () => {
   const { equipes } = equipesDoQuadro(CSV_EQ, {
-    ano: 2026, mes: 8, semana: SEMANA, osParaSup: OS_PARA_SUP,
+    ano: 2026, mes: 8, semana: SEMANA, producaoOnline: PRODUCAO_ONLINE,
   });
   const porId = Object.fromEntries(equipes.map((e) => [e.id, e]));
 
@@ -81,7 +87,7 @@ test('equipesDoQuadro monta as equipes com colunas, disponibilidade e popup', ()
 });
 
 test('equipe de férias a semana inteira não é arrastável', () => {
-  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, osParaSup: OS_PARA_SUP });
+  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: PRODUCAO_ONLINE });
   const eq59 = equipes.find((e) => e.id === '59');
   assert.strictEqual(eq59.diasDisponiveis, 0);
   assert.strictEqual(eq59.disponivel, false);
@@ -89,27 +95,33 @@ test('equipe de férias a semana inteira não é arrastável', () => {
 
 test('disponibilidade PARCIAL conta só os dias em campo', () => {
   // Equipe 88: 2 dias Baixada + 3 dias em campo.
-  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, osParaSup: OS_PARA_SUP });
+  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: PRODUCAO_ONLINE });
   const eq88 = equipes.find((e) => e.id === '88');
   assert.strictEqual(eq88.diasDisponiveis, 3);
   assert.strictEqual(eq88.disponivel, true);
   assert.strictEqual(eq88.polivalente, true);
 });
 
-test('supRealizado sai da ÚLTIMA OS vista, e o dia ativo sem OS herda a anterior', () => {
-  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, osParaSup: OS_PARA_SUP });
+test('supRealizado sai da produção real do sond (Link 7), até o fim da semana', () => {
+  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: PRODUCAO_ONLINE });
   const porId = Object.fromEntries(equipes.map((e) => [e.id, e]));
-  // Equipe 4: OS só na segunda, OK nos outros 4 dias -- o vínculo não se rompe.
   assert.strictEqual(porId['4'].supRealizado, 'SUP-7128-24');
   assert.strictEqual(porId['4'].colunaRealizada, 'SM / SM.F / SR');
-  // Equipe 88: OS na quarta -- polivalente, cai numa das colunas dela.
+  // Equipe 88: polivalente, cai numa das colunas dela.
   assert.strictEqual(porId['88'].supRealizado, 'SUP-7133-24');
   assert.ok(porId['88'].colunas.indexOf(porId['88'].colunaRealizada) !== -1);
 });
 
-test('equipe sem OS nenhuma nasce no pool -- supRealizado null, nunca chutado', () => {
+test('produção depois do fim da semana em tela não conta -- só o que já foi executado até lá', () => {
+  const producaoFutura = [{ idEquipe: '4', sup: 'SUP-9999-99', tipo: 'SM', diaEpoch: diaEpochDe(2026, 8, 20) }];
+  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: producaoFutura });
+  const eq4 = equipes.find((e) => e.id === '4');
+  assert.strictEqual(eq4.supRealizado, null, 'a única produção da equipe é depois do fim da semana em tela');
+});
+
+test('equipe sem produção nenhuma nasce no pool -- supRealizado null, nunca chutado', () => {
   const csv = CSV_EQ.split('\n').filter((l) => !l.startsWith('4,') && !l.startsWith('88,')).join('\n');
-  const { equipes } = equipesDoQuadro(csv, { ano: 2026, mes: 8, semana: SEMANA, osParaSup: OS_PARA_SUP });
+  const { equipes } = equipesDoQuadro(csv, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: PRODUCAO_ONLINE });
   const eq59 = equipes.find((e) => e.id === '59');
   assert.strictEqual(eq59.supRealizado, null);
   assert.strictEqual(eq59.colunaRealizada, null);
@@ -117,7 +129,7 @@ test('equipe sem OS nenhuma nasce no pool -- supRealizado null, nunca chutado', 
 
 test('Lab sai do quadro e aparece em foraDoQuadro com o motivo', () => {
   const { equipes, foraDoQuadro } = equipesDoQuadro(CSV_EQ, {
-    ano: 2026, mes: 8, semana: SEMANA, osParaSup: OS_PARA_SUP,
+    ano: 2026, mes: 8, semana: SEMANA, producaoOnline: PRODUCAO_ONLINE,
   });
   assert.strictEqual(equipes.find((e) => e.id === '200'), undefined);
   const fora = foraDoQuadro.find((e) => e.id === '200');
@@ -141,7 +153,7 @@ const CSV_EQ_VEICULO = [
 ].join('\n');
 
 const OPCOES_VEICULO = {
-  ano: 2026, mes: 8, semana: { inicio: 20675, fim: 20679 }, osParaSup: {},
+  ano: 2026, mes: 8, semana: { inicio: 20675, fim: 20679 }, producaoOnline: [],
 };
 
 test('equipe com carona ganha companheiros, rótulo do grupo e chave', () => {

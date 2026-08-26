@@ -113,15 +113,51 @@ function colunaSemeada(colunas, sup, temDemanda) {
   return colunas[0];
 }
 
+// Indexa producaoOnline (Link 7, dist/equipes-online.csv --
+// "IdEquipe,SUP,Tipo,DiaEpoch", raspado de sond.com.br/campo/sondagens por
+// atualizar-equipes-online.js) por idEquipe -- histórico ordenado por
+// diaEpoch. Mesmo formato de entrada que compute-equipes-realizado-alocado.js
+// já consome para o Realizado da Tabela Semanal, mas indexado à parte aqui:
+// lá o carry-forward tem janela de 45 dias; aqui é literalmente "a última
+// sondagem que a equipe executou", sem janela nenhuma -- ver
+// docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md.
+function indexarProducaoOnline(producaoOnline) {
+  var porEquipe = {};
+  (producaoOnline || []).forEach(function (l) {
+    if (!l || !l.idEquipe) return;
+    if (!porEquipe[l.idEquipe]) porEquipe[l.idEquipe] = [];
+    porEquipe[l.idEquipe].push(l);
+  });
+  Object.keys(porEquipe).forEach(function (id) {
+    porEquipe[id].sort(function (a, b) { return a.diaEpoch - b.diaEpoch; });
+  });
+  return porEquipe;
+}
+
+// Último registro do histórico (ordenado) com diaEpoch <= diaAlvo. null se não
+// achar -- equipe sem produção nenhuma até aquele dia nasce no pool, nunca
+// chutada (mesma garantia de quando a fonte era o texto da Sheet EQ).
+function ultimoRealizadoAte(historico, diaAlvo) {
+  var melhor = null;
+  (historico || []).forEach(function (item) {
+    if (item.diaEpoch > diaAlvo) return;
+    melhor = item;
+  });
+  return melhor;
+}
+
 // csvEq: o texto CSV da Sheet espelho da aba EQ.
-// opcoes: { ano, mes, semana: {inicio, fim}, osParaSup, temDemanda }
+// opcoes: { ano, mes, semana: {inicio, fim}, producaoOnline, temDemanda }
+//   producaoOnline: [{idEquipe, sup, tipo, diaEpoch}, ...] -- produção crua do
+//   Link 7 (dist/equipes-online.csv). Fonte de supRealizado/colunaRealizada
+//   desde 2026-08-26 (antes vinha do texto da Sheet EQ + osParaSup).
 //   temDemanda(sup, colunaId) -> bool, OPCIONAL, só para desempatar a coluna
 //   de uma equipe polivalente semeada pelo realizado.
 function equipesDoQuadro(csvEq, opcoes) {
   var o = opcoes || {};
   var roster = parseAbaEq(csvEq || '');
   var grade = linhasDaAbaEq(csvEq || '');
-  var osParaSup = o.osParaSup || {};
+  var producaoPorEquipe = indexarProducaoOnline(o.producaoOnline);
   var equipes = [];
   var foraDoQuadro = [];
   var diasDaSemana = o.semana ? (o.semana.fim - o.semana.inicio + 1) : 0;
@@ -146,21 +182,22 @@ function equipesDoQuadro(csvEq, opcoes) {
       return;
     }
 
-    // Disponibilidade e vínculo com o SUP saem do MESMO varrimento dos dias.
-    // O vínculo olha o mês inteiro até o fim da semana (a última OS vista
-    // continua valendo nos dias ativos sem OS -- mesma regra de
-    // agregarEquipesAtivas); a disponibilidade olha SÓ os dias da semana.
+    // Disponibilidade continua vindo do roster da Sheet EQ (Link 6) -- só os
+    // dias da semana em tela. O vínculo com o SUP (ultimoSup) NÃO depende mais
+    // desse varrimento -- vem direto da produção real do sond (Link 7,
+    // producaoPorEquipe), até o fim da semana em tela.
     var diasDisponiveis = 0;
-    var ultimoSup = null;
     bruta.dias.forEach(function (d) {
       var epoch = diaEpochDoDia(o.ano, o.mes, d.dia);
       if (o.semana && epoch > o.semana.fim) return;
       var classe = classificarDiaEquipe(d.texto);
       if (!classe) return;
       if (!contaComoAtiva(classe.estado)) return;
-      if (classe.os && osParaSup[classe.os]) ultimoSup = osParaSup[classe.os];
       if (o.semana && epoch >= o.semana.inicio) diasDisponiveis += 1;
     });
+    var diaAlvoRealizado = o.semana ? o.semana.fim : Infinity;
+    var ultimoRealizado = ultimoRealizadoAte(producaoPorEquipe[bruta.id], diaAlvoRealizado);
+    var ultimoSup = ultimoRealizado ? ultimoRealizado.sup : null;
 
     equipes.push({
       id: bruta.id,

@@ -439,6 +439,15 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   if (fs.existsSync(CAMINHO_PRODUCAO_ONLINE) && fs.existsSync(CAMINHO_ROSTER_ONLINE)) {
     const rosterCsv = fs.readFileSync(CAMINHO_ROSTER_ONLINE, 'utf8');
     const producaoCsv = fs.readFileSync(CAMINHO_PRODUCAO_ONLINE, 'utf8');
+    // producaoOnline (2026-08-26) viaja pro cliente pelo MESMO motivo de
+    // equipesCsv/osParaSup (comentário em montarEquipesAtivas, acima): a aba
+    // Alocação Equipes usa esta produção crua do Link 7 (equipes-alocaveis.js)
+    // para achar supRealizado/colunaRealizada -- ver
+    // docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md.
+    // Independente do cruzamento abaixo (montarEquipesRealizado) ter sucesso
+    // ou não -- Alocação e o Δ equipes REALIZADO da Tabela Semanal são
+    // consumidores independentes do mesmo CSV.
+    demandas.producaoOnline = parseProducaoOnlineCsv(producaoCsv);
     const { equipesPorDia, ativos, foraDaJanela } = montarEquipesRealizado({ rosterCsv, producaoCsv, registros });
     if (equipesPorDia) {
       demandas.equipesPorDia = equipesPorDia;

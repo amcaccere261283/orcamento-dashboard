@@ -437,13 +437,15 @@ function selecionarSemanaAlocacao(idx) {
 // a aba existir (um SUP inativo em Volume ainda pode ter carteira parada e
 // merecer uma equipe).
 //
-// osParaSup (Task 10) agora viaja no payload cifrado, dentro de
-// window.__DEMANDAS__ (build-dashboard.js/montarEquipesAtivas e o
-// live-refresh, ver atualizarDadosAoVivoSemanal) -- sem ele,
+// producaoOnline (2026-08-26) viaja no payload cifrado, dentro de
+// window.__DEMANDAS__ (build-dashboard.js e o live-refresh, ver
+// atualizarDadosAoVivoSemanal) -- é a produção crua do Link 7
+// (dist/equipes-online.csv, sond.com.br/campo/sondagens), sem ela
 // supRealizado/colunaRealizada ficam sempre null e "Repor o realizado" não
-// tem o que semear. O fallback '|| {}' continua como default seguro para HTML
-// de um build anterior a esta task (degrada para "pool vazio de sugestão",
-// nunca quebra).
+// tem o que semear. Antes vinha de osParaSup (texto da Sheet EQ + furos) --
+// ver docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md.
+// O fallback '|| []' é o default seguro para HTML de um build anterior a essa
+// troca (degrada para "pool vazio de sugestão", nunca quebra).
 function montarAbaAlocacao() {
   var semanas = semanasDoMesSelecionado();
   if (ESTADO_ALOCACAO.semanaIdx < 0 || ESTADO_ALOCACAO.semanaIdx >= semanas.length) {
@@ -471,7 +473,7 @@ function montarAbaAlocacao() {
     ano: window.__ANO__,
     mes: periodo ? periodo.mes : (mesSelecionadoIdx + 1),
     semana: semana,
-    osParaSup: demandas.osParaSup || {},
+    producaoOnline: demandas.producaoOnline || [],
   });
   ESTADO_ALOCACAO.equipes = roster.equipes;
   ESTADO_ALOCACAO.foraDoQuadro = roster.foraDoQuadro;

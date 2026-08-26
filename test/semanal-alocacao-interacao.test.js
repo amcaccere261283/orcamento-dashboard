@@ -99,6 +99,12 @@ function demandasTeste() {
     // comentário de pendência em montarAbaAlocacao, render-alocacao-pagina.js) --
     // aqui o teste o injeta direto, porque ele controla o payload inteiro.
     osParaSup: { [OS_SUP_A]: 'SUP-A' },
+    // producaoOnline (2026-08-26) é quem alimenta supRealizado desde a troca
+    // de origem -- ver
+    // docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md.
+    // Mesmo SUP/dia que osParaSup descrevia acima, agora como produção crua
+    // do Link 7.
+    producaoOnline: [{ idEquipe: '4', sup: 'SUP-A', tipo: 'SP', diaEpoch: DIAS_TESTE[0] }],
   };
 }
 

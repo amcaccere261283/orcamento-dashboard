@@ -356,6 +356,7 @@ function atualizarDadosAoVivo(config) {
           demandasNovas.equipesCsv = estado.demandas.equipesCsv;
           demandasNovas.osParaSup = estado.demandas.osParaSup;
           demandasNovas.equipesRosterPeriodo = estado.demandas.equipesRosterPeriodo;
+          demandasNovas.producaoOnline = estado.demandas.producaoOnline;
 
           // osParaSup: só depende de 'furos', usado pela aba Alocação
           // Equipes (equipesDoQuadro resolve supRealizado/colunaRealizada a
@@ -372,6 +373,28 @@ function atualizarDadosAoVivo(config) {
             demandasNovas.equipesRosterPeriodo = periodoEq;
             demandasNovas.equipesCsv = csvEq;
             demandasNovas.osParaSup = osParaSup;
+          }
+
+          // producaoOnline (2026-08-26): produção crua do Link 7
+          // (equipes-online.csv), fonte de supRealizado/colunaRealizada desde
+          // a troca de origem (ver
+          // docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md)
+          // -- osParaSup deixou de ser lido por equipes-alocaveis.js, mas
+          // continua populado acima por outros motivos (comentário dele).
+          // Reparseado de textos.producao aqui, independente do bloco
+          // REALIZADO logo abaixo (que exige TAMBÉM textos.roster e
+          // modulos.ComputeEquipesRealizadoAlocado) -- Alocação só precisa da
+          // produção crua, nunca do cruzamento com o roster.
+          if (textos.producao) {
+            var producaoOnlineAlocacao = [];
+            textos.producao.trim().split('\n').slice(1).forEach(function (linha) {
+              if (!linha) return;
+              var pa = linha.split(',');
+              var da = Number(pa[3]);
+              if (!isFinite(da)) return;
+              producaoOnlineAlocacao.push({ idEquipe: pa[0], sup: pa[1], tipo: pa[2], diaEpoch: da });
+            });
+            demandasNovas.producaoOnline = producaoOnlineAlocacao;
           }
         }
 

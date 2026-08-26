@@ -4,6 +4,18 @@ const assert = require('node:assert');
 const vm = require('node:vm');
 const { renderAlocacaoPagina } = require('../tools/semanal/render-alocacao-pagina.js');
 const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
+const { diaEpoch } = require('../tools/comum/datas.js');
+
+// supRealizado passou a vir da produção real do sond (Link 7,
+// producaoOnline) em vez do texto da Sheet EQ + osParaSup -- ver
+// docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md.
+// osParaSup continua nos fixtures abaixo (outros testes provam que ele
+// sobrevive a serialização/preservação), mas quem alimenta supRealizado/
+// colunaRealizada agora é producaoComOs.
+const DIA_01_08_2026 = diaEpoch(new Date(Date.UTC(2026, 7, 1)));
+function producaoComOs(sup) {
+  return [{ idEquipe: '4', sup, tipo: 'ST', diaEpoch: DIA_01_08_2026 }];
+}
 
 // Migrado de test/semanal-render-semanal-wireup.test.js (linhas 1723-2300,
 // "--- Alocação Equipes: a sétima aba, o blob cifrado e o invariante") pra
@@ -131,6 +143,7 @@ test('osParaSup viaja dentro do blob cifrado e chega em equipesDoQuadro -- supRe
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
     equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
+    producaoOnline: producaoComOs('SUP-0001-24'),
   });
   const html = renderAlocacaoPagina({ registros, demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
   const { sandbox, documentoFalso } = montarSandbox(html);
@@ -192,6 +205,7 @@ test('I-1: clicar em "Atualizar dados" redesenha #secao-alocacao com o roster NO
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
     equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
+    producaoOnline: producaoComOs('SUP-0001-24'),
   });
   const html = renderAlocacaoPagina({ registros, demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
@@ -267,6 +281,7 @@ test('I-2: a Sheet EQ falhando no "Atualizar dados" preserva o roster que já es
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
     equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
+    producaoOnline: producaoComOs('SUP-0001-24'),
   });
   const html = renderAlocacaoPagina({ registros, demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
 
@@ -352,6 +367,7 @@ test('a semana abre semeada do realizado no PRIMEIRO desenho da aba, sem precisa
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
     equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
+    producaoOnline: producaoComOs('SUP-0001-24'),
   });
   const html = renderAlocacaoPagina({ registros, demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
   const { sandbox, documentoFalso } = montarSandbox(html);
@@ -388,6 +404,7 @@ test('trocar para uma semana nunca vista (selecionarSemanaAlocacao) também seme
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
     equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
+    producaoOnline: producaoComOs('SUP-0001-24'),
   });
   const html = renderAlocacaoPagina({ registros, demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
   const { sandbox, documentoFalso } = montarSandbox(html);
@@ -409,6 +426,7 @@ test('uma semana esvaziada de propósito ("Limpar alocação") NÃO volta a seme
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
     equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
+    producaoOnline: producaoComOs('SUP-0001-24'),
   });
   const html = renderAlocacaoPagina({ registros, demandas, periodos: PERIODOS_2026, senha: SENHA_FAKE, geradoEm });
   const { sandbox, documentoFalso } = montarSandbox(html);
@@ -549,6 +567,7 @@ test('um arrasto que aterrissa ENQUANTO carregarAlocacaoDaSemana está em voo so
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
     equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
+    producaoOnline: producaoComOs('SUP-0001-24'),
   });
 
   const resolversGet = [];
@@ -602,6 +621,7 @@ test('trocar de semana enquanto um carregamento anterior está em voo não deixa
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
     equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
+    producaoOnline: producaoComOs('SUP-0001-24'),
   });
 
   const resolversGet = [];
@@ -658,6 +678,7 @@ function sandboxAlocacao() {
     equipesCsv: csvEqComOs('CCR RioSP (16925-25)'),
     equipesRosterPeriodo: { ano: 2026, mes: 8 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
+    producaoOnline: producaoComOs('SUP-0001-24'),
   });
   const html = renderAlocacaoPagina({
     registros, demandas, periodos: PERIODOS_2026,
@@ -750,6 +771,7 @@ test('em somenteLeitura nenhum cartão é arrastável -- nem alocar nem devolver
     // Espelho de JULHO com a página em agosto dispara somenteLeitura.
     equipesRosterPeriodo: { ano: 2026, mes: 7 },
     osParaSup: { '16925-25': 'SUP-0001-24' },
+    producaoOnline: producaoComOs('SUP-0001-24'),
   });
   const html = renderAlocacaoPagina({ registros, demandas, periodos: PERIODOS_2026,
     senha: SENHA_FAKE, geradoEm: new Date('2026-08-01T00:00:00Z') });
