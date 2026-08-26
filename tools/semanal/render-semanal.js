@@ -1414,7 +1414,7 @@ function montarOpcoesRelatorioSemanal(registros, indices) {
     ano: window.__ANO__, mesIdx: mesSelecionadoIdx, semanas: semanas,
     indiceAtual: semanaConsolidadoIdx(semanas, hojeEpoch),
     demandas: window.__DEMANDAS__, hojeEpoch: hojeEpoch,
-    geradoEm: new Date(), autor: (window.__ALOCACAO_AUTOR__ || 'dashboard'),
+    geradoEm: new Date(), autor: (window.__DASHBOARD_AUTOR__ || 'dashboard'),
   };
 }
 

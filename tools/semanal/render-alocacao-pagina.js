@@ -241,7 +241,7 @@ function clienteAlocacao() {
       url: (window.__ALOCACAO_URL__ || 'PENDENTE-publicar-o-apps-script'),
       fetch: function (u, o) { return fetch(u, o); },
       armazenamento: window.localStorage,
-      autor: (window.__ALOCACAO_AUTOR__ || 'dashboard'),
+      autor: (window.__DASHBOARD_AUTOR__ || 'dashboard'),
     });
   }
   return ESTADO_ALOCACAO.cliente;

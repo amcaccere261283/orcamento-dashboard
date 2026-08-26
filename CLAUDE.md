@@ -644,7 +644,9 @@ registros desde sempre, então não precisa do transplante de
 **Ligado em 2026-08-03** — o Apps Script do Avanço Sond foi publicado e as três
 fontes funcionam. `tools/semanal/apps-script-espelho-avancos.gs` já carrega o
 `ORIGEM_FILE_ID` real, e as duas URLs estão em `URL_ESPELHO_AVANCOS_SEMANAL`/
-`URL_ESPELHO_LAB_SEMANAL` (`render-semanal.js`, dentro de `SCRIPT_CLIENTE_SEMANAL`).
+`URL_ESPELHO_LAB_SEMANAL` (hoje em `tools/semanal/live-refresh.js`, ver a
+extração de 2026-08-25 logo abaixo — nasceram dentro de `SCRIPT_CLIENTE_SEMANAL`
+em `render-semanal.js`, quando esta era a única página com o botão).
 
 São a MESMA Sheet publicada, abas diferentes: o que as distingue é só o `gid`
 (`943230110` = Avanços, `213649864` = Lab Concluido). Trocá-las de lugar não daria
@@ -664,6 +666,32 @@ se confirma que a Sheet espelho não está servindo dado velho ou truncado.
 **O espelho atrasa até 30 min**: o gatilho do Apps Script (`criarGatilho`) roda
 nesse intervalo. Uma edição no `.xlsx` não aparece no botão antes disso — não é
 defeito do refresh.
+
+**Módulo compartilhado `tools/semanal/live-refresh.js` (2026-08-25).** Quando a
+aba Alocação Equipes virou página própria (`docs/alocacao-equipes.html`), ela
+nasceu com uma cópia colada da função inteira do botão -- ~300 linhas
+byte-idênticas entre `render-semanal.js` e `render-alocacao-pagina.js`, exceto
+em duas divergências pontuais (os 3 campos exclusivos da Alocação, e a chamada
+de redesenho no fim de cada página). Essa duplicação foi eliminada: a lógica
+mora agora só em `tools/semanal/live-refresh.js`, que expõe
+`atualizarDadosAoVivo(config)` e é chamada pelas DUAS páginas, cada uma
+passando sua própria `config`. As oito fontes (`matriz`, `avancos`, `lab`,
+`eq`, `producao`, `roster`, `demandasSondagem`, `demandasLab`) são lidas por
+**NOME** em `config.fontes`, não por índice posicional -- uma fonte
+ausente/`null` simplesmente não é buscada, em vez de deslocar as fontes
+seguintes num array. A página Semanal passa as 8; a página de Alocação passa
+só 6 (sem `producao`/`roster`, que só alimentavam o Realizado de Equipes da
+Tabela Semanal -- a Alocação nunca leu esse campo, sua Tendência é sempre
+`'volume'`) e sem `config.modulos`, cortando de vez o trabalho morto que ela
+fazia a cada clique. As duas divergências de página viram `config.rosterAlocacao`
+(os 3 campos exclusivos da Alocação) e `config.aplicar` (a chamada de
+redesenho, que também escreve `window.__REGISTROS__`/`window.__DEMANDAS__`).
+De quebra, o nome enganoso `window.__ALOCACAO_AUTOR__` (nunca definido em
+lugar nenhum, sempre cai no fallback `'dashboard'`) virou
+`window.__DASHBOARD_AUTOR__` nos dois pontos de leitura -- é o mesmo conceito
+("quem está operando o dashboard") nas duas páginas, não faz sentido ter dois
+nomes para o mesmo global vazio. Ver
+`docs/superpowers/plans/2026-08-25-live-refresh-compartilhado.md`.
 
 ### Formato numérico da Tabela Semanal e Gráficos, bug do Realizado de Equipes (2026-08-06/07)
 
@@ -692,16 +720,21 @@ milhares)" nunca mais aparece (consequência direta, não precisou tocar nele).
 
 **Bug corrigido (commit `88f137b`): "Realizado de Equipes" ficava em branco depois de
 qualquer clique em "Atualizar dados".** Causa raiz: `atualizarDadosAoVivoSemanal()`
-escrevia `demandasNovas.equipesAtivoPorDia` logo após buscar `historico.json`, mas
-`demandasNovas` era REATRIBUÍDA ~20 linhas depois (`= ComputeDemandas.computeDemandas(...)`)
-sempre que `avancosLabConfigurados` é true (o caso normal) -- o valor buscado ficava
-órfão no objeto descartado. Fix: captura o valor numa variável própria
-(`equipesAtivoPorDiaAtualizado`) e aplica em `demandasNovas.equipesAtivoPorDia` só no
-final da função, depois de qualquer reatribuição possível -- mesmo padrão que
-`equipesPorDia`/`equipesPeriodo` já usavam pra sobreviver a essa troca de objeto. **Ao
-adicionar qualquer campo novo em `demandasNovas` dentro dessa função, escrever por
-ÚLTIMO, nunca logo após o fetch** -- é a segunda vez que esse padrão de reatribuição no
-meio da função pega um campo desprevenido.
+(então duplicada em `render-semanal.js` e, depois de 2026-08-25, em
+`render-alocacao-pagina.js` também) escrevia `demandasNovas.equipesAtivoPorDia` logo
+após buscar `historico.json`, mas `demandasNovas` era REATRIBUÍDA ~20 linhas depois
+(`= ComputeDemandas.computeDemandas(...)`) sempre que `avancosLabConfigurados` é true
+(o caso normal) -- o valor buscado ficava órfão no objeto descartado. Fix: captura o
+valor numa variável própria (`equipesAtivoPorDiaAtualizado`) e aplica em
+`demandasNovas.equipesAtivoPorDia` só no final da função, depois de qualquer
+reatribuição possível -- mesmo padrão que `equipesPorDia`/`equipesPeriodo` já usavam
+pra sobreviver a essa troca de objeto. **Ao adicionar qualquer campo novo em
+`demandasNovas` dentro desta função, escrever por ÚLTIMO, nunca logo após o fetch** --
+é a segunda vez que esse padrão de reatribuição no meio da função pega um campo
+desprevenido. A função em si deixou de existir duplicada em 2026-08-25: hoje é
+`atualizarDadosAoVivo` em `tools/semanal/live-refresh.js` (ver a seção do módulo
+compartilhado acima), uma cópia só, chamada pelas duas páginas -- a regra de ordem
+continua valendo, só não precisa mais ser lembrada nos dois lugares.
 
 ### `tools/semanal/atualizar-arquivos.js` -- atalho local pras 3 buscas + build + publish (2026-08-07)
 
