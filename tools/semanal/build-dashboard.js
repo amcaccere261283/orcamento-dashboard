@@ -23,6 +23,7 @@ const { parseAbaEq, agregarEquipesAtivas, mesDaAbaEq } = require('./compute-equi
 const { agregarEquipesRealizadoAlocado } = require('./compute-equipes-realizado-alocado.js');
 const { agregarEquipesNaoProdutivas } = require('./compute-equipes-nao-produtivas.js');
 const { rotularTipologia } = require('../comum/tipologias-avancos.js');
+const { resolverCoordenadasPorSup } = require('./coordenadas-sup.js');
 const configDemandas = require('./config-demandas.js');
 const { lerAvisoAtualizacaoVolume, ultimaAtualizacaoOkIso } = require('./coordenacao-volume.js');
 
@@ -307,6 +308,12 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   } else {
     console.warn(`AVISO: ${CAMINHO_DEMANDAS_SONDAGEM_ONLINE} não encontrado -- Demandas Pendentes de sondagem não inclui furos ainda não executados. Rode "node tools/semanal/atualizar-demandas-sondagem-online.js".`);
   }
+  // Coordenadas por SUP (aba Mapa da Alocação Equipes, 2026-08-26) -- lê o
+  // MESMO grid combinado (avanços + pendentes) antes do unshift(null) que
+  // parseAvancos exige. Objeto vazio até a fonte publicar Latitude/
+  // Longitude (ver coordenadas-sup.js) -- nunca lança, nunca bloqueia o
+  // build.
+  const coordenadasPorSup = resolverCoordenadasPorSup(gridAvancos[0], gridAvancos.slice(1));
   gridAvancos.unshift(null);
   const { furos: furosLidos, descartadas, semDataTermino, cancelamentoIlegivel, deslocamentos } = parseAvancos(gridAvancos);
 
@@ -367,6 +374,7 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // MATRIZ, então apareceria como "SUP conhecido" no relatório).
   const { itens: furos, redirecionados: furosRedirecionados } = redirecionarSupsDesconhecidos(furosLidos, registros);
   const demandas = computeDemandas(furos, periodos, ensaios);
+  demandas.coordenadasPorSup = coordenadasPorSup;
   // Equipes Realizado: 1 origem só (2026-08-21) -- roster (Link 6) + produção
   // (Link 7) online, bloco "Δ equipes REALIZADO" logo abaixo. Até aqui havia
   // uma cascata de 3 fontes (mobilizadas via Sondador do Avanço Sond ->
