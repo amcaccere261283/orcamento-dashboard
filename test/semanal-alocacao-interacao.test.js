@@ -584,3 +584,23 @@ test('com o mapa já inicializado, o pool e os controles da aba Mapa continuam s
   const poolHtml = cliente.document.getElementById('mapa-alocacao-pool').innerHTML;
   assert.match(poolHtml, /pool-alocacao/, 'o pool continua sendo redesenhado, só o wrap do mapa é que é preservado');
 });
+
+// --- Task 12: particionarSupsPorLocalizacao (pino vs. painel "sem localização") ---
+//
+// Função PURA, separada de desenharPinosMapa (que mexe no MapLibre/DOM) --
+// testável sem precisar de um mapa de verdade. O resto de desenharPinosMapa
+// (criação de Marker/Popup) só é verificável manualmente, mesma limitação já
+// documentada na Task 11 para o resto do mapa.
+test('particionarSupsPorLocalizacao separa SUPs com e sem coordenada', () => {
+  const cliente = montarClienteAlocacao();
+  const porSup = [{ sup: 'SUP-A', leitura: 'absorvido' }, { sup: 'SUP-B', leitura: 'falta-equipe' }];
+  const coordenadas = { 'SUP-A': { lat: -25.5, lon: -49.2 } };
+  const resultado = cliente.particionarSupsPorLocalizacao(porSup, coordenadas);
+  // normalizar() (JSON round-trip, definida no topo deste arquivo): os
+  // arrays devolvidos pousam com o Array.prototype do vm.Context, e
+  // deepStrictEqual falha por "same structure but are not reference-equal"
+  // contra um array literal do realm principal -- mesmo achado já registrado
+  // ali para objetos.
+  assert.deepStrictEqual(normalizar(resultado.comLocalizacao.map((s) => s.sup)), ['SUP-A']);
+  assert.deepStrictEqual(normalizar(resultado.semLocalizacao.map((s) => s.sup)), ['SUP-B']);
+});

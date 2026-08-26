@@ -661,10 +661,113 @@ function montarMapaAlocacao(prep) {
     document.getElementById('mapa-alocacao-pool').innerHTML =
       RenderAbaAlocacaoMapa.renderAbaAlocacaoMapaPool(dados, prep.o);
   }
-  // desenharPinosMapa/atualizarPainelSemLocalizacao entram na Task 12 -- até
-  // lá esta função só desenha o shell (controles/pool/resumo).
+  // desenharPinosMapa (Task 12) desenha os pinos por SUP quando o mapa já
+  // existe -- a guarda 'typeof' é defensiva (nunca deveria disparar hoje que
+  // a função está sempre definida abaixo), mas fica porque montarMapaAlocacao
+  // é chamada de muitos gatilhos (arrasto, troca de filtro/semana/mês,
+  // "Atualizar dados", o handler de 'load' do mapa) e não vale o risco de um
+  // ReferenceError silencioso quebrar o redesenho inteiro do Kanban/Mapa.
   if (typeof desenharPinosMapa === 'function' && MAPA_ALOCACAO.instancia) {
     desenharPinosMapa(dados, (window.__DEMANDAS__ || {}).coordenadasPorSup || {});
+  }
+}
+
+// Mesmas 5 cores de .leitura-* (CSS_SEMANAL, render-semanal.js) --
+// REPETIDAS aqui de propósito, porque o marcador do MapLibre precisa da cor
+// SÓLIDA (background do pino), enquanto a classe original é um CHIP
+// translúcido (fundo claro + texto colorido, pensado pra um <span> de
+// rótulo, não pra um ponto no mapa). Mudar uma sem a outra é a próxima
+// divergência esperando acontecer -- ver o comentário sobre TIPOLOGIA_COLOR
+// em render-aba-consolidado.js pro mesmo raciocínio aplicado a outra paleta
+// deste projeto.
+var CORES_LEITURA_PINO = {
+  'parado-com-carteira': '#f6b53f',
+  'sem-equipe': '#e0684f',
+  'falta-equipe': '#e0684f',
+  antecipar: '#4f8ff0',
+  absorvido: '#7fd858',
+  'sem-demanda': '#898781',
+};
+
+// Separa as linhas de resumo.porSup em quem tem coordenada conhecida (vira
+// pino) e quem não tem (vai pro painel "sem localização"). Função PURA --
+// não mexe no mapa nem no DOM, só decide. Testada sem MapLibre em
+// test/semanal-alocacao-interacao.test.js.
+function particionarSupsPorLocalizacao(porSup, coordenadasPorSup) {
+  var coords = coordenadasPorSup || {};
+  var comLocalizacao = [];
+  var semLocalizacao = [];
+  (porSup || []).forEach(function (s) {
+    if (coords[s.sup]) comLocalizacao.push(s);
+    else semLocalizacao.push(s);
+  });
+  return { comLocalizacao: comLocalizacao, semLocalizacao: semLocalizacao };
+}
+
+// Conteúdo do popup de um pino -- SUP, tomador, tendência/capacidade
+// alocada, saldo e carteira. resumo.porSup já vem AGREGADO por SUP (ver
+// resumirAlocacao, compute-alocacao.js); o detalhe por coluna/tipologia fica
+// só no popup do CARTÃO da equipe (já existente em render-aba-alocacao.js),
+// não duplicado aqui.
+function popupHtmlDoPino(sup) {
+  return '<div class="popup-pino-alocacao">'
+    + '<p class="popup-titulo">' + RenderAbaAlocacao.escapeHtml(sup.sup) + '</p>'
+    + '<p>' + RenderAbaAlocacao.escapeHtml(sup.tomador || '—') + '</p>'
+    + '<p>Tendência: ' + sup.tendencia.toFixed(1) + ' · Capacidade alocada: ' + sup.capacidadeAlocada.toFixed(1) + '</p>'
+    + '<p>Saldo: ' + sup.saldo.toFixed(1) + '</p>'
+    + '<p>Carteira: ' + sup.carteira.toFixed(0) + '</p>'
+    + '</div>';
+}
+
+// Redesenha os pinos a partir do zero a cada chamada -- mesma filosofia de
+// montarAbaAlocacao pro Kanban (redesenha inteiro; mais simples e barato o
+// bastante que otimizar incrementalmente não vale a pena aqui: no máximo
+// algumas dezenas de SUPs por semana). dados: o retorno de
+// RenderAbaAlocacao.prepararDadosAlocacao (não nulo). coordenadasPorSup:
+// window.__DEMANDAS__.coordenadasPorSup.
+//
+// MAPA_ALOCACAO.marcadores pode não existir ainda quando esta função é
+// chamada com uma instância "dublê" (só nos testes -- ver
+// test/semanal-alocacao-interacao.test.js, que só atribui
+// MAPA_ALOCACAO.instancia sem passar por inicializarMapaAlocacao, a única
+// função que hoje inicializa .marcadores = {}); a guarda evita um
+// TypeError em Object.keys(undefined) nesse caminho.
+function desenharPinosMapa(dados, coordenadasPorSup) {
+  if (!MAPA_ALOCACAO.instancia) return;
+  var mapa = MAPA_ALOCACAO.instancia;
+  if (!MAPA_ALOCACAO.marcadores) MAPA_ALOCACAO.marcadores = {};
+
+  Object.keys(MAPA_ALOCACAO.marcadores).forEach(function (sup) {
+    MAPA_ALOCACAO.marcadores[sup].remove();
+  });
+  MAPA_ALOCACAO.marcadores = {};
+
+  var particionado = particionarSupsPorLocalizacao(dados.resumo.porSup, coordenadasPorSup);
+
+  particionado.comLocalizacao.forEach(function (sup) {
+    var coords = coordenadasPorSup[sup.sup];
+    var el = document.createElement('div');
+    el.className = 'marcador-alocacao-mapa';
+    el.style.background = CORES_LEITURA_PINO[sup.leitura] || CORES_LEITURA_PINO['sem-demanda'];
+    el.setAttribute('data-sup', sup.sup);
+    var marcador = new maplibregl.Marker({ element: el })
+      .setLngLat([coords.lon, coords.lat])
+      .setPopup(new maplibregl.Popup({ offset: 12 }).setHTML(popupHtmlDoPino(sup)))
+      .addTo(mapa);
+    MAPA_ALOCACAO.marcadores[sup.sup] = marcador;
+  });
+
+  var painelSemLocalizacao = document.getElementById('mapa-alocacao-sem-localizacao');
+  if (painelSemLocalizacao) {
+    if (!particionado.semLocalizacao.length) {
+      painelSemLocalizacao.innerHTML = '';
+    } else {
+      painelSemLocalizacao.innerHTML = '<strong>' + particionado.semLocalizacao.length
+        + ' SUP(s) sem localização</strong><ul>'
+        + particionado.semLocalizacao.map(function (s) {
+          return '<li>' + RenderAbaAlocacao.escapeHtml(s.sup) + ' — ' + RenderAbaAlocacao.escapeHtml(s.tomador || '—') + '</li>';
+        }).join('') + '</ul>';
+    }
   }
 }
 
@@ -1282,6 +1385,13 @@ function renderAlocacaoPagina({
   }
   #secao-mapa-alocacao .mapa-alocacao-sem-localizacao:empty { display: none; }
   #secao-mapa-alocacao .maplibregl-ctrl-attrib { background: rgba(0,0,0,0.5); color: var(--mapa-texto-secundario); }
+  #secao-mapa-alocacao .marcador-alocacao-mapa {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    cursor: pointer;
+  }
+  #secao-mapa-alocacao .popup-pino-alocacao { font-family: "Poppins", sans-serif; font-size: 13px; }
+  #secao-mapa-alocacao .popup-pino-alocacao .popup-titulo { font-weight: 700; margin: 0 0 4px; }
   `;
 
   return `<!DOCTYPE html>
