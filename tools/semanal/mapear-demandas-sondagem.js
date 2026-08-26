@@ -26,6 +26,15 @@ function texto(valor) {
   return String(valor === null || valor === undefined ? '' : valor).trim();
 }
 
+// Link 2 traz "Latitude/Longitude" numa célula só (ex.: "-25.55667703 /
+// -49.34752807"). Separa em duas colunas -- vazio (não "0/0") quando a
+// célula vier vazia ou sem o "/", pra não fabricar coordenada falsa.
+function separarLatLong(valor) {
+  const partes = texto(valor).split('/');
+  if (partes.length !== 2) return { latitude: '', longitude: '' };
+  return { latitude: partes[0].trim(), longitude: partes[1].trim() };
+}
+
 function juntarPendentesSondagem(linhasLink2, linhasLink3) {
   const porOS = new Map();
   for (const l3 of linhasLink3 || []) {
@@ -51,12 +60,16 @@ function juntarPendentesSondagem(linhasLink2, linhasLink3) {
       excluidos++;
       continue;
     }
-    // Layout de HEADER_SAIDA (mapear-producao-total.js), que encolheu em
-    // 2026-08-10: Contrato, Criação da OS, Tipo, Status, Executado Dia,
-    // Deslocamento, Total (m), Observações de Campo, OS, Sondador. Furo
+    // Layout de HEADER_SAIDA (mapear-producao-total.js): Contrato, Criação
+    // da OS, Tipo, Status, Executado Dia, Deslocamento, Total (m),
+    // Observações de Campo, OS, Sondador, Latitude, Longitude. Furo
     // pendente não tem execução, deslocamento nem metragem -- ficam vazios, e
     // é isso que o mantém no estoque de demandas pela regra de
     // compute-demandas.js. Metragem vazia NÃO bate no corte de 0,01.
+    // Latitude/Longitude vêm do próprio Link 2 -- guardadas em vez de
+    // descartadas (a partir de 2026-08-26), pra não exigir raspar tudo de
+    // novo quando alguém precisar da localização de um furo pendente.
+    const { latitude, longitude } = separarLatLong(l2['Latitude/Longitude']);
     rows.push([
       info.contrato,
       info.osDesde,
@@ -68,6 +81,8 @@ function juntarPendentesSondagem(linhasLink2, linhasLink3) {
       '',
       os,
       '',
+      latitude,
+      longitude,
     ]);
   }
 

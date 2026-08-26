@@ -45,9 +45,15 @@ const COLUNAS_LINK1 = [
   'Status Atual', 'Data Status Atual',
 ];
 
+// Latitude/Longitude adicionadas em 2026-08-26 -- só o Link 2 (furos
+// pendentes, mapear-demandas-sondagem.js) tem essas colunas na fonte; o
+// Link 1 (produção/realizado, function abaixo) não traz coordenadas, então
+// ficam vazias aqui. Colocadas no FIM do header pra não deslocar nenhuma
+// coluna existente (locateColunasAvancos busca por nome, não por posição).
 const HEADER_SAIDA = [
   'Contrato', 'Criação da OS', 'Tipo', 'Status', 'Executado Dia',
   'Deslocamento', 'Total (m)', 'Observações de Campo', 'OS', 'Sondador',
+  'Latitude', 'Longitude',
 ];
 
 function texto(valor) {
@@ -82,6 +88,8 @@ function mapearProducaoTotal(linhas) {
       texto(linha['Observações de campo']),
       texto(linha['OS']),
       texto(linha['Sondador']),
+      '', // Latitude -- Link 1 (produção) não traz coordenadas
+      '', // Longitude -- idem
     ]);
   }
   return { header: HEADER_SAIDA, rows, excluidos };
