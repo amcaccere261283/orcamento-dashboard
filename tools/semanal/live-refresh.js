@@ -4,6 +4,7 @@ const { parseAvancos } = require('./parse-avancos.js');
 const { parseLab } = require('./parse-lab.js');
 const { computeDemandas, redirecionarSupsDesconhecidos, resolverSupConhecido } = require('./compute-demandas.js');
 const { mesDaAbaEq, parseAbaEq } = require('./compute-equipes-ativas.js');
+const { resolverCoordenadasPorSup } = require('./coordenadas-sup.js');
 
 // live-refresh.js -- módulo COMPARTILHADO da lógica por trás do botão
 // "Atualizar dados" (2026-08-25). Desenho original do recurso inteiro (antes
@@ -292,6 +293,12 @@ function atualizarDadosAoVivo(config) {
           var gridPendentesCliente = parseCsvGrid(textos.demandasSondagem);
           for (var iP = 1; iP < gridPendentesCliente.length; iP++) gridAvancosCliente.push(gridPendentesCliente[iP]);
         }
+        // Coordenadas por SUP (aba Mapa da Alocação Equipes, Task 6, 2026-08-26)
+        // -- mesmo ponto de leitura que build-dashboard.js (Task 5) usa: o
+        // grid COMBINADO (avanços + pendentes), ANTES do unshift(null) que
+        // parseAvancos exige. Sem isso, clicar em "Atualizar dados" apagaria
+        // (ou deixaria velho) o que o build tinha calculado.
+        var coordenadasPorSup = resolverCoordenadasPorSup(gridAvancosCliente[0], gridAvancosCliente.slice(1));
         gridAvancosCliente.unshift(null);
         var furosLidos = parseAvancos(gridAvancosCliente).furos;
         var ensaiosLidos = parseLab(gridCsvComoXlsx(textos.lab)).ensaios;
@@ -325,6 +332,7 @@ function atualizarDadosAoVivo(config) {
         }
 
         demandasNovas = computeDemandas(furos, periodosDoAno(cfg.ano), ensaios);
+        demandasNovas.coordenadasPorSup = coordenadasPorSup;
         // equipesPorDia (Realizado) só vem do bloco REALIZADO (Link 6+7,
         // logo abaixo) -- sem cascata de mobilizadas/ATIVAS. equipesPeriodo
         // (cobertura do Realizado, lida por compute-balanco.js) fica null

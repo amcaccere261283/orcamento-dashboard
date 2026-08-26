@@ -881,6 +881,14 @@ const BUNDLE_ARQUIVOS = [
   // diaEpoch de lá agora (require('./compute-semanal.js'), same-dir,
   // resolvido normalmente pelo bundler).
   'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js',
+  // coordenadas-sup.js (Task 6 do plano da aba Mapa, 2026-08-26): resolvedor
+  // puro de coordenada por SUP, sem nenhum require same-dir -- live-refresh.js
+  // (mais abaixo) passou a fazer require() dele para recalcular
+  // demandas.coordenadasPorSup a cada "Atualizar dados". Precisa entrar
+  // ANTES de live-refresh.js na lista, mesmo contrato de ordem de sempre
+  // (senão a IIFE do bundle lança TypeError ao desestruturar MODULOS
+  // ['coordenadas-sup.js'] ainda undefined).
+  'coordenadas-sup.js',
   // live-refresh.js (Task 3, 2026-08-25) substitui a cópia local de
   // atualizarDadosAoVivoSemanal -- consome parse-matriz-cliente/parse-avancos/
   // parse-lab/compute-demandas/compute-equipes-ativas, todos já registrados

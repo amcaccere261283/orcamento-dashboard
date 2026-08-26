@@ -58,7 +58,7 @@ const BUNDLE_ARQUIVOS_ALOCACAO = [
   'render-aba-alertas.js', 'render-aba-consolidado.js',
   'parse-matriz-cliente.js', 'classificar-dia-equipe.js', 'compute-equipes-ativas.js',
   'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js',
-  'grupos-veiculo.js', 'equipes-alocaveis.js', 'compute-alocacao.js', 'alocacao-sheet.js',
+  'grupos-veiculo.js', 'equipes-alocaveis.js', 'coordenadas-sup.js', 'compute-alocacao.js', 'alocacao-sheet.js',
   'render-aba-alocacao.js',
   // live-refresh.js (Task 2, 2026-08-25) substitui a cópia local de
   // atualizarDadosAoVivoSemanal -- consome só os 5 módulos comuns já

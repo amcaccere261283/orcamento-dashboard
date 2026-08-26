@@ -464,3 +464,30 @@ test('demandasLab é buscado como JSON, sem cache-busting, e sem ele nenhum erro
   assert.ok(urlDemandasLabChamada, 'demandasLab precisa ter sido buscado');
   assert.strictEqual(urlDemandasLabChamada, URL_DEMANDAS_LAB, 'demandasLab NÃO leva cache-busting (?_=...), ao contrário das fontes CSV');
 });
+
+// --- Cenário 9 (Task 6, 2026-08-26): coordenadas por SUP recalculadas ------
+// "Atualizar dados" não pode apagar/deixar velho demandas.coordenadasPorSup
+// que o build já tinha calculado (Task 5) -- tem que recalcular a partir do
+// CSV FRESCO de avanços, mesma leitura (HEADER_SAIDA de 12 colunas, Task 4:
+// as 10 de sempre + Latitude/Longitude opcionais) que
+// build-dashboard.js usa.
+
+test('atualizarDadosAoVivo recalcula demandas.coordenadasPorSup a partir do CSV fresco de avancos', async () => {
+  const CSV_AVANCOS_COM_COORDENADA = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador,Latitude,Longitude\n'
+    + 'SUP-0001-24,01/08/2026,ST,CONCLUIDO,01/08/2026,Não,10,,12345,Fulano,-23.55,-46.63\n';
+  const { cfg, espiao } = configDublada({
+    fontes: { matriz: URL_MATRIZ, avancos: URL_AVANCOS, lab: URL_LAB },
+  });
+  const fetchDouble = criarFetchDouble({
+    [URL_MATRIZ]: respostaCsvOk(csvMatrizComSup('SUP-0001-24')),
+    [URL_AVANCOS]: respostaCsvOk(CSV_AVANCOS_COM_COORDENADA),
+    [URL_LAB]: respostaCsvOk(CSV_LAB_VAZIO),
+  });
+
+  await comFetch(fetchDouble, () => atualizarDadosAoVivo(cfg));
+
+  assert.strictEqual(espiao.aplicarChamado, true);
+  assert.deepStrictEqual(espiao.demandasAplicadas.coordenadasPorSup, {
+    'SUP-0001-24': { lat: -23.55, lon: -46.63 },
+  }, 'coordenadasPorSup precisa vir do resolvedor real, aplicado sobre o grid FRESCO de avanços');
+});
