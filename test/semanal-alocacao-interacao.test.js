@@ -604,3 +604,59 @@ test('particionarSupsPorLocalizacao separa SUPs com e sem coordenada', () => {
   assert.deepStrictEqual(normalizar(resultado.comLocalizacao.map((s) => s.sup)), ['SUP-A']);
   assert.deepStrictEqual(normalizar(resultado.semLocalizacao.map((s) => s.sup)), ['SUP-B']);
 });
+
+// --- Task 13: arrasto até o pino -- resolverAlvoAlocacao ganha o tipo 'pino' ---
+//
+// O pino é um elemento DOM real do MapLibre (um <div class="marcador-alocacao-mapa">
+// com data-sup, criado por desenharPinosMapa -- Task 12), que o `document` FALSO
+// deste arquivo não simula (não há MapLibre nos testes). Por isso estes dois testes
+// não simulam o gesto inteiro (isso é Task 14) -- chamam resolverAlvoAlocacao/
+// aplicarMovimentoNoPino direto, com um objeto que IMITA só o contrato de
+// `.closest()` que resolverAlvoAlocacao usa, mesma técnica que os testes de
+// célula/pool (linha 254 acima) já usam.
+function elementoFalsoPino(sup) {
+  const el = { getAttribute: (attr) => (attr === 'data-sup' ? sup : null) };
+  el.closest = (sel) => (sel === '.marcador-alocacao-mapa' ? el : null);
+  return el;
+}
+
+test('resolverAlvoAlocacao reconhece um marcador do mapa (.marcador-alocacao-mapa) como alvo tipo pino', async () => {
+  const cliente = montarClienteAlocacao();
+  const elFalso = elementoFalsoPino('SUP-A');
+  // document.elementFromPoint é chamado por resolverAlvoAlocacao -- o
+  // documento falso deste arquivo não implementa elementFromPoint, então
+  // caímos no fallback e.target (ver o comentário de resolverAlvoAlocacao).
+  const alvo = cliente.resolverAlvoAlocacao({ target: elFalso });
+  assert.deepStrictEqual({ tipo: alvo.tipo, sup: alvo.el.getAttribute('data-sup') }, { tipo: 'pino', sup: 'SUP-A' });
+});
+
+test('soltar equipe polivalente no pino escolhe a coluna com maior déficit', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  // Equipe 4 é SP nesta suíte -- reaproveitar como está prova só o caminho
+  // de coluna única (delega pra escolherColunaAutomatica, testada de sobra
+  // em test/semanal-compute-alocacao.test.js, Task 3). O caminho ONDE a
+  // coluna é escolhida (o handler de solta-no-pino) é o que este teste
+  // prova: chamar aplicarMovimentoNoPino('4', 'SUP-A') e checar que a
+  // coluna 'SP' (a única de equipe 4) foi resolvida sozinha.
+  const ok = cliente.aplicarMovimentoNoPino('4', 'SUP-A');
+  assert.strictEqual(ok, true);
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].sup, 'SUP-A');
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].coluna, 'SP');
+});
+
+// Trace do self-review: um SUP sem linha na grade (não devia acontecer na
+// prática -- o pino só existe para um SUP presente em dados.resumo.porSup, que
+// nasce da MESMA grade que ultimaGrade guarda; ver o comentário grande em
+// montarMapaAlocacao) não pode fazer aplicarMovimentoNoPino LANÇAR. celulasDaLinha
+// cai pra {} (nenhuma célula bate o filtro de escolherColunaAutomatica), que por
+// sua vez cai no PRÓPRIO fallback de escolherColunaAutomatica (Task 3): a
+// primeira coluna da equipe, não null -- então o movimento é aplicado do mesmo
+// jeito, com a coluna de fallback. Degrada sem travar; não é um no-op.
+test('aplicarMovimentoNoPino não lança quando o SUP não tem linha na grade -- degrada para a coluna de fallback da equipe', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  const ok = cliente.aplicarMovimentoNoPino('4', 'SUP-INEXISTENTE');
+  assert.strictEqual(ok, true);
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['4']), { sup: 'SUP-INEXISTENTE', coluna: 'SP' });
+});

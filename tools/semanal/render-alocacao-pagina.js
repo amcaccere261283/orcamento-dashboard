@@ -236,9 +236,17 @@ function fecharTendenciaVigente(dados) {
 // grande lá, é a correção do achado "arrasto sobrescrito pela promise que
 // resolve depois" (CLAUDE.md, "Precisa ser corrigido ANTES desse Apps
 // Script ir ao ar").
+// ultimaGrade (Task 13): a última grade calculada por montarMapaAlocacao
+// (RenderAbaAlocacao.prepararDadosAlocacao(...).grade), guardada aqui para
+// aplicarMovimentoNoPino achar a linha do SUP onde o pino foi solto sem
+// recalcular a grade de novo. Nasce vazia -- um pin drop antes do primeiro
+// desenho não deveria existir (o pino só nasce depois de desenharPinosMapa
+// rodar, que só roda depois de montarMapaAlocacao popular isto), mas o default
+// garante que .linhas.length não estoura mesmo assim.
 var ESTADO_ALOCACAO = {
   semanaIdx: -1, alocacao: {}, equipes: [], foraDoQuadro: [], cliente: null,
   semanaCarregada: null, geracaoAlocacao: 0, busca: '', tipologia: '',
+  ultimaGrade: { linhas: [], colunas: [] },
 };
 
 // MARCADOR DE SEMANA JÁ VISTA (Decisão 9 do spec, correção pós-verificação em
@@ -650,6 +658,11 @@ function montarMapaAlocacao(prep) {
     return;
   }
   var dados = RenderAbaAlocacao.prepararDadosAlocacao(window.__REGISTROS__, prep.indices, prep.o);
+  // ultimaGrade (Task 13): guardada aqui, no MESMO redesenho que
+  // desenharPinosMapa (abaixo) usa pra desenhar os pinos -- é o que garante
+  // que aplicarMovimentoNoPino sempre acha a linha certa para o SUP de um
+  // pino que está de fato na tela agora.
+  ESTADO_ALOCACAO.ultimaGrade = dados.grade;
   if (!MAPA_ALOCACAO.instancia) {
     // Primeiro desenho (ou qualquer desenho ANTES do mapa existir): markup
     // completo, incluindo um #mapa-alocacao-canvas novo -- é nele que
@@ -963,7 +976,48 @@ function resolverAlvoAlocacao(e) {
   var celula = sob.closest('.celula-alocacao');
   if (celula) return { tipo: 'celula', el: celula };
   if (sob.closest('.pool-alocacao')) return { tipo: 'pool', el: null };
+  // O pino do mapa (Task 13): um <div class="marcador-alocacao-mapa"> que o
+  // MapLibre posiciona sobre o canvas, dentro de #secao-mapa-alocacao -- nunca
+  // aninhado dentro de .celula-alocacao (que só existe na tabela Kanban,
+  // #secao-kanban-alocacao) nem de .pool-alocacao (que na aba Mapa é um
+  // painel próprio, #mapa-alocacao-pool, fora do container do mapa). As três
+  // classes nunca coincidem no mesmo ancestral por construção -- não há
+  // ambiguidade de ordem para resolver aqui, ao contrário de célula/pool
+  // acima (cuja ordem importa porque uma célula pode, em tese, estar dentro
+  // de um layout que também bate '.pool-alocacao'). Checada por último só
+  // porque é a mais nova, não por precisar ceder a nada.
+  var pino = sob.closest('.marcador-alocacao-mapa');
+  if (pino) return { tipo: 'pino', el: pino };
   return null;
+}
+
+// Resolve a coluna automaticamente (ComputeAlocacao.escolherColunaAutomatica,
+// Task 3) e delega pra aplicarMovimento -- o MESMO caminho que a célula da
+// tabela já usa. NENHUMA regra nova de negócio mora aqui: eligibilidade, trava
+// de veículo e persistência continuam só em aplicarMovimento/destinoDoGrupo;
+// esta função só decide QUAL coluna passar pra ele, porque um pino representa
+// o SUP inteiro, não uma célula SUP×coluna.
+//
+// equipeId: a equipe sendo solta. sup: o SUP do pino onde ela foi solta.
+//
+// SUP sem linha em ultimaGrade (não deveria acontecer na prática -- ver o
+// comentário em ESTADO_ALOCACAO.ultimaGrade -- mas não é validado aqui, de
+// propósito: validar existência do SUP seria uma regra nova, e o funil já
+// existente é quem decide o que é válido): celulasDaLinha cai pra {}, e
+// escolherColunaAutomatica cai no PRÓPRIO fallback dela (Task 3) -- a
+// primeira coluna da equipe, nunca null -- então o movimento ainda é
+// tentado, com essa coluna de fallback. Não lança, não trava.
+function aplicarMovimentoNoPino(equipeId, sup) {
+  var equipe = equipeAlocavelPeloId(equipeId);
+  if (!equipe) return false;
+  var linha = null;
+  for (var i = 0; i < ESTADO_ALOCACAO.ultimaGrade.linhas.length; i++) {
+    if (ESTADO_ALOCACAO.ultimaGrade.linhas[i].sup === sup) { linha = ESTADO_ALOCACAO.ultimaGrade.linhas[i]; break; }
+  }
+  var celulasDaLinha = linha ? linha.celulas : {};
+  var coluna = ComputeAlocacao.escolherColunaAutomatica(equipe.colunas || [], celulasDaLinha);
+  if (!coluna) return false;
+  return aplicarMovimento(equipeId, sup, coluna);
 }
 
 // Um único listener delegado em #secao-kanban-alocacao, montado UMA VEZ (a
@@ -1077,6 +1131,8 @@ function inicializarInteracaoAlocacao() {
     var alvo = resolverAlvoAlocacao(e);
     if (alvo && alvo.tipo === 'celula') {
       aplicarMovimento(equipeId, alvo.el.getAttribute('data-sup'), alvo.el.getAttribute('data-coluna'));
+    } else if (alvo && alvo.tipo === 'pino') {
+      aplicarMovimentoNoPino(equipeId, alvo.el.getAttribute('data-sup'));
     } else if (alvo && alvo.tipo === 'pool') {
       aplicarMovimento(equipeId, '', '');
     }
@@ -1143,6 +1199,8 @@ function inicializarInteracaoAlocacao() {
       var alvoClique = resolverAlvoAlocacao(e);
       if (alvoClique && alvoClique.tipo === 'celula') {
         aplicarMovimento(equipeIdSelecionado, alvoClique.el.getAttribute('data-sup'), alvoClique.el.getAttribute('data-coluna'));
+      } else if (alvoClique && alvoClique.tipo === 'pino') {
+        aplicarMovimentoNoPino(equipeIdSelecionado, alvoClique.el.getAttribute('data-sup'));
       } else if (alvoClique && alvoClique.tipo === 'pool') {
         aplicarMovimento(equipeIdSelecionado, '', '');
       }
