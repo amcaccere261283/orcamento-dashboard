@@ -74,6 +74,16 @@ test('sem os data URIs de fonte/textura, o build não quebra -- degrada pra sem 
     // nimbusRegularDataUri/nimbusBlackDataUri/texturaMapaDataUri OMITIDOS de propósito
   });
   assert.ok(html); // não lança
+
+  // Achado 8 da revisão final: `assert.ok(html)` sozinho não provaria nada
+  // -- passaria mesmo se cssFontesMapa tivesse interpolado
+  // `url("undefined")` (um dos 3 data URIs indo direto pro template sem a
+  // guarda condicional) ou emitido um @font-face vazio/quebrado. cssFontesMapa
+  // (render-alocacao-pagina.js) só entra no <style> quando PELO MENOS UM dos
+  // 3 data URIs está presente -- com os 3 omitidos, a string inteira cai no
+  // ramo '', então nem "undefined" nem "@font-face" podem aparecer.
+  assert.doesNotMatch(html, /url\("undefined"\)/);
+  assert.doesNotMatch(html, /@font-face/);
 });
 
 test('com os data URIs presentes, o @font-face Nimbus Sans Extd entra no <style>', () => {
@@ -98,7 +108,24 @@ test('a aba Mapa tem CSS escopado com a paleta Suporte Infra, sem vazar pro Kanb
   });
   assert.match(html, /#secao-mapa-alocacao\s*\{[^}]*#00163b/i);
   assert.match(html, /#f3b53f/);
-  // A paleta nova NÃO pode aparecer fora do escopo #secao-mapa-alocacao --
-  // verificação simples: toda ocorrência de #00163b vem precedida, em algum
-  // ponto anterior do CSS, por um seletor "#secao-mapa-alocacao".
+
+  // Achado 8 da revisão final: as duas asserções acima provam que a paleta
+  // ESTÁ presente num bloco escopado corretamente -- não que TODA ocorrência
+  // dela está escopada (o nome do teste, "sem vazar pro Kanban", promete a
+  // segunda coisa). Verificação real: extrai o <style> inteiro, divide em
+  // blocos "seletor { corpo }" (este CSS não tem chaves aninhadas dentro de
+  // um bloco -- @media (render-shell.js) não contém a paleta, então o
+  // splitter simples abaixo não precisa entender aninhamento) e falha se
+  // algum bloco cujo CORPO contém a paleta tiver um SELETOR que não inclui
+  // '#secao-mapa-alocacao'.
+  const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/);
+  assert.ok(styleMatch, 'esperava um bloco <style> no HTML gerado');
+  const css = styleMatch[1];
+  const blocos = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+  assert.ok(blocos.length > 10, 'pré-condição: o <style> tem que ter blocos o bastante pra a varredura não passar vazia');
+  const vazamentos = blocos.filter((m) => /#00163b|#f3b53f/i.test(m[2]) && !/#secao-mapa-alocacao/.test(m[1]));
+  assert.deepStrictEqual(
+    vazamentos.map((m) => m[1].trim()), [],
+    'a paleta #00163b/#f3b53f apareceu num seletor fora de #secao-mapa-alocacao'
+  );
 });

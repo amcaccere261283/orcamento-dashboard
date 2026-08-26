@@ -642,6 +642,9 @@ function prepararDadosAlocacao(registros, indices, opcoes) {
   var equipesPorId = {};
   equipes.forEach(function (e) { equipesPorId[e.id] = e; });
 
+  // A busca poda a GRADE também, não só o pool -- ver o comentário em
+  // montarGradeAlocacao. `equipesVisiveis` fica null quando não há busca, e
+  // null significa "não filtra", nunca "nenhuma".
   var termoBusca = normalizarBusca(o.buscaEquipe || '');
   var equipesVisiveis = null;
   if (termoBusca) {
@@ -673,7 +676,14 @@ function prepararDadosAlocacao(registros, indices, opcoes) {
 // semRoster: a Sheet espelho da EQ não respondeu -- guarda, sem grade nenhuma.
 // somenteLeitura: 'mes-diferente' quando a semana pedida é de outro mês que
 //   não o que o espelho da EQ cobre -- desenha a grade, mas nada é arrastável.
-function renderAbaAlocacao(registros, indices, opcoes) {
+// dadosPrecomputados (opcional, revisão final de 2026-08-26): o retorno de
+//   prepararDadosAlocacao(registros, indices, opcoes), quando quem chama já o
+//   calculou para outro fim (render-alocacao-pagina.js/montarAbaAlocacao
+//   compartilha o MESMO cálculo entre o Kanban e a aba Mapa, em vez de rodar
+//   montarGradeAlocacao duas vezes por redesenho). Omitido, cai no cálculo
+//   direto abaixo -- mesmo comportamento de sempre, então snapshot-alocacao.js
+//   e qualquer outro chamador sem 'dados' pronto continuam funcionando.
+function renderAbaAlocacao(registros, indices, opcoes, dadosPrecomputados) {
   var o = opcoes || {};
 
   // A guarda vem ANTES de qualquer grade -- um quadro vazio leria como "nada
@@ -682,7 +692,7 @@ function renderAbaAlocacao(registros, indices, opcoes) {
     return renderControles(o, true) + renderGuardaSemRoster();
   }
 
-  var dados = prepararDadosAlocacao(registros, indices, opcoes);
+  var dados = dadosPrecomputados || prepararDadosAlocacao(registros, indices, opcoes);
   var somenteLeitura = dados.somenteLeitura;
 
   var html = renderControles(o, somenteLeitura);

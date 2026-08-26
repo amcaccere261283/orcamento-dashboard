@@ -721,3 +721,87 @@ test('a parametrização de inicializarInteracaoAlocacao ligou as DUAS seções,
     assert.ok(mapa.listeners[tipo], 'Mapa precisa do listener de ' + tipo);
   });
 });
+
+// --- Revisão final (2026-08-26): a seleção clique-clique não pode sobreviver
+// à troca de aba ------------------------------------------------------------
+//
+// Achado Critical 1: '<div class="abas-visualizacao">' (os botões Kanban/Mapa)
+// é IRMÃ das duas seções, não descendente de nenhuma delas -- um clique nos
+// botões nunca chega aos listeners DELEGADOS de #secao-kanban-alocacao/
+// #secao-mapa-alocacao (inicializarInteracaoAlocacao, acima), então
+// SELECAO_ALOCACAO.equipeId sobrevivia à troca de aba. O PRIMEIRO clique
+// dentro da outra seção -- mesmo um clique qualquer, sem nenhum pino
+// envolvido -- era tratado como o 2º passo daquele gesto abandonado: soltar
+// no pool da aba Mapa com uma seleção órfã da aba Kanban chamava
+// aplicarMovimento(equipeId, '', ''), que DEVOLVE a equipe (e o grupo de
+// veículo inteiro) ao pool -- de-alocando em silêncio, sem confirmação, e
+// gravando a remoção na Sheet. Nenhum teste cobria os handlers de troca de
+// aba até esta correção (RED completo: os dois testes de estado abaixo
+// falhavam com "null" esperado contra "4" antes do fix em
+// render-alocacao-pagina.js, encerrarGestosAoTrocarDeAba).
+test('trocar para a aba Mapa encerra uma seleção clique-clique pendente da aba Kanban', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+
+  cliente.SELECAO_ALOCACAO.equipeId = '4';
+  cliente.SUPRIMIR_PROXIMO_CLICK_ALOCACAO = true; // o outro estado de gesto que o fix também zera
+  // Simula o mapa já ligado -- evita que o clique tente inicializar um
+  // MapLibre de verdade (inexistente neste sandbox), mesmo dublê que os
+  // testes de Task 11/12 já usam (ver 'CRITICAL: com o mapa já
+  // inicializado...' acima).
+  cliente.MAPA_ALOCACAO.instancia = { resize() {} };
+
+  cliente.document.getElementById('aba-mapa-alocacao').listeners.click();
+
+  assert.strictEqual(cliente.SELECAO_ALOCACAO.equipeId, null);
+  assert.strictEqual(cliente.SUPRIMIR_PROXIMO_CLICK_ALOCACAO, false);
+});
+
+test('trocar para a aba Kanban encerra uma seleção clique-clique pendente da aba Mapa', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+
+  cliente.SELECAO_ALOCACAO.equipeId = '4';
+  cliente.document.getElementById('aba-kanban-alocacao').listeners.click();
+
+  assert.strictEqual(cliente.SELECAO_ALOCACAO.equipeId, null);
+});
+
+// Evento de clique falso pro pool -- mesma técnica de eventoCliqueNoCartao
+// acima, mas resolvendo '.pool-alocacao' em vez de um cartão. É o alvo que
+// aplicarMovimento(equipeId, '', '') usaria para DEVOLVER a equipe.
+function eventoCliqueNoPool() {
+  return {
+    target: {
+      closest(sel) {
+        if (sel === '.pool-alocacao') return {};
+        return null;
+      },
+    },
+  };
+}
+
+test('GESTO COMPLETO: selecionar no Kanban, trocar pra aba Mapa e clicar no pool NÃO de-aloca a equipe', async () => {
+  const cliente = montarClienteAlocacao();
+  await cliente.selecionarSemanaAlocacao(1);
+  cliente.aplicarMovimento('4', 'SUP-A', 'SP');
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].sup, 'SUP-A', 'pré-condição: a 4 está alocada em SUP-A');
+
+  // 1º clique de um gesto clique-clique de verdade, disparado pelo listener
+  // REAL de #secao-kanban-alocacao (não setando SELECAO_ALOCACAO à mão) --
+  // seleciona a equipe 4 e deixa o gesto pendente.
+  cliente.document.getElementById('secao-kanban-alocacao').listeners.click(eventoCliqueNoCartao('4'));
+  assert.strictEqual(cliente.SELECAO_ALOCACAO.equipeId, '4', 'pré-condição: o 1º clique deixou a seleção pendente');
+
+  // Troca pra aba Mapa -- com a correção, isto encerra a seleção pendente.
+  cliente.MAPA_ALOCACAO.instancia = { resize() {} };
+  cliente.document.getElementById('aba-mapa-alocacao').listeners.click();
+
+  // Um clique qualquer no pool da aba Mapa -- SEM a correção, este seria
+  // tratado como o 2º passo do gesto abandonado (soltar a 4 no pool),
+  // devolvendo-a e apagando a alocação em silêncio.
+  cliente.document.getElementById('secao-mapa-alocacao').listeners.click(eventoCliqueNoPool());
+
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['4']), { sup: 'SUP-A', coluna: 'SP' },
+    'a troca de aba tinha que ter descartado a seleção -- o clique no pool da aba errada não pode de-alocar a equipe');
+});

@@ -105,6 +105,16 @@ function inicializarMapaAlocacao() {
     MAPA_ALOCACAO.instancia.resize();
     return;
   }
+  // FIX (revisão final, achado Important 3): quando semRoster é true,
+  // montarMapaAlocacao (abaixo) desenha só renderControles + renderGuardaSemRoster
+  // -- não existe #mapa-alocacao-canvas nenhum no DOM. Clicar na aba Mapa
+  // ainda chama esta função (o handler de clique não sabe de semRoster), e
+  // sem esta guarda new maplibregl.Map({container: 'mapa-alocacao-canvas'})
+  // lançaria "Container 'mapa-alocacao-canvas' not found" -- uma exceção não
+  // tratada saindo do handler de clique da aba. Sem container, não há o que
+  // inicializar: sai cedo, silenciosamente, e o próximo clique tenta de novo
+  // (MAPA_ALOCACAO.instancia continua null).
+  if (!document.getElementById('mapa-alocacao-canvas')) return;
   var mapa = new maplibregl.Map({
     container: 'mapa-alocacao-canvas',
     style: {
@@ -120,9 +130,12 @@ function inicializarMapaAlocacao() {
         { id: 'esri-limites', type: 'raster', source: 'esri-limites' },
       ],
     },
-    // Centro/zoom iniciais: mesma região do Mapa Sondagens (Paraná) --
-    // ajustado sozinho na Task 12 pra enquadrar os pinos reais assim que
-    // eles existirem (fitBounds).
+    // Centro/zoom iniciais: mesma região do Mapa Sondagens (Paraná) -- só o
+    // ponto de partida antes do 1º desenho com pinos reais. desenharPinosMapa
+    // (mais abaixo) chama mapa.fitBounds() na primeira vez que existe pelo
+    // menos um pino com coordenada conhecida, e não repete depois (guardado
+    // por MAPA_ALOCACAO.enquadrouUmaVez) -- pra não puxar o mapa de volta
+    // toda vez que o usuário já tiver panado/dado zoom por conta própria.
     center: [-49.2, -25.5],
     zoom: 7,
     pitch: 0, bearing: 0, dragRotate: false, touchPitch: false,
@@ -140,6 +153,12 @@ function inicializarMapaAlocacao() {
 
   MAPA_ALOCACAO.instancia = mapa;
   MAPA_ALOCACAO.marcadores = {};
+  // enquadrouUmaVez (fitBounds, ver desenharPinosMapa): nasce false a cada
+  // instância NOVA do mapa -- um mapa recriado do zero (semRoster ligou e
+  // desligou de novo, ver o comentário em montarMapaAlocacao) merece um novo
+  // auto-enquadramento, não herdar o "já enquadrei" de uma instância anterior
+  // que nem existe mais.
+  MAPA_ALOCACAO.enquadrouUmaVez = false;
 
   // Assim que o estilo carrega, desenha os pinos com o dado que JÁ existe
   // em ESTADO_ALOCACAO (o mapa pode ter sido aberto bem depois do 1º
@@ -591,10 +610,22 @@ function prepararOpcoesAlocacao() {
 function montarAbaAlocacao() {
   var prep = prepararOpcoesAlocacao();
 
+  // dados (achado Important 2 da revisão final): computado UMA vez aqui e
+  // repassado tanto para renderAbaAlocacao (Kanban) quanto para
+  // montarMapaAlocacao (Mapa) -- as duas chamavam prepararDadosAlocacao
+  // separadamente com os MESMOS argumentos (registros/prep.indices/prep.o),
+  // recalculando a grade inteira duas vezes a cada redesenho (o próprio
+  // motivo de prepararDadosAlocacao ter sido extraída, Task 1, era
+  // compartilhar este cálculo -- a composição das duas chamadas tinha
+  // deixado de fazer isso). null quando semRoster: prepararDadosAlocacao
+  // também devolve null nesse caso (mesma guarda), e renderAbaAlocacao já
+  // sabe desenhar a guarda-sem-roster sem precisar de dados nenhum.
+  var dados = prep.semRoster ? null : RenderAbaAlocacao.prepararDadosAlocacao(window.__REGISTROS__, prep.indices, prep.o);
+
   document.getElementById('secao-kanban-alocacao').innerHTML = RenderAbaAlocacao.renderAbaAlocacao(
-    window.__REGISTROS__, prep.indices, prep.o
+    window.__REGISTROS__, prep.indices, prep.o, dados
   );
-  montarMapaAlocacao(prep);
+  montarMapaAlocacao(prep, dados);
 
   // Primeiro desenho de uma semana nova (boot da aba, ou troca de mês que
   // muda a semana em curso) -- busca a alocação salva e, se for o caso,
@@ -651,13 +682,42 @@ function montarAbaAlocacao() {
 // já inicializado, o pool e os controles...' em
 // test/semanal-alocacao-interacao.test.js para a prova (RED antes desta
 // correção, GREEN depois).
-function montarMapaAlocacao(prep) {
+function montarMapaAlocacao(prep, dadosPrecomputados) {
   var secao = document.getElementById('secao-mapa-alocacao');
   if (prep.semRoster) {
+    // FIX (revisão final, achado Important 3): este ramo reescreve
+    // secao.innerHTML inteiro, sem o #mapa-alocacao-canvas que
+    // MAPA_ALOCACAO.instancia estaria ligada a ele -- se semRoster ligar
+    // DEPOIS de o mapa já ter sido inicializado numa sessão (a Sheet espelho
+    // da EQ parou de responder no meio da sessão), o próximo redesenho SEM
+    // semRoster (o ramo 'else' logo abaixo, quando o mapa já existe) faria
+    // document.getElementById('mapa-alocacao-topo').innerHTML sobre um
+    // elemento que não existe mais (null), lançando pra fora de
+    // aplicarMovimento antes da gravação na Sheet. Descartar a instância
+    // aqui -- no MESMO instante em que o container que ela dependia deixa de
+    // existir -- garante que o próximo desenho (com ou sem roster) sempre
+    // encontra MAPA_ALOCACAO num estado consistente com o que está no DOM:
+    // sem instância, o próximo clique na aba Mapa reinicializa do zero.
+    if (MAPA_ALOCACAO.instancia) {
+      MAPA_ALOCACAO.instancia.remove();
+      MAPA_ALOCACAO.instancia = null;
+      MAPA_ALOCACAO.marcadores = {};
+    }
     secao.innerHTML = RenderAbaAlocacaoMapa.renderAbaAlocacaoMapa(null, { semRoster: true });
     return;
   }
-  var dados = RenderAbaAlocacao.prepararDadosAlocacao(window.__REGISTROS__, prep.indices, prep.o);
+  // dadosPrecomputados (achado Important 2 da revisão final): montarAbaAlocacao
+  // já calculou a MESMA grade/resumo (registros/indices/prep.o idênticos, ver
+  // o comentário lá) para desenhar o Kanban -- recalcular aqui de novo era
+  // trabalho em dobro a cada tecla da busca, cada troca de filtro/semana/mês,
+  // cada solta e cada "Atualizar dados" (montarGradeAlocacao roda
+  // calcularSeriesSemanaisDimensao uma vez por CÉLULA e uma vez por LINHA de
+  // SUP -- ordem de 150 chamadas em produção), mesmo quando a aba Mapa nunca
+  // chegou a ser aberta (montarMapaAlocacao é incondicional). O parâmetro é
+  // OPCIONAL -- se faltar, cai no cálculo direto, mesmo comportamento de
+  // antes -- então snapshot-alocacao.js e qualquer chamador futuro que não
+  // tenha um 'dados' pronto continuam funcionando sem mudar nada.
+  var dados = dadosPrecomputados || RenderAbaAlocacao.prepararDadosAlocacao(window.__REGISTROS__, prep.indices, prep.o);
   // ultimaGrade (Task 13): guardada aqui, no MESMO redesenho que
   // desenharPinosMapa (abaixo) usa pra desenhar os pinos -- é o que garante
   // que aplicarMovimentoNoPino sempre acha a linha certa para o SUP de um
@@ -756,6 +816,31 @@ function desenharPinosMapa(dados, coordenadasPorSup) {
   MAPA_ALOCACAO.marcadores = {};
 
   var particionado = particionarSupsPorLocalizacao(dados.resumo.porSup, coordenadasPorSup);
+
+  // fitBounds (achado Important 4 da revisão final): a Task 12 tinha
+  // prometido isto num comentário (perto de inicializarMapaAlocacao, "ajustado
+  // sozinho... fitBounds") mas nunca implementou -- o mapa ficava sempre
+  // hardcoded em Paraná (center/zoom de inicializarMapaAlocacao), então um
+  // SUP fora dessa região nasceria fora da tela sem nenhum indício de que
+  // existe (o painel "sem localização" não o contaria -- ele TEM
+  // coordenada, só está fora do enquadramento). Sem efeito hoje (nenhuma
+  // fonte de coordenadasPorSup publicada ainda -- 0 pinos, ver o comentário
+  // em coordenadas-sup.js), mas seria a primeira coisa visivelmente quebrada
+  // no dia em que coordenadas reais forem publicadas.
+  //
+  // Guardado por enquadrouUmaVez pra rodar só no PRIMEIRO desenho que tiver
+  // pelo menos um pino -- desenharPinosMapa é chamada a cada redesenho
+  // (arrasto, troca de filtro/semana/mês, "Atualizar dados"), e reenquadrar
+  // toda vez brigaria com o usuário ter panado/dado zoom por conta própria.
+  if (particionado.comLocalizacao.length && !MAPA_ALOCACAO.enquadrouUmaVez) {
+    var bounds = new maplibregl.LngLatBounds();
+    particionado.comLocalizacao.forEach(function (sup) {
+      var c = coordenadasPorSup[sup.sup];
+      bounds.extend([c.lon, c.lat]);
+    });
+    mapa.fitBounds(bounds, { padding: 40, maxZoom: 12 });
+    MAPA_ALOCACAO.enquadrouUmaVez = true;
+  }
 
   particionado.comLocalizacao.forEach(function (sup) {
     var coords = coordenadasPorSup[sup.sup];
@@ -1326,6 +1411,42 @@ document.getElementById('atualizar-dashboard').addEventListener('click', atualiz
 inicializarInteracaoAlocacao('secao-kanban-alocacao');
 inicializarInteracaoAlocacao('secao-mapa-alocacao');
 
+// FIX (revisão final, achado Critical 1): a nav Kanban/Mapa vive em
+// '<div class="abas-visualizacao">', IRMÃ das duas seções -- um clique nos
+// botões nunca borbulha para dentro de #secao-kanban-alocacao nem de
+// #secao-mapa-alocacao, então os dois listeners delegados de
+// inicializarInteracaoAlocacao (acima) nunca veem esse clique. Sem isto, um
+// gesto de seleção por clique-clique (SELECAO_ALOCACAO.equipeId) iniciado
+// numa aba sobrevivia à troca de aba, e o PRIMEIRO clique dentro da OUTRA
+// seção -- mesmo um clique qualquer, só pra ler um cartão, sem nenhum pino
+// envolvido -- era tratado como o 2º passo daquele gesto abandonado. Um
+// clique no pool da aba Mapa com uma seleção "órfã" da aba Kanban chegava a
+// aplicarMovimento(equipeId, '', ''), que DEVOLVE a equipe (e o grupo de
+// veículo inteiro, destinoDoGrupo) ao pool -- de-alocando em silêncio, sem
+// confirmação, e gravando a remoção na Sheet. A direção oposta (selecionar
+// no Mapa, clicar numa célula do Kanban) aloca em vez de devolver -- mesma
+// causa raiz.
+//
+// Fix: as DUAS trocas de aba encerram qualquer gesto em andamento ANTES de
+// trocar o display -- zera SELECAO_ALOCACAO/SUPRIMIR_PROXIMO_CLICK_ALOCACAO
+// (estado de módulo, compartilhado pelas duas seções, ver o comentário
+// grande em inicializarInteracaoAlocacao) e limpa os destaques das DUAS
+// seções, não só da que está saindo de cena: limparDestaquesAlocacao(secao)
+// só limpa a seção CORRENTE (raiz escopada, achado Important 3 da revisão
+// do Task 9) -- sem limpar a outra também, a seção abandonada no meio de um
+// arrasto ficava presa em "arrastando" (celula-alvo/celula-inerte/
+// cartao-companheiro acesos) até um F5. Ver o teste
+// 'trocar de aba encerra uma seleção pendente' em
+// test/semanal-alocacao-interacao.test.js -- RED antes desta correção
+// (nenhum teste cobria os handlers de troca de aba até aqui), GREEN depois.
+function encerrarGestosAoTrocarDeAba() {
+  encerrarArrastoAlocacao(document.getElementById('secao-kanban-alocacao'));
+  SELECAO_ALOCACAO.equipeId = null;
+  SUPRIMIR_PROXIMO_CLICK_ALOCACAO = false;
+  limparDestaquesAlocacao(document.getElementById('secao-kanban-alocacao'));
+  limparDestaquesAlocacao(document.getElementById('secao-mapa-alocacao'));
+}
+
 // Nav Kanban/Mapa -- markupAbas() (tools/comum/render-shell.js) já desenha
 // o <div class="abas-visualizacao"> com os dois <button>; aqui só liga o
 // clique. Lazy-init do MapLibre no primeiro clique na aba Mapa (Task 11) --
@@ -1333,12 +1454,14 @@ inicializarInteracaoAlocacao('secao-mapa-alocacao');
 // em inicializarMapaAlocacao(), chamada por este mesmo handler quando ainda
 // não existir instância.
 document.getElementById('aba-kanban-alocacao').addEventListener('click', function () {
+  encerrarGestosAoTrocarDeAba();
   document.getElementById('aba-kanban-alocacao').classList.add('aba-ativa');
   document.getElementById('aba-mapa-alocacao').classList.remove('aba-ativa');
   document.getElementById('secao-kanban-alocacao').style.display = '';
   document.getElementById('secao-mapa-alocacao').style.display = 'none';
 });
 document.getElementById('aba-mapa-alocacao').addEventListener('click', function () {
+  encerrarGestosAoTrocarDeAba();
   document.getElementById('aba-mapa-alocacao').classList.add('aba-ativa');
   document.getElementById('aba-kanban-alocacao').classList.remove('aba-ativa');
   document.getElementById('secao-kanban-alocacao').style.display = 'none';
@@ -1477,6 +1600,20 @@ function renderAlocacaoPagina({
 <meta charset="UTF-8">
 <title>ALOCAÇÃO EQUIPES</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<!-- Poppins (Decisão 9 do spec, tipografia de corpo da aba Mapa) -- achado
+     Important 4 da revisão final: as 3 regras font-family: "Poppins" abaixo
+     (cssMapaAlocacao) nunca tiveram fonte nenhuma carregada, e caíam sempre
+     no fallback do sistema, em silêncio. O ideal seria embutir via
+     loadDataUri, igual à Nimbus Sans Extd (assets/mapa-alocacao/) -- mas não
+     existe um arquivo .otf/.ttf de Poppins neste repositório, e a instrução
+     desta correção foi explícita: NÃO baixar um agora. Link do Google Fonts
+     como solução de curto prazo -- é a única página deste projeto que
+     depende de um host externo além do MapLibre/Esri, então trocar por
+     embutida fica pendente pra quando o arquivo da fonte entrar em
+     assets/mapa-alocacao/. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap">
 <style>
 ${cssBase()}
 ${CSS_SEMANAL}

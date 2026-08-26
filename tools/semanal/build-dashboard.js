@@ -42,10 +42,17 @@ const NIMBUS_REGULAR_PATH = path.join(__dirname, '..', '..', 'assets', 'mapa-alo
 const NIMBUS_BLACK_PATH = path.join(__dirname, '..', '..', 'assets', 'mapa-alocacao', 'nimbus-sans-extd-black.otf');
 const TEXTURA_MAPA_PATH = path.join(__dirname, '..', '..', 'assets', 'mapa-alocacao', 'textura-fundo.png');
 
-function loadDataUri(filePath) {
+// mime (opcional, achado 6 da revisão final): antes hardcoded 'image/png'
+// pra QUALQUER arquivo, inclusive os dois .otf da Nimbus Sans Extd -- os
+// navegadores ignoram o MIME de uma data URI dentro de @font-face quando o
+// format() está presente (é o caso aqui, ver cssFontesMapa), então isso
+// provavelmente já funcionava, mas "provavelmente, nunca verificado" não é
+// bom o bastante pra um data URI que ninguém confere byte a byte depois do
+// build. Default 'image/png' preserva todo call site existente sem mudança.
+function loadDataUri(filePath, mime) {
   if (!fs.existsSync(filePath)) return undefined;
   const buf = fs.readFileSync(filePath);
-  return `data:image/png;base64,${buf.toString('base64')}`;
+  return `data:${mime || 'image/png'};base64,${buf.toString('base64')}`;
 }
 
 // parseBaseline devolve um Map (porChave) -- JSON.stringify não sabe
@@ -551,8 +558,8 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
     registros, demandas, periodos, senha, geradoEm: today,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
     avisoAtualizacao, ultimaAtualizacaoOkIso: ultimaAtualizacaoOkIsoValor,
-    nimbusRegularDataUri: loadDataUri(NIMBUS_REGULAR_PATH),
-    nimbusBlackDataUri: loadDataUri(NIMBUS_BLACK_PATH),
+    nimbusRegularDataUri: loadDataUri(NIMBUS_REGULAR_PATH, 'font/otf'),
+    nimbusBlackDataUri: loadDataUri(NIMBUS_BLACK_PATH, 'font/otf'),
     texturaMapaDataUri: loadDataUri(TEXTURA_MAPA_PATH),
   });
   // Deriva do MESMO diretório de resolvedOutPath (não de um caminho fixo
