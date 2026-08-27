@@ -763,6 +763,29 @@ var CORES_LEITURA_PINO = {
   'sem-demanda': '#898781',
 };
 
+// Paleta pra camada de referência das rodovias das concessionárias (Task 6) --
+// SEIS cores, escolhidas pra não colidir de hue com CORES_LEITURA_PINO (acima)
+// nem com TIPOLOGIA_COLOR (render-aba-consolidado.js): aquelas já cobrem
+// vermelho/coral, laranja-amarelo, azul, verde, roxo e cinza -- daqui saem
+// ciano, magenta, marrom, indigo-azulado, dourado-mostarda e verde-água. Tom
+// exato calibrado na revisão do Open Design (mesma ressalva já feita pra outras
+// cores novas deste projeto); a MECÂNICA de atribuição é o que este teste trava.
+// Ver docs/superpowers/specs/2026-08-27-alocacao-mapa-camada-rodovias-design.md,
+// Decisão 8.
+var CORES_RODOVIA = ['#00b8c4', '#d63bd6', '#8a5a2b', '#5a4fcf', '#c9a227', '#2ba88f'];
+
+// idsEmOrdem: ids de concessionária na ordem em que foram MARCADAS no seletor
+// (não a ordem alfabética da lista) -- é essa ordem que decide qual cor cada
+// uma pega. Cor é um DIFERENCIADOR da seleção atual, não uma identidade fixa da
+// concessionária: desmarcar e marcar de novo pode pegar outra posição.
+function atribuirCorRodovia(idsEmOrdem) {
+  var resultado = {};
+  (idsEmOrdem || []).forEach(function (id, indice) {
+    resultado[id] = CORES_RODOVIA[indice % CORES_RODOVIA.length];
+  });
+  return resultado;
+}
+
 // Separa as linhas de resumo.porSup em quem tem coordenada conhecida (vira
 // pino) e quem não tem (vai pro painel "sem localização"). Função PURA --
 // não mexe no mapa nem no DOM, só decide. Testada sem MapLibre em

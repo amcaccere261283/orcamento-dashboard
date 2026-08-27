@@ -820,3 +820,48 @@ test('GESTO COMPLETO: selecionar no Kanban, trocar pra aba Mapa e clicar no pool
   assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['4']), { sup: 'SUP-A', coluna: 'SP' },
     'a troca de aba tinha que ter descartado a seleção -- o clique no pool da aba errada não pode de-alocar a equipe');
 });
+
+// --- Camada de rodovias: atribuirCorRodovia (paleta cíclica por ordem de seleção) ---
+// Ver docs/superpowers/specs/2026-08-27-alocacao-mapa-camada-rodovias-design.md,
+// Decisão 8.
+test('atribuirCorRodovia dá a 1ª cor da paleta pra 1 seleção só', () => {
+  const cliente = montarClienteAlocacao();
+  const resultado = cliente.atribuirCorRodovia(['10']);
+  assert.deepStrictEqual(normalizar(resultado), { '10': cliente.CORES_RODOVIA[0] });
+});
+
+test('atribuirCorRodovia dá cores DISTINTAS em ordem pra seleção múltipla', () => {
+  const cliente = montarClienteAlocacao();
+  const resultado = cliente.atribuirCorRodovia(['10', '15', '22']);
+  const cores = normalizar(resultado);
+  assert.strictEqual(cores['10'], cliente.CORES_RODOVIA[0]);
+  assert.strictEqual(cores['15'], cliente.CORES_RODOVIA[1]);
+  assert.strictEqual(cores['22'], cliente.CORES_RODOVIA[2]);
+  // as 3 cores são realmente diferentes entre si -- o ponto central do pedido
+  const valores = Object.values(cores);
+  assert.strictEqual(new Set(valores).size, 3);
+});
+
+test('atribuirCorRodovia cicla ao passar do tamanho da paleta', () => {
+  const cliente = montarClienteAlocacao();
+  const n = cliente.CORES_RODOVIA.length;
+  const ids = Array.from({ length: n + 2 }, (_, i) => 'id-' + i);
+  const resultado = cliente.atribuirCorRodovia(ids);
+  assert.strictEqual(resultado['id-' + n], cliente.CORES_RODOVIA[0], 'a (n+1)-ésima seleção repete a 1ª cor');
+  assert.strictEqual(resultado['id-' + (n + 1)], cliente.CORES_RODOVIA[1]);
+});
+
+test('atribuirCorRodovia com lista vazia devolve objeto vazio, nunca lança', () => {
+  const cliente = montarClienteAlocacao();
+  assert.deepStrictEqual(normalizar(cliente.atribuirCorRodovia([])), {});
+});
+
+test('CORES_RODOVIA não repete nenhuma cor de CORES_LEITURA_PINO nem de tipologia', () => {
+  const cliente = montarClienteAlocacao();
+  const reservadas = Object.values(cliente.CORES_LEITURA_PINO).concat([
+    '#3f851a', '#2f6ad0', '#8d6f00', '#606060', '#4a3aa7', '#db244e',
+  ]).map((c) => c.toLowerCase());
+  cliente.CORES_RODOVIA.forEach((cor) => {
+    assert.ok(!reservadas.includes(cor.toLowerCase()), cor + ' colide com uma cor reservada de leitura/tipologia');
+  });
+});
