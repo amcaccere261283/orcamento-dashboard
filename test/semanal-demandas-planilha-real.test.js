@@ -103,7 +103,21 @@ test('o CSV de demandas pendentes tem o MESMO cabeçalho do Link 1', { skip: PUL
   // para o cache ("o combinador usa o cabeçalho do PRIMEIRO grid para todos").
   const a = parseCsvGrid(fs.readFileSync(CAMINHO_AVANCOS, 'utf8'))[0];
   const b = parseCsvGrid(fs.readFileSync(CAMINHO_PENDENTES, 'utf8'))[0];
-  assert.deepStrictEqual(b, a);
+  // PREFIXO, não igualdade exata (2026-08-26). O risco que este teste existe
+  // para pegar é DESALINHAMENTO -- uma coluna renomeada, reordenada ou
+  // removida no meio, que faria cada campo dos pendentes ser lido da coluna
+  // errada. Colunas a MAIS no FIM não desalinham nada: parseAvancos resolve
+  // por nome a partir do cabeçalho do avanços e ignora o que sobra.
+  //
+  // Isso deixou de ser hipotético: Latitude/Longitude entraram primeiro só no
+  // Link 2 (pendentes), porque o Link 1 (avanços) só ganha as colunas quando
+  // alguém rerraspar o histórico inteiro. Exigir igualdade aqui deixaria a
+  // suíte vermelha durante todo esse intervalo, por uma divergência que é
+  // segura por construção.
+  assert.deepStrictEqual(b.slice(0, a.length), a,
+    'o prefixo compartilhado divergiu -- AÍ sim cada campo dos pendentes passa a ser lido da coluna errada, em silêncio');
+  assert.ok(b.length >= a.length,
+    'o pendentes nunca pode ter MENOS colunas que o avanços -- faltaria campo no meio');
 });
 
 test('nenhuma tipologia crua do Link 1 fica fora do mapa', { skip: PULAR }, () => {

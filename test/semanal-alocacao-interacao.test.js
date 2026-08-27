@@ -193,9 +193,15 @@ test('prepararOpcoesAlocacao devolve o MESMO roster e as MESMAS opções que mon
   await cliente.selecionarSemanaAlocacao(1);
   const prep = cliente.prepararOpcoesAlocacao();
 
-  // prep.o precisa ter EXATAMENTE as 15 chaves que o objeto de opções tinha
-  // antes da extração -- nem a mais (campo vazando à toa), nem a menos (um
+  // prep.o precisa ter EXATAMENTE as chaves que o objeto de opções tinha antes
+  // da extração -- nem a mais (campo vazando à toa), nem a menos (um
   // consumidor -- Kanban ou Mapa -- ficaria sem o que precisa).
+  //
+  // 'producaoOnline' NÃO entra aqui de propósito: o trabalho paralelo de
+  // 2026-08-26 (Realizado da Alocação via produção do Link 7, ver
+  // docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md)
+  // passa esse campo direto pra EquipesAlocaveis.equipesDoQuadro(...), não pelo
+  // objeto de opções -- quem consome é o roster, não os renderizadores.
   const CHAVES_ESPERADAS = [
     'mesIdx', 'ano', 'semanas', 'semana', 'demandas', 'semRoster',
     'somenteLeitura', 'equipes', 'foraDoQuadro', 'alocacao', 'buscaEquipe',
@@ -233,11 +239,18 @@ test('prepararOpcoesAlocacao devolve o MESMO roster e as MESMAS opções que mon
 
   // Roster: recomputado por uma chamada DIRETA e independente a
   // EquipesAlocaveis.equipesDoQuadro, com os parâmetros que o fixture
-  // determina de fora (mês 8, semana 1, osParaSup cru) -- não os que
+  // determina de fora (mês 8, semana 1, produção crua do Link 7) -- não os que
   // prepararOpcoesAlocacao resolveu internamente. Se a extração tivesse
-  // trocado ano/mês/semana/osParaSup por engano, esta comparação pegaria.
+  // trocado ano/mês/semana/produção por engano, esta comparação pegaria.
+  //
+  // 'producaoOnline' (não mais 'osParaSup') desde a troca de 2026-08-26, num
+  // trabalho paralelo: supRealizado/colunaRealizada passaram a sair da produção
+  // do Link 7 em vez do texto da Sheet EQ. Passar a chave antiga aqui não
+  // quebraria a chamada -- ela seria só ignorada, e o roster esperado viria com
+  // supRealizado null contra o real preenchido, que foi exatamente como esta
+  // divergência apareceu no rebase.
   const rosterEsperado = cliente.EquipesAlocaveis.equipesDoQuadro(cliente.window.__DEMANDAS__.equipesCsv, {
-    ano: 2026, mes: 8, semana: SEMANAS_AGOSTO[1], osParaSup: cliente.window.__DEMANDAS__.osParaSup,
+    ano: 2026, mes: 8, semana: SEMANAS_AGOSTO[1], producaoOnline: cliente.window.__DEMANDAS__.producaoOnline,
   });
   assert.ok(rosterEsperado.equipes.length > 0, 'pré-condição: o roster esperado não pode estar vazio, senão a comparação abaixo seria vácua');
   assert.deepStrictEqual(normalizar(prep.o.equipes), normalizar(rosterEsperado.equipes));

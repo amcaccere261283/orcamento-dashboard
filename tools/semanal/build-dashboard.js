@@ -314,20 +314,37 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   // o build continua com Realizado normal, só sem os furos ainda não
   // executados no estoque de Demandas -- mesmo espírito de robustez que
   // equipes-online.csv já tem (ver mais abaixo).
+  // Coordenadas por SUP (aba Mapa da Alocação Equipes, 2026-08-26).
+  //
+  // CADA grid é resolvido com o PRÓPRIO cabeçalho, nunca com o do outro. Os
+  // dois arquivos NÃO andam em lockstep: as coordenadas nasceram só no Link 2
+  // (pendentes), e o Link 1 (avanços) só ganha as colunas quando alguém
+  // rerraspar o histórico inteiro -- o que pode demorar dias. Resolver o grid
+  // COMBINADO pelo cabeçalho do primeiro (que é o do avanços) devolvia {} em
+  // silêncio, com 5.724 coordenadas presentes no arquivo de pendentes e
+  // invisíveis: zero pino no mapa, sem erro nenhum. É o mesmo modo de falha
+  // que o CLAUDE.md descreve para o cache ("o combinador usa o cabeçalho do
+  // PRIMEIRO grid para todos").
+  //
+  // A ordem do merge importa: o avanços entra por último e SOBRESCREVE o
+  // pendente do mesmo SUP -- furo já executado tem coordenada mais confiável
+  // que furo ainda por executar. Hoje o avanços não traz nenhuma, então na
+  // prática vence o pendente; quando ele passar a trazer, a preferência já
+  // está no lugar certo.
+  let coordenadasPorSup = {};
   if (fs.existsSync(CAMINHO_DEMANDAS_SONDAGEM_ONLINE)) {
     const gridPendentes = parseCsvGrid(fs.readFileSync(CAMINHO_DEMANDAS_SONDAGEM_ONLINE, 'utf8'));
-    // gridPendentes[0] é cabeçalho (igual ao de gridAvancos[0]) -- só as
-    // linhas de dado (índice 1 em diante) entram.
+    coordenadasPorSup = resolverCoordenadasPorSup(gridPendentes[0], gridPendentes.slice(1));
+    // Só as linhas de dado (índice 1 em diante) entram no grid combinado. O
+    // cabeçalho do pendentes pode ter colunas a MAIS no fim (Latitude/
+    // Longitude) -- inofensivo para parseAvancos, que resolve por NOME a
+    // partir do cabeçalho do avanços e simplesmente ignora as sobrando.
     for (let i = 1; i < gridPendentes.length; i++) gridAvancos.push(gridPendentes[i]);
   } else {
     console.warn(`AVISO: ${CAMINHO_DEMANDAS_SONDAGEM_ONLINE} não encontrado -- Demandas Pendentes de sondagem não inclui furos ainda não executados. Rode "node tools/semanal/atualizar-demandas-sondagem-online.js".`);
   }
-  // Coordenadas por SUP (aba Mapa da Alocação Equipes, 2026-08-26) -- lê o
-  // MESMO grid combinado (avanços + pendentes) antes do unshift(null) que
-  // parseAvancos exige. Objeto vazio até a fonte publicar Latitude/
-  // Longitude (ver coordenadas-sup.js) -- nunca lança, nunca bloqueia o
-  // build.
-  const coordenadasPorSup = resolverCoordenadasPorSup(gridAvancos[0], gridAvancos.slice(1));
+  Object.assign(coordenadasPorSup, resolverCoordenadasPorSup(gridAvancos[0], gridAvancos.slice(1)));
+  console.log(`Coordenadas: ${Object.keys(coordenadasPorSup).length} SUP(s) com lat/long -- a aba Mapa desenha um pino por SUP resolvido; o resto vai pro painel "sem localização".`);
   gridAvancos.unshift(null);
   const { furos: furosLidos, descartadas, semDataTermino, cancelamentoIlegivel, deslocamentos } = parseAvancos(gridAvancos);
 
