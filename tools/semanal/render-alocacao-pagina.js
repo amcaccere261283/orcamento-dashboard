@@ -79,12 +79,17 @@ const BUNDLE_ARQUIVOS_ALOCACAO = [
 // Script cliente completo da página: estado, filtros, arrasto, live-refresh
 // (atualizarDadosAoVivoSemanal) e a montagem da grade de Alocação.
 const SCRIPT_CLIENTE_ALOCACAO = `
-// Setup MapLibre -- réplica EXATA do que está em produção no projeto Mapa
-// Sondagens (http://192.168.1.53:8080/, js/app.js), incluindo as 3 fontes
-// Esri/ArcGIS Online (World_Imagery base + Reference/World_Transportation +
-// Reference/World_Boundaries_and_Places sempre visíveis, sem toggle -- é
-// assim que o Mapa Sondagens já roda), a atribuição, e o zoom só com Ctrl
-// pressionado (scroll normal continua rolando a PÁGINA, não o mapa).
+// Setup MapLibre -- baseado no que está em produção no projeto Mapa
+// Sondagens (http://192.168.1.53:8080/, js/app.js), com uma divergência
+// deliberada pedida pelo dono do projeto em 2026-08-27: as duas fontes de
+// referência Esri (Reference/World_Transportation e
+// Reference/World_Boundaries_and_Places -- rótulos de rodovia com
+// sombreado/relevo e limites administrativos, incl. municipais) saíram.
+// Ficou só World_Imagery (satélite puro) -- menos poluição visual, sem
+// limite de município, e sem o relevo "elevado" que World_Transportation
+// desenhava nas rodovias (o efeito que lia como "3D"). A atribuição e o
+// zoom só com Ctrl pressionado (scroll normal continua rolando a PÁGINA,
+// não o mapa) continuam iguais ao Mapa Sondagens.
 //
 // Inicializado LAZY (só no primeiro clique na aba Mapa, não no load da
 // página): o MapLibre precisa que o container já tenha tamanho real
@@ -94,8 +99,6 @@ const SCRIPT_CLIENTE_ALOCACAO = `
 var MAPA_ALOCACAO = { instancia: null };
 
 var URL_ESRI_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-var URL_ESRI_TRANSPORTE = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
-var URL_ESRI_LIMITES = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
 
 function inicializarMapaAlocacao() {
   if (MAPA_ALOCACAO.instancia) {
@@ -121,13 +124,9 @@ function inicializarMapaAlocacao() {
       version: 8,
       sources: {
         'esri-imagery': { type: 'raster', tiles: [URL_ESRI_IMAGERY], tileSize: 256, maxzoom: 19, attribution: 'Tiles &copy; Esri' },
-        'esri-transporte': { type: 'raster', tiles: [URL_ESRI_TRANSPORTE], tileSize: 256, maxzoom: 19 },
-        'esri-limites': { type: 'raster', tiles: [URL_ESRI_LIMITES], tileSize: 256, maxzoom: 19 },
       },
       layers: [
         { id: 'esri-imagery', type: 'raster', source: 'esri-imagery' },
-        { id: 'esri-transporte', type: 'raster', source: 'esri-transporte' },
-        { id: 'esri-limites', type: 'raster', source: 'esri-limites' },
       ],
     },
     // Centro/zoom iniciais: mesma região do Mapa Sondagens (Paraná) -- só o
@@ -785,12 +784,16 @@ var CORES_LEITURA_PINO = {
 // SEIS cores, escolhidas pra não colidir de hue com CORES_LEITURA_PINO (acima)
 // nem com TIPOLOGIA_COLOR (render-aba-consolidado.js): aquelas já cobrem
 // vermelho/coral, laranja-amarelo, azul, verde, roxo e cinza -- daqui saem
-// ciano, magenta, marrom, indigo-azulado, dourado-mostarda e verde-água. Tom
-// exato calibrado na revisão do Open Design (mesma ressalva já feita pra outras
-// cores novas deste projeto); a MECÂNICA de atribuição é o que este teste trava.
+// ciano, magenta, marrom, indigo-azulado, dourado-mostarda e verde-água.
+// Saturação/brilho aumentados em 2026-08-27 (pedido do dono do projeto,
+// "cores mais vivas") em cima dos mesmos seis matizes já testados contra
+// colisão -- MESMA família de cor de antes, só mais intensa, então a
+// distinção de matiz já verificada continua valendo. Tom exato calibrado na
+// revisão do Open Design (mesma ressalva já feita pra outras cores novas
+// deste projeto); a MECÂNICA de atribuição é o que este teste trava.
 // Ver docs/superpowers/specs/2026-08-27-alocacao-mapa-camada-rodovias-design.md,
 // Decisão 8.
-var CORES_RODOVIA = ['#00b8c4', '#d63bd6', '#8a5a2b', '#5a4fcf', '#c9a227', '#2ba88f'];
+var CORES_RODOVIA = ['#00d4e6', '#f02ef0', '#b8611a', '#6a4dff', '#e8b400', '#00c9a3'];
 
 // idsEmOrdem: ids de concessionária na ordem em que foram MARCADAS no seletor
 // (não a ordem alfabética da lista) -- é essa ordem que decide qual cor cada
@@ -878,7 +881,9 @@ function sincronizarCamadasRodovias() {
       id: 'rodovia-' + camada.id,
       type: 'line',
       source: 'rodovia-' + camada.id,
-      paint: { 'line-color': camada.cor, 'line-width': 3, 'line-opacity': 0.85 },
+      // line-width/opacity aumentados em 2026-08-27 (pedido do dono do
+      // projeto, "um pouco mais espessa") -- era 3/0.85.
+      paint: { 'line-color': camada.cor, 'line-width': 5, 'line-opacity': 0.95 },
     });
     MAPA_ALOCACAO.camadasRodovia.push(camada.id);
   });
