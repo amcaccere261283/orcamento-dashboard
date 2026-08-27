@@ -1,5 +1,7 @@
 'use strict';
 
+var TRACADO_ANTT_DNIT_RESOLVIDO = require('./tracado-antt-dnit-resolvido.json');
+
 // Extração PURA (sem rede) dos dados de rodovias/concessionárias embutidos na
 // página https://melhoresrodovias.org.br/mapa-de-concessoes/ -- ver
 // docs/superpowers/specs/2026-08-27-alocacao-mapa-camada-rodovias-design.md.
@@ -110,11 +112,20 @@ var CONCESSIONARIAS_EXTRA_ANTT = [
   'Via Brasil BR-163', 'Via Campo', 'Via Cristais', 'Way-153', 'Way-262',
   'Way-364',
 ].map(function (nome) {
+  var id = 'antt-' + nome.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   return {
-    id: 'antt-' + nome.toLowerCase()
-      .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos
-      .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-    nome: nome, slug: null, cor: null, geojson: null,
+    id: id, nome: nome, slug: null, cor: null,
+    // 20 das 35 tiveram o traçado resolvido em 2026-08-27 cruzando a malha
+    // do DNIT (SNV) via WFS -- ver
+    // docs/superpowers/specs/2026-08-27-tracado-rodovias-antt-dnit-handoff.md
+    // e tools/semanal/atualizar-tracado-antt-dnit.js. Vem de um arquivo
+    // gerado à parte (TRACADO_ANTT_DNIT_RESOLVIDO), não escrito à mão aqui,
+    // pra sobreviver a uma re-raspagem da ABCR (atualizar-concessoes-
+    // rodovias.js não conhece nem apaga esse arquivo). "Ecovias das Gerais"
+    // continua null -- nenhuma linha do CSV da ANTT bate com esse nome.
+    geojson: TRACADO_ANTT_DNIT_RESOLVIDO[id] || null,
   };
 });
 

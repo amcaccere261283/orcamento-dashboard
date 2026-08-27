@@ -152,13 +152,21 @@ test('mesclarConcessionariasExtras com extras vazio/ausente devolve só a lista 
   assert.deepStrictEqual(mesclarConcessionariasExtras(lista, []).map((c) => c.nome), ['Alfa', 'Zeta']);
 });
 
-test('CONCESSIONARIAS_EXTRA_ANTT tem 35 entradas, todas com geojson null e id prefixado antt-', () => {
+test('CONCESSIONARIAS_EXTRA_ANTT tem 35 entradas, id prefixado antt-, geojson resolvido pra 20 delas (2026-08-27)', () => {
   assert.strictEqual(CONCESSIONARIAS_EXTRA_ANTT.length, 35);
   CONCESSIONARIAS_EXTRA_ANTT.forEach((c) => {
-    assert.strictEqual(c.geojson, null);
     assert.match(c.id, /^antt-[a-z0-9-]+$/);
     assert.ok(c.nome && c.nome.length > 0);
+    if (c.geojson !== null) {
+      assert.ok(c.geojson.features.length > 0, c.id + ' com geojson não-null precisa ter features');
+    }
   });
+  const comTracado = CONCESSIONARIAS_EXTRA_ANTT.filter((c) => c.geojson !== null);
+  assert.strictEqual(comTracado.length, 20, 'ver tools/semanal/tracado-antt-dnit-resolvido.json -- 20 das 35 cruzadas com o SNV do DNIT');
+  assert.ok(
+    CONCESSIONARIAS_EXTRA_ANTT.find((c) => c.id === 'antt-ecovias-das-gerais').geojson === null,
+    '"Ecovias das Gerais" continua sem correspondência no CSV da ANTT -- ver o handoff'
+  );
   const ids = CONCESSIONARIAS_EXTRA_ANTT.map((c) => c.id);
   assert.strictEqual(new Set(ids).size, ids.length, 'nenhum id repetido dentro da lista extra');
 });
