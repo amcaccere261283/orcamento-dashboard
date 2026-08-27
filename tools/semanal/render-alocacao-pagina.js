@@ -1863,8 +1863,9 @@ function renderAlocacaoPagina({
     border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.5);
     cursor: pointer;
   }
+  #secao-mapa-alocacao .maplibregl-popup-content { color: #1a1d24; }
   #secao-mapa-alocacao .popup-pino-alocacao { font-family: "Poppins", sans-serif; font-size: 13px; }
-  #secao-mapa-alocacao .popup-pino-alocacao .popup-titulo { font-weight: 700; margin: 0 0 4px; }
+  #secao-mapa-alocacao .popup-pino-alocacao .popup-titulo { font-weight: 700; margin: 0 0 4px; color: #1a1d24; }
   `;
 
   return `<!DOCTYPE html>
