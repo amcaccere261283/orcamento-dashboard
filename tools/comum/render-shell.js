@@ -340,8 +340,18 @@ function markupCabecalho({ titulo, subtitulo, logo, extra, recuo }) {
 const SETA_FILTRO_MULTI = '<svg class="filtro-multi-seta" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 // Um filtro multi-select: gatilho com o rótulo do estado atual e o painel
-// vazio, que o JS de cliente preenche com as opções. Interna: só markupFiltros
-// chama -- não está no module.exports porque ninguém de fora precisa dela.
+// vazio, que o JS de cliente preenche com as opções. markupFiltros (abaixo) é
+// o chamador principal, mas também é exportada para qualquer página Node-only
+// (só build, sem passar pelo browser-bundle) que precise de um filtro-multi
+// avulso, fora da faixa .filtros-selecao normal.
+//
+// NÃO chame esta versão de dentro de um módulo dual (Node + navegador, ver o
+// contrato em tools/comum/browser-bundle.js) -- um require('../comum/...') aí
+// é removido pelo bundler (dependência fora do diretório concatenado) e
+// deixaria markupFiltroMulti undefined no navegador, sem erro nenhum nos
+// testes Node. tools/semanal/render-aba-alocacao-mapa.js precisou dela nesse
+// caso e tem sua PRÓPRIA cópia local (mesma convenção que chaveDemandas já
+// segue nesse bundle) em vez de importar esta.
 //
 // ESCAPE É DO CHAMADOR, como em markupCabecalho: 'filtro.rotulo' entra cru.
 function markupFiltroMulti(filtro) {
@@ -707,6 +717,7 @@ module.exports = {
   cssBase,
   markupCabecalho,
   markupFiltros,
+  markupFiltroMulti,
   markupAbas,
   scriptDesbloqueio,
   scriptFiltros,
