@@ -66,8 +66,8 @@ function diaEpochDe(ano, mes, dia) { return Math.floor(Date.UTC(ano, mes - 1, di
 // {idEquipe, sup, tipo, diaEpoch} -- desde 2026-08-26 é a fonte de
 // supRealizado/colunaRealizada, no lugar do texto da Sheet EQ + osParaSup.
 const PRODUCAO_ONLINE = [
-  { idEquipe: '4', sup: 'SUP-7128-24', tipo: 'SM', diaEpoch: diaEpochDe(2026, 8, 11) },
-  { idEquipe: '88', sup: 'SUP-7133-24', tipo: 'ST', diaEpoch: diaEpochDe(2026, 8, 12) },
+  { idEquipe: '4', sup: 'SUP-7128-24', tipo: 'SM', diaEpoch: diaEpochDe(2026, 8, 14) },
+  { idEquipe: '88', sup: 'SUP-7133-24', tipo: 'ST', diaEpoch: diaEpochDe(2026, 8, 15) },
 ];
 
 test('equipesDoQuadro monta as equipes com colunas, disponibilidade e popup', () => {
@@ -110,6 +110,20 @@ test('supRealizado sai da produção real do sond (Link 7), até o fim da semana
   // Equipe 88: polivalente, cai numa das colunas dela.
   assert.strictEqual(porId['88'].supRealizado, 'SUP-7133-24');
   assert.ok(porId['88'].colunas.indexOf(porId['88'].colunaRealizada) !== -1);
+});
+
+test('produção com mais de 3 dias de defasagem não conta -- equipe nasce no pool', () => {
+  const producaoAntiga = [{ idEquipe: '4', sup: 'SUP-7128-24', tipo: 'SM', diaEpoch: diaEpochDe(2026, 8, 12) }];
+  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: producaoAntiga });
+  const eq4 = equipes.find((e) => e.id === '4');
+  assert.strictEqual(eq4.supRealizado, null, 'diaEpoch 12/08 está a 4 dias do fim da semana (16/08) -- fora da janela de 3');
+});
+
+test('produção com exatos 3 dias de defasagem ainda conta', () => {
+  const producaoNoLimite = [{ idEquipe: '4', sup: 'SUP-7128-24', tipo: 'SM', diaEpoch: diaEpochDe(2026, 8, 13) }];
+  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: producaoNoLimite });
+  const eq4 = equipes.find((e) => e.id === '4');
+  assert.strictEqual(eq4.supRealizado, 'SUP-7128-24', 'diaEpoch 13/08 está a exatos 3 dias do fim da semana (16/08)');
 });
 
 test('produção depois do fim da semana em tela não conta -- só o que já foi executado até lá', () => {

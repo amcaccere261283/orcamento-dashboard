@@ -41,10 +41,10 @@ Alocação Equipes.
 `compute-equipes-realizado-alocado.js` já consome). Um helper novo,
 `ultimoRealizadoPorEquipe`, indexa esse array por `idEquipe` (histórico ordenado por
 `diaEpoch`) e devolve, para uma equipe e um dia-alvo, o último registro com
-`diaEpoch <= alvo` — **sem** janela de 45 dias (diferente do carry-forward do Realizado
-da Tabela Semanal): aqui é literalmente "a última sondagem que essa equipe executou",
-não importa há quanto tempo, e nunca é chutado — equipe sem produção nenhuma continua
-nascendo no pool (`supRealizado: null`).
+`diaEpoch <= alvo` **e** `alvo - diaEpoch <= 3` (`JANELA_ULTIMO_REALIZADO_DIAS`,
+2026-08-27; antes era sem janela nenhuma) — diferente do carry-forward de 45 dias do
+Realizado da Tabela Semanal. Produção mais antiga que isso não conta — equipe sem
+produção recente (ou nenhuma) nasce no pool (`supRealizado: null`), nunca é chutada.
 
 A opção `osParaSup` sai de `equipesDoQuadro` (só ela é afetada — `osParaSup` continua
 existindo e sendo usado por `compute-equipes-ativas.js`/Tabela Semanal, sem mudança).

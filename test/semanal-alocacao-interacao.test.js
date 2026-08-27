@@ -104,7 +104,9 @@ function demandasTeste() {
     // docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md.
     // Mesmo SUP/dia que osParaSup descrevia acima, agora como produção crua
     // do Link 7.
-    producaoOnline: [{ idEquipe: '4', sup: 'SUP-A', tipo: 'SP', diaEpoch: DIAS_TESTE[0] }],
+    // diaEpoch = fim de S2 (não o início): a janela do "último realizado" é
+    // de só 3 dias -- ver JANELA_ULTIMO_REALIZADO_DIAS em equipes-alocaveis.js.
+    producaoOnline: [{ idEquipe: '4', sup: 'SUP-A', tipo: 'SP', diaEpoch: SEMANAS_AGOSTO[1].fim }],
   };
 }
 
@@ -314,7 +316,7 @@ test('semear do realizado preenche a partir da última OS da semana', async () =
   const cliente = montarClienteAlocacao();
   await cliente.selecionarSemanaAlocacao(1);
   const equipe4 = cliente.ESTADO_ALOCACAO.equipes.find((e) => e.id === '4');
-  assert.strictEqual(equipe4.supRealizado, 'SUP-A', 'pré-condição: a OS do 1º dia resolveu para SUP-A');
+  assert.strictEqual(equipe4.supRealizado, 'SUP-A', 'pré-condição: a OS do fim da semana resolveu para SUP-A');
 
   cliente.semearDoRealizado();
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].sup, 'SUP-A');

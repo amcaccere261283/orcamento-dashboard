@@ -135,13 +135,20 @@ function indexarProducaoOnline(producaoOnline) {
   return porEquipe;
 }
 
-// Último registro do histórico (ordenado) com diaEpoch <= diaAlvo. null se não
-// achar -- equipe sem produção nenhuma até aquele dia nasce no pool, nunca
-// chutada (mesma garantia de quando a fonte era o texto da Sheet EQ).
+// Janela máxima de carry-forward do "último realizado": se a última produção
+// da equipe for mais antiga que isso em relação ao diaAlvo, ela nasce no pool
+// em vez de ficar presa a um SUP de dias atrás.
+var JANELA_ULTIMO_REALIZADO_DIAS = 3;
+
+// Último registro do histórico (ordenado) com diaEpoch <= diaAlvo e
+// diaAlvo - diaEpoch <= JANELA_ULTIMO_REALIZADO_DIAS. null se não achar --
+// equipe sem produção recente até aquele dia nasce no pool, nunca chutada
+// (mesma garantia de quando a fonte era o texto da Sheet EQ).
 function ultimoRealizadoAte(historico, diaAlvo) {
   var melhor = null;
   (historico || []).forEach(function (item) {
     if (item.diaEpoch > diaAlvo) return;
+    if (diaAlvo - item.diaEpoch > JANELA_ULTIMO_REALIZADO_DIAS) return;
     melhor = item;
   });
   return melhor;
