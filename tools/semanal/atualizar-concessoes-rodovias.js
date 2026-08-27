@@ -26,6 +26,7 @@ async function buscarEGravar() {
   console.log(
     'Gravado ' + DEST + ' -- ' + dados.length + ' concessionárias, ' + comTrecho + ' com trecho de rodovia.'
   );
+  console.log('Para publicar: cp dist/concessoes-rodovias.json docs/concessoes-rodovias.json');
 }
 
 buscarEGravar().catch((erro) => {

@@ -906,3 +906,159 @@ test('camadasRodoviasDesejadas com lista vazia devolve array vazio', () => {
   const cliente = montarClienteAlocacao();
   assert.deepStrictEqual(normalizar(cliente.camadasRodoviasDesejadas([], {})), []);
 });
+
+// --- Camada de rodovias: aoMudarSeletorRodovias (achado Important 4 da revisão
+// final -- era a única lógica stateful da feature sem nenhum teste) ---
+//
+// aoMudarSeletorRodovias chama sincronizarCamadasRodovias() no fim, que retorna
+// cedo (`if (!mapa) return;`) quando MAPA_ALOCACAO.instancia é null -- estes
+// quatro testes deixam a instância como está (null, o padrão de
+// montarClienteAlocacao) de propósito: eles só provam ESTADO_RODOVIAS.ordem,
+// que é mantido por aoMudarSeletorRodovias ANTES dessa chamada, então não
+// precisam de um mapa de verdade nem de um dublê.
+test('aoMudarSeletorRodovias adiciona ao FIM de ESTADO_RODOVIAS.ordem ao marcar', () => {
+  const cliente = montarClienteAlocacao();
+  cliente.aoMudarSeletorRodovias('10', true);
+  cliente.aoMudarSeletorRodovias('15', true);
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_RODOVIAS.ordem), ['10', '15']);
+});
+
+test('aoMudarSeletorRodovias remove de ESTADO_RODOVIAS.ordem ao desmarcar', () => {
+  const cliente = montarClienteAlocacao();
+  cliente.aoMudarSeletorRodovias('10', true);
+  cliente.aoMudarSeletorRodovias('15', true);
+  cliente.aoMudarSeletorRodovias('10', false);
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_RODOVIAS.ordem), ['15']);
+});
+
+test('aoMudarSeletorRodovias marcar uma concessionária já marcada não duplica', () => {
+  const cliente = montarClienteAlocacao();
+  cliente.aoMudarSeletorRodovias('10', true);
+  cliente.aoMudarSeletorRodovias('10', true);
+  assert.deepStrictEqual(normalizar(cliente.ESTADO_RODOVIAS.ordem), ['10']);
+});
+
+// INTENCIONAL -- pino de comportamento, não regressão a "corrigir": remover
+// uma seleção do MEIO da ordem desloca a cor de toda seleção que vinha
+// DEPOIS dela, porque atribuirCorRodovia (e camadasRodoviasDesejadas, que a
+// chama dentro de sincronizarCamadasRodovias) sempre deriva a cor da POSIÇÃO
+// atual em ESTADO_RODOVIAS.ordem, nunca de uma identidade fixa por
+// concessionária -- ver o comentário grande acima de atribuirCorRodovia
+// (render-alocacao-pagina.js): "Cor é um DIFERENCIADOR da seleção atual, não
+// uma identidade fixa da concessionária". Este teste existe pra travar essa
+// escolha -- se ele quebrar porque alguém fez a cor "grudar" na
+// concessionária, isso é uma mudança de design que precisa ser deliberada,
+// não um efeito colateral silencioso.
+test('INTENCIONAL: remover uma seleção do MEIO desloca a cor de todas as posteriores', () => {
+  const cliente = montarClienteAlocacao();
+  cliente.aoMudarSeletorRodovias('10', true); // posição 0 -> CORES_RODOVIA[0]
+  cliente.aoMudarSeletorRodovias('15', true); // posição 1 -> CORES_RODOVIA[1]
+  cliente.aoMudarSeletorRodovias('22', true); // posição 2 -> CORES_RODOVIA[2]
+
+  cliente.aoMudarSeletorRodovias('15', false); // remove a do meio
+
+  const cores = normalizar(cliente.atribuirCorRodovia(cliente.ESTADO_RODOVIAS.ordem));
+  assert.strictEqual(cores['10'], cliente.CORES_RODOVIA[0], '10 continua na 1ª posição -- cor não muda');
+  assert.strictEqual(cores['22'], cliente.CORES_RODOVIA[1],
+    'por design: 22 passa da 3ª pra 2ª posição e MUDA de cor (era CORES_RODOVIA[2])');
+});
+
+// --- Camada de rodovias: sincronizarCamadasRodovias (achado Important 4) ---
+//
+// Dublê mínimo do MapLibre -- só o que sincronizarCamadasRodovias de fato
+// chama (getLayer/getSource pra decidir se remove, addSource/addLayer/
+// removeLayer/removeSource pra desenhar), guardando estado próprio (layers/
+// sources) pra que getLayer/getSource reflitam o efeito líquido das chamadas
+// anteriores, não um mock "sempre presente" -- é isso que permite os testes
+// abaixo verificarem o RESULTADO (o que está no mapa depois da chamada), não
+// só a lista de chamadas feitas.
+function mapaFalsoRodovias() {
+  const layers = {};
+  const sources = {};
+  const chamadas = { addSource: [], addLayer: [], removeLayer: [], removeSource: [] };
+  return {
+    chamadas,
+    getLayer: (id) => layers[id] || null,
+    getSource: (id) => sources[id] || null,
+    addSource: (id, opcoes) => { sources[id] = opcoes; chamadas.addSource.push(id); },
+    addLayer: (opcoes) => { layers[opcoes.id] = opcoes; chamadas.addLayer.push(opcoes); },
+    removeLayer: (id) => { delete layers[id]; chamadas.removeLayer.push(id); },
+    removeSource: (id) => { delete sources[id]; chamadas.removeSource.push(id); },
+  };
+}
+
+test('sincronizarCamadasRodovias adiciona a camada certa (id, source, line-color) ao selecionar', () => {
+  const cliente = montarClienteAlocacao();
+  const mapa = mapaFalsoRodovias();
+  cliente.MAPA_ALOCACAO.instancia = mapa;
+  cliente.ESTADO_RODOVIAS.concessoesPorId = { 10: concessaoSintetica('10', 'Autoban', true) };
+  cliente.ESTADO_RODOVIAS.ordem = ['10'];
+
+  cliente.sincronizarCamadasRodovias();
+
+  assert.deepStrictEqual(mapa.chamadas.addSource, ['rodovia-10']);
+  assert.strictEqual(mapa.chamadas.addLayer.length, 1);
+  assert.strictEqual(mapa.chamadas.addLayer[0].id, 'rodovia-10');
+  assert.strictEqual(mapa.chamadas.addLayer[0].source, 'rodovia-10');
+  assert.strictEqual(mapa.chamadas.addLayer[0].paint['line-color'], cliente.CORES_RODOVIA[0]);
+  assert.deepStrictEqual(normalizar(cliente.MAPA_ALOCACAO.camadasRodovia), ['10']);
+});
+
+test('sincronizarCamadasRodovias: desmarcar uma concessionária tira só ela do mapa, a outra permanece', () => {
+  const cliente = montarClienteAlocacao();
+  const mapa = mapaFalsoRodovias();
+  cliente.MAPA_ALOCACAO.instancia = mapa;
+  cliente.ESTADO_RODOVIAS.concessoesPorId = {
+    10: concessaoSintetica('10', 'Autoban', true),
+    15: concessaoSintetica('15', 'Sorocabana', true),
+  };
+  cliente.ESTADO_RODOVIAS.ordem = ['10', '15'];
+  cliente.sincronizarCamadasRodovias();
+  assert.ok(mapa.getLayer('rodovia-10'), 'pré-condição: as duas foram desenhadas');
+  assert.ok(mapa.getLayer('rodovia-15'), 'pré-condição: as duas foram desenhadas');
+
+  cliente.ESTADO_RODOVIAS.ordem = ['15']; // desmarca a 10
+
+  cliente.sincronizarCamadasRodovias();
+
+  // NOTA: sincronizarCamadasRodovias redesenha TUDO do zero a cada chamada
+  // (mesma filosofia de desenharPinosMapa, ver o comentário na função) -- por
+  // baixo dos panos as DUAS camadas são removidas e só a 15 é recriada, não é
+  // uma remoção seletiva. O que este teste trava é o RESULTADO visível: a
+  // camada desmarcada some do mapa, a que continua marcada continua nele.
+  assert.strictEqual(mapa.getLayer('rodovia-10'), null, 'a camada desmarcada tem que sumir do mapa');
+  assert.ok(mapa.getLayer('rodovia-15'), 'a camada que continua marcada tem que continuar no mapa');
+  assert.deepStrictEqual(normalizar(cliente.MAPA_ALOCACAO.camadasRodovia), ['15']);
+});
+
+test('sincronizarCamadasRodovias escreve a legenda com as concessionárias selecionadas', () => {
+  const cliente = montarClienteAlocacao();
+  const mapa = mapaFalsoRodovias();
+  cliente.MAPA_ALOCACAO.instancia = mapa;
+  cliente.ESTADO_RODOVIAS.concessoesPorId = { 10: concessaoSintetica('10', 'Autoban', true) };
+  cliente.ESTADO_RODOVIAS.ordem = ['10'];
+
+  cliente.sincronizarCamadasRodovias();
+
+  const legendaHtml = cliente.document.getElementById('mapa-alocacao-rodovias-legenda').innerHTML;
+  assert.match(legendaHtml, /Autoban/);
+  assert.match(legendaHtml, new RegExp(cliente.CORES_RODOVIA[0]));
+});
+
+test('sincronizarCamadasRodovias sem nenhuma seleção deixa a legenda vazia', () => {
+  const cliente = montarClienteAlocacao();
+  const mapa = mapaFalsoRodovias();
+  cliente.MAPA_ALOCACAO.instancia = mapa;
+  cliente.ESTADO_RODOVIAS.ordem = [];
+
+  cliente.sincronizarCamadasRodovias();
+
+  const legendaHtml = cliente.document.getElementById('mapa-alocacao-rodovias-legenda').innerHTML;
+  assert.strictEqual(legendaHtml, '');
+});
+
+test('sincronizarCamadasRodovias sem mapa (MAPA_ALOCACAO.instancia null) não lança', () => {
+  const cliente = montarClienteAlocacao();
+  cliente.ESTADO_RODOVIAS.ordem = ['10'];
+  assert.doesNotThrow(() => cliente.sincronizarCamadasRodovias());
+});

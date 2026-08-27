@@ -703,6 +703,16 @@ function montarMapaAlocacao(prep, dadosPrecomputados) {
       MAPA_ALOCACAO.instancia.remove();
       MAPA_ALOCACAO.instancia = null;
       MAPA_ALOCACAO.marcadores = {};
+      // FIX (achado Minor 5 da revisão final): sem isto, ESTADO_RODOVIAS.ordem
+      // sobrevive à destruição da instância (é estado do SELETOR, não do
+      // mapa), mas MAPA_ALOCACAO.camadasRodovia continuava com os ids de
+      // camadas que não existem mais -- quando o roster volta e o mapa é
+      // recriado do zero, sincronizarCamadasRodovias() tentaria remover
+      // camadas de uma instância NOVA que nunca as teve. Zerar aqui, no MESMO
+      // instante em que a instância morre, deixa o próximo desenho recriar as
+      // camadas do zero a partir de ESTADO_RODOVIAS.ordem, em vez de deixar o
+      // painel com caixas marcadas sobre um mapa sem nenhuma linha.
+      MAPA_ALOCACAO.camadasRodovia = [];
     }
     secao.innerHTML = RenderAbaAlocacaoMapa.renderAbaAlocacaoMapa(null, { semRoster: true });
     return;
@@ -744,6 +754,14 @@ function montarMapaAlocacao(prep, dadosPrecomputados) {
   if (typeof desenharPinosMapa === 'function' && MAPA_ALOCACAO.instancia) {
     desenharPinosMapa(dados, (window.__DEMANDAS__ || {}).coordenadasPorSup || {});
   }
+  // FIX (achado Minor 5 da revisão final): redesenha as camadas de rodovia
+  // selecionadas sempre que o mapa é redesenhado -- sem isto, um mapa
+  // recriado do zero (depois de um ciclo semRoster, ver o FIX acima) nunca
+  // recuperava as camadas de ESTADO_RODOVIAS.ordem, e o painel ficava com
+  // caixas marcadas sobre um mapa vazio. Guardado por instancia (não por
+  // typeof, como o desenharPinosMapa acima) porque sincronizarCamadasRodovias
+  // é declarada ANTES desta função no mesmo arquivo, sempre definida.
+  if (MAPA_ALOCACAO.instancia) sincronizarCamadasRodovias();
 }
 
 // Mesmas 5 cores de .leitura-* (CSS_SEMANAL, render-semanal.js) --
@@ -789,8 +807,8 @@ function atribuirCorRodovia(idsEmOrdem) {
 // idsSelecionadosEmOrdem: ESTADO_RODOVIAS.ordem (abaixo). concessoesPorId: mapa
 // id -> entrada de concessoes-rodovias.json (Task 2/3), já carregado. Função
 // PURA -- decide o QUE desenhar, nunca toca map/DOM (isso é
-// sincronizarCamadasRodovias, Step 5). Concessionária sem geojson (a maioria,
-// hoje -- só 60 das 61 têm trecho em ROADS) simplesmente não vira camada; ela
+// sincronizarCamadasRodovias, Step 5). Concessionária sem geojson (poucas,
+// hoje -- 59 das 60 têm trecho em ROADS) simplesmente não vira camada; ela
 // continua "selecionada" (ESTADO_RODOVIAS.ordem não muda), só não desenha nada.
 function camadasRodoviasDesejadas(idsSelecionadosEmOrdem, concessoesPorId) {
   var cores = atribuirCorRodovia(idsSelecionadosEmOrdem || []);
@@ -803,18 +821,18 @@ function camadasRodoviasDesejadas(idsSelecionadosEmOrdem, concessoesPorId) {
   return resultado;
 }
 
-// Estado de módulo pro seletor de rodovias -- 'ordem' e a lista de ids na ORDEM
-// em que foram marcados (nao a ordem alfabetica da lista), porque e essa ordem
+// Estado de módulo pro seletor de rodovias -- 'ordem' é a lista de ids na ORDEM
+// em que foram marcados (não a ordem alfabética da lista), porque é essa ordem
 // que decide a cor de cada um (atribuirCorRodovia). 'concessoesPorId' nasce null
-// e so e populado no 1o fetch bem-sucedido de concessoes-rodovias.json (lazy --
-// nunca busca antes do usuario abrir o seletor pela 1a vez).
+// e só é populado no 1º fetch bem-sucedido de concessoes-rodovias.json (lazy --
+// nunca busca antes de o usuário abrir o seletor pela 1ª vez).
 var ESTADO_RODOVIAS = { ordem: [], concessoesPorId: null, carregando: null };
 
-// Busca concessoes-rodovias.json (mesma origem do Pages, sem CORS) so na
-// PRIMEIRA vez que e preciso -- nunca no load da pagina. Idempotente: chamadas
-// concorrentes (ex. dois cliques rapidos no seletor antes do 1o fetch responder)
+// Busca concessoes-rodovias.json (mesma origem do Pages, sem CORS) só na
+// PRIMEIRA vez que é preciso -- nunca no load da página. Idempotente: chamadas
+// concorrentes (ex. dois cliques rápidos no seletor antes do 1º fetch responder)
 // compartilham a MESMA promise via ESTADO_RODOVIAS.carregando, em vez de disparar
-// requisicoes duplicadas.
+// requisições duplicadas.
 function garantirConcessoesCarregadas() {
   if (ESTADO_RODOVIAS.concessoesPorId) return Promise.resolve(ESTADO_RODOVIAS.concessoesPorId);
   if (ESTADO_RODOVIAS.carregando) return ESTADO_RODOVIAS.carregando;
@@ -828,9 +846,9 @@ function garantirConcessoesCarregadas() {
       return porId;
     })
     .catch(function (erro) {
-      // Nunca lanca pra fora -- sem o JSON, o seletor simplesmente nao tem
-      // opcoes (mesma filosofia de "sem dado, nunca erro" de coordenadas-sup.js).
-      console.error('concessoes-rodovias.json nao pode ser carregado:', erro);
+      // Nunca lança pra fora -- sem o JSON, o seletor simplesmente não tem
+      // opções (mesma filosofia de "sem dado, nunca erro" de coordenadas-sup.js).
+      console.error('concessoes-rodovias.json não pôde ser carregado:', erro);
       ESTADO_RODOVIAS.carregando = null;
       return {};
     });
@@ -838,10 +856,10 @@ function garantirConcessoesCarregadas() {
 }
 
 // Redesenha TODAS as camadas de rodovia a partir do zero -- mesma filosofia de
-// desenharPinosMapa (redesenhar inteiro e simples e barato o bastante pra no
-// maximo algumas linhas por vez). So roda se o mapa ja existe; se o seletor for
-// mexido antes de a aba Mapa ter sido aberta (nao deveria ser possivel, o bloco
-// so existe dentro de #secao-mapa-alocacao, mas e uma guarda barata), sai sem
+// desenharPinosMapa (redesenhar inteiro é simples e barato o bastante pra no
+// máximo algumas linhas por vez). Só roda se o mapa já existe; se o seletor for
+// mexido antes de a aba Mapa ter sido aberta (não deveria ser possível, o bloco
+// só existe dentro de #secao-mapa-alocacao, mas é uma guarda barata), sai sem
 // fazer nada.
 function sincronizarCamadasRodovias() {
   var mapa = MAPA_ALOCACAO.instancia;
@@ -873,10 +891,10 @@ function sincronizarCamadasRodovias() {
   }
 }
 
-// Ligacao do checkbox: marcar adiciona ao FIM de ESTADO_RODOVIAS.ordem (fica com
-// a proxima cor da paleta); desmarcar remove -- as que continuam marcadas NAO
-// mudam de posicao relativa entre si (Array.prototype.filter preserva ordem),
-// entao suas cores continuam estaveis.
+// Ligação do checkbox: marcar adiciona ao FIM de ESTADO_RODOVIAS.ordem (fica com
+// a próxima cor da paleta); desmarcar remove -- as que continuam marcadas NÃO
+// mudam de posição relativa entre si (Array.prototype.filter preserva ordem),
+// então suas cores continuam estáveis.
 function aoMudarSeletorRodovias(idConcessionaria, marcado) {
   var indiceAtual = ESTADO_RODOVIAS.ordem.indexOf(idConcessionaria);
   if (marcado && indiceAtual === -1) ESTADO_RODOVIAS.ordem.push(idConcessionaria);
@@ -884,8 +902,8 @@ function aoMudarSeletorRodovias(idConcessionaria, marcado) {
   sincronizarCamadasRodovias();
 }
 
-// Abre/fecha o painel e, na 1a abertura, busca concessoes-rodovias.json e
-// popula as opcoes.
+// Abre/fecha o painel e, na 1ª abertura, busca concessoes-rodovias.json e
+// popula as opções.
 function abrirOuFecharSeletorRodovias() {
   var container = document.getElementById('filtro-rodovias');
   var painel = container ? container.querySelector('.filtro-multi-painel') : null;
@@ -901,27 +919,51 @@ function abrirOuFecharSeletorRodovias() {
   garantirConcessoesCarregadas().then(function (porId) {
     var opcoes = Object.keys(porId).map(function (id) { return porId[id]; })
       .sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
-    painel.innerHTML = opcoes.length
+    var listaHtml = opcoes.length
       ? opcoes.map(function (c) {
           var marcado = ESTADO_RODOVIAS.ordem.indexOf(c.id) !== -1 ? ' checked' : '';
-          return '<label class="filtro-multi-item"><input type="checkbox" value="' + c.id + '"' + marcado + '>' + RenderAbaAlocacao.escapeHtml(c.nome) + '</label>';
+          return '<label class="filtro-multi-item"><input type="checkbox" value="' + RenderAbaAlocacao.escapeHtml(c.id) + '"' + marcado + '>' + RenderAbaAlocacao.escapeHtml(c.nome) + '</label>';
         }).join('')
       : '<div class="filtro-multi-vazio">Nenhuma rodovia encontrada</div>';
-    // Os checkboxes NAO recebem listener proprio aqui -- o 'change' delegado
+    // Caixa de busca (achado Important 2 da revisão final): mesma marcação e
+    // handler que montarFiltroMulti (tools/comum/render-shell.js) já usa nos
+    // outros filtro-multi da página -- 60 concessionárias num painel de
+    // max-height:320px deixavam ~50 escondidas atrás de scroll, sem jeito de
+    // digitar o nome. normalizarBusca vem de SCRIPT_CLIENTE_FILTROS
+    // (scriptFiltros(), concatenado ANTES deste script na mesma <script> tag
+    // -- ver o comentário de scriptFiltros logo abaixo de SCRIPT_CLIENTE_ALOCACAO),
+    // não precisa ser duplicada aqui.
+    painel.innerHTML = (opcoes.length ? '<input type="text" class="filtro-multi-busca" placeholder="Buscar..." autocomplete="off">' : '')
+      + listaHtml
+      + '<div class="filtro-multi-vazio filtro-multi-vazio-busca" hidden>Nenhum resultado</div>';
+    // Os checkboxes NÃO recebem listener próprio aqui -- o 'change' delegado
     // em inicializarSeletorRodovias (abaixo) cobre qualquer checkbox dentro de
-    // #filtro-rodovias, mesmo estes recem-inseridos por innerHTML.
+    // #filtro-rodovias, mesmo estes recém-inseridos por innerHTML.
+    var busca = painel.querySelector('.filtro-multi-busca');
+    if (busca) {
+      busca.addEventListener('input', function () {
+        var termo = normalizarBusca(busca.value);
+        var algumVisivel = false;
+        painel.querySelectorAll('.filtro-multi-item').forEach(function (item) {
+          var combina = normalizarBusca(item.textContent).indexOf(termo) !== -1;
+          item.style.display = combina ? '' : 'none';
+          if (combina) algumVisivel = true;
+        });
+        painel.querySelector('.filtro-multi-vazio-busca').hidden = algumVisivel || termo === '';
+      });
+    }
   });
 }
 
-// FIX (achado ao planejar): #filtro-rodovias so passa a existir no DOM depois
-// do 1o montarMapaAlocacao() -- o script de cliente roda este wireup no load
-// da pagina, ANTES de qualquer roster/senha ter chegado, entao um
+// FIX (achado ao planejar): #filtro-rodovias só passa a existir no DOM depois
+// do 1º montarMapaAlocacao() -- o script de cliente roda este wireup no load
+// da página, ANTES de qualquer roster/senha ter chegado, então um
 // addEventListener ligado DIRETO no trigger (document.querySelector(...)
-// naquele instante) nunca acharia o elemento e o botao 'Rodovias' ficaria
+// naquele instante) nunca acharia o elemento e o botão 'Rodovias' ficaria
 // morto pra sempre. Por isso, igual a inicializarInteracaoAlocacao (que tem o
-// MESMO problema com as celulas/pinos, que tambem so existem depois do 1o
-// desenho), a ligacao e por DELEGACAO no container ESTAVEL #secao-mapa-alocacao
-// (existe desde o load, mesmo vazio) -- funciona nao importa quando
+// MESMO problema com as células/pinos, que também só existem depois do 1º
+// desenho), a ligação é por DELEGAÇÃO no container ESTÁVEL #secao-mapa-alocacao
+// (existe desde o load, mesmo vazio) -- funciona não importa quando
 // #filtro-rodovias for inserido dentro dele.
 function inicializarSeletorRodovias() {
   var secaoMapa = document.getElementById('secao-mapa-alocacao');
@@ -1596,9 +1638,9 @@ inicializarInteracaoAlocacao('secao-kanban-alocacao');
 inicializarInteracaoAlocacao('secao-mapa-alocacao');
 
 // Task 6: wireup do seletor de rodovias (busca lazy, camadas MapLibre, legenda).
-// #secao-mapa-alocacao ja existe no HTML estatico desde o load da pagina, entao
-// a delegacao dentro de inicializarSeletorRodovias funciona mesmo chamada antes
-// de #filtro-rodovias existir no DOM (so aparece depois do 1o montarMapaAlocacao()).
+// #secao-mapa-alocacao já existe no HTML estático desde o load da página, então
+// a delegação dentro de inicializarSeletorRodovias funciona mesmo chamada antes
+// de #filtro-rodovias existir no DOM (só aparece depois do 1º montarMapaAlocacao()).
 inicializarSeletorRodovias();
 
 // FIX (revisão final, achado Critical 1): a nav Kanban/Mapa vive em
@@ -1767,7 +1809,7 @@ function renderAlocacaoPagina({
   #secao-mapa-alocacao #mapa-alocacao-rodovias { position: relative; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   #secao-mapa-alocacao #mapa-alocacao-rodovias .filtro-multi-painel { max-height: 320px; overflow-y: auto; }
   #secao-mapa-alocacao .mapa-alocacao-rodovias-legenda { display: flex; gap: 10px; flex-wrap: wrap; }
-  #secao-mapa-alocacao .legenda-rodovia-item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--acento-contraste, #00163b); }
+  #secao-mapa-alocacao .legenda-rodovia-item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--mapa-texto); }
   #secao-mapa-alocacao .legenda-rodovia-cor { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
   #secao-mapa-alocacao .mapa-alocacao-sem-localizacao {
     position: absolute; top: 12px; right: 12px; z-index: 5;
