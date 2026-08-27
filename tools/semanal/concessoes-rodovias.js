@@ -62,6 +62,7 @@ function simplificarCoordenadas(featureCollection, casas) {
   if (!featureCollection) return null;
   var c = casas === undefined ? 5 : casas;
   var copia = JSON.parse(JSON.stringify(featureCollection));
+  if (!copia.features) return copia;
   copia.features.forEach(function (feature) {
     var geom = feature.geometry;
     if (!geom) return;
@@ -83,7 +84,13 @@ function extrairConcessoesRodovias(html) {
   var featuresPorConcessionaria = {};
   roads.forEach(function (trecho) {
     if (!trecho.geojson) return;
-    var fc = JSON.parse(trecho.geojson);
+    var fc;
+    try {
+      fc = JSON.parse(trecho.geojson);
+    } catch (e) {
+      // Geojson malformado: trata como se estivesse ausente, pula o trecho
+      return;
+    }
     var id = trecho.concessionaria_id;
     if (!featuresPorConcessionaria[id]) featuresPorConcessionaria[id] = [];
     featuresPorConcessionaria[id] = featuresPorConcessionaria[id].concat(fc.features || []);

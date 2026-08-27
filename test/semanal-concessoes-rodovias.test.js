@@ -88,3 +88,30 @@ test('extrairConcessoesRodovias ordena por nome (localeCompare pt-BR)', () => {
 test('extrairConcessoesRodovias lança com mensagem clara se CONCESS não existir no HTML', () => {
   assert.throws(() => extrairConcessoesRodovias('<html><body>nada aqui</body></html>'), /CONCESS/);
 });
+
+test('extrairConcessoesRodovias trata geojson malformado sem lançar, pulando o trecho', () => {
+  const concess = JSON.stringify([
+    { id: '10', nome: 'Autoban', slug: 'autoban', cor: '#662d91' },
+    { id: '15', nome: 'Sorocabana', slug: 'sorocabana', cor: '#662d91' },
+  ]);
+  const geojsonValido = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', properties: [], geometry: { type: 'LineString', coordinates: [[-46.720280999999999949, -23.508509000000000099]] } }],
+  });
+  const geojsonMalformado = '{quebrado'; // JSON inválido
+  const roads = JSON.stringify([
+    { id: '8', nome: 'Trecho 1', slug: 'trecho-1', concessionaria_id: '10', geojson: geojsonMalformado },
+    { id: '9', nome: 'Trecho 2', slug: 'trecho-2', concessionaria_id: '15', geojson: geojsonValido },
+  ]).slice(1, -1);
+  const html = `<html><body><script>
+    const CONCESS = ${concess};
+    const ROADS = [${roads}];
+  </script></body></html>`;
+
+  const resultado = extrairConcessoesRodovias(html);
+  assert.strictEqual(resultado.length, 2);
+  const autoban = resultado.find((c) => c.id === '10');
+  assert.strictEqual(autoban.geojson, null, 'concessionária com só trecho malformado tem geojson null');
+  const sorocabana = resultado.find((c) => c.id === '15');
+  assert.strictEqual(sorocabana.geojson.features.length, 1, 'trecho válido de outra concessionária permanece');
+});
