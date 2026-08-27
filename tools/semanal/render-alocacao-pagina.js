@@ -1764,6 +1764,11 @@ function renderAlocacaoPagina({
     border: 1px solid var(--mapa-borda-painel);
   }
   #mapa-alocacao-canvas { width: 100%; height: 720px; }
+  #secao-mapa-alocacao #mapa-alocacao-rodovias { position: relative; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #secao-mapa-alocacao #mapa-alocacao-rodovias .filtro-multi-painel { max-height: 320px; overflow-y: auto; }
+  #secao-mapa-alocacao .mapa-alocacao-rodovias-legenda { display: flex; gap: 10px; flex-wrap: wrap; }
+  #secao-mapa-alocacao .legenda-rodovia-item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--acento-contraste, #00163b); }
+  #secao-mapa-alocacao .legenda-rodovia-cor { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
   #secao-mapa-alocacao .mapa-alocacao-sem-localizacao {
     position: absolute; top: 12px; right: 12px; z-index: 5;
     max-width: 280px; max-height: 220px; overflow-y: auto;

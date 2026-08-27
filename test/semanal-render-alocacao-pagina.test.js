@@ -129,3 +129,13 @@ test('a aba Mapa tem CSS escopado com a paleta Suporte Infra, sem vazar pro Kanb
     'a paleta #00163b/#f3b53f apareceu num seletor fora de #secao-mapa-alocacao'
   );
 });
+
+test('CSS da aba Mapa inclui o bloco do seletor de rodovias e da legenda', () => {
+  const registros = [registroSintetico('SUP-0005-24', 'Tomador-Sintetico-Epsilon')];
+  const html = renderAlocacaoPagina({
+    registros, demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  assert.match(html, /#mapa-alocacao-rodovias/);
+  assert.match(html, /\.legenda-rodovia-cor/);
+});
