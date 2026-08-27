@@ -154,12 +154,17 @@ test('Lab sai do quadro e aparece em foraDoQuadro com o motivo', () => {
 // --- filtro de ativas (aba PESSOAS) -----------------------------------------
 
 // Mesmo cabeçalho real medido em 2026-08-27 (test/semanal-pessoas-ativas.test.js).
-// Equipe 4 (José I. Amaral) está ATV=FALSE; 59 e 88 estão TRUE.
+// Equipe 4 (José I. Amaral) está ATV=FALSE; 59 e 88 estão TRUE. 658 está
+// TRUE mas de propósito NÃO tem linha correspondente em CSV_EQ -- é o caso
+// real medido em produção (2026-08-27): equipe nova, cadastrada na PESSOAS,
+// esquecida na EQ, sumindo sem rastro do quadro E de foraDoQuadro até essa
+// checagem existir.
 const CSV_PESSOAS = [
   'ID,ATV,COLABORADOR,LÍDER,SERVIÇO,CARGO,ADMISSÃO,CNH,BAIXADA,DESLIGADO,EXP 30,EXP 90,AÇÃO',
   '4,FALSE,José Ildomar Pereira do Amaral,AMARAL,SM,Sondador SM,02/03/2026,-,-,,-,-,Ok',
   '59,TRUE,Paulo S. Lima,Paulo S.,SP,Sondador SP,01/01/2020,-,-,,-,-,Ok',
   '88,TRUE,Edy Inacio Gomes,Edy I.,ST | PI | BL (ST),Sondador ST,01/01/2020,-,-,,-,-,Ok',
+  '658,TRUE,Aucélio Costa Formiga,PAULO,SM,Sondador SM,05/08/2026,-,-,,-,-,Ok',
 ].join('\n');
 
 test('com pessoasCsv, equipe ATV=FALSE na PESSOAS sai do quadro e vai para foraDoQuadro', () => {
@@ -178,6 +183,17 @@ test('com pessoasCsv, equipe ATV=TRUE continua no quadro normalmente', () => {
   });
   assert.ok(equipes.find((e) => e.id === '59'), 'ATV=TRUE continua no pool');
   assert.ok(equipes.find((e) => e.id === '88'), 'ATV=TRUE continua no pool');
+});
+
+test('ativa na PESSOAS mas sem linha na EQ vira aviso em foraDoQuadro, com o nome pra ser identificável', () => {
+  const { equipes, foraDoQuadro } = equipesDoQuadro(CSV_EQ, {
+    ano: 2026, mes: 8, semana: SEMANA, producaoOnline: PRODUCAO_ONLINE, pessoasCsv: CSV_PESSOAS,
+  });
+  assert.strictEqual(equipes.find((e) => e.id === '658'), undefined);
+  const fora = foraDoQuadro.find((e) => e.id === '658');
+  assert.ok(fora, 'equipe ativa sem linha na EQ tem de aparecer em foraDoQuadro, nunca sumir calada');
+  assert.match(fora.motivo, /EQ/);
+  assert.strictEqual(fora.lider, 'PAULO', 'usa o líder da PESSOAS pra dar pra identificar quem é');
 });
 
 test('sem pessoasCsv (opção omitida), ninguém é filtrado -- comportamento de antes preservado', () => {

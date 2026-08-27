@@ -2,7 +2,7 @@
 const { parseAbaEq, linhasDaAbaEq } = require('./compute-equipes-ativas.js');
 const { classificarDiaEquipe, contaComoAtiva } = require('./classificar-dia-equipe.js');
 const { agruparPorVeiculo } = require('./grupos-veiculo.js');
-const { parsePessoasAtivas } = require('./pessoas-ativas.js');
+const { parsePessoasAtivas, detalhesPessoasAtivas } = require('./pessoas-ativas.js');
 
 // Este módulo roda no Node (build/testes) e no navegador (bundle) -- por isso
 // 'var'/'function' e os requires acima na forma EXATA que transformaModulo
@@ -180,6 +180,14 @@ function equipesDoQuadro(csvEq, opcoes) {
   // -- ninguém é filtrado por PESSOAS até essa fonte existir no build/refresh.
   var idsAtivos = (o.pessoasCsv !== undefined && o.pessoasCsv !== null)
     ? parsePessoasAtivas(o.pessoasCsv) : null;
+  // detalhesAtivos: só para o aviso abaixo (id 658 sumiu sem rastro até
+  // 2026-08-27 -- ativo na PESSOAS, sem NENHUMA linha na EQ, então nem
+  // roster.forEach nem o motivo 'Inativa' o alcançavam; ninguém via o
+  // problema até contar os cartões um por um). idsAtivos continua sendo o
+  // Set usado no filtro de fato, por clareza -- este Map é só pra nomear o
+  // aviso.
+  var detalhesAtivos = (o.pessoasCsv !== undefined && o.pessoasCsv !== null)
+    ? detalhesPessoasAtivas(o.pessoasCsv) : null;
 
   // Os grupos saem do roster INTEIRO -- incluindo o que vai para foraDoQuadro.
   // Duas equipes alocáveis podem se ligar pela carona numa Lab, e o veículo é o
@@ -265,6 +273,26 @@ function equipesDoQuadro(csvEq, opcoes) {
       return id !== String(e.id) && alocaveis[id];
     });
   });
+
+  // Ativo na PESSOAS mas SEM NENHUMA linha na EQ (id não bate) -- diferente de
+  // 'Inativa na planilha PESSOAS', que é uma linha da EQ excluída pelo
+  // filtro. Aqui a linha da EQ nem existe: sem líder/serviço/dias, não dá pra
+  // montar cartão nenhum, então o aviso é o único jeito da equipe aparecer em
+  // algum lugar da tela em vez de sumir muda.
+  if (idsAtivos) {
+    var idsNaEq = {};
+    roster.forEach(function (bruta) { idsNaEq[String(bruta.id)] = true; });
+    idsAtivos.forEach(function (id) {
+      if (idsNaEq[id]) return;
+      var detalhe = detalhesAtivos ? detalhesAtivos.get(id) : null;
+      foraDoQuadro.push({
+        id: id,
+        lider: (detalhe && (detalhe.lider || detalhe.colaborador)) || '',
+        servicos: (detalhe && detalhe.servico) || '',
+        motivo: 'Ativa na planilha PESSOAS (ATV=TRUE), mas sem nenhuma linha correspondente na aba EQ -- confira o ID',
+      });
+    });
+  }
 
   return { equipes: equipes, foraDoQuadro: foraDoQuadro };
 }

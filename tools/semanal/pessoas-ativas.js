@@ -43,4 +43,38 @@ function parsePessoasAtivas(csvText) {
   return ativos;
 }
 
-module.exports = { parsePessoasAtivas };
+// Mesmo filtro de parsePessoasAtivas, mas devolve COLABORADOR/LÍDER por id em
+// vez de só o Set -- para o aviso de "ativa na PESSOAS mas sem linha na EQ"
+// (equipesDoQuadro): sem o nome, o aviso mostraria só um id cru, difícil de
+// achar na planilha. Duplica o parse em vez de reaproveitar
+// parsePessoasAtivas de propósito -- é a MESMA função square (csv -> map por
+// id), só que devolvendo mais colunas; extrair um Set a partir do Map aqui
+// obrigaria os dois requires desnecessariamente nos poucos lugares que só
+// querem o Set.
+function detalhesPessoasAtivas(csvText) {
+  var linhas = parseCsvGrid(csvText || '');
+  var detalhes = new Map();
+  if (!linhas.length) return detalhes;
+  var header = linhas[0];
+  var colId = header.indexOf('ID');
+  var colAtv = header.indexOf('ATV');
+  var colColaborador = header.indexOf('COLABORADOR');
+  var colLider = header.indexOf('LÍDER');
+  var colServico = header.indexOf('SERVIÇO');
+  if (colId === -1 || colAtv === -1) return detalhes;
+  for (var i = 1; i < linhas.length; i++) {
+    var linha = linhas[i];
+    var id = String(linha[colId] || '').trim();
+    if (!id) continue;
+    var atv = String(linha[colAtv] || '').trim().toUpperCase() === 'TRUE';
+    if (!atv) continue;
+    detalhes.set(id, {
+      colaborador: colColaborador === -1 ? '' : String(linha[colColaborador] || '').trim(),
+      lider: colLider === -1 ? '' : String(linha[colLider] || '').trim(),
+      servico: colServico === -1 ? '' : String(linha[colServico] || '').trim(),
+    });
+  }
+  return detalhes;
+}
+
+module.exports = { parsePessoasAtivas, detalhesPessoasAtivas };
