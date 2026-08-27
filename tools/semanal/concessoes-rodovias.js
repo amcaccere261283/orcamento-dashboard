@@ -77,6 +77,57 @@ function simplificarCoordenadas(featureCollection, casas) {
   return copia;
 }
 
+// Concessionárias coletadas manualmente em 2026-08-27 do filtro "Concessionária"
+// do relatório ANTT "Mapa das Concessões" (Power BI):
+// https://app.powerbi.com/view?r=eyJrIjoiMzc2OGVkZjYtY2JhNC00MzhhLTg4OTItY2JkM2E2NDljN2ZjIiwidCI6Ijg3YmJlOWRlLWE4OTItNGNkZS1hNDY2LTg4Zjk4MmZiYzQ5MCJ9
+// Sem coordenada nenhuma -- o Power BI serve os dados num formato interno
+// comprimido (DSR, com dicionário de valores + RLE) que não vale decifrar só
+// pra uma lista de nomes; a lista foi lida rolando o filtro manualmente (35
+// itens, duas varreduras consecutivas confirmaram estabilidade). Decisão do
+// dono do projeto (2026-08-27): lista fixa, sem tentar casar contra CONCESS
+// (várias parecem o mesmo grupo com nome atualizado -- ex. "Fluminense" na
+// ABCR vira "Autopista Fluminense" na ANTT, "RioSP" vira "Motiva RioSP",
+// rebrand real da Motiva/CCR em 2024 -- mas confirmar qual é qual sem fonte
+// oficial de correspondência arriscaria fundir duas empresas diferentes por
+// engano). Entram como concessionária a mais no seletor, `geojson: null`
+// (mesmo tratamento que qualquer concessionária sem trecho em ROADS já
+// recebe) -- nunca desenham linha, só ficam disponíveis pra escolher.
+// `id` prefixado com "antt-" pra nunca colidir com os ids numéricos de
+// CONCESS (que vêm do site da ABCR, faixa 1-99).
+var CONCESSIONARIAS_EXTRA_ANTT = [
+  'Autopista Fluminense', 'Autopista Litoral Sul', 'Autopista Planalto Sul',
+  'Autopista Regis Bittencourt', 'EPR Iguaçu', 'EPR Litoral Pioneiro',
+  'EPR Paraná', 'EPR Via Mineira', 'Ecovias Araguaia', 'Ecovias Capixaba',
+  'Ecovias Cerrado', 'Ecovias Minas Goiás', 'Ecovias Ponte', 'Ecovias Rio Minas',
+  'Ecovias das Gerais', 'Elovias', 'Motiva Minas SP', 'Motiva Pantanal',
+  'Motiva Paraná', 'Motiva RioSP', 'Motiva ViaCosteira', 'Motiva ViaSul',
+  'Nova 364', 'Nova 381', 'Nova Rota do Oeste', 'Rota Verde Goiás',
+  'Triunfo Concebra', 'Triunfo Transbrasiliana', 'Via Araucária',
+  'Via Brasil BR-163', 'Via Campo', 'Via Cristais', 'Way-153', 'Way-262',
+  'Way-364',
+].map(function (nome) {
+  return {
+    id: 'antt-' + nome.toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos
+      .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+    nome: nome, slug: null, cor: null, geojson: null,
+  };
+});
+
+// Junta o resultado de extrairConcessoesRodovias com CONCESSIONARIAS_EXTRA_ANTT
+// (ou outra lista de extras equivalente) e reordena por nome -- função PURA,
+// separada de extrairConcessoesRodovias pra continuar testável com uma
+// fixture pequena, sem precisar simular o HTML inteiro da ABCR de novo.
+// Nunca deduplica: cada entrada de `extras` sempre entra, mesmo que já exista
+// uma concessionária com nome parecido em `lista` -- ver o comentário de
+// CONCESSIONARIAS_EXTRA_ANTT sobre por que casar os dois automaticamente
+// seria arriscado.
+function mesclarConcessionariasExtras(lista, extras) {
+  var combinado = (lista || []).concat(extras || []);
+  combinado.sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+  return combinado;
+}
+
 function extrairConcessoesRodovias(html) {
   var concess = extrairArrayLiteral(html, 'CONCESS');
   var roads = extrairArrayLiteral(html, 'ROADS');
@@ -108,4 +159,7 @@ function extrairConcessoesRodovias(html) {
   return resultado;
 }
 
-module.exports = { simplificarCoordenadas, extrairConcessoesRodovias };
+module.exports = {
+  simplificarCoordenadas, extrairConcessoesRodovias,
+  mesclarConcessionariasExtras, CONCESSIONARIAS_EXTRA_ANTT,
+};

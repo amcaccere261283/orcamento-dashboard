@@ -1,7 +1,10 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { simplificarCoordenadas, extrairConcessoesRodovias } = require('../tools/semanal/concessoes-rodovias.js');
+const {
+  simplificarCoordenadas, extrairConcessoesRodovias,
+  mesclarConcessionariasExtras, CONCESSIONARIAS_EXTRA_ANTT,
+} = require('../tools/semanal/concessoes-rodovias.js');
 
 test('simplificarCoordenadas arredonda coordenadas de um LineString a 5 casas', () => {
   const fc = {
@@ -114,4 +117,40 @@ test('extrairConcessoesRodovias trata geojson malformado sem lançar, pulando o 
   assert.strictEqual(autoban.geojson, null, 'concessionária com só trecho malformado tem geojson null');
   const sorocabana = resultado.find((c) => c.id === '15');
   assert.strictEqual(sorocabana.geojson.features.length, 1, 'trecho válido de outra concessionária permanece');
+});
+
+// --- mesclarConcessionariasExtras (lista manual coletada da ANTT, 2026-08-27) ---
+
+test('mesclarConcessionariasExtras junta as duas listas e reordena por nome', () => {
+  const lista = [{ id: '10', nome: 'Sorocabana', slug: 's', cor: '#000', geojson: null }];
+  const extras = [{ id: 'antt-autopista-fluminense', nome: 'Autopista Fluminense', slug: null, cor: null, geojson: null }];
+  const resultado = mesclarConcessionariasExtras(lista, extras);
+  assert.deepStrictEqual(resultado.map((c) => c.nome), ['Autopista Fluminense', 'Sorocabana']);
+});
+
+test('mesclarConcessionariasExtras nunca deduplica -- entradas parecidas das duas fontes convivem', () => {
+  const lista = [{ id: '22', nome: 'Fluminense', slug: 'fluminense', cor: '#000', geojson: null }];
+  const extras = [{ id: 'antt-autopista-fluminense', nome: 'Autopista Fluminense', slug: null, cor: null, geojson: null }];
+  const resultado = mesclarConcessionariasExtras(lista, extras);
+  assert.strictEqual(resultado.length, 2, 'as duas entram, mesmo sendo (provavelmente) o mesmo grupo com nome diferente');
+});
+
+test('mesclarConcessionariasExtras com extras vazio/ausente devolve só a lista original, reordenada', () => {
+  const lista = [
+    { id: '2', nome: 'Zeta', slug: 'z', cor: '#000', geojson: null },
+    { id: '1', nome: 'Alfa', slug: 'a', cor: '#000', geojson: null },
+  ];
+  assert.deepStrictEqual(mesclarConcessionariasExtras(lista).map((c) => c.nome), ['Alfa', 'Zeta']);
+  assert.deepStrictEqual(mesclarConcessionariasExtras(lista, []).map((c) => c.nome), ['Alfa', 'Zeta']);
+});
+
+test('CONCESSIONARIAS_EXTRA_ANTT tem 35 entradas, todas com geojson null e id prefixado antt-', () => {
+  assert.strictEqual(CONCESSIONARIAS_EXTRA_ANTT.length, 35);
+  CONCESSIONARIAS_EXTRA_ANTT.forEach((c) => {
+    assert.strictEqual(c.geojson, null);
+    assert.match(c.id, /^antt-[a-z0-9-]+$/);
+    assert.ok(c.nome && c.nome.length > 0);
+  });
+  const ids = CONCESSIONARIAS_EXTRA_ANTT.map((c) => c.id);
+  assert.strictEqual(new Set(ids).size, ids.length, 'nenhum id repetido dentro da lista extra');
 });
