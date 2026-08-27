@@ -100,6 +100,15 @@ const PARES = [
     publicado: path.join(RAIZ, 'docs', 'heartbeat-atualizacao-volume.csv'),
     comando: 'cp dist/heartbeat-atualizacao-volume.csv docs/heartbeat-atualizacao-volume.csv',
   },
+  // Entrou em 2026-08-27 com a camada de referência de rodovias das
+  // concessionárias na aba Mapa (Alocação Equipes) -- mesma rede de proteção
+  // dist/ <-> docs/ dos outros arquivos publicados junto com as páginas.
+  {
+    nome: 'JSON de concessões e rodovias',
+    origem: path.join(RAIZ, 'dist', 'concessoes-rodovias.json'),
+    publicado: path.join(RAIZ, 'docs', 'concessoes-rodovias.json'),
+    comando: 'cp dist/concessoes-rodovias.json docs/concessoes-rodovias.json',
+  },
 ];
 
 function relativo(p) {
