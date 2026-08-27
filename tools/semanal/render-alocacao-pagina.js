@@ -942,10 +942,20 @@ function abrirOuFecharSeletorRodovias() {
   garantirConcessoesCarregadas().then(function (porId) {
     var opcoes = Object.keys(porId).map(function (id) { return porId[id]; })
       .sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    // Achado ao vivo (2026-08-27, "Via Araucária não plota"): 22 das 81
+    // concessionárias não têm geojson (21 da lista manual ANTT, que nunca
+    // teve traçado, + 1 da própria ABCR sem trecho em ROADS) -- marcar e
+    // não acontecer nada era silencioso demais. Sem geojson, o checkbox
+    // fica desabilitado e o rótulo ganha "(sem traçado)", pra não parecer
+    // que o clique não funcionou.
     var listaHtml = opcoes.length
       ? opcoes.map(function (c) {
           var marcado = ESTADO_RODOVIAS.ordem.indexOf(c.id) !== -1 ? ' checked' : '';
-          return '<label class="filtro-multi-item"><input type="checkbox" value="' + RenderAbaAlocacao.escapeHtml(c.id) + '"' + marcado + '>' + RenderAbaAlocacao.escapeHtml(c.nome) + '</label>';
+          var semTracado = !c.geojson;
+          var disabled = semTracado ? ' disabled' : '';
+          var classe = semTracado ? ' filtro-multi-item-sem-tracado' : '';
+          var sufixo = semTracado ? ' <span class="filtro-multi-item-nota">(sem traçado)</span>' : '';
+          return '<label class="filtro-multi-item' + classe + '"><input type="checkbox" value="' + RenderAbaAlocacao.escapeHtml(c.id) + '"' + marcado + disabled + '>' + RenderAbaAlocacao.escapeHtml(c.nome) + sufixo + '</label>';
         }).join('')
       : '<div class="filtro-multi-vazio">Nenhuma rodovia encontrada</div>';
     // Caixa de busca (achado Important 2 da revisão final): mesma marcação e
@@ -1834,6 +1844,8 @@ function renderAlocacaoPagina({
   #secao-mapa-alocacao .mapa-alocacao-rodovias-legenda { display: flex; gap: 10px; flex-wrap: wrap; }
   #secao-mapa-alocacao .legenda-rodovia-item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--mapa-texto); }
   #secao-mapa-alocacao .legenda-rodovia-cor { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  #secao-mapa-alocacao .filtro-multi-item-sem-tracado { opacity: 0.5; cursor: not-allowed; }
+  #secao-mapa-alocacao .filtro-multi-item-nota { font-size: 11px; font-style: italic; }
   #secao-mapa-alocacao .mapa-alocacao-sem-localizacao {
     position: absolute; top: 12px; right: 12px; z-index: 5;
     max-width: 280px; max-height: 220px; overflow-y: auto;
