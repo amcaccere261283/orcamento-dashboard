@@ -589,6 +589,7 @@ function prepararOpcoesAlocacao() {
     semana: semana,
     producaoOnline: demandas.producaoOnline || [],
     pessoasCsv: demandas.pessoasCsv,
+    hoje: hojeEpochDoNavegador(),
   });
   ESTADO_ALOCACAO.equipes = roster.equipes;
   ESTADO_ALOCACAO.foraDoQuadro = roster.foraDoQuadro;
