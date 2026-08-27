@@ -128,11 +128,19 @@ test('mesclarConcessionariasExtras junta as duas listas e reordena por nome', ()
   assert.deepStrictEqual(resultado.map((c) => c.nome), ['Autopista Fluminense', 'Sorocabana']);
 });
 
-test('mesclarConcessionariasExtras nunca deduplica -- entradas parecidas das duas fontes convivem', () => {
+test('mesclarConcessionariasExtras não deduplica nomes PARECIDOS (só idênticos) -- as duas convivem', () => {
   const lista = [{ id: '22', nome: 'Fluminense', slug: 'fluminense', cor: '#000', geojson: null }];
   const extras = [{ id: 'antt-autopista-fluminense', nome: 'Autopista Fluminense', slug: null, cor: null, geojson: null }];
   const resultado = mesclarConcessionariasExtras(lista, extras);
   assert.strictEqual(resultado.length, 2, 'as duas entram, mesmo sendo (provavelmente) o mesmo grupo com nome diferente');
+});
+
+test('mesclarConcessionariasExtras deduplica nome IDÊNTICO -- a extra é descartada, a de lista (que pode ter geojson) vence', () => {
+  const lista = [{ id: '10', nome: 'Ecovias Araguaia', slug: 'ecovias-araguaia', cor: '#007a3d', geojson: { type: 'FeatureCollection', features: [] } }];
+  const extras = [{ id: 'antt-ecovias-araguaia', nome: 'Ecovias Araguaia', slug: null, cor: null, geojson: null }];
+  const resultado = mesclarConcessionariasExtras(lista, extras);
+  assert.strictEqual(resultado.length, 1, 'nome idêntico -- a extra some, não duplica');
+  assert.strictEqual(resultado[0].id, '10', 'sobrevive a entrada original (com geojson), não a extra sem geojson');
 });
 
 test('mesclarConcessionariasExtras com extras vazio/ausente devolve só a lista original, reordenada', () => {

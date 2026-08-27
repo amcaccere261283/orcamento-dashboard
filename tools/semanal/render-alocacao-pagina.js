@@ -80,16 +80,22 @@ const BUNDLE_ARQUIVOS_ALOCACAO = [
 // (atualizarDadosAoVivoSemanal) e a montagem da grade de Alocação.
 const SCRIPT_CLIENTE_ALOCACAO = `
 // Setup MapLibre -- baseado no que está em produção no projeto Mapa
-// Sondagens (http://192.168.1.53:8080/, js/app.js), com uma divergência
-// deliberada pedida pelo dono do projeto em 2026-08-27: as duas fontes de
-// referência Esri (Reference/World_Transportation e
-// Reference/World_Boundaries_and_Places -- rótulos de rodovia com
-// sombreado/relevo e limites administrativos, incl. municipais) saíram.
-// Ficou só World_Imagery (satélite puro) -- menos poluição visual, sem
-// limite de município, e sem o relevo "elevado" que World_Transportation
-// desenhava nas rodovias (o efeito que lia como "3D"). A atribuição e o
-// zoom só com Ctrl pressionado (scroll normal continua rolando a PÁGINA,
-// não o mapa) continuam iguais ao Mapa Sondagens.
+// Sondagens (http://192.168.1.53:8080/, js/app.js), com duas divergências
+// deliberadas pedidas pelo dono do projeto em 2026-08-27:
+// 1) A fonte Esri Reference/World_Transportation (rótulos de rodovia com
+//    sombreado/relevo -- o efeito que lia como "3D") saiu de vez.
+// 2) Reference/World_Boundaries_and_Places (limites administrativos +
+//    nomes de lugar) NÃO saiu, mas teve o detalhe CONGELADO: a fonte tem
+//    maxzoom: 7, então o MapLibre nunca busca um tile mais detalhado que
+//    esse (nível que já mostra limite de estado + nome do estado +
+//    principais municípios, sem descer pra limite/nome de município
+//    pequeno -- testado ao vivo). Zoom além de 7 reusa (overzoom) o
+//    mesmo tile z7, que ficaria borrado se mostrado sólido -- por isso
+//    'raster-opacity' desvanece a camada até sumir em zoom 9: no
+//    overview (zoom padrão 7) o contexto administrativo aparece nítido,
+//    zoomado numa área específica ele já desapareceu antes de ficar feio.
+// A atribuição e o zoom só com Ctrl pressionado (scroll normal continua
+// rolando a PÁGINA, não o mapa) continuam iguais ao Mapa Sondagens.
 //
 // Inicializado LAZY (só no primeiro clique na aba Mapa, não no load da
 // página): o MapLibre precisa que o container já tenha tamanho real
@@ -99,6 +105,7 @@ const SCRIPT_CLIENTE_ALOCACAO = `
 var MAPA_ALOCACAO = { instancia: null };
 
 var URL_ESRI_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+var URL_ESRI_LIMITES = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
 
 function inicializarMapaAlocacao() {
   if (MAPA_ALOCACAO.instancia) {
@@ -124,9 +131,20 @@ function inicializarMapaAlocacao() {
       version: 8,
       sources: {
         'esri-imagery': { type: 'raster', tiles: [URL_ESRI_IMAGERY], tileSize: 256, maxzoom: 19, attribution: 'Tiles &copy; Esri' },
+        // maxzoom: 7 -- ver o comentário grande no topo do arquivo (congela
+        // o detalhe em estado+principais municípios, nunca desce a município
+        // pequeno).
+        'esri-limites': { type: 'raster', tiles: [URL_ESRI_LIMITES], tileSize: 256, maxzoom: 7 },
       },
       layers: [
         { id: 'esri-imagery', type: 'raster', source: 'esri-imagery' },
+        {
+          id: 'esri-limites', type: 'raster', source: 'esri-limites',
+          // Desvanece entre zoom 7 (nítido) e 9 (some) -- evita o overzoom
+          // borrado que o maxzoom: 7 da fonte produziria se ficasse sólido
+          // além desse zoom.
+          paint: { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 7, 1, 9, 0] },
+        },
       ],
     },
     // Centro/zoom iniciais: mesma região do Mapa Sondagens (Paraná) -- só o

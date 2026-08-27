@@ -94,6 +94,10 @@ function simplificarCoordenadas(featureCollection, casas) {
 // recebe) -- nunca desenham linha, só ficam disponíveis pra escolher.
 // `id` prefixado com "antt-" pra nunca colidir com os ids numéricos de
 // CONCESS (que vêm do site da ABCR, faixa 1-99).
+// Esta lista NÃO é filtrada aqui contra CONCESS -- quem descarta uma entrada
+// EXATAMENTE igual a uma já existente é mesclarConcessionariasExtras (achado
+// de 2026-08-27: 14 destes 35 nomes já existiam letra por letra na ABCR e
+// entravam duplicados no seletor antes dessa função deduplicar).
 var CONCESSIONARIAS_EXTRA_ANTT = [
   'Autopista Fluminense', 'Autopista Litoral Sul', 'Autopista Planalto Sul',
   'Autopista Regis Bittencourt', 'EPR Iguaçu', 'EPR Litoral Pioneiro',
@@ -118,12 +122,26 @@ var CONCESSIONARIAS_EXTRA_ANTT = [
 // (ou outra lista de extras equivalente) e reordena por nome -- função PURA,
 // separada de extrairConcessoesRodovias pra continuar testável com uma
 // fixture pequena, sem precisar simular o HTML inteiro da ABCR de novo.
-// Nunca deduplica: cada entrada de `extras` sempre entra, mesmo que já exista
-// uma concessionária com nome parecido em `lista` -- ver o comentário de
-// CONCESSIONARIAS_EXTRA_ANTT sobre por que casar os dois automaticamente
-// seria arriscado.
+//
+// Deduplica só por IGUALDADE EXATA de nome (mesmo padrão "nunca por
+// aproximação" já usado em coordenadas-sup.js/parse-medicoes.js) -- uma
+// extra com o MESMO texto de uma concessionária que `lista` já tem é
+// descartada (lista vence, porque pode ter geojson de verdade e a extra
+// nunca tem). Corrigido em 2026-08-27: 14 das 35 entradas de
+// CONCESSIONARIAS_EXTRA_ANTT eram cópias EXATAS de nomes já existentes na
+// ABCR (ex. "Ecovias Araguaia", "Nova 364") -- entraram duplicadas no
+// seletor porque a versão anterior desta função nunca deduplicava nada.
+// Nomes PARECIDOS mas não idênticos (ex. "Fluminense" na ABCR vs "Autopista
+// Fluminense" na ANTT) continuam entrando os dois, sem tentativa de casar
+// -- ver o comentário de CONCESSIONARIAS_EXTRA_ANTT sobre por que isso
+// seria arriscado sem fonte oficial de correspondência.
 function mesclarConcessionariasExtras(lista, extras) {
-  var combinado = (lista || []).concat(extras || []);
+  var nomesExistentes = {};
+  (lista || []).forEach(function (c) { nomesExistentes[c.nome] = true; });
+  var extrasSemDuplicataExata = (extras || []).filter(function (c) {
+    return !nomesExistentes[c.nome];
+  });
+  var combinado = (lista || []).concat(extrasSemDuplicataExata);
   combinado.sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
   return combinado;
 }

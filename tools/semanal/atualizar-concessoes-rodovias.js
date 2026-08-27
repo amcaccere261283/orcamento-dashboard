@@ -22,18 +22,22 @@ async function buscarEGravar() {
   }
   const html = await resposta.text();
   const daAbcr = extrairConcessoesRodovias(html);
-  // Soma a lista fixa coletada manualmente da ANTT (Power BI) -- ver o
-  // comentário de CONCESSIONARIAS_EXTRA_ANTT em concessoes-rodovias.js pro
-  // porquê de não tentar casar/deduplicar contra a lista da ABCR. Rodar este
-  // script de novo no futuro (pra atualizar a lista da ABCR) NUNCA derruba
-  // essas 35 entradas -- elas são código, não parte do que foi baixado.
+  // Soma a lista fixa coletada manualmente da ANTT (Power BI) -- mesclarConcessionariasExtras
+  // descarta as extras cujo nome já existe EXATO na ABCR (a versão da ABCR
+  // vence, porque pode ter geojson de verdade); nomes só PARECIDOS continuam
+  // entrando os dois -- ver o comentário de CONCESSIONARIAS_EXTRA_ANTT em
+  // concessoes-rodovias.js pro porquê. Rodar este script de novo no futuro
+  // (pra atualizar a lista da ABCR) NUNCA derruba essas 35 entradas -- elas
+  // são código, não parte do que foi baixado.
   const dados = mesclarConcessionariasExtras(daAbcr, CONCESSIONARIAS_EXTRA_ANTT);
   fs.mkdirSync(path.dirname(DEST), { recursive: true });
   fs.writeFileSync(DEST, JSON.stringify(dados));
   const comTrecho = dados.filter((c) => c.geojson).length;
+  const anttEntrou = dados.length - daAbcr.length;
   console.log(
     'Gravado ' + DEST + ' -- ' + dados.length + ' concessionárias (' + daAbcr.length + ' da ABCR + '
-    + CONCESSIONARIAS_EXTRA_ANTT.length + ' da lista manual ANTT), ' + comTrecho + ' com trecho de rodovia.'
+    + anttEntrou + ' da lista manual ANTT, ' + (CONCESSIONARIAS_EXTRA_ANTT.length - anttEntrou)
+    + ' descartada(s) por já existir com o mesmo nome na ABCR), ' + comTrecho + ' com trecho de rodovia.'
   );
   console.log('Para publicar: cp dist/concessoes-rodovias.json docs/concessoes-rodovias.json');
 }
