@@ -865,3 +865,44 @@ test('CORES_RODOVIA não repete nenhuma cor de CORES_LEITURA_PINO nem de tipolog
     assert.ok(!reservadas.includes(cor.toLowerCase()), cor + ' colide com uma cor reservada de leitura/tipologia');
   });
 });
+
+// --- Camada de rodovias: camadasRodoviasDesejadas (função pura) ---
+function concessaoSintetica(id, nome, comTrecho) {
+  return {
+    id, nome, slug: nome.toLowerCase(), cor: '#000000',
+    geojson: comTrecho ? { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[-49, -25]] } }] } : null,
+  };
+}
+
+test('camadasRodoviasDesejadas devolve só as selecionadas COM geojson, com a cor certa', () => {
+  const cliente = montarClienteAlocacao();
+  const porId = {
+    '10': concessaoSintetica('10', 'Autoban', true),
+    '99': concessaoSintetica('99', 'Sem Trecho', false),
+  };
+  const resultado = cliente.camadasRodoviasDesejadas(['10', '99'], porId);
+  const normalizado = normalizar(resultado);
+  assert.strictEqual(normalizado.length, 1, 'a concessionária sem geojson não vira camada');
+  assert.strictEqual(normalizado[0].id, '10');
+  assert.strictEqual(normalizado[0].cor, cliente.CORES_RODOVIA[0]);
+});
+
+test('camadasRodoviasDesejadas preserva a ordem de seleção nas cores mesmo com uma sem geojson no meio', () => {
+  const cliente = montarClienteAlocacao();
+  const porId = {
+    '10': concessaoSintetica('10', 'Autoban', true),
+    '99': concessaoSintetica('99', 'Sem Trecho', false),
+    '15': concessaoSintetica('15', 'Sorocabana', true),
+  };
+  const resultado = cliente.camadasRodoviasDesejadas(['10', '99', '15'], porId);
+  const normalizado = normalizar(resultado);
+  // '99' consome a posição 1 da ordem mesmo sem virar camada (a cor é atribuída
+  // pela ordem de SELEÇÃO, não pela ordem das camadas resultantes) -- '15' fica
+  // com a 3ª cor da paleta, não a 2ª.
+  assert.strictEqual(normalizado.find((c) => c.id === '15').cor, cliente.CORES_RODOVIA[2]);
+});
+
+test('camadasRodoviasDesejadas com lista vazia devolve array vazio', () => {
+  const cliente = montarClienteAlocacao();
+  assert.deepStrictEqual(normalizar(cliente.camadasRodoviasDesejadas([], {})), []);
+});
