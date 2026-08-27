@@ -2,6 +2,7 @@
 const { parseAbaEq, linhasDaAbaEq } = require('./compute-equipes-ativas.js');
 const { classificarDiaEquipe, contaComoAtiva } = require('./classificar-dia-equipe.js');
 const { agruparPorVeiculo } = require('./grupos-veiculo.js');
+const { parsePessoasAtivas } = require('./pessoas-ativas.js');
 
 // Este módulo roda no Node (build/testes) e no navegador (bundle) -- por isso
 // 'var'/'function' e os requires acima na forma EXATA que transformaModulo
@@ -161,6 +162,13 @@ function equipesDoQuadro(csvEq, opcoes) {
   var equipes = [];
   var foraDoQuadro = [];
   var diasDaSemana = o.semana ? (o.semana.fim - o.semana.inicio + 1) : 0;
+  // Filtro de ATIVAS na aba PESSOAS (2026-08-27, pedido do dono do projeto) --
+  // PESSOAS decide só QUEM aparece no quadro; líder/serviços/veículo/popup/
+  // disponibilidade da semana continuam vindo da EQ, como sempre. o.pessoasCsv
+  // OMITIDO (undefined/null) preserva o comportamento de antes desta mudança
+  // -- ninguém é filtrado por PESSOAS até essa fonte existir no build/refresh.
+  var idsAtivos = (o.pessoasCsv !== undefined && o.pessoasCsv !== null)
+    ? parsePessoasAtivas(o.pessoasCsv) : null;
 
   // Os grupos saem do roster INTEIRO -- incluindo o que vai para foraDoQuadro.
   // Duas equipes alocáveis podem se ligar pela carona numa Lab, e o veículo é o
@@ -171,9 +179,17 @@ function equipesDoQuadro(csvEq, opcoes) {
   }));
 
   roster.forEach(function (bruta, indice) {
-    var resolvido = colunasDaEquipe(bruta.servicos);
     var linha = grade[indice] || [];
     var lider = String(linha[COL_LIDER] || '').trim() || bruta.nome;
+
+    if (idsAtivos && !idsAtivos.has(String(bruta.id))) {
+      foraDoQuadro.push({
+        id: bruta.id, lider: lider, servicos: bruta.servicos, motivo: 'Inativa na planilha PESSOAS (ATV=FALSE)',
+      });
+      return;
+    }
+
+    var resolvido = colunasDaEquipe(bruta.servicos);
 
     if (!resolvido.colunas.length) {
       foraDoQuadro.push({

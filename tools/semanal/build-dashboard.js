@@ -162,6 +162,27 @@ function montarEquipesRealizado({ rosterCsv, producaoCsv, registros }) {
 // o Apps Script (tools/semanal/apps-script-espelho-eq.gs), a cada 30 min.
 const URL_ESPELHO_EQ = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ7SaAZI8VwQaZD0nPxtOyw56b1XmKfqDTC6qSkj-1PAQr4A8ihTY4vZCOhF4PuMNIYm_-hN_CNdNrX/pub?gid=199381651&single=true&output=csv';
 
+// Aba PESSOAS da MESMA planilha de equipes (fileId 1Mgj87eSKMO4Gh2aHQWChNl5YC
+// H2vatMDC2fCNuxB8TU -- igual ao tools/matriz/config.js do repositório-mãe,
+// que já parseia esta aba pra outro dashboard). Decide, desde 2026-08-27,
+// QUEM aparece no quadro da Alocação Equipes -- coluna ATV=TRUE (checkbox
+// manual, coluna B). Diferente da espelho de EQ acima, PESSOAS é uma aba
+// ÚNICA (não muda de gid todo mês) e já está compartilhada com "qualquer um
+// com o link pode ver" -- dá pra ler o /export direto, sem Apps Script
+// espelhando nada.
+const URL_PESSOAS = 'https://docs.google.com/spreadsheets/d/1Mgj87eSKMO4Gh2aHQWChNl5YCH2vatMDC2fCNuxB8TU/export?format=csv&gid=1744884054';
+
+async function buscarPessoasAtivas() {
+  try {
+    const resposta = await fetch(URL_PESSOAS, { redirect: 'follow' });
+    if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+    return await resposta.text();
+  } catch (err) {
+    console.warn(`Equipes ativas (PESSOAS): não consegui ler a aba (${err.message}). O quadro da Alocação Equipes segue sem o filtro de ativas -- ninguém sai por causa disso.`);
+    return null;
+  }
+}
+
 // Busca a espelho. NUNCA derruba o build: esta é a única fonte do projeto que
 // vem por rede, e o dashboard inteiro (Tabela, Gráficos, Demandas, e o próprio
 // Balanço em volume/financeiro) continua correto sem ela. Falhou, o Δ equipes
@@ -266,6 +287,7 @@ function montarEquipesAtivas(furos, csvEspelho) {
 
 async function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
   const equipesAtivasCsv = await buscarEspelhoEq();
+  const pessoasAtivasCsv = await buscarPessoasAtivas();
   if (!senha) {
     throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
   }
@@ -446,6 +468,13 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   } = montarEquipesAtivas(furos, equipesAtivasCsv);
   Object.assign(demandas, resultadoEquipesAtivas);
   demandas.equipesRosterPeriodo = equipesRosterPeriodo;
+  // pessoasCsv viaja para o cliente pelo MESMO motivo de equipesCsv: a aba
+  // Alocação Equipes recomputa equipesDoQuadro a cada troca de semana, e é lá
+  // (não aqui) que o filtro de ATV=TRUE é aplicado -- ver equipes-alocaveis.js.
+  // null quando a busca falha, nunca '' (mesma convenção de equipesCsv):
+  // string vazia parsearia para "ninguém ativo", que apagaria o quadro
+  // inteiro em vez de simplesmente não filtrar nada.
+  demandas.pessoasCsv = pessoasAtivasCsv;
 
   // Δ equipes REALIZADO (2026-08-10, recuperado e reintegrado em 2026-08-11
   // depois de um git reset --hard ter descartado esta branch -- ver
