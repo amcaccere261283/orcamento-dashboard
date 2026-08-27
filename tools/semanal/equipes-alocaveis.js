@@ -155,7 +155,11 @@ function ultimoRealizadoAte(historico, diaAlvo) {
 }
 
 // csvEq: o texto CSV da Sheet espelho da aba EQ.
-// opcoes: { ano, mes, semana: {inicio, fim}, producaoOnline, temDemanda }
+// opcoes: { ano, mes, semana: {inicio, fim}, producaoOnline, temDemanda, hoje }
+//   hoje: diaEpoch do dia atual, OPCIONAL -- limita diaAlvoRealizado a não
+//   ultrapassar hoje numa semana ainda em curso (ver comentário acima de
+//   diaAlvoRealizado). Omitido preserva o comportamento antigo (usa sempre
+//   o fim da semana).
 //   producaoOnline: [{idEquipe, sup, tipo, diaEpoch}, ...] -- produção crua do
 //   Link 7 (dist/equipes-online.csv). Fonte de supRealizado/colunaRealizada
 //   desde 2026-08-26 (antes vinha do texto da Sheet EQ + osParaSup).
@@ -218,7 +222,17 @@ function equipesDoQuadro(csvEq, opcoes) {
       if (!contaComoAtiva(classe.estado)) return;
       if (o.semana && epoch >= o.semana.inicio) diasDisponiveis += 1;
     });
-    var diaAlvoRealizado = o.semana ? o.semana.fim : Infinity;
+    // diaAlvoRealizado: nunca no futuro. Numa semana ainda em curso,
+    // o.semana.fim é um dia que ainda não aconteceu -- não existe (nem pode
+    // existir) produção depois de hoje, então usar o fim da semana como alvo
+    // faz a janela de 3 dias "vencer" antes mesmo de alcançar a produção real
+    // de ontem/anteontem, e a equipe nasce no pool sem nunca ter ficado
+    // realmente sem trabalho. min(fim da semana, hoje) resolve: semanas já
+    // fechadas continuam usando o fim (hoje >= fim), semanas em curso usam
+    // hoje.
+    var diaAlvoRealizado = o.semana
+      ? (o.hoje != null ? Math.min(o.semana.fim, o.hoje) : o.semana.fim)
+      : Infinity;
     var ultimoRealizado = ultimoRealizadoAte(producaoPorEquipe[bruta.id], diaAlvoRealizado);
     var ultimoSup = ultimoRealizado ? ultimoRealizado.sup : null;
 
