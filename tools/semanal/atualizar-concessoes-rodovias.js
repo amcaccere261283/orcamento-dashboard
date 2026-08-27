@@ -8,6 +8,15 @@ const {
 const URL_MAPA_CONCESSOES = 'https://melhoresrodovias.org.br/mapa-de-concessoes/';
 const DEST = path.join(__dirname, '..', '..', 'dist', 'concessoes-rodovias.json');
 
+// "Ecovias Raposo Castello" (id "40" na ABCR) nunca tem geojson em ROADS --
+// não é falha do scraper, a própria ABCR não publica o traçado dela (rodovia
+// ESTADUAL de SP, fora do padrão federal do resto do site). Resolvido à parte
+// via OSM em atualizar-tracado-raposo-castello.js -- ver o comentário lá.
+// Aplicado só quando o valor vier null da ABCR, pra uma eventual publicação
+// futura do traçado real por lá continuar vencendo.
+const ID_RAPOSO_CASTELLO = '40';
+const TRACADO_RAPOSO_CASTELLO = require('./tracado-raposo-castello-resolvido.json');
+
 // User-Agent de navegador comum -- confirmado necessário em 2026-08-27: o fetch
 // do Claude (WebFetch) tomou 403 sem ele, mas um curl/fetch puro com este UA
 // devolveu HTTP 200 normalmente. Não é autenticação nem cookie -- é só o bloqueio
@@ -30,6 +39,8 @@ async function buscarEGravar() {
   // (pra atualizar a lista da ABCR) NUNCA derruba essas 35 entradas -- elas
   // são código, não parte do que foi baixado.
   const dados = mesclarConcessionariasExtras(daAbcr, CONCESSIONARIAS_EXTRA_ANTT);
+  const raposoCastello = dados.find((c) => c.id === ID_RAPOSO_CASTELLO);
+  if (raposoCastello && !raposoCastello.geojson) raposoCastello.geojson = TRACADO_RAPOSO_CASTELLO;
   fs.mkdirSync(path.dirname(DEST), { recursive: true });
   fs.writeFileSync(DEST, JSON.stringify(dados));
   const comTrecho = dados.filter((c) => c.geojson).length;

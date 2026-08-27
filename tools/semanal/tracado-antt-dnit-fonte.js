@@ -153,4 +153,34 @@ const TRECHOS_FEDERAIS_POR_CONCESSIONARIA = {
   ],
 };
 
+// "Ecovias das Gerais" (2026-08-27, mesmo dia da resolução das outras 20):
+// concessão nova demais pra estar no CSV da ANTT usado acima -- contrato
+// publicado no DOU em 2026-06-08 (leilão em 2026-03-31), depois do corte do
+// arquivo trecho-concedido de julho/2026. É rodovia FEDERAL de verdade
+// (BR-116/MG + BR-251/MG, 734,9 km ao todo, Governador Valadares/MG até a
+// divisa com a Bahia + Montes Claros/MG até o entroncamento com a BR-116) --
+// só que a página da ANTT (gov.br/antt/.../ecovias-das-gerais) só publica a
+// extensão total, não os km inicial/final oficiais do contrato.
+//
+// **Faixas de km ESTIMADAS**, não oficiais -- lidas nos campos descritivos
+// ds_local_i/ds_local_f do próprio WFS do DNIT (que descrevem os extremos de
+// cada segmento em texto, tipo "ENTR BR-116/251 (ACESSO SUL TANCREDO
+// NEVES)"), procurando por "GOV. VALADARES", "DIV BA/MG" e "MONTES CLAROS":
+//   BR-116/MG: km 0 (DIV BA/MG) até km 412 (ENTR BR-116/381/451, centro de
+//   Governador Valadares) -- ~412 km.
+//   BR-251/MG: km 179,3 (ENTR BR-116/251/MG-251, o entroncamento LITERAL com
+//   a BR-116, perto de Pedra Azul) até km 530,1 (ENTR BR-135/251, Montes
+//   Claros) -- ~350,8 km.
+// Soma ~762,8 km contra os 734,9 km oficiais (~3,7% acima) -- diferença
+// esperada de uma estimativa por descrição textual, não por km oficial do
+// contrato. Se algum dia o contrato/edital publicar os km exatos, trocar
+// aqui e re-rodar atualizar-tracado-antt-dnit.js.
+// `uf` (sigla real, não `ufAntt`) porque esta faixa não veio do CSV da ANTT
+// -- não faz sentido fingir um código que nunca existiu; ver
+// atualizar-tracado-antt-dnit.js, que aceita os dois formatos.
+TRECHOS_FEDERAIS_POR_CONCESSIONARIA['antt-ecovias-das-gerais'] = [
+  { br: '116', uf: 'MG', kmInicial: 0, kmFinal: 412 },
+  { br: '251', uf: 'MG', kmInicial: 179.3, kmFinal: 530.1 },
+];
+
 module.exports = { UF_ANTT_PARA_SIGLA, TRECHOS_FEDERAIS_POR_CONCESSIONARIA };

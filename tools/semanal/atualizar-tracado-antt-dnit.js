@@ -126,7 +126,7 @@ async function resolverConcessionaria(id, trechos) {
   var features = [];
   for (var i = 0; i < trechos.length; i++) {
     var t = trechos[i];
-    var uf = UF_ANTT_PARA_SIGLA[t.ufAntt];
+    var uf = t.uf || UF_ANTT_PARA_SIGLA[t.ufAntt];
     if (!uf) {
       console.warn('[' + id + '] código de UF ' + t.ufAntt + ' sem sigla mapeada -- trecho BR-' + t.br + ' pulado');
       continue;

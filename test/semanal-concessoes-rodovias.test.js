@@ -162,11 +162,7 @@ test('CONCESSIONARIAS_EXTRA_ANTT tem 35 entradas, id prefixado antt-, geojson re
     }
   });
   const comTracado = CONCESSIONARIAS_EXTRA_ANTT.filter((c) => c.geojson !== null);
-  assert.strictEqual(comTracado.length, 20, 'ver tools/semanal/tracado-antt-dnit-resolvido.json -- 20 das 35 cruzadas com o SNV do DNIT');
-  assert.ok(
-    CONCESSIONARIAS_EXTRA_ANTT.find((c) => c.id === 'antt-ecovias-das-gerais').geojson === null,
-    '"Ecovias das Gerais" continua sem correspondência no CSV da ANTT -- ver o handoff'
-  );
+  assert.strictEqual(comTracado.length, 21, 'ver tools/semanal/tracado-antt-dnit-resolvido.json -- 21 das 35 cruzadas com o SNV do DNIT (20 do CSV da ANTT + Ecovias das Gerais por estimativa)');
   const ids = CONCESSIONARIAS_EXTRA_ANTT.map((c) => c.id);
   assert.strictEqual(new Set(ids).size, ids.length, 'nenhum id repetido dentro da lista extra');
 });

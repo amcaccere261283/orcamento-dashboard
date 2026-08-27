@@ -8,6 +8,7 @@ const {
 const {
   UF_ANTT_PARA_SIGLA, TRECHOS_FEDERAIS_POR_CONCESSIONARIA,
 } = require('../tools/semanal/tracado-antt-dnit-fonte.js');
+const { montarQuery, TRECHOS_OSM } = require('../tools/semanal/atualizar-tracado-raposo-castello.js');
 
 test('padBr completa com zero à esquerda até 3 dígitos', () => {
   assert.strictEqual(padBr('40'), '040');
@@ -58,14 +59,29 @@ test('simplificarGeometria reduz pontos de LineString e MultiLineString sem toca
   assert.strictEqual(simplificarGeometria({ type: 'Feature', geometry: null }).geometry, null);
 });
 
-test('todo ufAntt usado em TRECHOS_FEDERAIS_POR_CONCESSIONARIA tem sigla mapeada em UF_ANTT_PARA_SIGLA', () => {
+test('todo trecho de TRECHOS_FEDERAIS_POR_CONCESSIONARIA resolve pra uma sigla de UF (via uf direto ou ufAntt mapeado)', () => {
   Object.keys(TRECHOS_FEDERAIS_POR_CONCESSIONARIA).forEach((id) => {
     TRECHOS_FEDERAIS_POR_CONCESSIONARIA[id].forEach((trecho) => {
-      assert.ok(
-        UF_ANTT_PARA_SIGLA[trecho.ufAntt],
-        id + ': código de UF ' + trecho.ufAntt + ' sem sigla mapeada'
-      );
+      const uf = trecho.uf || UF_ANTT_PARA_SIGLA[trecho.ufAntt];
+      assert.ok(uf, id + ': nem "uf" nem "ufAntt" mapeado pra trecho BR-' + trecho.br);
+      assert.match(uf, /^[A-Z]{2}$/, id + ': "' + uf + '" não parece sigla de UF');
       assert.ok(trecho.kmFinal > trecho.kmInicial, id + ': faixa de km invertida ou vazia em BR-' + trecho.br);
     });
+  });
+});
+
+test('montarQuery (Raposo Castello/OSM) monta um filtro Overpass válido por ref e bbox', () => {
+  const q = montarQuery('SP-270', [-23.7, -47.05, -23.45, -46.7]);
+  assert.match(q, /way\["ref"~"SP-270"\]\["highway"\]\(-23\.7,-47\.05,-23\.45,-46\.7\)/);
+  assert.match(q, /out geom;/);
+});
+
+test('TRECHOS_OSM (Raposo Castello) cobre as 3 rodovias estaduais com bbox e faixa de longitude coerentes', () => {
+  assert.strictEqual(TRECHOS_OSM.length, 3);
+  const refs = TRECHOS_OSM.map((t) => t.ref).sort();
+  assert.deepStrictEqual(refs, ['SP-029', 'SP-270', 'SP-280']);
+  TRECHOS_OSM.forEach((t) => {
+    assert.strictEqual(t.bbox.length, 4, t.ref + ': bbox precisa ter [sul, oeste, norte, leste]');
+    if (t.lonMin != null) assert.ok(t.lonMin < t.lonMax, t.ref + ': lonMin/lonMax invertidos');
   });
 });
