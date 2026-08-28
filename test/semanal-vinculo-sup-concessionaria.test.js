@@ -71,6 +71,31 @@ test('vincularSupsAConcessoes resolve "Rota Sorocabana" -> "Sorocabana" via sinÃ
   assert.deepStrictEqual(resultado.concessaoIdPorSup, { 'SUP-8370-25': '15' });
 });
 
+test('vincularSupsAConcessoes usa o override confirmado por SUP (RioSP separada por rodovia, 2026-08-28), com prioridade sobre o tomador', () => {
+  const registros = [
+    { sup: 'SUP-7285-24', tomador: 'RioSP' },
+    { sup: 'SUP-6498-23', tomador: 'RioSP' },
+    { sup: 'SUP-6830-23', tomador: 'RioSP' },
+    { sup: 'SUP-OUTRO', tomador: 'RioSP' }, // sem override -- cai na RioSP genÃ©rica
+  ];
+  const concessoes = [
+    concessao('13', 'RioSP'),
+    concessao('riosp-br-101', 'RioSP (BR-101)'),
+    concessao('riosp-br-116', 'RioSP (BR-116)'),
+  ];
+  const resultado = vincularSupsAConcessoes(registros, concessoes);
+  assert.deepStrictEqual(resultado.concessaoIdPorSup, {
+    'SUP-7285-24': 'riosp-br-116',
+    'SUP-6498-23': 'riosp-br-101',
+    'SUP-6830-23': 'riosp-br-101',
+    'SUP-OUTRO': '13',
+  });
+  assert.deepStrictEqual(
+    resultado.supsPorConcessaoId['riosp-br-101'].sort(),
+    ['SUP-6498-23', 'SUP-6830-23']
+  );
+});
+
 test('vincularSupsAConcessoes ignora registro sem SUP', () => {
   const registros = [{ sup: '', tomador: 'Autoban' }, { sup: null, tomador: 'Autoban' }];
   const concessoes = [concessao('10', 'Autoban')];

@@ -38,6 +38,21 @@ var SINONIMOS_TOMADOR_CONFIRMADOS = {
   rotasorocabana: 'sorocabana',
 };
 
+// Override CONFIRMADO por SUP (não por tomador) -- pra quando a mesma
+// concessão tem SUPs em rodovias FISICAMENTE diferentes e o usuário quer as
+// duas linhas separadas em vez da concessão inteira misturada. Caso
+// confirmado em 2026-08-28: a RioSP tem SUP-7285-24 na BR-116 e
+// SUP-6498-23/SUP-6830-23 na BR-101 -- ver
+// atualizar-tracado-riosp-por-rodovia.js pra como as duas concessionárias
+// SINTÉTICAS ("riosp-br-101"/"riosp-br-116") foram resolvidas. Tem
+// PRIORIDADE sobre o match por tomador (verificado abaixo antes da busca
+// normal) -- um SUP aqui nunca cai no fallback da concessão genérica.
+var CONCESSAO_POR_SUP_CONFIRMADO = {
+  'SUP-7285-24': 'riosp-br-116',
+  'SUP-6498-23': 'riosp-br-101',
+  'SUP-6830-23': 'riosp-br-101',
+};
+
 function normalizarNomeConcessao(nome) {
   var texto = String(nome || '').toLowerCase().trim();
   SUFIXOS_RAZAO_SOCIAL.forEach(function (sufixo) {
@@ -56,9 +71,11 @@ function normalizarNomeConcessao(nome) {
 // SUP sem tomador reconhecido em nenhuma concessionária simplesmente não
 // aparece em nenhum dos dois -- nunca lança, nunca adivinha.
 function vincularSupsAConcessoes(registros, concessoes) {
+  var porId = {};
   var porNomeNormalizado = {};
   (concessoes || []).forEach(function (c) {
     if (!c.geojson) return;
+    porId[c.id] = c;
     var chave = normalizarNomeConcessao(c.nome);
     // Primeira concessionária com este nome normalizado vence -- não
     // deveria colidir na prática (81 nomes bem distintos mesmo depois de
@@ -73,9 +90,15 @@ function vincularSupsAConcessoes(registros, concessoes) {
   (registros || []).forEach(function (r) {
     if (!r.sup || supsVistos[r.sup]) return; // 1ª ocorrência do SUP decide -- mesmo padrão de coordenadas-sup.js
     supsVistos[r.sup] = true;
-    var chave = normalizarNomeConcessao(r.tomador || '');
-    if (chave && SINONIMOS_TOMADOR_CONFIRMADOS[chave]) chave = SINONIMOS_TOMADOR_CONFIRMADOS[chave];
-    var concessao = chave ? porNomeNormalizado[chave] : null;
+    var concessao = null;
+    var idConfirmado = CONCESSAO_POR_SUP_CONFIRMADO[r.sup];
+    if (idConfirmado && porId[idConfirmado]) {
+      concessao = porId[idConfirmado];
+    } else {
+      var chave = normalizarNomeConcessao(r.tomador || '');
+      if (chave && SINONIMOS_TOMADOR_CONFIRMADOS[chave]) chave = SINONIMOS_TOMADOR_CONFIRMADOS[chave];
+      concessao = chave ? porNomeNormalizado[chave] : null;
+    }
     if (!concessao) return;
     concessaoIdPorSup[r.sup] = concessao.id;
     if (!supsPorConcessaoId[concessao.id]) supsPorConcessaoId[concessao.id] = [];

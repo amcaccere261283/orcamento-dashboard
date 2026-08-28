@@ -17,6 +17,21 @@ const DEST = path.join(__dirname, '..', '..', 'dist', 'concessoes-rodovias.json'
 const ID_RAPOSO_CASTELLO = '40';
 const TRACADO_RAPOSO_CASTELLO = require('./tracado-raposo-castello-resolvido.json');
 
+// RioSP tem SUPs em duas rodovias diferentes (BR-101 e BR-116) dentro da
+// MESMA concessão -- pedido do usuário em 2026-08-28: separar visualmente
+// as duas em vez de uma linha só misturando as duas rodovias. Como o
+// geojson único da ABCR não marca qual feature é de qual BR, a solução foi
+// resolver as duas SEPARADAS via DNIT (atualizar-tracado-riosp-por-
+// rodovia.js) e injetá-las aqui como duas concessionárias SINTÉTICAS --
+// vinculo-sup-concessionaria.js aponta os 3 SUPs confirmados pra elas em
+// vez da RioSP genérica (id "13", que continua existindo pra qualquer SUP
+// da RioSP que não tenha essa confirmação manual).
+const TRACADO_RIOSP_POR_RODOVIA = require('./tracado-riosp-por-rodovia-resolvido.json');
+const CONCESSOES_SINTETICAS_RIOSP = [
+  { id: 'riosp-br-101', nome: 'RioSP (BR-101)', slug: null, cor: null, geojson: TRACADO_RIOSP_POR_RODOVIA['riosp-br-101'] },
+  { id: 'riosp-br-116', nome: 'RioSP (BR-116)', slug: null, cor: null, geojson: TRACADO_RIOSP_POR_RODOVIA['riosp-br-116'] },
+];
+
 // User-Agent de navegador comum -- confirmado necessário em 2026-08-27: o fetch
 // do Claude (WebFetch) tomou 403 sem ele, mas um curl/fetch puro com este UA
 // devolveu HTTP 200 normalmente. Não é autenticação nem cookie -- é só o bloqueio
@@ -41,6 +56,12 @@ async function buscarEGravar() {
   const dados = mesclarConcessionariasExtras(daAbcr, CONCESSIONARIAS_EXTRA_ANTT);
   const raposoCastello = dados.find((c) => c.id === ID_RAPOSO_CASTELLO);
   if (raposoCastello && !raposoCastello.geojson) raposoCastello.geojson = TRACADO_RAPOSO_CASTELLO;
+  // As sintéticas entram só se ainda não existirem (idempotente -- rodar
+  // este script de novo não duplica) e são ordenadas junto com o resto.
+  CONCESSOES_SINTETICAS_RIOSP.forEach((sintetica) => {
+    if (!dados.find((c) => c.id === sintetica.id)) dados.push(sintetica);
+  });
+  dados.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   fs.mkdirSync(path.dirname(DEST), { recursive: true });
   fs.writeFileSync(DEST, JSON.stringify(dados));
   const comTrecho = dados.filter((c) => c.geojson).length;
