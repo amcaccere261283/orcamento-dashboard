@@ -29,8 +29,9 @@ function markupFiltroMulti(filtro) {
 // Módulo dual (Node + navegador) -- mesmo padrão de render-aba-alocacao.js.
 // Devolve o HTML ESTÁTICO da aba Mapa: barra de controles, resumo, pool de
 // equipes (os TRÊS reaproveitados de render-aba-alocacao.js, sem nenhuma
-// cópia) e o container onde o MapLibre desenha os pinos -- isso é JS puro,
-// não faz parte deste HTML (ver render-alocacao-pagina.js, Tasks 11/12).
+// cópia) e o container onde o MapLibre desenha a linha das rodovias -- isso
+// é JS puro, não faz parte deste HTML (ver render-alocacao-pagina.js,
+// desenharSupsComoRodovias).
 //
 // Ver docs/superpowers/specs/2026-08-26-alocacao-equipes-mapa-design.md.
 //

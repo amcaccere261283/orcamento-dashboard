@@ -164,6 +164,20 @@ function montarClienteAlocacao() {
   const sandbox = {
     document: documentoFalso, atob, btoa, crypto, TextEncoder, TextDecoder, console,
     localStorage: armazenamentoFalso(),
+    // Dublê mínimo do MapLibre global -- a página real sempre tem o script
+    // do MapLibre carregado ANTES deste bundle; sem isto, qualquer redesenho
+    // do mapa que crie um LngLatBounds/Popup (desenharSupsComoRodovias roda
+    // incondicionalmente a cada aplicarMovimento agora, não só quando um
+    // teste mexe explicitamente com o mapa) lançaria ReferenceError. Testes
+    // que precisam de um Popup com comportamento próprio (ex. o miniseletor)
+    // sobrescrevem cliente.maplibregl depois de montarClienteAlocacao().
+    maplibregl: {
+      LngLatBounds: function () { this.extend = () => this; },
+      Popup: function () {
+        this.setLngLat = () => this; this.setHTML = () => this; this.setDOMContent = () => this;
+        this.addTo = () => this; this.remove = () => {}; this.isOpen = () => false;
+      },
+    },
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
@@ -600,104 +614,57 @@ test('com o mapa já inicializado, o pool e os controles da aba Mapa continuam s
   assert.match(poolHtml, /pool-alocacao/, 'o pool continua sendo redesenhado, só o wrap do mapa é que é preservado');
 });
 
-// --- Task 12: particionarSupsPorLocalizacao (pino vs. painel "sem localização") ---
+// --- Redesenho de 2026-08-28: rodovia em vez de pino ------------------------
 //
-// Função PURA, separada de desenharPinosMapa (que mexe no MapLibre/DOM) --
-// testável sem precisar de um mapa de verdade. O resto de desenharPinosMapa
-// (criação de Marker/Popup) só é verificável manualmente, mesma limitação já
-// documentada na Task 11 para o resto do mapa.
-test('particionarSupsPorLocalizacao separa SUPs com e sem coordenada', () => {
+// prepararRodoviasDoMapa/leituraMaisCriticaEntre/resolverAlvoRodoviaDeFeatures
+// são PURAS, separadas de desenharSupsComoRodovias (que mexe em MapLibre/DOM)
+// -- testáveis sem precisar de um mapa de verdade. O resto (addSource/
+// addLayer, hover) só é verificável manualmente, mesma limitação já
+// documentada pro resto do mapa.
+test('prepararRodoviasDoMapa agrupa por concessaoId e separa quem não tem vínculo', () => {
   const cliente = montarClienteAlocacao();
-  const porSup = [{ sup: 'SUP-A', leitura: 'absorvido' }, { sup: 'SUP-B', leitura: 'falta-equipe' }];
-  const coordenadas = { 'SUP-A': { lat: -25.5, lon: -49.2 } };
-  const resultado = cliente.particionarSupsPorLocalizacao(porSup, coordenadas);
-  // normalizar() (JSON round-trip, definida no topo deste arquivo): os
-  // arrays devolvidos pousam com o Array.prototype do vm.Context, e
-  // deepStrictEqual falha por "same structure but are not reference-equal"
-  // contra um array literal do realm principal -- mesmo achado já registrado
-  // ali para objetos.
-  assert.deepStrictEqual(normalizar(resultado.comLocalizacao.map((s) => s.sup)), ['SUP-A']);
-  assert.deepStrictEqual(normalizar(resultado.semLocalizacao.map((s) => s.sup)), ['SUP-B']);
-});
-
-// --- Task 13: arrasto até o pino -- resolverAlvoAlocacao ganha o tipo 'pino' ---
-//
-// O pino é um elemento DOM real do MapLibre (um <div class="marcador-alocacao-mapa">
-// com data-sup, criado por desenharPinosMapa -- Task 12), que o `document` FALSO
-// deste arquivo não simula (não há MapLibre nos testes). Por isso estes dois testes
-// não simulam o gesto inteiro (isso é Task 14) -- chamam resolverAlvoAlocacao/
-// aplicarMovimentoNoPino direto, com um objeto que IMITA só o contrato de
-// `.closest()` que resolverAlvoAlocacao usa, mesma técnica que os testes de
-// célula/pool (linha 254 acima) já usam.
-function elementoFalsoPino(sup) {
-  const el = { getAttribute: (attr) => (attr === 'data-sup' ? sup : null) };
-  el.closest = (sel) => (sel === '.marcador-alocacao-mapa, .marcador-alocacao-mapa-equipe' ? el : null);
-  return el;
-}
-
-test('resolverAlvoAlocacao reconhece um marcador do mapa (.marcador-alocacao-mapa) como alvo tipo pino', async () => {
-  const cliente = montarClienteAlocacao();
-  const elFalso = elementoFalsoPino('SUP-A');
-  // document.elementFromPoint é chamado por resolverAlvoAlocacao -- o
-  // documento falso deste arquivo não implementa elementFromPoint, então
-  // caímos no fallback e.target (ver o comentário de resolverAlvoAlocacao).
-  const alvo = cliente.resolverAlvoAlocacao({ target: elFalso });
-  assert.deepStrictEqual({ tipo: alvo.tipo, sup: alvo.el.getAttribute('data-sup') }, { tipo: 'pino', sup: 'SUP-A' });
-});
-
-// --- "Efeito kanban": agruparEquipesAlocadasPorSup (equipe no mapa) ---
-//
-// Função PURA, separada de desenharEquipesNoMapa (que mexe no MapLibre/DOM)
-// -- mesma separação que particionarSupsPorLocalizacao/desenharPinosMapa já
-// estabelecem logo acima. A criação de Marker em si só é verificável
-// manualmente, mesma limitação já documentada pro resto do mapa.
-test('agruparEquipesAlocadasPorSup agrupa só equipes com destino E com coordenada conhecida', () => {
-  const cliente = montarClienteAlocacao();
-  const porEquipe = [
-    { id: '1', sup: 'SUP-A', coluna: 'SP' },
-    { id: '2', sup: 'SUP-A', coluna: 'SM' },
-    { id: '3', sup: 'SUP-B', coluna: 'SP' }, // SUP-B sem coordenada -- fica de fora
-    { id: '4', sup: null, coluna: null }, // no pool -- fica de fora
+  const porSup = [
+    { sup: 'SUP-A', leitura: 'absorvido' },
+    { sup: 'SUP-B', leitura: 'falta-equipe' },
+    { sup: 'SUP-C', leitura: 'sem-demanda' },
   ];
-  const coordenadas = { 'SUP-A': { lat: -25.5, lon: -49.2 } };
-  const grupos = cliente.agruparEquipesAlocadasPorSup(porEquipe, coordenadas);
-  assert.deepStrictEqual(normalizar(Object.keys(grupos)), ['SUP-A']);
-  assert.deepStrictEqual(normalizar(grupos['SUP-A'].map((e) => e.id)), ['1', '2']);
+  const vinculo = { concessaoIdPorSup: { 'SUP-A': '10', 'SUP-B': '10' } }; // SUP-C sem rodovia
+  const resultado = cliente.prepararRodoviasDoMapa(porSup, vinculo);
+  assert.deepStrictEqual(normalizar(Object.keys(resultado.porConcessao)), ['10']);
+  assert.deepStrictEqual(normalizar(resultado.porConcessao['10'].map((s) => s.sup)), ['SUP-A', 'SUP-B']);
+  assert.deepStrictEqual(normalizar(resultado.semRodovia.map((s) => s.sup)), ['SUP-C']);
 });
 
-test('agruparEquipesAlocadasPorSup preserva a ORDEM original de porEquipe dentro de cada grupo', () => {
+test('leituraMaisCriticaEntre escolhe a mais urgente (falta-equipe vence absorvido)', () => {
   const cliente = montarClienteAlocacao();
-  const porEquipe = [
-    { id: '9', sup: 'SUP-A', coluna: 'SP' },
-    { id: '2', sup: 'SUP-A', coluna: 'SM' },
-    { id: '5', sup: 'SUP-A', coluna: 'ST' },
-  ];
-  const coordenadas = { 'SUP-A': { lat: -25.5, lon: -49.2 } };
-  const grupos = cliente.agruparEquipesAlocadasPorSup(porEquipe, coordenadas);
-  assert.deepStrictEqual(normalizar(grupos['SUP-A'].map((e) => e.id)), ['9', '2', '5']);
+  assert.strictEqual(cliente.leituraMaisCriticaEntre(['absorvido', 'falta-equipe']), 'falta-equipe');
+  assert.strictEqual(cliente.leituraMaisCriticaEntre(['sem-demanda', 'parado-com-carteira']), 'parado-com-carteira');
+  assert.strictEqual(cliente.leituraMaisCriticaEntre(['absorvido']), 'absorvido');
+  assert.strictEqual(cliente.leituraMaisCriticaEntre([]), 'sem-demanda');
 });
 
-test('agruparEquipesAlocadasPorSup sem nenhuma equipe alocada devolve objeto vazio, nunca lança', () => {
+// --- Hit-test da rodovia no mapa (resolverAlvoRodoviaDeFeatures) -----------
+//
+// A camada é WebGL (mapa.queryRenderedFeatures), não um elemento DOM com
+// .closest() como o antigo pino -- por isso o teste passa o RESULTADO já
+// devolvido por queryRenderedFeatures (só precisa de features[0].layer.id),
+// não um document/elementFromPoint falso.
+test('resolverAlvoRodoviaDeFeatures resolve os SUPs da camada tocada', () => {
   const cliente = montarClienteAlocacao();
-  assert.deepStrictEqual(normalizar(cliente.agruparEquipesAlocadasPorSup([], {})), {});
-  assert.deepStrictEqual(normalizar(cliente.agruparEquipesAlocadasPorSup(null, null)), {});
+  const vinculo = { supsPorConcessaoId: { '10': ['SUP-A', 'SUP-B'] } };
+  const alvo = cliente.resolverAlvoRodoviaDeFeatures(
+    [{ layer: { id: 'sup-rodovia-10' } }], vinculo, { lng: -49, lat: -25 }
+  );
+  assert.deepStrictEqual(normalizar(alvo), { tipo: 'rodovia', sups: ['SUP-A', 'SUP-B'], lngLat: { lng: -49, lat: -25 } });
 });
 
-// "Efeito kanban" (2026-08-28): o cartão de uma equipe JÁ alocada é
-// desenhado como marcador próprio em cima do pino do SUP dela
-// (desenharEquipesNoMapa) -- soltar outra equipe ali tem de valer o mesmo
-// que soltar no pino em si.
-function elementoFalsoCartaoEquipeMapa(sup) {
-  const el = { getAttribute: (attr) => (attr === 'data-sup' ? sup : null) };
-  el.closest = (sel) => (sel === '.marcador-alocacao-mapa, .marcador-alocacao-mapa-equipe' ? el : null);
-  return el;
-}
-
-test('resolverAlvoAlocacao reconhece o cartão de equipe do mapa (.marcador-alocacao-mapa-equipe) como alvo tipo pino', async () => {
+test('resolverAlvoRodoviaDeFeatures sem features (ou sem vínculo pra concessão) devolve null', () => {
   const cliente = montarClienteAlocacao();
-  const elFalso = elementoFalsoCartaoEquipeMapa('SUP-A');
-  const alvo = cliente.resolverAlvoAlocacao({ target: elFalso });
-  assert.deepStrictEqual({ tipo: alvo.tipo, sup: alvo.el.getAttribute('data-sup') }, { tipo: 'pino', sup: 'SUP-A' });
+  assert.strictEqual(cliente.resolverAlvoRodoviaDeFeatures([], {}, {}), null);
+  assert.strictEqual(
+    cliente.resolverAlvoRodoviaDeFeatures([{ layer: { id: 'sup-rodovia-99' } }], { supsPorConcessaoId: {} }, {}),
+    null
+  );
 });
 
 test('soltar equipe polivalente no pino escolhe a coluna com maior déficit', async () => {
@@ -731,19 +698,19 @@ test('aplicarMovimentoNoPino não lança quando o SUP não tem linha na grade --
   assert.deepStrictEqual(normalizar(cliente.ESTADO_ALOCACAO.alocacao['4']), { sup: 'SUP-INEXISTENTE', coluna: 'SP' });
 });
 
-// --- Task 14: o GESTO COMPLETO de arrasto até o pino ------------------------
+// --- o GESTO COMPLETO de arrasto até a rodovia (redesenho de 2026-08-28) ---
 //
-// A Task 13 provou resolverAlvoAlocacao/aplicarMovimentoNoPino chamando as
-// duas DIRETO. O que faltava era a ponta: até a Task 14,
-// inicializarInteracaoAlocacao só ligava #secao-kanban-alocacao, onde pino
-// nenhum aparece -- ou seja, todo o código da Task 13 estava correto e
-// INALCANÇÁVEL no app real. Este teste é a prova de que a ponta foi ligada:
-// ele dispara os listeners REAIS de #secao-mapa-alocacao (pointerdown ->
-// pointermove -> pointerup), nunca aplicarMovimentoNoPino direto.
+// Até aqui os testes provaram resolverAlvoRodoviaDeFeatures/aplicarMovimentoNoPino
+// DIRETO. Este é a ponta: dispara os listeners REAIS de #secao-mapa-alocacao
+// (pointerdown -> pointermove -> pointerup), nunca aplicarMovimentoNoPino
+// direto. Precisa de um dublê de mapa com queryRenderedFeatures/getContainer/
+// unproject -- a linha da rodovia é WebGL, não um elemento DOM com .closest()
+// como o antigo pino.
 //
 // O DOM falso não implementa elementFromPoint, então resolverAlvoAlocacao cai
-// no fallback e.target (comportamento documentado na própria função) -- por
-// isso o pointerup carrega o marcador como target.
+// no fallback e.target -- por isso o pointerup carrega o CONTAINER do mapa
+// falso como target (dentroDoMapa em resolverAlvoRodoviaNoMapa aceita
+// sob === container).
 function eventoPointerNoCartao(equipeId, pointerId) {
   return {
     pointerId: pointerId,
@@ -760,22 +727,99 @@ function eventoPointerNoCartao(equipeId, pointerId) {
   };
 }
 
-test('GESTO COMPLETO: arrastar o cartão do pool até o pino do mapa aloca a equipe no SUP do pino', async () => {
+// Reaproveita mapaFalsoRodovias() (getLayer/getSource/addSource/addLayer --
+// desenharSupsComoRodovias os chama a cada redesenho, inclusive o que
+// aplicarMovimento dispara DEPOIS do gesto) e acrescenta só o que o hit-test
+// precisa (queryRenderedFeatures/getContainer/unproject).
+function mapaFalsoComRodovia(camadaId) {
+  const mapa = mapaFalsoRodovias();
+  const container = {
+    getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    contains: () => true,
+    // resolverAlvoAlocacao chama sob.closest('.celula-alocacao')/'.pool-alocacao'
+    // ANTES de cair no ramo da rodovia -- sem isto o container falso nem
+    // teria o método, e `!sob.closest` faria a função devolver null cedo
+    // demais, antes de resolverAlvoRodoviaNoMapa ser alcançado.
+    closest: () => null,
+  };
+  mapa.getContainer = () => container;
+  mapa.queryRenderedFeatures = () => [{ layer: { id: camadaId } }];
+  mapa.unproject = ([x, y]) => ({ lng: x, lat: y });
+  return mapa;
+}
+
+test('GESTO COMPLETO: arrastar o cartão do pool até a rodovia aloca a equipe no SUP dela (1 SUP só)', async () => {
   const cliente = montarClienteAlocacao();
   marcarSemanasVistas(cliente, 1); // sem isto a semeadura automática já alocaria a 4
   await cliente.selecionarSemanaAlocacao(1);
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined, 'pré-condição: a 4 está no pool');
 
-  const [pino] = cliente.document.registrarMarcadoresAlocacao(['SUP-A']);
+  const mapaFalso = mapaFalsoComRodovia('sup-rodovia-10');
+  cliente.MAPA_ALOCACAO.instancia = mapaFalso;
+  cliente.MAPA_ALOCACAO.camadasSupRodovia = ['sup-rodovia-10'];
+  cliente.MAPA_ALOCACAO.vinculoSupConcessao = { supsPorConcessaoId: { '10': ['SUP-A'] } };
+
   const secaoMapa = cliente.document.getElementById('secao-mapa-alocacao');
-  assert.ok(secaoMapa.listeners.pointerdown,
-    'pré-condição: #secao-mapa-alocacao tem que ter listeners -- é o que a Task 14 liga');
+  assert.ok(secaoMapa.listeners.pointerdown, 'pré-condição: #secao-mapa-alocacao tem que ter listeners');
 
   secaoMapa.listeners.pointerdown(eventoPointerNoCartao('4', 1));
   secaoMapa.listeners.pointermove({ pointerId: 1, clientX: 10, clientY: 10 });
-  secaoMapa.listeners.pointerup({ pointerId: 1, clientX: 10, clientY: 10, target: pino });
+  secaoMapa.listeners.pointerup({ pointerId: 1, clientX: 10, clientY: 10, target: mapaFalso.getContainer() });
 
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].sup, 'SUP-A');
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].coluna, 'SP');
+});
+
+// Rodovia com 2+ SUPs (ex. Pantanal): não aloca sozinho -- abre o
+// miniseletor (abrirEscolhaDeSupNaRodovia) e só aloca depois do clique num
+// botão [data-sup-escolha]. Precisa de um dublê de maplibregl.Popup (o
+// sandbox não carrega o MapLibre de verdade).
+function popupFalsoGlobal() {
+  function Popup() {
+    this.setLngLat = () => this;
+    this.setDOMContent = (el) => { this._el = el; return this; };
+    this.addTo = () => this;
+    this.remove = () => {};
+  }
+  // LngLatBounds continua precisando existir: o redesenho que aplicarMovimento
+  // dispara depois do gesto (desenharSupsComoRodovias) sempre cria um, mesmo
+  // sem nenhuma rodovia de verdade pra desenhar neste teste.
+  return { Popup, LngLatBounds: function () { this.extend = () => this; } };
+}
+
+test('GESTO COMPLETO: soltar equipe numa rodovia com 2+ SUPs abre o miniseletor, e o clique no botão finaliza', async () => {
+  const cliente = montarClienteAlocacao();
+  marcarSemanasVistas(cliente, 1);
+  await cliente.selecionarSemanaAlocacao(1);
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined, 'pré-condição: a 4 está no pool');
+
+  cliente.maplibregl = popupFalsoGlobal();
+  const mapaFalso = mapaFalsoComRodovia('sup-rodovia-11');
+  cliente.MAPA_ALOCACAO.instancia = mapaFalso;
+  cliente.MAPA_ALOCACAO.camadasSupRodovia = ['sup-rodovia-11'];
+  cliente.MAPA_ALOCACAO.vinculoSupConcessao = { supsPorConcessaoId: { '11': ['SUP-A', 'SUP-B'] } };
+
+  const secaoMapa = cliente.document.getElementById('secao-mapa-alocacao');
+  secaoMapa.listeners.pointerdown(eventoPointerNoCartao('4', 1));
+  secaoMapa.listeners.pointermove({ pointerId: 1, clientX: 10, clientY: 10 });
+  secaoMapa.listeners.pointerup({ pointerId: 1, clientX: 10, clientY: 10, target: mapaFalso.getContainer() });
+
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'], undefined,
+    'não alocou sozinho -- a ambiguidade tem que abrir o miniseletor, nunca adivinhar');
+  assert.ok(cliente.MAPA_ALOCACAO.popupEscolhaSup, 'o popup do miniseletor tem que ter sido criado');
+
+  // O 'click' que o navegador dispara logo após ESTE pointerup (mesmo
+  // gesto de arrasto) já foi suprimido por SUPRIMIR_PROXIMO_CLICK_ALOCACAO
+  // -- simula esse click primeiro (target irrelevante, é engolido) antes do
+  // clique DE VERDADE no botão do popup, um gesto seguinte e independente.
+  secaoMapa.listeners.click({ target: { closest: () => null } });
+
+  const botao = { getAttribute: (attr) => (attr === 'data-equipe-escolha' ? '4' : attr === 'data-sup-escolha' ? 'SUP-B' : null) };
+  secaoMapa.listeners.click({
+    target: { closest: (sel) => (sel === '[data-sup-escolha]' ? botao : null) },
+  });
+
+  assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].sup, 'SUP-B');
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].coluna, 'SP');
 });
 
@@ -1077,7 +1121,7 @@ test('sincronizarCamadasRodovias: desmarcar uma concessionária tira só ela do 
   cliente.sincronizarCamadasRodovias();
 
   // NOTA: sincronizarCamadasRodovias redesenha TUDO do zero a cada chamada
-  // (mesma filosofia de desenharPinosMapa, ver o comentário na função) -- por
+  // (mesma filosofia de redesenho completo de desenharSupsComoRodovias) -- por
   // baixo dos panos as DUAS camadas são removidas e só a 15 é recriada, não é
   // uma remoção seletiva. O que este teste trava é o RESULTADO visível: a
   // camada desmarcada some do mapa, a que continua marcada continua nele.

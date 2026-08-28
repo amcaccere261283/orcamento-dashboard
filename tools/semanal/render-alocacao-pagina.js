@@ -58,7 +58,8 @@ const BUNDLE_ARQUIVOS_ALOCACAO = [
   'render-aba-alertas.js', 'render-aba-consolidado.js',
   'parse-matriz-cliente.js', 'classificar-dia-equipe.js', 'compute-equipes-ativas.js',
   'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js',
-  'grupos-veiculo.js', 'pessoas-ativas.js', 'equipes-alocaveis.js', 'coordenadas-sup.js', 'compute-alocacao.js', 'alocacao-sheet.js',
+  'grupos-veiculo.js', 'pessoas-ativas.js', 'equipes-alocaveis.js', 'coordenadas-sup.js',
+  'vinculo-sup-concessionaria.js', 'compute-alocacao.js', 'alocacao-sheet.js',
   'render-aba-alocacao.js', 'render-aba-alocacao-mapa.js',
   // live-refresh.js (Task 2, 2026-08-25) substitui a cópia local de
   // atualizarDadosAoVivoSemanal -- consome só os 5 módulos comuns já
@@ -148,11 +149,12 @@ function inicializarMapaAlocacao() {
       ],
     },
     // Centro/zoom iniciais: mesma região do Mapa Sondagens (Paraná) -- só o
-    // ponto de partida antes do 1º desenho com pinos reais. desenharPinosMapa
-    // (mais abaixo) chama mapa.fitBounds() na primeira vez que existe pelo
-    // menos um pino com coordenada conhecida, e não repete depois (guardado
-    // por MAPA_ALOCACAO.enquadrouUmaVez) -- pra não puxar o mapa de volta
-    // toda vez que o usuário já tiver panado/dado zoom por conta própria.
+    // ponto de partida antes do 1º desenho com rodovias reais.
+    // desenharSupsComoRodovias (mais abaixo) chama mapa.fitBounds() na
+    // primeira vez que existe pelo menos uma rodovia vinculada a algum SUP,
+    // e não repete depois (guardado por MAPA_ALOCACAO.enquadrouUmaVez) -- pra
+    // não puxar o mapa de volta toda vez que o usuário já tiver panado/dado
+    // zoom por conta própria.
     center: [-49.2, -25.5],
     zoom: 7,
     pitch: 0, bearing: 0, dragRotate: false, touchPitch: false,
@@ -169,18 +171,31 @@ function inicializarMapaAlocacao() {
   }, { passive: false });
 
   MAPA_ALOCACAO.instancia = mapa;
-  MAPA_ALOCACAO.marcadores = {};
-  MAPA_ALOCACAO.marcadoresEquipe = {};
-  // enquadrouUmaVez (fitBounds, ver desenharPinosMapa): nasce false a cada
-  // instância NOVA do mapa -- um mapa recriado do zero (semRoster ligou e
-  // desligou de novo, ver o comentário em montarMapaAlocacao) merece um novo
-  // auto-enquadramento, não herdar o "já enquadrei" de uma instância anterior
-  // que nem existe mais.
+  // enquadrouUmaVez (fitBounds, ver desenharSupsComoRodovias): nasce false a
+  // cada instância NOVA do mapa -- um mapa recriado do zero (semRoster ligou
+  // e desligou de novo, ver o comentário em montarMapaAlocacao) merece um
+  // novo auto-enquadramento, não herdar o "já enquadrei" de uma instância
+  // anterior que nem existe mais.
   MAPA_ALOCACAO.enquadrouUmaVez = false;
 
-  // Assim que o estilo carrega, desenha os pinos com o dado que JÁ existe
+  // Hover nas rodovias (2026-08-28): UM listener no nível do MAPA, ligado
+  // uma vez só por instância -- nunca por camada, porque as camadas de
+  // rodovia mudam a cada redesenho (desenharSupsComoRodovias) e uma camada
+  // WebGL não tem elemento DOM por feature onde prender/soltar listeners.
+  // queryRenderedFeatures([...], {layers}) lê MAPA_ALOCACAO.camadasSupRodovia
+  // na hora, então funciona não importa quantas rodovias existam agora.
+  mapa.on('mousemove', function (e) {
+    var camadas = MAPA_ALOCACAO.camadasSupRodovia || [];
+    if (!camadas.length) { esconderPopupHoverRodovia(); return; }
+    var features = mapa.queryRenderedFeatures(e.point, { layers: camadas });
+    if (!features.length) { esconderPopupHoverRodovia(); return; }
+    mostrarPopupHoverRodovia(features[0].layer.id, e.lngLat);
+  });
+  mapa.getContainer().addEventListener('mouseleave', esconderPopupHoverRodovia);
+
+  // Assim que o estilo carrega, desenha as rodovias com o dado que JÁ existe
   // em ESTADO_ALOCACAO (o mapa pode ter sido aberto bem depois do 1º
-  // montarAbaAlocacao) -- ver Task 12 pra desenharPinosMapa.
+  // montarAbaAlocacao).
   mapa.on('load', function () {
     montarAbaAlocacao();
   });
@@ -190,6 +205,7 @@ var ComputeSemanal = MODULOS['compute-semanal.js'];
 var RenderAbaAlocacao = MODULOS['render-aba-alocacao.js'];
 var RenderAbaAlocacaoMapa = MODULOS['render-aba-alocacao-mapa.js'];
 var CoordenadasSup = MODULOS['coordenadas-sup.js'];
+var VinculoSupConcessionaria = MODULOS['vinculo-sup-concessionaria.js'];
 var EquipesAlocaveis = MODULOS['equipes-alocaveis.js'];
 var GruposVeiculo = MODULOS['grupos-veiculo.js'];
 var ComputeAlocacao = MODULOS['compute-alocacao.js'];
@@ -275,11 +291,12 @@ function fecharTendenciaVigente(dados) {
 // Script ir ao ar").
 // ultimaGrade (Task 13): a última grade calculada por montarMapaAlocacao
 // (RenderAbaAlocacao.prepararDadosAlocacao(...).grade), guardada aqui para
-// aplicarMovimentoNoPino achar a linha do SUP onde o pino foi solto sem
-// recalcular a grade de novo. Nasce vazia -- um pin drop antes do primeiro
-// desenho não deveria existir (o pino só nasce depois de desenharPinosMapa
-// rodar, que só roda depois de montarMapaAlocacao popular isto), mas o default
-// garante que .linhas.length não estoura mesmo assim.
+// aplicarMovimentoNoPino achar a linha do SUP onde a equipe foi solta sem
+// recalcular a grade de novo. Nasce vazia -- soltar antes do primeiro
+// desenho não deveria acontecer (a rodovia só nasce depois de
+// desenharSupsComoRodovias rodar, que só roda depois de montarMapaAlocacao
+// popular isto), mas o default garante que .linhas.length não estoura mesmo
+// assim.
 var ESTADO_ALOCACAO = {
   semanaIdx: -1, alocacao: {}, equipes: [], foraDoQuadro: [], cliente: null,
   semanaCarregada: null, geracaoAlocacao: 0, busca: '', tipologia: '',
@@ -721,8 +738,6 @@ function montarMapaAlocacao(prep, dadosPrecomputados) {
     if (MAPA_ALOCACAO.instancia) {
       MAPA_ALOCACAO.instancia.remove();
       MAPA_ALOCACAO.instancia = null;
-      MAPA_ALOCACAO.marcadores = {};
-      MAPA_ALOCACAO.marcadoresEquipe = {};
       // FIX (achado Minor 5 da revisão final): sem isto, ESTADO_RODOVIAS.ordem
       // sobrevive à destruição da instância (é estado do SELETOR, não do
       // mapa), mas MAPA_ALOCACAO.camadasRodovia continuava com os ids de
@@ -731,8 +746,10 @@ function montarMapaAlocacao(prep, dadosPrecomputados) {
       // camadas de uma instância NOVA que nunca as teve. Zerar aqui, no MESMO
       // instante em que a instância morre, deixa o próximo desenho recriar as
       // camadas do zero a partir de ESTADO_RODOVIAS.ordem, em vez de deixar o
-      // painel com caixas marcadas sobre um mapa sem nenhuma linha.
+      // painel com caixas marcadas sobre um mapa sem nenhuma linha. Mesma
+      // razão pra camadasSupRodovia (2026-08-28).
       MAPA_ALOCACAO.camadasRodovia = [];
+      MAPA_ALOCACAO.camadasSupRodovia = [];
     }
     secao.innerHTML = RenderAbaAlocacaoMapa.renderAbaAlocacaoMapa(null, { semRoster: true });
     return;
@@ -750,9 +767,9 @@ function montarMapaAlocacao(prep, dadosPrecomputados) {
   // tenha um 'dados' pronto continuam funcionando sem mudar nada.
   var dados = dadosPrecomputados || RenderAbaAlocacao.prepararDadosAlocacao(window.__REGISTROS__, prep.indices, prep.o);
   // ultimaGrade (Task 13): guardada aqui, no MESMO redesenho que
-  // desenharPinosMapa (abaixo) usa pra desenhar os pinos -- é o que garante
-  // que aplicarMovimentoNoPino sempre acha a linha certa para o SUP de um
-  // pino que está de fato na tela agora.
+  // desenharSupsComoRodovias (abaixo) usa pra desenhar as rodovias -- é o
+  // que garante que aplicarMovimentoNoPino sempre acha a linha certa para o
+  // SUP de uma rodovia que está de fato na tela agora.
   ESTADO_ALOCACAO.ultimaGrade = dados.grade;
   if (!MAPA_ALOCACAO.instancia) {
     // Primeiro desenho (ou qualquer desenho ANTES do mapa existir): markup
@@ -765,21 +782,22 @@ function montarMapaAlocacao(prep, dadosPrecomputados) {
     document.getElementById('mapa-alocacao-pool').innerHTML =
       RenderAbaAlocacaoMapa.renderAbaAlocacaoMapaPool(dados, prep.o);
   }
-  // desenharPinosMapa (Task 12) desenha os pinos por SUP quando o mapa já
-  // existe -- a guarda 'typeof' é defensiva (nunca deveria disparar hoje que
-  // a função está sempre definida abaixo), mas fica porque montarMapaAlocacao
-  // é chamada de muitos gatilhos (arrasto, troca de filtro/semana/mês,
-  // "Atualizar dados", o handler de 'load' do mapa) e não vale o risco de um
-  // ReferenceError silencioso quebrar o redesenho inteiro do Kanban/Mapa.
-  if (typeof desenharPinosMapa === 'function' && MAPA_ALOCACAO.instancia) {
-    desenharPinosMapa(dados, (window.__DEMANDAS__ || {}).coordenadasPorSup || {});
+  // desenharSupsComoRodovias desenha a linha da rodovia de cada SUP quando o
+  // mapa já existe -- a guarda 'typeof' é defensiva (nunca deveria disparar
+  // hoje que a função está sempre definida abaixo), mas fica porque
+  // montarMapaAlocacao é chamada de muitos gatilhos (arrasto, troca de
+  // filtro/semana/mês, "Atualizar dados", o handler de 'load' do mapa) e não
+  // vale o risco de um ReferenceError silencioso quebrar o redesenho inteiro
+  // do Kanban/Mapa.
+  if (typeof desenharSupsComoRodovias === 'function' && MAPA_ALOCACAO.instancia) {
+    desenharSupsComoRodovias(dados);
   }
   // FIX (achado Minor 5 da revisão final): redesenha as camadas de rodovia
   // selecionadas sempre que o mapa é redesenhado -- sem isto, um mapa
   // recriado do zero (depois de um ciclo semRoster, ver o FIX acima) nunca
   // recuperava as camadas de ESTADO_RODOVIAS.ordem, e o painel ficava com
   // caixas marcadas sobre um mapa vazio. Guardado por instancia (não por
-  // typeof, como o desenharPinosMapa acima) porque sincronizarCamadasRodovias
+  // typeof, como desenharSupsComoRodovias acima) porque sincronizarCamadasRodovias
   // é declarada ANTES desta função no mesmo arquivo, sempre definida.
   if (MAPA_ALOCACAO.instancia) sincronizarCamadasRodovias();
 }
@@ -860,6 +878,14 @@ var ESTADO_RODOVIAS = { ordem: [], concessoesPorId: null, carregando: null };
 function garantirConcessoesCarregadas() {
   if (ESTADO_RODOVIAS.concessoesPorId) return Promise.resolve(ESTADO_RODOVIAS.concessoesPorId);
   if (ESTADO_RODOVIAS.carregando) return ESTADO_RODOVIAS.carregando;
+  // Sem fetch global (ambiente de teste -- o DOM falso deste projeto nunca
+  // simula rede; ou um navegador muito antigo) -- mesma filosofia "nunca
+  // lança" do catch logo abaixo, só que ANTES de tentar chamar algo que nem
+  // existe (chamar fetch(...) sem fetch definido lançaria síncrono, fora
+  // do alcance do .catch da promise). Achado em 2026-08-28 quando
+  // desenharSupsComoRodovias passou a chamar esta função em TODO redesenho
+  // do mapa, não só quando o usuário abre o seletor manual.
+  if (typeof fetch !== 'function') return Promise.resolve(ESTADO_RODOVIAS.concessoesPorId || {});
   ESTADO_RODOVIAS.carregando = fetch('concessoes-rodovias.json')
     .then(function (resposta) { return resposta.json(); })
     .then(function (lista) {
@@ -880,8 +906,8 @@ function garantirConcessoesCarregadas() {
 }
 
 // Redesenha TODAS as camadas de rodovia a partir do zero -- mesma filosofia de
-// desenharPinosMapa (redesenhar inteiro é simples e barato o bastante pra no
-// máximo algumas linhas por vez). Só roda se o mapa já existe; se o seletor for
+// desenharSupsComoRodovias (redesenhar inteiro é simples e barato o bastante
+// pra no máximo algumas linhas por vez). Só roda se o mapa já existe; se o seletor for
 // mexido antes de a aba Mapa ter sido aberta (não deveria ser possível, o bloco
 // só existe dentro de #secao-mapa-alocacao, mas é uma guarda barata), sai sem
 // fazer nada.
@@ -1024,191 +1050,238 @@ function inicializarSeletorRodovias() {
   });
 }
 
-// Separa as linhas de resumo.porSup em quem tem coordenada conhecida (vira
-// pino) e quem não tem (vai pro painel "sem localização"). Função PURA --
-// não mexe no mapa nem no DOM, só decide. Testada sem MapLibre em
-// test/semanal-alocacao-interacao.test.js.
-function particionarSupsPorLocalizacao(porSup, coordenadasPorSup) {
-  var coords = coordenadasPorSup || {};
-  var comLocalizacao = [];
-  var semLocalizacao = [];
-  (porSup || []).forEach(function (s) {
-    if (coords[s.sup]) comLocalizacao.push(s);
-    else semLocalizacao.push(s);
+// Redesenho de 2026-08-28 (pedido do usuário: "a visualização não ficou
+// boa"): a aba Mapa deixa de usar pino + cartão flutuante por SUP
+// (coordenadasPorSup/desenharPinosMapa/desenharEquipesNoMapa, removidos) e
+// passa a desenhar a PRÓPRIA linha da rodovia da concessionária do SUP,
+// vinculada via VinculoSupConcessionaria (tomador × nome da concessão).
+// Nenhum pino sobrevive -- a linha é a única representação visual do SUP no
+// mapa, colorida pela leitura mais crítica entre os SUPs daquela rodovia
+// (uma rodovia pode servir mais de um SUP, ex. "Pantanal").
+
+// Ordem de severidade pra decidir a cor de uma rodovia com 2+ SUPs -- número
+// MENOR vence (mais urgente). 'falta-equipe'/'sem-equipe' empatados no topo
+// porque os dois já são a mesma cor vermelha em CORES_LEITURA_PINO; as
+// demais seguem a leitura natural do semáforo (âmbar > azul > verde >
+// cinza). Decisão do usuário (2026-08-28): nunca esconder um SUP com
+// problema atrás de outro tranquilo na mesma rodovia.
+var SEVERIDADE_LEITURA = {
+  'falta-equipe': 0, 'sem-equipe': 0,
+  'parado-com-carteira': 1,
+  antecipar: 2,
+  absorvido: 3,
+  'sem-demanda': 4,
+};
+
+// Função PURA -- decide só a leitura vencedora, nunca mexe em cor/DOM (isso
+// é desenharSupsComoRodovias). leituras: array de strings de leitura (uma
+// por SUP da mesma rodovia). Leitura desconhecida cai no mesmo nível de
+// 'sem-demanda' (a mais neutra), nunca trava.
+function leituraMaisCriticaEntre(leituras) {
+  var melhor = null;
+  var melhorSeveridade = Infinity;
+  (leituras || []).forEach(function (l) {
+    var severidade = SEVERIDADE_LEITURA[l];
+    if (severidade === undefined) severidade = SEVERIDADE_LEITURA['sem-demanda'];
+    if (severidade < melhorSeveridade) { melhorSeveridade = severidade; melhor = l; }
   });
-  return { comLocalizacao: comLocalizacao, semLocalizacao: semLocalizacao };
+  return melhor || 'sem-demanda';
 }
 
-// Conteúdo do popup de um pino -- SUP, tomador, tendência/capacidade
-// alocada, saldo e carteira. resumo.porSup já vem AGREGADO por SUP (ver
-// resumirAlocacao, compute-alocacao.js); o detalhe por coluna/tipologia fica
-// só no popup do CARTÃO da equipe (já existente em render-aba-alocacao.js),
-// não duplicado aqui.
-function popupHtmlDoPino(sup) {
-  return '<div class="popup-pino-alocacao">'
-    + '<p class="popup-titulo">' + RenderAbaAlocacao.escapeHtml(sup.sup) + '</p>'
-    + '<p>' + RenderAbaAlocacao.escapeHtml(sup.tomador || '—') + '</p>'
-    + '<p>Tendência: ' + sup.tendencia.toFixed(1) + ' · Capacidade alocada: ' + sup.capacidadeAlocada.toFixed(1) + '</p>'
-    + '<p>Saldo: ' + sup.saldo.toFixed(1) + '</p>'
-    + '<p>Carteira: ' + sup.carteira.toFixed(0) + '</p>'
+// Separa resumo.porSup em quem tem rodovia vinculada (agrupado por
+// concessaoId -- uma rodovia pode ter 2+ SUPs) e quem não tem (painel "sem
+// rodovia vinculada"). Função PURA -- não mexe no mapa nem no DOM, só
+// decide. vinculo: o retorno de VinculoSupConcessionaria.vincularSupsAConcessoes.
+function prepararRodoviasDoMapa(porSup, vinculo) {
+  var concessaoIdPorSup = (vinculo && vinculo.concessaoIdPorSup) || {};
+  var porConcessao = {};
+  var semRodovia = [];
+  (porSup || []).forEach(function (s) {
+    var concessaoId = concessaoIdPorSup[s.sup];
+    if (!concessaoId) { semRodovia.push(s); return; }
+    if (!porConcessao[concessaoId]) porConcessao[concessaoId] = [];
+    porConcessao[concessaoId].push(s);
+  });
+  return { porConcessao: porConcessao, semRodovia: semRodovia };
+}
+
+// Conteúdo do popup ao passar o mouse na rodovia -- por SUP daquela rodovia
+// (tendência/capacidade/saldo/carteira, o mesmo resumo agregado que o antigo
+// popup do pino já mostrava) mais uma lista de equipes alocadas AGRUPADA
+// POR TIPOLOGIA (coluna), combinando todos os SUPs daquela rodovia -- pedido
+// explícito do usuário em 2026-08-28. supsResumo: entradas de
+// dados.resumo.porSup só dos SUPs desta rodovia. porEquipe/equipesPorId: os
+// mesmos de dados.resumo.porEquipe/dados.equipesPorId, sem filtrar -- a
+// filtragem por SUP acontece aqui dentro.
+function popupHtmlDaRodovia(nomeRodovia, supsResumo, porEquipe, equipesPorId) {
+  var supsDaRodovia = {};
+  var blocosSup = (supsResumo || []).map(function (s) {
+    supsDaRodovia[s.sup] = true;
+    return '<div class="popup-rodovia-sup">'
+      + '<p class="popup-subtitulo">' + RenderAbaAlocacao.escapeHtml(s.sup)
+      + (s.tomador ? ' — ' + RenderAbaAlocacao.escapeHtml(s.tomador) : '') + '</p>'
+      + '<p>Tendência: ' + s.tendencia.toFixed(1) + ' · Capacidade alocada: ' + s.capacidadeAlocada.toFixed(1) + '</p>'
+      + '<p>Saldo: ' + s.saldo.toFixed(1) + ' · Carteira: ' + s.carteira.toFixed(0) + '</p>'
+      + '</div>';
+  }).join('');
+
+  var porTipologia = {};
+  (porEquipe || []).forEach(function (re) {
+    if (!re.sup || !supsDaRodovia[re.sup]) return;
+    var coluna = re.coluna || '—';
+    if (!porTipologia[coluna]) porTipologia[coluna] = [];
+    var equipe = (equipesPorId || {})[re.id];
+    porTipologia[coluna].push((equipe ? equipe.lider : re.id) + ' (' + re.id + ' · ' + re.sup + ')');
+  });
+  var colunas = Object.keys(porTipologia).sort();
+  var blocosEquipe = colunas.length
+    ? colunas.map(function (coluna) {
+      return '<p><strong>' + RenderAbaAlocacao.escapeHtml(coluna) + ':</strong> '
+        + porTipologia[coluna].map(RenderAbaAlocacao.escapeHtml).join(', ') + '</p>';
+    }).join('')
+    : '<p>Sem equipe alocada</p>';
+
+  return '<div class="popup-rodovia-alocacao">'
+    + '<p class="popup-titulo">' + RenderAbaAlocacao.escapeHtml(nomeRodovia) + '</p>'
+    + blocosSup
+    + '<p class="popup-equipes-titulo">Equipes por tipologia</p>'
+    + blocosEquipe
     + '</div>';
 }
 
-// "Efeito kanban" no mapa (2026-08-28): agrupa resumo.porEquipe (o MESMO
-// resumo que a tabela usa -- nenhum cálculo novo) por SUP, restrito a quem
-// JÁ tem destino (campo sup truthy) E cujo SUP tem coordenada conhecida (sem
-// coordenada não há onde pousar o cartão -- essa equipe continua contada
-// normalmente no resumo, só não ganha marcador no mapa). Função PURA, sem
-// DOM/MapLibre -- testável isoladamente (ver
-// test/semanal-alocacao-interacao.test.js). A ordem dentro de cada
-// grupo é a mesma de porEquipe (estável), pra não embaralhar a fileira de
-// cartões a cada redesenho sem necessidade.
-function agruparEquipesAlocadasPorSup(porEquipe, coordenadasPorSup) {
-  var coords = coordenadasPorSup || {};
-  var grupos = {};
-  (porEquipe || []).forEach(function (e) {
-    if (!e.sup || !coords[e.sup]) return;
-    if (!grupos[e.sup]) grupos[e.sup] = [];
-    grupos[e.sup].push(e);
-  });
-  return grupos;
-}
-
-// Deslocamento em pixels (não em grau de lat/lon -- fica constante em
-// qualquer zoom): enfileira os cartões do MESMO SUP numa fileira horizontal
-// logo abaixo do pino dele.
-var OFFSET_EQUIPE_MAPA_X_PX = 30;
-var OFFSET_EQUIPE_MAPA_Y_PX = 30;
-
-// Desenha, como marcador PRÓPRIO do MapLibre, o MESMO cartão que já aparece
-// no pool/na célula do Kanban (RenderAbaAlocacao.renderCartaoEquipe -- zero
-// markup novo) em cima do pino do SUP onde a equipe está alocada. É isto que
-// dá o "efeito kanban" pedido: mover a equipe de SUP tira o cartão de um
-// pino e recria no outro no PRÓXIMO desenharPinosMapa (chamado depois de
-// TODO aplicarMovimento, mesmo padrão que já redesenha a tabela) -- a
-// equipe "pula" de pino em pino do jeito que já pulava de célula em célula.
-//
-// Nenhuma regra de negócio nova: o cartão nasce com data-equipe/
-// data-arrastavel="sim" (o PRÓPRIO renderCartaoEquipe já decide isso, igual
-// em qualquer outro lugar que o desenha) -- o listener delegado em
-// #secao-mapa-alocacao (inicializarInteracaoAlocacao) já reconhece esse
-// seletor não importa onde ele apareça no DOM, então arrastar um cartão do
-// mapa funciona sem nenhum wireup extra. A classe
-// .marcador-alocacao-mapa-equipe + data-sup é o que faz resolverAlvoAlocacao
-// aceitar SOLTAR em cima de um cartão já alocado como se fosse soltar no
-// próprio pino (ver o comentário lá).
-function desenharEquipesNoMapa(dados, coordenadasPorSup) {
-  var mapa = MAPA_ALOCACAO.instancia;
-  if (!MAPA_ALOCACAO.marcadoresEquipe) MAPA_ALOCACAO.marcadoresEquipe = {};
-  Object.keys(MAPA_ALOCACAO.marcadoresEquipe).forEach(function (id) {
-    MAPA_ALOCACAO.marcadoresEquipe[id].remove();
-  });
-  MAPA_ALOCACAO.marcadoresEquipe = {};
-
-  var grupos = agruparEquipesAlocadasPorSup(dados.resumo.porEquipe, coordenadasPorSup);
-  Object.keys(grupos).forEach(function (sup) {
-    var coords = coordenadasPorSup[sup];
-    var lista = grupos[sup];
-    lista.forEach(function (resumoEquipe, i) {
-      var equipe = dados.equipesPorId[resumoEquipe.id];
-      if (!equipe) return; // não deveria acontecer -- porEquipe vem das mesmas equipes
-      var wrap = document.createElement('div');
-      wrap.innerHTML = RenderAbaAlocacao.renderCartaoEquipe(
-        equipe, resumoEquipe, dados.somenteLeitura, false, resumoEquipe.coluna
-      );
-      var slot = wrap.firstElementChild;
-      if (!slot) return;
-      var cartao = slot.querySelector('.cartao-equipe');
-      if (cartao) {
-        cartao.classList.add('marcador-alocacao-mapa-equipe');
-        cartao.setAttribute('data-sup', sup);
-      }
-      var deslocX = (i - (lista.length - 1) / 2) * OFFSET_EQUIPE_MAPA_X_PX;
-      var marcador = new maplibregl.Marker({ element: slot, offset: [deslocX, OFFSET_EQUIPE_MAPA_Y_PX] })
-        .setLngLat([coords.lon, coords.lat])
-        .addTo(mapa);
-      MAPA_ALOCACAO.marcadoresEquipe[resumoEquipe.id] = marcador;
-    });
+// Estende bounds com toda coordenada de um FeatureCollection LineString/
+// MultiLineString -- mesma necessidade que o antigo fitBounds por pino
+// tinha, só que agora a geometria vem do TRAÇADO da rodovia, não de um
+// ponto só.
+function estenderBoundsPorGeojson(bounds, geojson) {
+  ((geojson && geojson.features) || []).forEach(function (f) {
+    var geom = f.geometry;
+    if (!geom) return;
+    if (geom.type === 'LineString') {
+      geom.coordinates.forEach(function (c) { bounds.extend(c); });
+    } else if (geom.type === 'MultiLineString') {
+      geom.coordinates.forEach(function (linha) { linha.forEach(function (c) { bounds.extend(c); }); });
+    }
   });
 }
 
-// Redesenha os pinos a partir do zero a cada chamada -- mesma filosofia de
-// montarAbaAlocacao pro Kanban (redesenha inteiro; mais simples e barato o
-// bastante que otimizar incrementalmente não vale a pena aqui: no máximo
-// algumas dezenas de SUPs por semana). dados: o retorno de
-// RenderAbaAlocacao.prepararDadosAlocacao (não nulo). coordenadasPorSup:
-// window.__DEMANDAS__.coordenadasPorSup.
+// Prefixo das camadas desenhadas por SUP -- namespace PRÓPRIO, distinto de
+// 'rodovia-' (o seletor manual "Rodovias" de referência, decisão 2026-08-27,
+// que continua existindo e independente disto: um é dado da alocação, o
+// outro é a lista das 81 concessionárias pra consulta livre). Nunca
+// colidem, então as duas camadas de uma mesma concessionária (se o usuário
+// também a marcar no seletor manual) convivem sem conflito de id.
+var PREFIXO_CAMADA_SUP_RODOVIA = 'sup-rodovia-';
+
+function limparCamadasSupRodoviaDoMapa(mapa) {
+  (MAPA_ALOCACAO.camadasSupRodovia || []).forEach(function (id) {
+    if (mapa.getLayer(id)) mapa.removeLayer(id);
+    if (mapa.getSource(id)) mapa.removeSource(id);
+  });
+  MAPA_ALOCACAO.camadasSupRodovia = [];
+}
+
+// Redesenha as rodovias do zero a cada chamada -- redesenhar inteiro é
+// simples e barato o bastante pra no máximo algumas dezenas de SUPs por
+// semana. dados: o
+// retorno de RenderAbaAlocacao.prepararDadosAlocacao (não nulo).
 //
-// MAPA_ALOCACAO.marcadores pode não existir ainda quando esta função é
-// chamada com uma instância "dublê" (só nos testes -- ver
-// test/semanal-alocacao-interacao.test.js, que só atribui
-// MAPA_ALOCACAO.instancia sem passar por inicializarMapaAlocacao, a única
-// função que hoje inicializa .marcadores = {}); a guarda evita um
-// TypeError em Object.keys(undefined) nesse caminho.
-function desenharPinosMapa(dados, coordenadasPorSup) {
+// Assíncrona (depende de garantirConcessoesCarregadas, o MESMO fetch/cache
+// que o seletor manual de rodovias já usa -- nenhuma requisição nova) --
+// por isso guarda dados em MAPA_ALOCACAO.ultimosDados ANTES do fetch: se
+// um redesenho mais novo chegar enquanto este ainda busca o JSON (usuário
+// trocou de semana rápido, por exemplo), o callback usa o dado MAIS FRESCO
+// na hora de desenhar, nunca o congelado no momento da chamada.
+function desenharSupsComoRodovias(dados) {
   if (!MAPA_ALOCACAO.instancia) return;
   var mapa = MAPA_ALOCACAO.instancia;
-  if (!MAPA_ALOCACAO.marcadores) MAPA_ALOCACAO.marcadores = {};
+  MAPA_ALOCACAO.ultimosDados = dados;
+  limparCamadasSupRodoviaDoMapa(mapa);
 
-  Object.keys(MAPA_ALOCACAO.marcadores).forEach(function (sup) {
-    MAPA_ALOCACAO.marcadores[sup].remove();
-  });
-  MAPA_ALOCACAO.marcadores = {};
+  garantirConcessoesCarregadas().then(function (concessoesPorId) {
+    var dadosAtuais = MAPA_ALOCACAO.ultimosDados;
+    if (!MAPA_ALOCACAO.instancia || !dadosAtuais) return;
 
-  var particionado = particionarSupsPorLocalizacao(dados.resumo.porSup, coordenadasPorSup);
+    var concessoesLista = Object.keys(concessoesPorId).map(function (id) { return concessoesPorId[id]; });
+    var vinculo = VinculoSupConcessionaria.vincularSupsAConcessoes(window.__REGISTROS__, concessoesLista);
+    MAPA_ALOCACAO.vinculoSupConcessao = vinculo;
 
-  // fitBounds (achado Important 4 da revisão final): a Task 12 tinha
-  // prometido isto num comentário (perto de inicializarMapaAlocacao, "ajustado
-  // sozinho... fitBounds") mas nunca implementou -- o mapa ficava sempre
-  // hardcoded em Paraná (center/zoom de inicializarMapaAlocacao), então um
-  // SUP fora dessa região nasceria fora da tela sem nenhum indício de que
-  // existe (o painel "sem localização" não o contaria -- ele TEM
-  // coordenada, só está fora do enquadramento). Sem efeito hoje (nenhuma
-  // fonte de coordenadasPorSup publicada ainda -- 0 pinos, ver o comentário
-  // em coordenadas-sup.js), mas seria a primeira coisa visivelmente quebrada
-  // no dia em que coordenadas reais forem publicadas.
-  //
-  // Guardado por enquadrouUmaVez pra rodar só no PRIMEIRO desenho que tiver
-  // pelo menos um pino -- desenharPinosMapa é chamada a cada redesenho
-  // (arrasto, troca de filtro/semana/mês, "Atualizar dados"), e reenquadrar
-  // toda vez brigaria com o usuário ter panado/dado zoom por conta própria.
-  if (particionado.comLocalizacao.length && !MAPA_ALOCACAO.enquadrouUmaVez) {
+    var preparado = prepararRodoviasDoMapa(dadosAtuais.resumo.porSup, vinculo);
+
     var bounds = new maplibregl.LngLatBounds();
-    particionado.comLocalizacao.forEach(function (sup) {
-      var c = coordenadasPorSup[sup.sup];
-      bounds.extend([c.lon, c.lat]);
+    var teveGeometria = false;
+    Object.keys(preparado.porConcessao).forEach(function (concessaoId) {
+      var concessao = concessoesPorId[concessaoId];
+      if (!concessao || !concessao.geojson) return;
+      var supsResumo = preparado.porConcessao[concessaoId];
+      var leitura = leituraMaisCriticaEntre(supsResumo.map(function (s) { return s.leitura; }));
+      var cor = CORES_LEITURA_PINO[leitura] || CORES_LEITURA_PINO['sem-demanda'];
+      var camadaId = PREFIXO_CAMADA_SUP_RODOVIA + concessaoId;
+      mapa.addSource(camadaId, { type: 'geojson', data: concessao.geojson });
+      mapa.addLayer({
+        id: camadaId, type: 'line', source: camadaId,
+        paint: { 'line-color': cor, 'line-width': 6, 'line-opacity': 0.95 },
+      });
+      MAPA_ALOCACAO.camadasSupRodovia.push(camadaId);
+      estenderBoundsPorGeojson(bounds, concessao.geojson);
+      teveGeometria = true;
     });
-    mapa.fitBounds(bounds, { padding: 40, maxZoom: 12 });
-    MAPA_ALOCACAO.enquadrouUmaVez = true;
-  }
 
-  particionado.comLocalizacao.forEach(function (sup) {
-    var coords = coordenadasPorSup[sup.sup];
-    var el = document.createElement('div');
-    el.className = 'marcador-alocacao-mapa';
-    el.style.background = CORES_LEITURA_PINO[sup.leitura] || CORES_LEITURA_PINO['sem-demanda'];
-    el.setAttribute('data-sup', sup.sup);
-    var marcador = new maplibregl.Marker({ element: el })
-      .setLngLat([coords.lon, coords.lat])
-      .setPopup(new maplibregl.Popup({ offset: 12 }).setHTML(popupHtmlDoPino(sup)))
-      .addTo(mapa);
-    MAPA_ALOCACAO.marcadores[sup.sup] = marcador;
-  });
-
-  desenharEquipesNoMapa(dados, coordenadasPorSup);
-
-  var painelSemLocalizacao = document.getElementById('mapa-alocacao-sem-localizacao');
-  if (painelSemLocalizacao) {
-    if (!particionado.semLocalizacao.length) {
-      painelSemLocalizacao.innerHTML = '';
-    } else {
-      painelSemLocalizacao.innerHTML = '<strong>' + particionado.semLocalizacao.length
-        + ' SUP(s) sem localização</strong><ul>'
-        + particionado.semLocalizacao.map(function (s) {
-          return '<li>' + RenderAbaAlocacao.escapeHtml(s.sup) + ' — ' + RenderAbaAlocacao.escapeHtml(s.tomador || '—') + '</li>';
-        }).join('') + '</ul>';
+    // Guardado por enquadrouUmaVez pra rodar só no PRIMEIRO desenho com pelo
+    // menos uma rodovia -- desenharSupsComoRodovias é chamada a cada
+    // redesenho (arrasto, troca de filtro/semana/mês, "Atualizar dados"), e
+    // reenquadrar toda vez brigaria com o usuário ter panado/dado zoom por
+    // conta própria (mesma cautela que o antigo fitBounds por pino já tinha).
+    if (teveGeometria && !MAPA_ALOCACAO.enquadrouUmaVez) {
+      mapa.fitBounds(bounds, { padding: 40, maxZoom: 12 });
+      MAPA_ALOCACAO.enquadrouUmaVez = true;
     }
+
+    var painelSemRodovia = document.getElementById('mapa-alocacao-sem-localizacao');
+    if (painelSemRodovia) {
+      if (!preparado.semRodovia.length) {
+        painelSemRodovia.innerHTML = '';
+      } else {
+        painelSemRodovia.innerHTML = '<strong>' + preparado.semRodovia.length
+          + ' SUP(s) sem rodovia vinculada</strong><ul>'
+          + preparado.semRodovia.map(function (s) {
+            return '<li>' + RenderAbaAlocacao.escapeHtml(s.sup) + ' — ' + RenderAbaAlocacao.escapeHtml(s.tomador || '—') + '</li>';
+          }).join('') + '</ul>';
+      }
+    }
+  });
+}
+
+// Popup de hover -- UMA instância reaproveitada (não uma por rodovia),
+// reposicionada/reescrita a cada 'mousemove' -- ligado UMA VEZ por instância
+// do mapa (inicializarMapaAlocacao), nunca a cada redesenho (uma camada WebGL
+// não tem elemento DOM por feature pra prender um listener; queryRenderedFeatures
+// no nível do MAPA, não da camada, é o que permite reaproveitar o mesmo
+// listener não importa quantas rodovias existam a cada redesenho).
+function mostrarPopupHoverRodovia(camadaId, lngLat) {
+  var mapa = MAPA_ALOCACAO.instancia;
+  var dados = MAPA_ALOCACAO.ultimosDados;
+  if (!mapa || !dados) return;
+  var concessaoId = camadaId.slice(PREFIXO_CAMADA_SUP_RODOVIA.length);
+  var concessao = (ESTADO_RODOVIAS.concessoesPorId || {})[concessaoId];
+  var sups = ((MAPA_ALOCACAO.vinculoSupConcessao || {}).supsPorConcessaoId || {})[concessaoId] || [];
+  if (!concessao || !sups.length) return;
+
+  var porSupMap = {};
+  (dados.resumo.porSup || []).forEach(function (s) { porSupMap[s.sup] = s; });
+  var supsResumo = sups.map(function (sup) { return porSupMap[sup]; }).filter(Boolean);
+  if (!supsResumo.length) return;
+
+  var html = popupHtmlDaRodovia(concessao.nome, supsResumo, dados.resumo.porEquipe, dados.equipesPorId);
+  if (!MAPA_ALOCACAO.popupHoverRodovia) {
+    MAPA_ALOCACAO.popupHoverRodovia = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
   }
+  MAPA_ALOCACAO.popupHoverRodovia.setLngLat(lngLat).setHTML(html);
+  if (!MAPA_ALOCACAO.popupHoverRodovia.isOpen()) MAPA_ALOCACAO.popupHoverRodovia.addTo(mapa);
+}
+
+function esconderPopupHoverRodovia() {
+  if (MAPA_ALOCACAO.popupHoverRodovia) MAPA_ALOCACAO.popupHoverRodovia.remove();
 }
 
 // Pointer Events, não o drag-and-drop nativo do HTML5: o nativo não funciona
@@ -1403,28 +1476,58 @@ function resolverAlvoAlocacao(e) {
   var celula = sob.closest('.celula-alocacao');
   if (celula) return { tipo: 'celula', el: celula };
   if (sob.closest('.pool-alocacao')) return { tipo: 'pool', el: null };
-  // O pino do mapa (Task 13): um <div class="marcador-alocacao-mapa"> que o
-  // MapLibre posiciona sobre o canvas, dentro de #secao-mapa-alocacao -- nunca
-  // aninhado dentro de .celula-alocacao (que só existe na tabela Kanban,
-  // #secao-kanban-alocacao) nem de .pool-alocacao (que na aba Mapa é um
-  // painel próprio, #mapa-alocacao-pool, fora do container do mapa). As três
-  // classes nunca coincidem no mesmo ancestral por construção -- não há
-  // ambiguidade de ordem para resolver aqui, ao contrário de célula/pool
-  // acima (cuja ordem importa porque uma célula pode, em tese, estar dentro
-  // de um layout que também bate '.pool-alocacao'). Checada por último só
-  // porque é a mais nova, não por precisar ceder a nada.
-  //
-  // .marcador-alocacao-mapa-equipe (efeito kanban, 2026-08-28): o CARTÃO da
-  // equipe alocada, desenhado como marcador PRÓPRIO em cima do pino do SUP
-  // dela (desenharEquipesNoMapa) -- ganha data-sup no mesmo formato do pino,
-  // então soltar em cima de um cartão de equipe já alocada tem exatamente o
-  // mesmo efeito de soltar no pino: aplicarMovimentoNoPino decide a coluna e
-  // aplicarMovimento decide se aceita. Reconhecido no MESMO closest() do
-  // pino -- as duas classes nunca aninham uma dentro da outra por construção
-  // (marcador-equipe é ele mesmo o alvo, não um filho do marcador-pino).
-  var pino = sob.closest('.marcador-alocacao-mapa, .marcador-alocacao-mapa-equipe');
-  if (pino) return { tipo: 'pino', el: pino };
+  // A rodovia no mapa (redesenho de 2026-08-28): não existe mais pino nem
+  // cartão flutuante -- o SUP é representado pela PRÓPRIA linha da rodovia,
+  // desenhada em WebGL (uma camada MapLibre, não um elemento DOM por
+  // feature). document.elementFromPoint só acha o <canvas> do mapa aqui, sem
+  // saber QUAL feature está sob o ponto -- por isso este ramo, diferente dos
+  // de cima, precisa de mapa.queryRenderedFeatures em vez de .closest().
+  var alvoRodovia = resolverAlvoRodoviaNoMapa(e, sob);
+  if (alvoRodovia) return alvoRodovia;
   return null;
+}
+
+// Hit-test contra as camadas de rodovia dos SUPs (MAPA_ALOCACAO.camadasSupRodovia,
+// ver desenharSupsComoRodovias) -- separado de resolverAlvoAlocacao só pra
+// isolar a parte que depende de mapa.queryRenderedFeatures/getContainer
+// (não dá pra simular num DOM falso sem MapLibre de verdade; a prova FUNCIONAL
+// deste caminho é resolverAlvoRodoviaDeFeatures logo abaixo, que é pura).
+// sob: o elemento devolvido por elementFromPoint (ou e.target) -- precisa
+// estar DENTRO do container do mapa pra este ramo disparar.
+function resolverAlvoRodoviaNoMapa(e, sob) {
+  var mapa = MAPA_ALOCACAO.instancia;
+  var camadas = MAPA_ALOCACAO.camadasSupRodovia || [];
+  if (!mapa || !camadas.length || typeof mapa.queryRenderedFeatures !== 'function') return null;
+  if (typeof e.clientX !== 'number') return null;
+  var container = mapa.getContainer();
+  if (!container) return null;
+  var dentroDoMapa = sob === container || (typeof container.contains === 'function' && container.contains(sob));
+  if (!dentroDoMapa) return null;
+
+  var retangulo = container.getBoundingClientRect();
+  var px = e.clientX - retangulo.left;
+  var py = e.clientY - retangulo.top;
+  // Tolerância de alguns pixels ao redor do ponto -- a linha é fina (6px de
+  // largura na tela), soltar em cima do TRAÇO exato seria pouco tolerante
+  // pro dedo num tablet.
+  var TOLERANCIA_PX = 4;
+  var features = mapa.queryRenderedFeatures(
+    [[px - TOLERANCIA_PX, py - TOLERANCIA_PX], [px + TOLERANCIA_PX, py + TOLERANCIA_PX]],
+    { layers: camadas }
+  );
+  return resolverAlvoRodoviaDeFeatures(features, MAPA_ALOCACAO.vinculoSupConcessao, mapa.unproject([px, py]));
+}
+
+// Função PURA -- decide o alvo a partir do resultado JÁ QUERIDO do MapLibre,
+// sem tocar mapa/DOM. Testável isoladamente com uma lista de features falsa
+// (só precisa de .layer.id, o único campo que este código lê).
+function resolverAlvoRodoviaDeFeatures(features, vinculoSupConcessao, lngLat) {
+  if (!features || !features.length) return null;
+  var camadaId = features[0].layer.id;
+  var concessaoId = camadaId.slice(PREFIXO_CAMADA_SUP_RODOVIA.length);
+  var sups = ((vinculoSupConcessao || {}).supsPorConcessaoId || {})[concessaoId] || [];
+  if (!sups.length) return null;
+  return { tipo: 'rodovia', sups: sups, lngLat: lngLat };
 }
 
 // Resolve a coluna automaticamente (ComputeAlocacao.escolherColunaAutomatica,
@@ -1454,6 +1557,35 @@ function aplicarMovimentoNoPino(equipeId, sup) {
   var coluna = ComputeAlocacao.escolherColunaAutomatica(equipe.colunas || [], celulasDaLinha);
   if (!coluna) return false;
   return aplicarMovimento(equipeId, sup, coluna);
+}
+
+// Miniseletor (2026-08-28): quando a rodovia onde a equipe foi solta tem 2+
+// SUPs (ex. "Pantanal"), não dá pra saber sozinho qual deles o usuário quis
+// -- decisão do usuário: perguntar na hora, em vez de adivinhar pelo maior
+// déficit. Um popup do MapLibre com um botão por SUP candidato, ancorado no
+// ponto onde a equipe foi solta. O clique no botão (delegado no MESMO
+// listener de #secao-mapa-alocacao, via [data-sup-escolha]) chama
+// aplicarMovimentoNoPino de verdade -- este popup só APRESENTA a escolha,
+// não decide nada por conta própria.
+function abrirEscolhaDeSupNaRodovia(equipeId, sups, lngLat) {
+  var mapa = MAPA_ALOCACAO.instancia;
+  if (!mapa) return;
+  if (MAPA_ALOCACAO.popupEscolhaSup) MAPA_ALOCACAO.popupEscolhaSup.remove();
+
+  var container = document.createElement('div');
+  container.className = 'popup-escolha-sup-rodovia';
+  container.innerHTML = '<p class="popup-titulo">Alocar em qual SUP?</p>'
+    + sups.map(function (sup) {
+      return '<button type="button" class="botao-escolha-sup-rodovia"'
+        + ' data-equipe-escolha="' + RenderAbaAlocacao.escapeHtml(equipeId) + '"'
+        + ' data-sup-escolha="' + RenderAbaAlocacao.escapeHtml(sup) + '">'
+        + RenderAbaAlocacao.escapeHtml(sup) + '</button>';
+    }).join('');
+
+  MAPA_ALOCACAO.popupEscolhaSup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 8 })
+    .setLngLat(lngLat)
+    .setDOMContent(container)
+    .addTo(mapa);
 }
 
 // Um único listener delegado por SEÇÃO, montado UMA VEZ (a seção nunca é
@@ -1581,8 +1713,12 @@ function inicializarInteracaoAlocacao(idSecao) {
     var alvo = resolverAlvoAlocacao(e);
     if (alvo && alvo.tipo === 'celula') {
       aplicarMovimento(equipeId, alvo.el.getAttribute('data-sup'), alvo.el.getAttribute('data-coluna'));
-    } else if (alvo && alvo.tipo === 'pino') {
-      aplicarMovimentoNoPino(equipeId, alvo.el.getAttribute('data-sup'));
+    } else if (alvo && alvo.tipo === 'rodovia') {
+      if (alvo.sups.length === 1) {
+        aplicarMovimentoNoPino(equipeId, alvo.sups[0]);
+      } else {
+        abrirEscolhaDeSupNaRodovia(equipeId, alvo.sups, alvo.lngLat);
+      }
     } else if (alvo && alvo.tipo === 'pool') {
       aplicarMovimento(equipeId, '', '');
     }
@@ -1606,6 +1742,22 @@ function inicializarInteracaoAlocacao(idSecao) {
     // foi resolvido lá -- este é o mesmo gesto, ignora e consome a flag.
     if (SUPRIMIR_PROXIMO_CLICK_ALOCACAO) {
       SUPRIMIR_PROXIMO_CLICK_ALOCACAO = false;
+      return;
+    }
+
+    // Botão do miniseletor "Alocar em qual SUP?" (2026-08-28,
+    // abrirEscolhaDeSupNaRodovia) -- resolve a ambiguidade de uma rodovia
+    // com 2+ SUPs. Checado ANTES de [data-acao]/[data-equipe] porque o botão
+    // não carrega nenhum dos dois.
+    var botaoEscolhaSup = e.target && e.target.closest ? e.target.closest('[data-sup-escolha]') : null;
+    if (botaoEscolhaSup) {
+      var equipeDaEscolha = botaoEscolhaSup.getAttribute('data-equipe-escolha');
+      var supDaEscolha = botaoEscolhaSup.getAttribute('data-sup-escolha');
+      if (MAPA_ALOCACAO.popupEscolhaSup) {
+        MAPA_ALOCACAO.popupEscolhaSup.remove();
+        MAPA_ALOCACAO.popupEscolhaSup = null;
+      }
+      aplicarMovimentoNoPino(equipeDaEscolha, supDaEscolha);
       return;
     }
 
@@ -1649,8 +1801,12 @@ function inicializarInteracaoAlocacao(idSecao) {
       var alvoClique = resolverAlvoAlocacao(e);
       if (alvoClique && alvoClique.tipo === 'celula') {
         aplicarMovimento(equipeIdSelecionado, alvoClique.el.getAttribute('data-sup'), alvoClique.el.getAttribute('data-coluna'));
-      } else if (alvoClique && alvoClique.tipo === 'pino') {
-        aplicarMovimentoNoPino(equipeIdSelecionado, alvoClique.el.getAttribute('data-sup'));
+      } else if (alvoClique && alvoClique.tipo === 'rodovia') {
+        if (alvoClique.sups.length === 1) {
+          aplicarMovimentoNoPino(equipeIdSelecionado, alvoClique.sups[0]);
+        } else {
+          abrirEscolhaDeSupNaRodovia(equipeIdSelecionado, alvoClique.sups, alvoClique.lngLat);
+        }
       } else if (alvoClique && alvoClique.tipo === 'pool') {
         aplicarMovimento(equipeIdSelecionado, '', '');
       }
@@ -1756,9 +1912,10 @@ document.getElementById('atualizar-dashboard').addEventListener('click', atualiz
 // HTML estático (ver renderAlocacaoPagina), e os listeners delegados não
 // dependem de senha nem de a aba já ter sido desenhada.
 //
-// DUAS chamadas (Task 14): a aba Mapa também aceita arrasto, e os pinos
-// (.marcador-alocacao-mapa) ficam dentro de #secao-mapa-alocacao -- fora da
-// árvore do Kanban, então o listener dele nunca os alcançaria.
+// DUAS chamadas (Task 14): a aba Mapa também aceita arrasto, e as rodovias
+// (camadas MapLibre dentro de #mapa-alocacao-canvas) ficam dentro de
+// #secao-mapa-alocacao -- fora da árvore do Kanban, então o listener dele
+// nunca as alcançaria.
 inicializarInteracaoAlocacao('secao-kanban-alocacao');
 inicializarInteracaoAlocacao('secao-mapa-alocacao');
 
@@ -1949,26 +2106,31 @@ function renderAlocacaoPagina({
   }
   #secao-mapa-alocacao .mapa-alocacao-sem-localizacao:empty { display: none; }
   #secao-mapa-alocacao .maplibregl-ctrl-attrib { background: rgba(0,0,0,0.5); color: var(--mapa-texto-secundario); }
-  #secao-mapa-alocacao .marcador-alocacao-mapa {
-    width: 18px; height: 18px; border-radius: 50%;
-    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.5);
-    cursor: pointer;
+  #secao-mapa-alocacao .maplibregl-popup-content { color: #1a1d24; max-width: 320px; }
+  /* Popup de hover na rodovia (redesenho de 2026-08-28) -- por SUP daquela
+     rodovia (tendência/capacidade/saldo/carteira) mais a lista de equipes
+     por tipologia, ver popupHtmlDaRodovia. */
+  #secao-mapa-alocacao .popup-rodovia-alocacao { font-family: "Poppins", sans-serif; font-size: 13px; }
+  #secao-mapa-alocacao .popup-rodovia-alocacao .popup-titulo { font-weight: 700; margin: 0 0 6px; color: #1a1d24; }
+  #secao-mapa-alocacao .popup-rodovia-sup {
+    padding: 6px 0; border-top: 1px solid rgba(0,0,0,0.12);
   }
-  /* "Efeito kanban" (2026-08-28): o cartão da equipe alocada, pousado sobre
-     o pino do SUP dela -- mesmo .cartao-equipe do pool/Kanban, só com sombra
-     extra (flutua sobre tiles de mapa/satélite, que variam de brilho, ao
-     contrário do fundo sólido de --surface-1 de onde o cartão normalmente
-     vem) e fonte um pouco menor pra caber várias lado a lado sem disputar
-     espaço com o pino. Cor/borda continuam de --surface-1/--border (a base
-     do dashboard já é escura -- ver :root em render-shell.js -- por isso o
-     cartão não precisa de um tema próprio aqui, ao contrário dos PAINÉIS da
-     aba Mapa, que usam a paleta Suporte Infra à parte). */
-  #secao-mapa-alocacao .marcador-alocacao-mapa-equipe {
-    font-size: 11px; box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  #secao-mapa-alocacao .popup-rodovia-sup:first-of-type { border-top: none; }
+  #secao-mapa-alocacao .popup-rodovia-sup .popup-subtitulo { font-weight: 600; margin: 0 0 2px; color: #1a1d24; }
+  #secao-mapa-alocacao .popup-equipes-titulo {
+    font-weight: 600; margin: 8px 0 4px; padding-top: 6px;
+    border-top: 1px solid rgba(0,0,0,0.12); color: #1a1d24;
   }
-  #secao-mapa-alocacao .maplibregl-popup-content { color: #1a1d24; }
-  #secao-mapa-alocacao .popup-pino-alocacao { font-family: "Poppins", sans-serif; font-size: 13px; }
-  #secao-mapa-alocacao .popup-pino-alocacao .popup-titulo { font-weight: 700; margin: 0 0 4px; color: #1a1d24; }
+  /* Miniseletor "Alocar em qual SUP?" (abrirEscolhaDeSupNaRodovia) -- só
+     aparece quando a rodovia solta tem 2+ SUPs. */
+  #secao-mapa-alocacao .popup-escolha-sup-rodovia { font-family: "Poppins", sans-serif; font-size: 13px; }
+  #secao-mapa-alocacao .popup-escolha-sup-rodovia .popup-titulo { font-weight: 700; margin: 0 0 6px; color: #1a1d24; }
+  #secao-mapa-alocacao .botao-escolha-sup-rodovia {
+    display: block; width: 100%; margin-bottom: 4px; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1);
+    color: var(--text-primary); font-size: 12px; cursor: pointer; text-align: left;
+  }
+  #secao-mapa-alocacao .botao-escolha-sup-rodovia:hover { background: var(--mapa-acento); color: var(--mapa-acento-contraste); }
   `;
 
   return `<!DOCTYPE html>

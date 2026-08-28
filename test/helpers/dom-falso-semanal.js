@@ -95,11 +95,6 @@ function criarDocumentoFalso() {
   // (achado Important 3 da revisão do Task 9, 2026-08-26).
   const celulasAlocacao = [];
   const cartoesAlocacao = [];
-  // Os PINOS do mapa (Task 14, 2026-08-26) -- mesmo motivo de
-  // celulasAlocacao/cartoesAlocacao: sem eles querySelectorAll
-  // ('.marcador-alocacao-mapa') devolveria [] e um teste de arrasto até o pino
-  // passaria VAZIO. Registrados pelos testes com registrarMarcadoresAlocacao().
-  const marcadoresAlocacao = [];
   let poolAlocacao = null;
 
   function comClassList(extra) {
@@ -156,11 +151,6 @@ function criarDocumentoFalso() {
     if (sel === '[data-equipe]') return cartoesAlocacao;
     const porEquipe = /^\[data-equipe="([^"]+)"\]$/.exec(sel);
     if (porEquipe) return cartoesAlocacao.filter((c) => c.equipeId === porEquipe[1]);
-    // Os pinos do mapa (Task 14). Devolve [] quando nenhum teste registrou
-    // marcador -- e NÃO null, porque [] aqui é a resposta certa ("esta página
-    // não tem pino nenhum"), enquanto null significaria "não reconheço este
-    // seletor" e deixaria o chamador procurar noutro lugar.
-    if (sel === '.marcador-alocacao-mapa') return marcadoresAlocacao;
     return null; // null, não [] -- sinaliza "não é um seletor de alocação", ver os chamadores
   }
 
@@ -186,7 +176,22 @@ function criarDocumentoFalso() {
         style: {},
         classList,
         listeners: {},
-        addEventListener(tipo, fn) { this.listeners[tipo] = fn; },
+        // Empilha por tipo (mesma semântica do addEventListener real -- dois
+        // registros pro MESMO tipo no MESMO elemento coexistem, os dois
+        // disparam) em vez de sobrescrever: #secao-mapa-alocacao recebe
+        // 'click' de inicializarInteracaoAlocacao E de inicializarSeletorRodovias
+        // (2026-08-28) -- sobrescrever perderia o primeiro (o que trata o
+        // miniseletor "Alocar em qual SUP?"). `listeners[tipo]` continua
+        // CHAMÁVEL como uma função só, então nenhum teste existente que já
+        // fazia `el.listeners.click(evento)` precisa mudar -- só passa a
+        // disparar todos os handlers registrados, não só o último.
+        _listenersPorTipo: {},
+        addEventListener(tipo, fn) {
+          if (!this._listenersPorTipo[tipo]) this._listenersPorTipo[tipo] = [];
+          this._listenersPorTipo[tipo].push(fn);
+          const todos = this._listenersPorTipo[tipo];
+          this.listeners[tipo] = (evento) => { todos.forEach((h) => h(evento)); };
+        },
         focus() {},
         value: '',
         textContent: '',
@@ -287,26 +292,6 @@ function criarDocumentoFalso() {
         filho.parentNode = null;
         return filho;
       },
-    },
-    // Os PINOS do mapa (Task 14). Mesmo padrão de registrarCelulasAlocacao:
-    // cada pino carrega o data-sup que resolverAlvoAlocacao lê, e um closest()
-    // que só reconhece o próprio seletor -- o suficiente para o gesto de
-    // arrasto até o pino ser exercitado de ponta a ponta pelos listeners
-    // REAIS, em vez de chamar aplicarMovimentoNoPino direto.
-    registrarMarcadoresAlocacao(sups) {
-      marcadoresAlocacao.length = 0;
-      (sups || []).forEach((sup) => {
-        const marcador = comClassList({
-          getAttribute: (attr) => (attr === 'data-sup' ? String(sup) : null),
-          sup: String(sup),
-        });
-        marcador.closest = (sel) => (sel === '.marcador-alocacao-mapa, .marcador-alocacao-mapa-equipe' ? marcador : null);
-        marcadoresAlocacao.push(marcador);
-      });
-      return marcadoresAlocacao;
-    },
-    marcadorAlocacao(sup) {
-      return marcadoresAlocacao.find((m) => m.sup === String(sup)) || null;
     },
     // document.querySelector só é chamado como '#algum-id .filtro-multi-trigger'
     // ou '#algum-id .filtro-multi-painel' (ver atualizarRotuloFiltro/montarFiltroMulti
