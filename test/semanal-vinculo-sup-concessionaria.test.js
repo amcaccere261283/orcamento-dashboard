@@ -64,6 +64,13 @@ test('vincularSupsAConcessoes com registros/concessoes vazios ou ausentes nunca 
   assert.deepStrictEqual(vincularSupsAConcessoes(null, null), { concessaoIdPorSup: {}, supsPorConcessaoId: {} });
 });
 
+test('vincularSupsAConcessoes resolve "Rota Sorocabana" -> "Sorocabana" via sinônimo confirmado (2026-08-28)', () => {
+  const registros = [{ sup: 'SUP-8370-25', tomador: 'Rota Sorocabana' }];
+  const concessoes = [concessao('15', 'Sorocabana')];
+  const resultado = vincularSupsAConcessoes(registros, concessoes);
+  assert.deepStrictEqual(resultado.concessaoIdPorSup, { 'SUP-8370-25': '15' });
+});
+
 test('vincularSupsAConcessoes ignora registro sem SUP', () => {
   const registros = [{ sup: '', tomador: 'Autoban' }, { sup: null, tomador: 'Autoban' }];
   const concessoes = [concessao('10', 'Autoban')];

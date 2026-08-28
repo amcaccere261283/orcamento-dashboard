@@ -25,6 +25,19 @@
 
 var SUFIXOS_RAZAO_SOCIAL = [' s.a.', ' s.a', ' s/a', ' ltda.', ' ltda'];
 
+// Sinônimos CONFIRMADOS manualmente (nunca inferidos por aproximação) --
+// tomador normalizado -> nome de concessão normalizado. Cada entrada aqui é
+// uma correspondência que o dono do projeto verificou pessoalmente ser a
+// MESMA concessão, apesar do texto do Tomador na MATRIZ não bater exato com
+// o nome cadastrado na ABCR/ANTT. "Rota Sorocabana" (2026-08-28): SUP-8370-25
+// usa esse nome comercial na MATRIZ, mas a ABCR cadastra a concessão só como
+// "Sorocabana" -- confirmado que é a mesma empresa antes de entrar aqui.
+// Nunca adicionar uma entrada por suposição/prefixo comum -- só depois de
+// confirmação explícita, um caso de cada vez.
+var SINONIMOS_TOMADOR_CONFIRMADOS = {
+  rotasorocabana: 'sorocabana',
+};
+
 function normalizarNomeConcessao(nome) {
   var texto = String(nome || '').toLowerCase().trim();
   SUFIXOS_RAZAO_SOCIAL.forEach(function (sufixo) {
@@ -61,6 +74,7 @@ function vincularSupsAConcessoes(registros, concessoes) {
     if (!r.sup || supsVistos[r.sup]) return; // 1ª ocorrência do SUP decide -- mesmo padrão de coordenadas-sup.js
     supsVistos[r.sup] = true;
     var chave = normalizarNomeConcessao(r.tomador || '');
+    if (chave && SINONIMOS_TOMADOR_CONFIRMADOS[chave]) chave = SINONIMOS_TOMADOR_CONFIRMADOS[chave];
     var concessao = chave ? porNomeNormalizado[chave] : null;
     if (!concessao) return;
     concessaoIdPorSup[r.sup] = concessao.id;
