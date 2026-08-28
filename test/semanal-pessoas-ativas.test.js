@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { parsePessoasAtivas } = require('../tools/semanal/pessoas-ativas.js');
+const { parsePessoasAtivas, detalhesPessoasAtivas } = require('../tools/semanal/pessoas-ativas.js');
 
 // Cabeçalho real da aba PESSOAS (medido em 2026-08-27, mesma planilha da EQ,
 // gid 1744884054): ID | ATV | COLABORADOR | LÍDER | SERVIÇO | CARGO |
@@ -32,4 +32,16 @@ test('linha de auxiliar (ID vazio) não vira id ativo nenhum', () => {
 test('CSV vazio devolve conjunto vazio, nunca lança', () => {
   const ativos = parsePessoasAtivas('');
   assert.strictEqual(ativos.size, 0);
+});
+
+test('detalhesPessoasAtivas devolve colaborador/líder/serviço só dos ATV=TRUE', () => {
+  const detalhes = detalhesPessoasAtivas(CSV_PESSOAS);
+  assert.strictEqual(detalhes.has('4'), false, 'ATV=FALSE não entra');
+  assert.deepStrictEqual(detalhes.get('79'), { colaborador: 'Leonardo da Silva Marques', lider: 'LEONARDO', servico: 'SM' });
+  assert.deepStrictEqual(detalhes.get('88'), { colaborador: 'Edy Inacio Gomes', lider: 'EDY', servico: 'ST | PI | BL (ST)' });
+});
+
+test('detalhesPessoasAtivas de CSV vazio devolve Map vazio, nunca lança', () => {
+  const detalhes = detalhesPessoasAtivas('');
+  assert.strictEqual(detalhes.size, 0);
 });
