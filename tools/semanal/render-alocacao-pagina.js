@@ -601,12 +601,21 @@ function prepararOpcoesAlocacao() {
   // grade continua desenhada mas nada é arrastável.
   var somenteLeitura = (!semRoster && periodo && (periodo.mes - 1) !== mesSelecionadoIdx)
     ? 'mes-diferente' : null;
+  // supsConhecidos (2026-08-28): os SUPs que existem na Matriz (TODOS os
+  // registros do ano carregado, não só os filtrados -- mesma base que
+  // compute-alocacao.js usa pra supsConhecidos, ver o comentário lá). Quando
+  // o SUP resolvido pela produção online (Última Foto) não bate com nenhum
+  // deles, equipesDoQuadro redireciona a equipe pra 'Diversos' em vez de
+  // criar uma linha avulsa na grade -- ver o design de 2026-08-28.
+  var supsConhecidos = {};
+  (window.__REGISTROS__ || []).forEach(function (r) { if (r) supsConhecidos[r.sup] = true; });
   var roster = EquipesAlocaveis.equipesDoQuadro(demandas.equipesCsv || '', {
     ano: window.__ANO__,
     mes: periodo ? periodo.mes : (mesSelecionadoIdx + 1),
     semana: semana,
     producaoOnline: demandas.producaoOnline || [],
     pessoasCsv: demandas.pessoasCsv,
+    supsConhecidos: supsConhecidos,
     hoje: hojeEpochDoNavegador(),
   });
   ESTADO_ALOCACAO.equipes = roster.equipes;
@@ -1867,14 +1876,20 @@ function definirStatusAtualizacaoSemanal(texto, ehErro) {
 
 // live-refresh.js (Task 2, 2026-08-25) é a fonte única desta lógica -- ver o
 // histórico completo da duplicação (e por que as duas páginas divergiam) no
-// cabeçalho de tools/semanal/live-refresh.js. Esta página passa só as 6
+// cabeçalho de tools/semanal/live-refresh.js. Esta página passa só as 7
 // fontes que a Alocação de fato lê (matriz/avancos/lab/eq/demandasSondagem/
-// demandasLab) e config.rosterAlocacao: true -- liga os 3 campos exclusivos
-// dela (equipesCsv/osParaSup/equipesRosterPeriodo). producao/roster (Link
-// 6+7) e config.modulos ficam de fora de propósito: os dois só alimentam
-// equipesPorDia/equipesNaoProdutivas (Realizado de Equipes), que esta página
-// nunca lê -- a Tendência dela é sempre 'volume' (compute-alocacao.js), e
-// volume não toca nenhum dos dois campos.
+// demandasLab/pessoas) e config.rosterAlocacao: true -- liga os 4 campos
+// exclusivos dela (equipesCsv/osParaSup/equipesRosterPeriodo/pessoasCsv).
+// producao/roster (Link 6+7) e config.modulos ficam de fora de propósito: os
+// dois só alimentam equipesPorDia/equipesNaoProdutivas (Realizado de
+// Equipes), que esta página nunca lê -- a Tendência dela é sempre 'volume'
+// (compute-alocacao.js), e volume não toca nenhum dos dois campos.
+// pessoas (2026-08-28): URL_ESPELHO_PESSOAS_SEMANAL ainda é o placeholder
+// PENDENTE-PUBLICAR-PESSOAS até a aba PESSOAS ser publicada como CSV no
+// Google Sheets (ver o comentário dela em live-refresh.js) -- até lá, o
+// fetch é pulado (RE_URL_PENDENTE) e "Atualizar dados" preserva o
+// pessoasCsv que o build embutiu na página, sem apagá-lo (o bug de
+// 2026-08-28 que isto substitui).
 var LiveRefresh = MODULOS['live-refresh.js'];
 
 function atualizarDadosAoVivoSemanal() {
@@ -1886,6 +1901,7 @@ function atualizarDadosAoVivoSemanal() {
       eq: LiveRefresh.URLS_PADRAO.eq,
       demandasSondagem: LiveRefresh.URLS_PADRAO.demandasSondagem,
       demandasLab: LiveRefresh.URLS_PADRAO.demandasLab,
+      pessoas: LiveRefresh.URLS_PADRAO.pessoas,
       // producao/roster NÃO entram: só alimentam equipesPorDia (Realizado de
       // Equipes), que esta página nunca lê -- a Tendência dela é sempre
       // 'volume' (compute-alocacao.js), e volume não toca equipesPorDia.

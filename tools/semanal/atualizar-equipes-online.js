@@ -46,7 +46,14 @@ const CABECALHO_ROSTER = 'IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos';
 // Fracao' (pré-agregado) até 2026-08-10 -- o dia mudou de posição junto, de
 // [2] para [3]. Constante em vez de literal justamente para que o leitor e o
 // gravador não possam divergir.
-const CABECALHO_PRODUCAO = 'IdEquipe,SUP,Tipo,DiaEpoch';
+//
+// UltimaFotoEpoch (2026-08-28): epoch em MINUTOS (não dias) da coluna "Data /
+// Hora Última Foto" -- decide, dentro do MESMO dia, qual das várias sessões
+// (SUPs) de uma equipe foi a mais recente, pro critério de "onde ela estava"
+// em equipes-alocaveis.js (ultimoRealizadoAte). DiaEpoch continua vindo da
+// Primeira Foto e decidindo só o BALDE do dia -- as duas colunas nunca
+// competiram pelo mesmo papel; ver o design de 2026-08-28.
+const CABECALHO_PRODUCAO = 'IdEquipe,SUP,Tipo,DiaEpoch,UltimaFotoEpoch';
 
 // Trava de versão de formato, compartilhada pelos DOIS CSVs que este fetcher
 // publica (roster e produção).
@@ -195,15 +202,48 @@ function gravarRoster({ linhasNovas, mesesBuscados, jaTemos }, caminho = OUT_PAT
 // Acha o valor de uma coluna comparando o rótulo ignorando variação de
 // espaçamento (a planilha real usa espaço duplo em algumas colunas, ex.
 // "Data / Hora  Primeira Foto" -- não confiável usar a chave exata).
+// Achado ao vivo em 2026-08-28: o cabeçalho real da coluna Última Foto no
+// site é "Data / Hora Ultima Foto" -- SEM acento, diferente do que a fixture
+// de teste original usava. colunaTolerante ignorava só a variação de
+// ESPAÇAMENTO (achado de 2026-08-08 pra Primeira Foto); sem normalizar
+// acento também, a busca por "Última Foto" nunca batia, caía em undefined em
+// silêncio, e ultimaFotoEpoch degradava pro fallback (início do dia da
+// Primeira Foto) SEMPRE -- exatamente o bug que a Última Foto existe pra
+// corrigir, voltando disfarçado. normalize('NFD') + strip dos diacríticos
+// (U+0300–U+036f) resolve os dois lados da comparação de uma vez.
+function normalizarRotulo(texto) {
+  return String(texto).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
 function colunaTolerante(linha, rotulo) {
-  const alvo = rotulo.replace(/\s+/g, ' ').trim();
+  const alvo = normalizarRotulo(rotulo);
   for (const chave of Object.keys(linha || {})) {
-    if (chave.replace(/\s+/g, ' ').trim() === alvo) return linha[chave];
+    if (normalizarRotulo(chave) === alvo) return linha[chave];
   }
   return undefined;
 }
 
 const RE_DATA_HORA = /^(\d{2})\/(\d{2})\/(\d{4})/;
+// Última Foto (2026-08-28): mesmo formato "dd/mm/aaaa HH:MM" da Primeira
+// Foto, mas aqui o HORÁRIO importa -- ver o comentário de CABECALHO_PRODUCAO
+// acima. O grupo de hora/minuto é opcional (?:...)? só por robustez: se a
+// célula um dia vier sem horário, ultimaFotoEpochMinuto ainda extrai a data e
+// cai no início do dia (00:00), em vez de descartar a linha inteira.
+const RE_DATA_HORA_COM_MINUTO = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/;
+
+// epoch em MINUTOS (não dias) da Última Foto de uma linha. Sem o minuto, duas
+// sessões (SUPs diferentes) da mesma equipe no MESMO dia empatam no diaEpoch,
+// e "a última do array" vira arbitrário -- ordem de chegada da tabela do
+// site, não horário real de quando a equipe esteve lá. null quando o texto
+// não casa com o formato (célula vazia ou ilegível) -- quem chama decide o
+// fallback, nunca aqui.
+function ultimaFotoEpochMinuto(texto) {
+  const m = RE_DATA_HORA_COM_MINUTO.exec(String(texto || '').trim());
+  if (!m) return null;
+  var dd = m[1], mm = m[2], yyyy = m[3], hh = m[4], min = m[5];
+  var ms = Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh || 0), Number(min || 0));
+  return Math.floor(ms / 60000);
+}
 // O Link 7 traz o Tipo BRUTO (ex.: "SM", "SM.F", "SR", "CPTU", "SP.F", "BQ",
 // "DN", "SN"...), o mesmo alfabeto de 21 rótulos que a aba Avanços do
 // Avanço Sond.xlsx sempre usou -- não o rótulo de 10 tipologias que a
@@ -298,11 +338,18 @@ function parseLinhasLink7(linhasCru) {
     const chave = chaveEquipe(l);
     if (!chave) semChave++;
     else if (!acharIdEquipe(l)) porNome++;
+    // Sem Última Foto legível (coluna ausente na tabela, célula vazia numa
+    // linha só): degrada pro início do dia da Primeira Foto, em vez de
+    // descartar a linha -- mesmo espírito de resiliência do resto deste
+    // arquivo (uma célula ruim não pode apagar produção real).
+    var ultimaFotoEpoch = ultimaFotoEpochMinuto(colunaTolerante(l, 'Data / Hora Última Foto'));
+    if (ultimaFotoEpoch === null) ultimaFotoEpoch = dia * 1440;
     saida.push({
       idEquipe: chave,
       sup: String(colunaTolerante(l, 'Contrato Financeiro') || '').trim(),
       tipo: rotularTipologia(colunaTolerante(l, 'Tipo')),
       diaEpoch: dia,
+      ultimaFotoEpoch: ultimaFotoEpoch,
     });
   }
   if (excluidos > 0) {
@@ -426,11 +473,11 @@ function mesclarProducao({ resultadosPorMes, jaTemos, diaFim }) {
     (l) => mesesBuscados.has(mesDoDia(l.diaEpoch)) && l.diaEpoch <= diaFim,
   );
 
-  // Formato cru desde 2026-08-10: IdEquipe,SUP,Tipo,DiaEpoch, uma linha por
-  // (equipe, dia, contrato) -- a fração/alocação por roster é calculada no
-  // cruzamento (build/refresh), não aqui. Ver
-  // compute-equipes-realizado-alocado.js.
-  const linhasSaida = linhasNovas.map((l) => `${l.idEquipe},${l.sup},${l.tipo},${l.diaEpoch}`);
+  // Formato cru desde 2026-08-10 (+ UltimaFotoEpoch em 2026-08-28): IdEquipe,
+  // SUP,Tipo,DiaEpoch,UltimaFotoEpoch, uma linha por (equipe, dia, contrato)
+  // -- a fração/alocação por roster é calculada no cruzamento (build/
+  // refresh), não aqui. Ver compute-equipes-realizado-alocado.js.
+  const linhasSaida = linhasNovas.map((l) => `${l.idEquipe},${l.sup},${l.tipo},${l.diaEpoch},${l.ultimaFotoEpoch}`);
 
   // Preserva os dias dos meses que NÃO foram rebuscados agora. A disjunção
   // entre o que se grava e o que se preserva vem inteiramente de
@@ -597,5 +644,5 @@ if (require.main === module) {
 module.exports = {
   parseLinhasLink7, lerCsvExistente, janelasMensais, mesesPendentes, mesclarProducao, mesDoDia, main,
   linhasRosterDoMes, lerRosterExistente, buscarRoster, gravarRoster,
-  CABECALHO_ROSTER, CABECALHO_PRODUCAO,
+  CABECALHO_ROSTER, CABECALHO_PRODUCAO, ultimaFotoEpochMinuto,
 };

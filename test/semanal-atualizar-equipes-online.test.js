@@ -9,13 +9,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-test('lerCsvExistente lê o formato cru novo (IdEquipe,SUP,Tipo,DiaEpoch), dia na coluna 4', () => {
+test('lerCsvExistente lê o formato cru novo (IdEquipe,SUP,Tipo,DiaEpoch,UltimaFotoEpoch), dia na coluna 4', () => {
   const caminho = path.join(os.tmpdir(), `equipes-teste-${Date.now()}.csv`);
-  fs.writeFileSync(caminho, 'IdEquipe,SUP,Tipo,DiaEpoch\n441,SUP-1,SP,19000\n442,SUP-2,SM,19001\n');
+  fs.writeFileSync(caminho, 'IdEquipe,SUP,Tipo,DiaEpoch,UltimaFotoEpoch\n441,SUP-1,SP,19000,27360000\n442,SUP-2,SM,19001,27361440\n');
   const { porDia, ultimoDia } = lerCsvExistente(caminho);
   assert.deepEqual(Object.keys(porDia).sort(), ['19000', '19001']);
   assert.equal(porDia[19000].length, 1);
-  assert.equal(porDia[19000][0], '441,SUP-1,SP,19000');
+  assert.equal(porDia[19000][0], '441,SUP-1,SP,19000,27360000');
   assert.equal(ultimoDia, 19001);
   fs.unlinkSync(caminho);
 });
@@ -35,6 +35,19 @@ test('lerCsvExistente devolve porDia vazio quando o arquivo não existe', () => 
 test('lerCsvExistente descarta arquivo de produção no formato ANTIGO (SUP,Tipo,DiaEpoch,Fracao)', () => {
   const caminho = path.join(os.tmpdir(), `producao-antiga-${Date.now()}.csv`);
   fs.writeFileSync(caminho, 'SUP,Tipo,DiaEpoch,Fracao\nSUP-1,SP,19000,0.5\n');
+  const { porDia, ultimoDia } = lerCsvExistente(caminho);
+  assert.deepEqual(porDia, {});
+  assert.equal(ultimoDia, null);
+  fs.unlinkSync(caminho);
+});
+
+// UltimaFotoEpoch (2026-08-28): mesma trava de formato, uma bump adiante --
+// um arquivo do formato 2026-08-10 (sem a 5ª coluna) não pode ser lido como
+// se já tivesse UltimaFotoEpoch (a coluna simplesmente não existiria naquela
+// posição). Descarta e força re-fetch, mesmo comportamento do salto anterior.
+test('lerCsvExistente descarta arquivo de produção no formato ANTERIOR (IdEquipe,SUP,Tipo,DiaEpoch, sem UltimaFotoEpoch)', () => {
+  const caminho = path.join(os.tmpdir(), `producao-sem-ultima-foto-${Date.now()}.csv`);
+  fs.writeFileSync(caminho, 'IdEquipe,SUP,Tipo,DiaEpoch\n441,SUP-1,SP,19000\n');
   const { porDia, ultimoDia } = lerCsvExistente(caminho);
   assert.deepEqual(porDia, {});
   assert.equal(ultimoDia, null);
@@ -197,8 +210,12 @@ test('mesesPendentes continua trazendo os meses SEM dado nenhum, que é o backfi
 const { mesclarProducao } = require('../tools/semanal/atualizar-equipes-online.js');
 
 const DIA_FIM_PADRAO = diaEpochDe(2026, 7, 17);
-function linhaLink7(idEquipe, sup, tipo, diaEpoch) {
-  return { idEquipe, sup, tipo, diaEpoch };
+// ultimaFotoEpoch default = início do dia (diaEpoch * 1440 minutos) -- mesmo
+// fallback que parseLinhasLink7 usa quando a célula não tem horário legível;
+// os testes de mesclarProducao (que testam o MERGE, não a extração da
+// Última Foto) não precisam de um valor interessante, só de um determinístico.
+function linhaLink7(idEquipe, sup, tipo, diaEpoch, ultimaFotoEpoch) {
+  return { idEquipe, sup, tipo, diaEpoch, ultimaFotoEpoch: ultimaFotoEpoch === undefined ? diaEpoch * 1440 : ultimaFotoEpoch };
 }
 
 // A REGRESSÃO que motivou a extração: em 2026-08-08 um espaço duplo num
@@ -210,10 +227,10 @@ test('mesclarProducao: mês que voltou com ZERO linha NÃO é regravado -- o dad
   const diaJun = diaEpochDe(2026, 6, 10);
   const { linhasSaida, mesesBuscados, mesesVazios, diasPreservados } = mesclarProducao({
     resultadosPorMes: [{ chave: '2026-06', lidas: [] }],
-    jaTemos: { [String(diaJun)]: [`441,SUP-1,SP,${diaJun}`] },
+    jaTemos: { [String(diaJun)]: [`441,SUP-1,SP,${diaJun},${diaJun * 1440}`] },
     diaFim: DIA_FIM_PADRAO,
   });
-  assert.deepEqual(linhasSaida, [`441,SUP-1,SP,${diaJun}`], 'a linha de junho tem que sobreviver');
+  assert.deepEqual(linhasSaida, [`441,SUP-1,SP,${diaJun},${diaJun * 1440}`], 'a linha de junho tem que sobreviver');
   assert.equal(diasPreservados, 1);
   assert.equal(mesesBuscados.has('2026-06'), false, 'mês vazio não pode autorizar descarte');
   assert.deepEqual(mesesVazios, ['2026-06'], 'e tem que ser reportado, não sumir calado');
@@ -224,10 +241,10 @@ test('mesclarProducao: mês que voltou COM linha substitui o dado anterior daque
   const diaNovo = diaEpochDe(2026, 6, 20);
   const { linhasSaida, diasPreservados } = mesclarProducao({
     resultadosPorMes: [{ chave: '2026-06', lidas: [linhaLink7(333, 'SUP-NOVO', 'SM', diaNovo)] }],
-    jaTemos: { [String(diaVelho)]: [`222,SUP-VELHO,SP,${diaVelho}`] },
+    jaTemos: { [String(diaVelho)]: [`222,SUP-VELHO,SP,${diaVelho},${diaVelho * 1440}`] },
     diaFim: DIA_FIM_PADRAO,
   });
-  assert.deepEqual(linhasSaida, [`333,SUP-NOVO,SM,${diaNovo}`], 'o dado velho de junho sai; o novo entra');
+  assert.deepEqual(linhasSaida, [`333,SUP-NOVO,SM,${diaNovo},${diaNovo * 1440}`], 'o dado velho de junho sai; o novo entra');
   assert.equal(diasPreservados, 0);
 });
 
@@ -236,11 +253,11 @@ test('mesclarProducao: mês que nem foi tentado (falhou, ou não estava pendente
   const diaJun = diaEpochDe(2026, 6, 20);
   const { linhasSaida, diasPreservados } = mesclarProducao({
     resultadosPorMes: [{ chave: '2026-06', lidas: [linhaLink7(333, 'SUP-A', 'SM', diaJun)] }],
-    jaTemos: { [String(diaMai)]: [`111,SUP-MAIO,SP,${diaMai}`] },
+    jaTemos: { [String(diaMai)]: [`111,SUP-MAIO,SP,${diaMai},${diaMai * 1440}`] },
     diaFim: DIA_FIM_PADRAO,
   });
   assert.equal(diasPreservados, 1);
-  assert.ok(linhasSaida.includes(`111,SUP-MAIO,SP,${diaMai}`), 'maio não foi buscado: tem que continuar lá');
+  assert.ok(linhasSaida.includes(`111,SUP-MAIO,SP,${diaMai},${diaMai * 1440}`), 'maio não foi buscado: tem que continuar lá');
 });
 
 // O filtro de/ate do site não restringe "Data / Hora Primeira Foto" ao
@@ -257,7 +274,7 @@ test('mesclarProducao: linha de um mês que NÃO foi buscado vem na resposta e �
     jaTemos: {},
     diaFim: DIA_FIM_PADRAO,
   });
-  assert.deepEqual(linhasSaida, [`333,SUP-A,SM,${diaJun}`], 'a sessão de abril não pertence ao merge de junho');
+  assert.deepEqual(linhasSaida, [`333,SUP-A,SM,${diaJun},${diaJun * 1440}`], 'a sessão de abril não pertence ao merge de junho');
 });
 
 test('mesclarProducao: linha DEPOIS do corte (diaFim) é descartada -- não existe dado de dia futuro', () => {
@@ -271,7 +288,7 @@ test('mesclarProducao: linha DEPOIS do corte (diaFim) é descartada -- não exis
     jaTemos: {},
     diaFim: diaHoje,
   });
-  assert.deepEqual(linhasSaida, [`1,SUP-A,SP,${diaHoje}`], 'o dia de hoje entra (corte em D); amanhã não existe');
+  assert.deepEqual(linhasSaida, [`1,SUP-A,SP,${diaHoje},${diaHoje * 1440}`], 'o dia de hoje entra (corte em D); amanhã não existe');
 });
 
 test('mesclarProducao: a saída sai ordenada por dia, misturando linha nova e preservada', () => {
@@ -283,7 +300,7 @@ test('mesclarProducao: a saída sai ordenada por dia, misturando linha nova e pr
       linhaLink7(3, 'SUP-C', 'SP', d3),
       linhaLink7(2, 'SUP-B', 'SP', d2),
     ] }],
-    jaTemos: { [String(d1)]: [`1,SUP-A,SP,${d1}`] },
+    jaTemos: { [String(d1)]: [`1,SUP-A,SP,${d1},${d1 * 1440}`] },
     diaFim: DIA_FIM_PADRAO,
   });
   assert.deepEqual(linhasSaida.map((l) => Number(l.split(',')[3])), [d1, d2, d3]);

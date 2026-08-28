@@ -102,6 +102,16 @@ function parseRosterOnlineCsvBruto(csvTexto) {
 // cru desde 2026-08-10: "IdEquipe,SUP,Tipo,DiaEpoch" -- substitui o antigo
 // pré-agregado "SUP,Tipo,DiaEpoch,Fracao" (a fração agora é calculada no
 // cruzamento com o roster, ver montarEquipesRealizado abaixo).
+//
+// UltimaFotoEpoch (2026-08-28, coluna [4]): decide, dentro do MESMO dia,
+// qual sessão (SUP) de uma equipe foi a mais recente -- ver
+// equipes-alocaveis.js (indexarProducaoOnline/ultimoRealizadoAte). Ausente
+// num CSV de um build anterior a esta mudança (só 4 colunas): partes[4] é
+// undefined, Number(undefined) é NaN, e ultimaFotoEpoch sai undefined --
+// indexarProducaoOnline já trata isso como 0 (fallback), sem lançar. Nunca
+// use lerLinhasComCabecalho aqui: este parser sempre foi posicional/sem
+// trava de formato (diferente do fetcher), de propósito -- é o único jeito
+// de um CSV de 4 colunas continuar legível depois desta mudança.
 function parseProducaoOnlineCsv(csvTexto) {
   const linhas = (csvTexto || '').trim().split('\n').slice(1);
   const saida = [];
@@ -110,7 +120,11 @@ function parseProducaoOnlineCsv(csvTexto) {
     const partes = linha.split(',');
     const dia = Number(partes[3]);
     if (!Number.isFinite(dia)) continue;
-    saida.push({ idEquipe: partes[0], sup: partes[1], tipo: partes[2], diaEpoch: dia });
+    const ultimaFotoEpoch = Number(partes[4]);
+    saida.push({
+      idEquipe: partes[0], sup: partes[1], tipo: partes[2], diaEpoch: dia,
+      ultimaFotoEpoch: Number.isFinite(ultimaFotoEpoch) ? ultimaFotoEpoch : undefined,
+    });
   }
   return saida;
 }

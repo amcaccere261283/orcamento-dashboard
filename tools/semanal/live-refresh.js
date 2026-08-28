@@ -95,10 +95,24 @@ var URL_ESPELHO_EQUIPES_ROSTER_SEMANAL = 'equipes-roster-online.csv';
 // junto com a própria página, mesmo padrão relativo dos CSVs de cima.
 var URL_ESPELHO_DEMANDAS_SONDAGEM_SEMANAL = 'demandas-sondagem-online.csv';
 var URL_ESPELHO_DEMANDAS_LAB_SEMANAL = 'demandas-lab-online.json';
+// 2026-08-28: aba PESSOAS (fileId 1Mgj87eSKMO4Gh2aHQWChNl5YCH2vatMDC2fCNuxB8TU,
+// gid=1744884054 -- mesma planilha de tools/semanal/build-dashboard.js,
+// URL_PESSOAS), decide QUEM aparece no quadro da Alocação (ATV=TRUE/FALSE).
+// Só o build lia isso até aqui (fetch direto do /export, server-side, sem
+// CORS) -- "Atualizar dados" nunca buscava de novo, então demandasNovas
+// nascia sem pessoasCsv a cada clique e o filtro de ativas morria em
+// silêncio (idsAtivos vira null em equipesDoQuadro, ver o comentário lá).
+// PENDENTE-PUBLICAR-PESSOAS até a aba ser publicada como CSV (Arquivo >
+// Compartilhar > Publicar na Web, só a aba PESSOAS, formato CSV) -- o
+// /export usado pelo build não tem CORS e trava fetch() do navegador; a EQ
+// resolve isso com um link /pub próprio (URL_ESPELHO_EQ_SEMANAL acima), e a
+// PESSOAS precisa do mesmo, com o SEU PRÓPRIO gid publicado (testado: o
+// gid da PESSOAS não está incluído na publicação atual da EQ -- 401).
+var URL_ESPELHO_PESSOAS_SEMANAL = 'PENDENTE-PUBLICAR-PESSOAS';
 
-// URLS_PADRAO: as 8 URL_ESPELHO_* de cima, num objeto chaveado pelos mesmos
+// URLS_PADRAO: os URL_ESPELHO_* de cima, num objeto chaveado pelos mesmos
 // nomes que atualizarDadosAoVivo espera em config.fontes -- as duas páginas
-// passam a ler daqui em vez de duplicar as 8 constantes.
+// passam a ler daqui em vez de duplicar as constantes.
 var URLS_PADRAO = {
   matriz: URL_ESPELHO_MATRIZ_SEMANAL,
   avancos: URL_ESPELHO_AVANCOS_SEMANAL,
@@ -108,6 +122,7 @@ var URLS_PADRAO = {
   roster: URL_ESPELHO_EQUIPES_ROSTER_SEMANAL,
   demandasSondagem: URL_ESPELHO_DEMANDAS_SONDAGEM_SEMANAL,
   demandasLab: URL_ESPELHO_DEMANDAS_LAB_SEMANAL,
+  pessoas: URL_ESPELHO_PESSOAS_SEMANAL,
 };
 
 function periodosDoAno(ano) {
@@ -235,6 +250,14 @@ function atualizarDadosAoVivo(config) {
     // causa da série secundária. Não depende de avancosLabConfigurados --
     // só de a fonte ter sido configurada.
     eq: fontes.eq ? buscarCsv(fontes.eq).catch(function () { return null; }) : Promise.resolve(null),
+    // Espelho da aba PESSOAS (filtro de ativas ATV=TRUE/FALSE, ver o
+    // comentário de URL_ESPELHO_PESSOAS_SEMANAL). Mesmo padrão de falha
+    // isolada da EQ: sem ela (fonte ausente, ainda PENDENTE-, ou HTTP
+    // falhando), o refresh preserva o pessoasCsv anterior em vez de derrubar
+    // o resto -- ver a atribuição de demandasNovas.pessoasCsv abaixo.
+    pessoas: (fontes.pessoas && !RE_URL_PENDENTE.test(fontes.pessoas))
+      ? buscarCsv(fontes.pessoas).catch(function () { return null; })
+      : Promise.resolve(null),
     // Produção CRUA (Link 7), cruzada com o roster mais abaixo. Gated pelo
     // MESMO avancosLabConfigurados dos dois de cima: o parse+cruzamento roda
     // depois de furos/ensaios estarem prontos. Falha sozinha, mesmo padrão
@@ -365,6 +388,16 @@ function atualizarDadosAoVivo(config) {
           demandasNovas.osParaSup = estado.demandas.osParaSup;
           demandasNovas.equipesRosterPeriodo = estado.demandas.equipesRosterPeriodo;
           demandasNovas.producaoOnline = estado.demandas.producaoOnline;
+          // pessoasCsv: preserva o valor anterior por padrão (mesmo raciocínio
+          // do bloco inteiro -- nunca apagar o filtro de ativas por causa de
+          // uma fonte que falhou ou nem foi configurada) e sobrescreve só
+          // quando o fetch de fato trouxe algo. Sem isto, demandasNovas nasce
+          // sem pessoasCsv a cada clique em "Atualizar dados" (computeDemandas
+          // não o produz), idsAtivos vira null em equipesDoQuadro, e TODAS as
+          // equipes inativas (ATV=FALSE) voltam a aparecer no pool -- o bug
+          // relatado em 2026-08-28.
+          demandasNovas.pessoasCsv = estado.demandas.pessoasCsv;
+          if (textos.pessoas) demandasNovas.pessoasCsv = textos.pessoas;
 
           // osParaSup: só depende de 'furos', usado pela aba Alocação
           // Equipes (equipesDoQuadro resolve supRealizado/colunaRealizada a

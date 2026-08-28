@@ -109,6 +109,7 @@ const URL_LAB = 'lab-fake.csv';
 const URL_EQ = 'https://fake.exemplo/eq-csv';
 const URL_PRODUCAO = 'producao-fake.csv';
 const URL_ROSTER = 'roster-fake.csv';
+const URL_PESSOAS = 'https://fake.exemplo/pessoas-csv';
 
 // demandasBase: o "estado anterior" que estadoAtual() devolve -- cada campo
 // tem um valor SENTINELA fácil de distinguir do que o refresh calcularia de
@@ -120,6 +121,7 @@ function demandasBase(overrides) {
     equipesCsv: 'CSV-ANTIGO-SENTINELA',
     osParaSup: { OS_ANTIGA: 'SUP-ANTIGA' },
     equipesRosterPeriodo: { ano: 2020, mes: 1 },
+    pessoasCsv: 'PESSOAS-CSV-ANTIGO-SENTINELA',
   }, overrides || {});
 }
 
@@ -135,7 +137,7 @@ function configDublada(overrides) {
   const cfg = {
     fontes: Object.assign({
       matriz: URL_MATRIZ, avancos: null, lab: null, eq: null,
-      producao: null, roster: null, demandasSondagem: null, demandasLab: null,
+      producao: null, roster: null, demandasSondagem: null, demandasLab: null, pessoas: null,
     }, o.fontes || {}),
     modulos: Object.assign({}, o.modulos || {}),
     ano: 2026,
@@ -366,6 +368,116 @@ test('rosterAlocacao: true -- os 3 campos são SOBRESCRITOS quando eq responde',
   assert.notDeepStrictEqual(espiao.demandasAplicadas.equipesRosterPeriodo, anteriores.equipesRosterPeriodo);
 });
 
+// --- Cenário 6b: pessoasCsv (filtro de ativas) -- mesma preserva/sobrescreve
+// dos 3 campos acima, testado à parte porque tem fonte própria (pessoas) e
+// RE_URL_PENDENTE tem que ser respeitado (ver o comentário do bug 2026-08-28
+// em live-refresh.js: sem preservar, o filtro de ATV=FALSE morria a cada
+// clique em "Atualizar dados").
+
+test('rosterAlocacao: true -- pessoasCsv é PRESERVADO quando fontes.pessoas é null (fonte ainda não publicada)', async () => {
+  const anteriores = demandasBase();
+  const { cfg, espiao } = configDublada({
+    fontes: { matriz: URL_MATRIZ, avancos: URL_AVANCOS, lab: URL_LAB, eq: URL_EQ, pessoas: null },
+    rosterAlocacao: true,
+    demandasAnteriores: anteriores,
+  });
+  const fetchDouble = criarFetchDouble({
+    [URL_MATRIZ]: respostaCsvOk(csvMatrizComSup('SUP-0001-24')),
+    [URL_AVANCOS]: respostaCsvOk(CSV_AVANCOS_VAZIO),
+    [URL_LAB]: respostaCsvOk(CSV_LAB_VAZIO),
+    [URL_EQ]: respostaCsvOk(csvEqComPeriodo()),
+  });
+
+  await comFetch(fetchDouble, () => atualizarDadosAoVivo(cfg));
+
+  assert.strictEqual(espiao.aplicarChamado, true);
+  assert.strictEqual(espiao.demandasAplicadas.pessoasCsv, anteriores.pessoasCsv);
+});
+
+test('rosterAlocacao: true -- pessoasCsv é PRESERVADO quando fontes.pessoas ainda é PENDENTE- (placeholder, sem publicar)', async () => {
+  const anteriores = demandasBase();
+  const { cfg, espiao } = configDublada({
+    fontes: { matriz: URL_MATRIZ, avancos: URL_AVANCOS, lab: URL_LAB, eq: URL_EQ, pessoas: 'PENDENTE-PUBLICAR-PESSOAS' },
+    rosterAlocacao: true,
+    demandasAnteriores: anteriores,
+  });
+  const fetchDouble = criarFetchDouble({
+    [URL_MATRIZ]: respostaCsvOk(csvMatrizComSup('SUP-0001-24')),
+    [URL_AVANCOS]: respostaCsvOk(CSV_AVANCOS_VAZIO),
+    [URL_LAB]: respostaCsvOk(CSV_LAB_VAZIO),
+    [URL_EQ]: respostaCsvOk(csvEqComPeriodo()),
+  });
+
+  await comFetch(fetchDouble, () => atualizarDadosAoVivo(cfg));
+
+  assert.strictEqual(espiao.aplicarChamado, true);
+  assert.strictEqual(espiao.demandasAplicadas.pessoasCsv, anteriores.pessoasCsv);
+  assert.strictEqual(fetchDouble.chamadas.some((u) => String(u).indexOf('pessoas-csv') !== -1), false, 'PENDENTE- não pode nem tentar o fetch');
+});
+
+test('rosterAlocacao: true -- pessoasCsv é PRESERVADO quando fontes.pessoas responde mas falha (rede fora do ar)', async () => {
+  const anteriores = demandasBase();
+  const { cfg, espiao } = configDublada({
+    fontes: { matriz: URL_MATRIZ, avancos: URL_AVANCOS, lab: URL_LAB, eq: URL_EQ, pessoas: URL_PESSOAS },
+    rosterAlocacao: true,
+    demandasAnteriores: anteriores,
+  });
+  const fetchDouble = criarFetchDouble({
+    [URL_MATRIZ]: respostaCsvOk(csvMatrizComSup('SUP-0001-24')),
+    [URL_AVANCOS]: respostaCsvOk(CSV_AVANCOS_VAZIO),
+    [URL_LAB]: respostaCsvOk(CSV_LAB_VAZIO),
+    [URL_EQ]: respostaCsvOk(csvEqComPeriodo()),
+    [URL_PESSOAS]: respostaRedeFoiRejeitada('Sheet PESSOAS fora do ar (simulado)'),
+  });
+
+  await comFetch(fetchDouble, () => atualizarDadosAoVivo(cfg));
+
+  assert.strictEqual(espiao.aplicarChamado, true);
+  assert.strictEqual(espiao.demandasAplicadas.pessoasCsv, anteriores.pessoasCsv);
+});
+
+test('rosterAlocacao: true -- pessoasCsv é SOBRESCRITO quando fontes.pessoas responde com sucesso', async () => {
+  const anteriores = demandasBase();
+  const csvPessoasNovo = 'ID,Nome,ATV\n4,José I. Amaral,TRUE\n';
+  const { cfg, espiao } = configDublada({
+    fontes: { matriz: URL_MATRIZ, avancos: URL_AVANCOS, lab: URL_LAB, eq: URL_EQ, pessoas: URL_PESSOAS },
+    rosterAlocacao: true,
+    demandasAnteriores: anteriores,
+  });
+  const fetchDouble = criarFetchDouble({
+    [URL_MATRIZ]: respostaCsvOk(csvMatrizComSup('SUP-0001-24')),
+    [URL_AVANCOS]: respostaCsvOk(CSV_AVANCOS_VAZIO),
+    [URL_LAB]: respostaCsvOk(CSV_LAB_VAZIO),
+    [URL_EQ]: respostaCsvOk(csvEqComPeriodo()),
+    [URL_PESSOAS]: respostaCsvOk(csvPessoasNovo),
+  });
+
+  await comFetch(fetchDouble, () => atualizarDadosAoVivo(cfg));
+
+  assert.strictEqual(espiao.aplicarChamado, true);
+  assert.strictEqual(espiao.demandasAplicadas.pessoasCsv, csvPessoasNovo, 'pessoas respondeu -- pessoasCsv tem que ser o CSV NOVO, não o antigo');
+  assert.notStrictEqual(espiao.demandasAplicadas.pessoasCsv, anteriores.pessoasCsv);
+});
+
+test('rosterAlocacao ausente -- pessoasCsv não aparece no resultado, mesmo com fontes.pessoas respondendo', async () => {
+  const { cfg, espiao } = configDublada({
+    fontes: { matriz: URL_MATRIZ, avancos: URL_AVANCOS, lab: URL_LAB, eq: URL_EQ, pessoas: URL_PESSOAS },
+    // rosterAlocacao NÃO passado (undefined)
+  });
+  const fetchDouble = criarFetchDouble({
+    [URL_MATRIZ]: respostaCsvOk(csvMatrizComSup('SUP-0001-24')),
+    [URL_AVANCOS]: respostaCsvOk(CSV_AVANCOS_VAZIO),
+    [URL_LAB]: respostaCsvOk(CSV_LAB_VAZIO),
+    [URL_EQ]: respostaCsvOk(csvEqComPeriodo()),
+    [URL_PESSOAS]: respostaCsvOk('ID,Nome,ATV\n4,José I. Amaral,TRUE\n'),
+  });
+
+  await comFetch(fetchDouble, () => atualizarDadosAoVivo(cfg));
+
+  assert.strictEqual(espiao.aplicarChamado, true);
+  assert.strictEqual('pessoasCsv' in espiao.demandasAplicadas, false);
+});
+
 // --- Cenário 7: rosterAlocacao ausente/false -- os 3 campos NÃO aparecem ---
 
 test('rosterAlocacao ausente -- os 3 campos da Alocação não aparecem no resultado', async () => {
@@ -414,10 +526,14 @@ test('rosterAlocacao: false (explícito) -- mesmo resultado que ausente', async 
 // forma exportada evita regressão silenciosa se um dia alguém alterar sem
 // perceber que quebra o "avancosLabConfigurados" das duas páginas.
 
-test('URLS_PADRAO exporta as 8 fontes com os mesmos nomes que config.fontes espera', () => {
-  ['matriz', 'avancos', 'lab', 'eq', 'producao', 'roster', 'demandasSondagem', 'demandasLab'].forEach((chave) => {
+test('URLS_PADRAO exporta as 9 fontes com os mesmos nomes que config.fontes espera', () => {
+  ['matriz', 'avancos', 'lab', 'eq', 'producao', 'roster', 'demandasSondagem', 'demandasLab', 'pessoas'].forEach((chave) => {
     assert.strictEqual(typeof URLS_PADRAO[chave], 'string', 'URLS_PADRAO.' + chave + ' precisa ser uma URL string');
   });
+});
+
+test('URLS_PADRAO.pessoas ainda é o placeholder PENDENTE- -- lembrete pra trocar depois que a aba PESSOAS for publicada', () => {
+  assert.strictEqual(RE_URL_PENDENTE.test(URLS_PADRAO.pessoas), true);
 });
 
 test('RE_URL_PENDENTE reconhece o placeholder PENDENTE- e nada além dele', () => {

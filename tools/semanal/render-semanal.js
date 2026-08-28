@@ -551,6 +551,10 @@ const CSS_SEMANAL = `
      problema (#e0684f, já em .leitura-falta/.celula-falta/.cartao-motivo) --
      não um tom novo. */
   .cartao-selo-veiculo { margin-left: 3px; font-size: 10px; opacity: .85; font-variant-numeric: tabular-nums; }
+  /* supReal (2026-08-28): mesmo padrão visual dos outros selos permanentes do
+     cartão -- só que este chama mais atenção (cor de alerta), porque avisa
+     que a semeadura automática caiu num SUP que não existe na Matriz. */
+  .cartao-selo-sup-real { margin-left: 3px; font-size: 10px; opacity: .9; color: #f6b53f; cursor: help; }
   .cartao-companheiro { outline: 2px dashed #4f8ff0; outline-offset: 2px; }
   .cartao-conflito-veiculo { box-shadow: inset 0 0 0 1px #e0684f; }
   .popup-veiculo-grupo { font-size: 11px; opacity: .9; }

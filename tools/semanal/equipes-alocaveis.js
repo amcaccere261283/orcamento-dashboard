@@ -115,11 +115,12 @@ function colunaSemeada(colunas, sup, temDemanda) {
 }
 
 // Indexa producaoOnline (Link 7, dist/equipes-online.csv --
-// "IdEquipe,SUP,Tipo,DiaEpoch", raspado de sond.com.br/campo/sondagens por
-// atualizar-equipes-online.js) por idEquipe -- histórico ordenado por
-// diaEpoch. Mesmo formato de entrada que compute-equipes-realizado-alocado.js
-// já consome para o Realizado da Tabela Semanal, mas indexado à parte aqui:
-// lá o carry-forward tem janela de 45 dias; aqui é literalmente "a última
+// "IdEquipe,SUP,Tipo,DiaEpoch,UltimaFotoEpoch", raspado de
+// sond.com.br/campo/sondagens por atualizar-equipes-online.js) por idEquipe
+// -- histórico ordenado por (diaEpoch, ultimaFotoEpoch). Mesmo formato de
+// entrada que compute-equipes-realizado-alocado.js já consome para o
+// Realizado da Tabela Semanal, mas indexado à parte aqui: lá o
+// carry-forward tem janela de 45 dias; aqui é literalmente "a última
 // sondagem que a equipe executou", sem janela nenhuma -- ver
 // docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md.
 function indexarProducaoOnline(producaoOnline) {
@@ -130,7 +131,16 @@ function indexarProducaoOnline(producaoOnline) {
     porEquipe[l.idEquipe].push(l);
   });
   Object.keys(porEquipe).forEach(function (id) {
-    porEquipe[id].sort(function (a, b) { return a.diaEpoch - b.diaEpoch; });
+    // Ordena por (diaEpoch, ultimaFotoEpoch) por legibilidade -- ultimoRealizadoAte
+    // (abaixo) já varre o histórico INTEIRO comparando diaEfetivoRealizado
+    // explicitamente, então a ordem aqui não é mais estritamente necessária
+    // pra correção (uma OS velha com Última Foto recente fica cedo no array
+    // por diaEpoch, mas ultimoRealizadoAte compara certo mesmo assim -- ver o
+    // comentário de 2026-08-28 lá).
+    porEquipe[id].sort(function (a, b) {
+      if (a.diaEpoch !== b.diaEpoch) return a.diaEpoch - b.diaEpoch;
+      return (a.ultimaFotoEpoch || 0) - (b.ultimaFotoEpoch || 0);
+    });
   });
   return porEquipe;
 }
@@ -140,31 +150,76 @@ function indexarProducaoOnline(producaoOnline) {
 // em vez de ficar presa a um SUP de dias atrás.
 var JANELA_ULTIMO_REALIZADO_DIAS = 3;
 
-// Último registro do histórico (ordenado) com diaEpoch <= diaAlvo e
-// diaAlvo - diaEpoch <= JANELA_ULTIMO_REALIZADO_DIAS. null se não achar --
-// equipe sem produção recente até aquele dia nasce no pool, nunca chutada
-// (mesma garantia de quando a fonte era o texto da Sheet EQ).
+// ACHADO AO VIVO em 2026-08-28 (relatado pelo dono do projeto, equipes 216 e
+// 337 sumindo do "Repor o realizado" apesar de foto de HOJE): uma linha do
+// Link 7 é a OS INTEIRA, não um dia isolado -- "Primeira Foto" é quando a OS
+// abriu, "Última Foto" é a atividade mais recente NELA, e as duas podem
+// distar dias ou semanas (medido: OS aberta 15/08, ainda com foto 28/08).
+// diaEpoch (que vem da Primeira Foto, ver CABECALHO_PRODUCAO em
+// atualizar-equipes-online.js) é o campo ERRADO pra medir "há quanto tempo a
+// equipe foi vista" -- ele fica preso ao dia de ABERTURA da OS, e uma OS
+// aberta há 13 dias mas ativa hoje caía fora da janela de 3 dias em silêncio.
+// diaEfetivo usa o DIA da Última Foto pra essa conta -- diaEpoch continua
+// intocado (é a fonte de OUTROS consumidores do mesmo CSV, como o Realizado
+// da Tabela Semanal, que atribuem a produção ao dia que a OS foi aberta, e
+// mudar esse significado ali está fora do escopo desta correção).
+function diaEfetivoRealizado(item) {
+  return item.ultimaFotoEpoch != null ? Math.floor(item.ultimaFotoEpoch / 1440) : item.diaEpoch;
+}
+
+// Registro do histórico com o MAIOR diaEfetivo (desempatado pelo
+// ultimaFotoEpoch em minutos, quando dois caem no mesmo dia) que satisfaça
+// diaEfetivo <= diaAlvo e diaAlvo - diaEfetivo <= JANELA_ULTIMO_REALIZADO_DIAS.
+// null se não achar -- equipe sem produção recente até aquele dia nasce no
+// pool, nunca chutada (mesma garantia de quando a fonte era o texto da Sheet
+// EQ). Varre o histórico INTEIRO (não depende mais da ordem de
+// indexarProducaoOnline) porque diaEfetivo pode discordar da ordem por
+// diaEpoch -- uma OS velha (diaEpoch baixo) com Última Foto de hoje
+// (diaEfetivo alto) fica cedo no array ordenado por diaEpoch, mas é ela quem
+// tem que ganhar.
 function ultimoRealizadoAte(historico, diaAlvo) {
   var melhor = null;
+  var melhorDiaEfetivo = null;
   (historico || []).forEach(function (item) {
-    if (item.diaEpoch > diaAlvo) return;
-    if (diaAlvo - item.diaEpoch > JANELA_ULTIMO_REALIZADO_DIAS) return;
-    melhor = item;
+    var diaEfetivo = diaEfetivoRealizado(item);
+    if (diaEfetivo > diaAlvo) return;
+    if (diaAlvo - diaEfetivo > JANELA_ULTIMO_REALIZADO_DIAS) return;
+    if (melhor === null || diaEfetivo > melhorDiaEfetivo
+      || (diaEfetivo === melhorDiaEfetivo && (item.ultimaFotoEpoch || 0) > (melhor.ultimaFotoEpoch || 0))) {
+      melhor = item;
+      melhorDiaEfetivo = diaEfetivo;
+    }
   });
   return melhor;
 }
 
+// SUP sintético para onde uma equipe é semeada quando o SUP resolvido pela
+// produção online NÃO bate com nenhum SUP conhecido da Matriz (2026-08-28) --
+// texto de OS mal formatado, contrato encerrado que já saiu da Matriz, etc.
+// Sem isto, montarGradeAlocacao (compute-alocacao.js) cria uma linha AVULSA
+// pra cada SUP desconhecido distinto -- lixo espalhado pela grade em vez de
+// consolidado num só lugar previsível.
+var SUP_DESCONHECIDO = 'Diversos';
+
 // csvEq: o texto CSV da Sheet espelho da aba EQ.
-// opcoes: { ano, mes, semana: {inicio, fim}, producaoOnline, temDemanda, hoje }
+// opcoes: { ano, mes, semana: {inicio, fim}, producaoOnline, temDemanda,
+//           supsConhecidos, hoje }
 //   hoje: diaEpoch do dia atual, OPCIONAL -- limita diaAlvoRealizado a não
 //   ultrapassar hoje numa semana ainda em curso (ver comentário acima de
 //   diaAlvoRealizado). Omitido preserva o comportamento antigo (usa sempre
 //   o fim da semana).
-//   producaoOnline: [{idEquipe, sup, tipo, diaEpoch}, ...] -- produção crua do
-//   Link 7 (dist/equipes-online.csv). Fonte de supRealizado/colunaRealizada
-//   desde 2026-08-26 (antes vinha do texto da Sheet EQ + osParaSup).
+//   producaoOnline: [{idEquipe, sup, tipo, diaEpoch, ultimaFotoEpoch}, ...] --
+//   produção crua do Link 7 (dist/equipes-online.csv). Fonte de
+//   supRealizado/colunaRealizada desde 2026-08-26 (antes vinha do texto da
+//   Sheet EQ + osParaSup).
 //   temDemanda(sup, colunaId) -> bool, OPCIONAL, só para desempatar a coluna
 //   de uma equipe polivalente semeada pelo realizado.
+//   supsConhecidos: { [sup]: true, ... }, OPCIONAL -- os SUPs que existem na
+//   Matriz do período em tela. Quando presente, um supRealizado que não bate
+//   com nenhuma chave dele é redirecionado para SUP_DESCONHECIDO ('Diversos')
+//   -- o valor original fica em equipe.supReal, pro cartão mostrar de onde
+//   veio (ver renderCartaoEquipe). Omitido preserva o comportamento antigo
+//   (nunca redireciona) -- mesma convenção de pessoasCsv/temDemanda acima.
 function equipesDoQuadro(csvEq, opcoes) {
   var o = opcoes || {};
   var roster = parseAbaEq(csvEq || '');
@@ -242,7 +297,16 @@ function equipesDoQuadro(csvEq, opcoes) {
       ? (o.hoje != null ? Math.min(o.semana.fim, o.hoje) : o.semana.fim)
       : Infinity;
     var ultimoRealizado = ultimoRealizadoAte(producaoPorEquipe[bruta.id], diaAlvoRealizado);
-    var ultimoSup = ultimoRealizado ? ultimoRealizado.sup : null;
+    var ultimoSupBruto = ultimoRealizado ? ultimoRealizado.sup : null;
+    // Redireciona pra SUP_DESCONHECIDO só quando dá pra CONFERIR (o chamador
+    // passou supsConhecidos) e o SUP não bate com nenhum -- sem
+    // supsConhecidos, mantém o comportamento antigo (usa o SUP cru, mesmo que
+    // seja lixo). supReal só é preenchido no caso redirecionado: é o que o
+    // cartão usa pra saber que tem algo a mostrar no tooltip (ver
+    // renderCartaoEquipe) -- null nos outros casos, não string vazia, pra não
+    // precisar de um segundo booleano.
+    var redirecionado = !!(ultimoSupBruto && o.supsConhecidos && !o.supsConhecidos[ultimoSupBruto]);
+    var ultimoSup = redirecionado ? SUP_DESCONHECIDO : ultimoSupBruto;
 
     equipes.push({
       id: bruta.id,
@@ -255,6 +319,7 @@ function equipesDoQuadro(csvEq, opcoes) {
       diasDaSemana: diasDaSemana,
       disponivel: diasDisponiveis > 0,
       supRealizado: ultimoSup,
+      supReal: redirecionado ? ultimoSupBruto : null,
       colunaRealizada: ultimoSup ? colunaSemeada(resolvido.colunas, ultimoSup, o.temDemanda) : null,
       popup: camposDoPopup(linha),
       veiculoGrupo: grupos.grupoPorId[String(bruta.id)] || null,
@@ -298,5 +363,5 @@ function equipesDoQuadro(csvEq, opcoes) {
 }
 
 module.exports = {
-  COLUNAS_ALOCACAO, COLUNAS_POR_SERVICO, colunasDaEquipe, equipesDoQuadro,
+  COLUNAS_ALOCACAO, COLUNAS_POR_SERVICO, colunasDaEquipe, equipesDoQuadro, SUP_DESCONHECIDO,
 };
