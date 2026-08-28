@@ -115,11 +115,12 @@ function colunaSemeada(colunas, sup, temDemanda) {
 }
 
 // Indexa producaoOnline (Link 7, dist/equipes-online.csv --
-// "IdEquipe,SUP,Tipo,DiaEpoch", raspado de sond.com.br/campo/sondagens por
-// atualizar-equipes-online.js) por idEquipe -- histórico ordenado por
-// diaEpoch. Mesmo formato de entrada que compute-equipes-realizado-alocado.js
-// já consome para o Realizado da Tabela Semanal, mas indexado à parte aqui:
-// lá o carry-forward tem janela de 45 dias; aqui é literalmente "a última
+// "IdEquipe,SUP,Tipo,DiaEpoch,UltimaFotoEpoch", raspado de
+// sond.com.br/campo/sondagens por atualizar-equipes-online.js) por idEquipe
+// -- histórico ordenado por (diaEpoch, ultimaFotoEpoch). Mesmo formato de
+// entrada que compute-equipes-realizado-alocado.js já consome para o
+// Realizado da Tabela Semanal, mas indexado à parte aqui: lá o
+// carry-forward tem janela de 45 dias; aqui é literalmente "a última
 // sondagem que a equipe executou", sem janela nenhuma -- ver
 // docs/superpowers/specs/2026-08-26-realizado-alocacao-via-producao-sond-design.md.
 function indexarProducaoOnline(producaoOnline) {
@@ -130,7 +131,17 @@ function indexarProducaoOnline(producaoOnline) {
     porEquipe[l.idEquipe].push(l);
   });
   Object.keys(porEquipe).forEach(function (id) {
-    porEquipe[id].sort(function (a, b) { return a.diaEpoch - b.diaEpoch; });
+    // Desempate por ultimaFotoEpoch (2026-08-28, minutos -- ver
+    // CABECALHO_PRODUCAO em atualizar-equipes-online.js) DENTRO do mesmo dia:
+    // sem ele, duas sessões (SUPs diferentes) da mesma equipe no mesmo dia só
+    // tinham diaEpoch pra comparar, e "a última do array" virava a ordem de
+    // chegada da tabela do site, não o horário real. Ausente (CSV de uma
+    // versão anterior do formato, ou fallback do próprio fetcher) cai em 0 --
+    // nunca lança, só perde a granularidade de horário que já não tinha antes.
+    porEquipe[id].sort(function (a, b) {
+      if (a.diaEpoch !== b.diaEpoch) return a.diaEpoch - b.diaEpoch;
+      return (a.ultimaFotoEpoch || 0) - (b.ultimaFotoEpoch || 0);
+    });
   });
   return porEquipe;
 }
@@ -154,17 +165,33 @@ function ultimoRealizadoAte(historico, diaAlvo) {
   return melhor;
 }
 
+// SUP sintético para onde uma equipe é semeada quando o SUP resolvido pela
+// produção online NÃO bate com nenhum SUP conhecido da Matriz (2026-08-28) --
+// texto de OS mal formatado, contrato encerrado que já saiu da Matriz, etc.
+// Sem isto, montarGradeAlocacao (compute-alocacao.js) cria uma linha AVULSA
+// pra cada SUP desconhecido distinto -- lixo espalhado pela grade em vez de
+// consolidado num só lugar previsível.
+var SUP_DESCONHECIDO = 'Diversos';
+
 // csvEq: o texto CSV da Sheet espelho da aba EQ.
-// opcoes: { ano, mes, semana: {inicio, fim}, producaoOnline, temDemanda, hoje }
+// opcoes: { ano, mes, semana: {inicio, fim}, producaoOnline, temDemanda,
+//           supsConhecidos, hoje }
 //   hoje: diaEpoch do dia atual, OPCIONAL -- limita diaAlvoRealizado a não
 //   ultrapassar hoje numa semana ainda em curso (ver comentário acima de
 //   diaAlvoRealizado). Omitido preserva o comportamento antigo (usa sempre
 //   o fim da semana).
-//   producaoOnline: [{idEquipe, sup, tipo, diaEpoch}, ...] -- produção crua do
-//   Link 7 (dist/equipes-online.csv). Fonte de supRealizado/colunaRealizada
-//   desde 2026-08-26 (antes vinha do texto da Sheet EQ + osParaSup).
+//   producaoOnline: [{idEquipe, sup, tipo, diaEpoch, ultimaFotoEpoch}, ...] --
+//   produção crua do Link 7 (dist/equipes-online.csv). Fonte de
+//   supRealizado/colunaRealizada desde 2026-08-26 (antes vinha do texto da
+//   Sheet EQ + osParaSup).
 //   temDemanda(sup, colunaId) -> bool, OPCIONAL, só para desempatar a coluna
 //   de uma equipe polivalente semeada pelo realizado.
+//   supsConhecidos: { [sup]: true, ... }, OPCIONAL -- os SUPs que existem na
+//   Matriz do período em tela. Quando presente, um supRealizado que não bate
+//   com nenhuma chave dele é redirecionado para SUP_DESCONHECIDO ('Diversos')
+//   -- o valor original fica em equipe.supReal, pro cartão mostrar de onde
+//   veio (ver renderCartaoEquipe). Omitido preserva o comportamento antigo
+//   (nunca redireciona) -- mesma convenção de pessoasCsv/temDemanda acima.
 function equipesDoQuadro(csvEq, opcoes) {
   var o = opcoes || {};
   var roster = parseAbaEq(csvEq || '');
@@ -242,7 +269,16 @@ function equipesDoQuadro(csvEq, opcoes) {
       ? (o.hoje != null ? Math.min(o.semana.fim, o.hoje) : o.semana.fim)
       : Infinity;
     var ultimoRealizado = ultimoRealizadoAte(producaoPorEquipe[bruta.id], diaAlvoRealizado);
-    var ultimoSup = ultimoRealizado ? ultimoRealizado.sup : null;
+    var ultimoSupBruto = ultimoRealizado ? ultimoRealizado.sup : null;
+    // Redireciona pra SUP_DESCONHECIDO só quando dá pra CONFERIR (o chamador
+    // passou supsConhecidos) e o SUP não bate com nenhum -- sem
+    // supsConhecidos, mantém o comportamento antigo (usa o SUP cru, mesmo que
+    // seja lixo). supReal só é preenchido no caso redirecionado: é o que o
+    // cartão usa pra saber que tem algo a mostrar no tooltip (ver
+    // renderCartaoEquipe) -- null nos outros casos, não string vazia, pra não
+    // precisar de um segundo booleano.
+    var redirecionado = !!(ultimoSupBruto && o.supsConhecidos && !o.supsConhecidos[ultimoSupBruto]);
+    var ultimoSup = redirecionado ? SUP_DESCONHECIDO : ultimoSupBruto;
 
     equipes.push({
       id: bruta.id,
@@ -255,6 +291,7 @@ function equipesDoQuadro(csvEq, opcoes) {
       diasDaSemana: diasDaSemana,
       disponivel: diasDisponiveis > 0,
       supRealizado: ultimoSup,
+      supReal: redirecionado ? ultimoSupBruto : null,
       colunaRealizada: ultimoSup ? colunaSemeada(resolvido.colunas, ultimoSup, o.temDemanda) : null,
       popup: camposDoPopup(linha),
       veiculoGrupo: grupos.grupoPorId[String(bruta.id)] || null,
@@ -298,5 +335,5 @@ function equipesDoQuadro(csvEq, opcoes) {
 }
 
 module.exports = {
-  COLUNAS_ALOCACAO, COLUNAS_POR_SERVICO, colunasDaEquipe, equipesDoQuadro,
+  COLUNAS_ALOCACAO, COLUNAS_POR_SERVICO, colunasDaEquipe, equipesDoQuadro, SUP_DESCONHECIDO,
 };

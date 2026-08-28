@@ -10,6 +10,7 @@ function linhaLink7Cru(over = {}) {
     Tipo: 'SP',
     'Contrato Financeiro': 'SUP-7722-24',
     'Data / Hora Primeira Foto': '08/08/2026 07:54',
+    'Data / Hora Última Foto': '08/08/2026 11:30',
     'ID Sondador': '3275',
   }, over);
 }
@@ -24,6 +25,41 @@ test('extrai idEquipe, sup, tipo e diaEpoch da data/hora da primeira foto', () =
   assert.strictEqual(linha.sup, 'SUP-7722-24');
   assert.strictEqual(linha.tipo, 'SP');
   assert.strictEqual(linha.diaEpoch, diaEpoch(new Date('2026-08-08T00:00:00Z')));
+});
+
+// --- Última Foto -> ultimaFotoEpoch (2026-08-28) ----------------------------
+// Decide, dentro do MESMO dia, qual das sessões (SUPs) de uma equipe foi a
+// mais recente -- ver o design de 2026-08-28 e o comentário de
+// CABECALHO_PRODUCAO em atualizar-equipes-online.js.
+
+test('extrai ultimaFotoEpoch (minutos) da coluna "Data / Hora Última Foto", com HORÁRIO (não só o dia)', () => {
+  const [linha] = parseLinhasLink7([linhaLink7Cru()]);
+  const esperado = Math.floor(Date.UTC(2026, 7, 8, 11, 30) / 60000);
+  assert.strictEqual(linha.ultimaFotoEpoch, esperado);
+});
+
+test('duas linhas do MESMO dia com Última Foto em horários diferentes não empatam', () => {
+  const [cedo, tarde] = parseLinhasLink7([
+    linhaLink7Cru({ 'Contrato Financeiro': 'SUP-CEDO', 'Data / Hora Última Foto': '08/08/2026 08:00' }),
+    linhaLink7Cru({ 'Contrato Financeiro': 'SUP-TARDE', 'Data / Hora Última Foto': '08/08/2026 17:45' }),
+  ]);
+  assert.strictEqual(cedo.diaEpoch, tarde.diaEpoch, 'pré-condição: os dois caem no mesmo dia');
+  assert.ok(tarde.ultimaFotoEpoch > cedo.ultimaFotoEpoch, 'quem tirou foto mais tarde tem que ordenar depois');
+});
+
+test('sem "Data / Hora Última Foto" legível, ultimaFotoEpoch degrada pro início do dia da Primeira Foto -- não descarta a linha', () => {
+  const [linha] = parseLinhasLink7([linhaLink7Cru({ 'Data / Hora Última Foto': '' })]);
+  assert.ok(linha, 'a linha não pode ser descartada só por causa da Última Foto');
+  assert.strictEqual(linha.ultimaFotoEpoch, linha.diaEpoch * 1440);
+});
+
+test('cabeçalho com espaço DUPLO ("Data / Hora  Última Foto") também é tolerado', () => {
+  const linha = linhaLink7Cru();
+  delete linha['Data / Hora Última Foto'];
+  linha['Data / Hora  Última Foto'] = '08/08/2026 11:30';
+  const [resultado] = parseLinhasLink7([linha]);
+  const esperado = Math.floor(Date.UTC(2026, 7, 8, 11, 30) / 60000);
+  assert.strictEqual(resultado.ultimaFotoEpoch, esperado);
 });
 
 // Achado rodando o pipeline de verdade em 2026-08-08: o cabeçalho REAL desta

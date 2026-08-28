@@ -291,6 +291,15 @@ function renderCartaoEquipe(equipe, resumoEquipe, somenteLeitura, mostrarNome, c
         + ' equipes no veículo ' + escapeHtml(equipe.veiculoRotulo || '—') + '">🚐 '
         + escapeHtml(String(companheiros.length + 1)) + '</span>'
       : '')
+    // supReal (2026-08-28): só existe quando equipesDoQuadro redirecionou a
+    // equipe pra 'Diversos' -- o SUP resolvido pela Última Foto não bate com
+    // nenhum SUP conhecido da Matriz. O selo avisa que a semeadura automática
+    // ("Repor o realizado") não achou onde encaixar de verdade, e o tooltip
+    // mostra o SUP cru pra quem decide manualmente pra onde mover a equipe.
+    + (equipe.supReal
+      ? '<span class="cartao-selo-sup-real" title="SUP real (não cadastrado na Matriz): '
+        + escapeHtml(equipe.supReal) + '">❓</span>'
+      : '')
     + '<span class="cartao-cor" style="background:' + corPrincipal + '"></span>'
     + '<span class="cartao-lider">' + escapeHtml(equipe.lider) + '</span>'
     // Só quando o casamento veio do nome completo -- ver casouSoPeloNome.
