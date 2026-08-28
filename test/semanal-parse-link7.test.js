@@ -62,6 +62,23 @@ test('cabeçalho com espaço DUPLO ("Data / Hora  Última Foto") também é tole
   assert.strictEqual(resultado.ultimaFotoEpoch, esperado);
 });
 
+// Achado ao vivo em 2026-08-28 (equipes 216/337 relatadas pelo dono do
+// projeto): o cabeçalho REAL do site é "Data / Hora Ultima Foto" -- SEM
+// acento no Ú, diferente da fixture original (com acento) e diferente de
+// Primeira Foto (sem acento nenhuma letra, nunca expôs este bug). Sem
+// normalizar o acento, a busca nunca batia, ultimaFotoEpoch caía SEMPRE no
+// fallback (início do dia da Primeira Foto) em silêncio -- voltando a
+// travar OS de sessão longa fora da janela de 3 dias, disfarçado de "sem
+// Última Foto legível" quando na verdade a coluna respondia normalmente.
+test('cabeçalho SEM acento ("Data / Hora Ultima Foto", como o site publica de verdade) é lido igual ao acentuado', () => {
+  const linha = linhaLink7Cru();
+  delete linha['Data / Hora Última Foto'];
+  linha['Data / Hora Ultima Foto'] = '28/08/2026 10:24';
+  const [resultado] = parseLinhasLink7([linha]);
+  const esperado = Math.floor(Date.UTC(2026, 7, 28, 10, 24) / 60000);
+  assert.strictEqual(resultado.ultimaFotoEpoch, esperado, 'sem a normalização de acento, isto degradaria pro fallback (início do dia) em silêncio');
+});
+
 // Achado rodando o pipeline de verdade em 2026-08-08: o cabeçalho REAL desta
 // coluna no site tem espaço DUPLO ("Data / Hora  Primeira Foto"), diferente
 // da fixture original acima (espaço simples) -- toda linha era descartada em

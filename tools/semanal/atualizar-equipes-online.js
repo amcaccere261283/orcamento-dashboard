@@ -202,10 +202,23 @@ function gravarRoster({ linhasNovas, mesesBuscados, jaTemos }, caminho = OUT_PAT
 // Acha o valor de uma coluna comparando o rótulo ignorando variação de
 // espaçamento (a planilha real usa espaço duplo em algumas colunas, ex.
 // "Data / Hora  Primeira Foto" -- não confiável usar a chave exata).
+// Achado ao vivo em 2026-08-28: o cabeçalho real da coluna Última Foto no
+// site é "Data / Hora Ultima Foto" -- SEM acento, diferente do que a fixture
+// de teste original usava. colunaTolerante ignorava só a variação de
+// ESPAÇAMENTO (achado de 2026-08-08 pra Primeira Foto); sem normalizar
+// acento também, a busca por "Última Foto" nunca batia, caía em undefined em
+// silêncio, e ultimaFotoEpoch degradava pro fallback (início do dia da
+// Primeira Foto) SEMPRE -- exatamente o bug que a Última Foto existe pra
+// corrigir, voltando disfarçado. normalize('NFD') + strip dos diacríticos
+// (U+0300–U+036f) resolve os dois lados da comparação de uma vez.
+function normalizarRotulo(texto) {
+  return String(texto).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
 function colunaTolerante(linha, rotulo) {
-  const alvo = rotulo.replace(/\s+/g, ' ').trim();
+  const alvo = normalizarRotulo(rotulo);
   for (const chave of Object.keys(linha || {})) {
-    if (chave.replace(/\s+/g, ' ').trim() === alvo) return linha[chave];
+    if (normalizarRotulo(chave) === alvo) return linha[chave];
   }
   return undefined;
 }

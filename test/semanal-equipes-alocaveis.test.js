@@ -179,6 +179,50 @@ test('produção sem ultimaFotoEpoch (CSV de formato anterior) não quebra -- ca
   assert.strictEqual(eq4.supRealizado, 'SUP-7128-24');
 });
 
+// --- OS de sessão longa: Primeira Foto velha, Última Foto recente (achado
+// ao vivo em 2026-08-28, equipes 216 e 337 relatadas pelo dono do projeto) --
+// Uma linha do Link 7 é a OS INTEIRA, não um dia isolado: "Primeira Foto" é
+// quando a OS abriu, "Última Foto" é a atividade mais recente NELA. Uma OS
+// aberta há 9 dias mas com foto de HOJE tem que CONTAR -- diaEpoch (que vem
+// da Primeira Foto) sozinho a jogaria fora da janela de 3 dias em silêncio.
+
+test('OS aberta 9 dias atrás (diaEpoch velho) mas com Última Foto de HOJE conta -- não cai fora da janela por causa da Primeira Foto', () => {
+  const hoje = diaEpochDe(2026, 8, 16); // = SEMANA.fim, pra diaAlvoRealizado = hoje
+  const osSessaoLonga = [{
+    idEquipe: '4', sup: 'SUP-7285-24', tipo: 'SM',
+    diaEpoch: diaEpochDe(2026, 8, 7), // Primeira Foto: 9 dias antes de hoje -- fora da janela SE for isto que conta
+    ultimaFotoEpoch: hoje * 1440 + 10 * 60, // Última Foto: hoje às 10h
+  }];
+  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: osSessaoLonga, hoje });
+  const eq4 = equipes.find((e) => e.id === '4');
+  assert.strictEqual(eq4.supRealizado, 'SUP-7285-24', 'a Última Foto é de hoje -- a equipe tem que ser semeada, não sobrar no pool');
+});
+
+test('mesmo caso, mas a Última Foto TAMBÉM está fora da janela -- aí sim cai no pool (a janela vale, só o campo errado que decidia mudou)', () => {
+  const hoje = diaEpochDe(2026, 8, 16);
+  const osAntigaDeVerdade = [{
+    idEquipe: '4', sup: 'SUP-7285-24', tipo: 'SM',
+    diaEpoch: diaEpochDe(2026, 8, 7),
+    ultimaFotoEpoch: diaEpochDe(2026, 8, 10) * 1440, // Última Foto também há 6 dias -- fora da janela de 3
+  }];
+  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: osAntigaDeVerdade, hoje });
+  const eq4 = equipes.find((e) => e.id === '4');
+  assert.strictEqual(eq4.supRealizado, null, 'sem atividade recente de verdade, a equipe nasce no pool -- a janela continua valendo');
+});
+
+test('entre duas OSs diferentes da mesma equipe, ganha a de diaEfetivo (Última Foto) mais recente, mesmo com diaEpoch mais antigo', () => {
+  const hoje = diaEpochDe(2026, 8, 16);
+  const duasOs = [
+    // OS A: aberta recentemente (diaEpoch alto), mas sem foto nova desde então.
+    { idEquipe: '4', sup: 'SUP-A-RECENTE-MAS-PARADA', tipo: 'SM', diaEpoch: diaEpochDe(2026, 8, 15), ultimaFotoEpoch: diaEpochDe(2026, 8, 15) * 1440 },
+    // OS B: aberta há mais tempo (diaEpoch mais baixo que A), mas com foto de HOJE.
+    { idEquipe: '4', sup: 'SUP-B-VELHA-MAS-ATIVA-HOJE', tipo: 'SM', diaEpoch: diaEpochDe(2026, 8, 5), ultimaFotoEpoch: hoje * 1440 + 9 * 60 },
+  ];
+  const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: duasOs, hoje });
+  const eq4 = equipes.find((e) => e.id === '4');
+  assert.strictEqual(eq4.supRealizado, 'SUP-B-VELHA-MAS-ATIVA-HOJE', 'diaEfetivo (Última Foto) manda, não diaEpoch (Primeira Foto)');
+});
+
 test('produção com mais de 3 dias de defasagem não conta -- equipe nasce no pool', () => {
   const producaoAntiga = [{ idEquipe: '4', sup: 'SUP-7128-24', tipo: 'SM', diaEpoch: diaEpochDe(2026, 8, 12) }];
   const { equipes } = equipesDoQuadro(CSV_EQ, { ano: 2026, mes: 8, semana: SEMANA, producaoOnline: producaoAntiga });

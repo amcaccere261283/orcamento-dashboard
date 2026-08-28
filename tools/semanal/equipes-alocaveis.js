@@ -131,13 +131,12 @@ function indexarProducaoOnline(producaoOnline) {
     porEquipe[l.idEquipe].push(l);
   });
   Object.keys(porEquipe).forEach(function (id) {
-    // Desempate por ultimaFotoEpoch (2026-08-28, minutos -- ver
-    // CABECALHO_PRODUCAO em atualizar-equipes-online.js) DENTRO do mesmo dia:
-    // sem ele, duas sessões (SUPs diferentes) da mesma equipe no mesmo dia só
-    // tinham diaEpoch pra comparar, e "a última do array" virava a ordem de
-    // chegada da tabela do site, não o horário real. Ausente (CSV de uma
-    // versão anterior do formato, ou fallback do próprio fetcher) cai em 0 --
-    // nunca lança, só perde a granularidade de horário que já não tinha antes.
+    // Ordena por (diaEpoch, ultimaFotoEpoch) por legibilidade -- ultimoRealizadoAte
+    // (abaixo) já varre o histórico INTEIRO comparando diaEfetivoRealizado
+    // explicitamente, então a ordem aqui não é mais estritamente necessária
+    // pra correção (uma OS velha com Última Foto recente fica cedo no array
+    // por diaEpoch, mas ultimoRealizadoAte compara certo mesmo assim -- ver o
+    // comentário de 2026-08-28 lá).
     porEquipe[id].sort(function (a, b) {
       if (a.diaEpoch !== b.diaEpoch) return a.diaEpoch - b.diaEpoch;
       return (a.ultimaFotoEpoch || 0) - (b.ultimaFotoEpoch || 0);
@@ -151,16 +150,45 @@ function indexarProducaoOnline(producaoOnline) {
 // em vez de ficar presa a um SUP de dias atrás.
 var JANELA_ULTIMO_REALIZADO_DIAS = 3;
 
-// Último registro do histórico (ordenado) com diaEpoch <= diaAlvo e
-// diaAlvo - diaEpoch <= JANELA_ULTIMO_REALIZADO_DIAS. null se não achar --
-// equipe sem produção recente até aquele dia nasce no pool, nunca chutada
-// (mesma garantia de quando a fonte era o texto da Sheet EQ).
+// ACHADO AO VIVO em 2026-08-28 (relatado pelo dono do projeto, equipes 216 e
+// 337 sumindo do "Repor o realizado" apesar de foto de HOJE): uma linha do
+// Link 7 é a OS INTEIRA, não um dia isolado -- "Primeira Foto" é quando a OS
+// abriu, "Última Foto" é a atividade mais recente NELA, e as duas podem
+// distar dias ou semanas (medido: OS aberta 15/08, ainda com foto 28/08).
+// diaEpoch (que vem da Primeira Foto, ver CABECALHO_PRODUCAO em
+// atualizar-equipes-online.js) é o campo ERRADO pra medir "há quanto tempo a
+// equipe foi vista" -- ele fica preso ao dia de ABERTURA da OS, e uma OS
+// aberta há 13 dias mas ativa hoje caía fora da janela de 3 dias em silêncio.
+// diaEfetivo usa o DIA da Última Foto pra essa conta -- diaEpoch continua
+// intocado (é a fonte de OUTROS consumidores do mesmo CSV, como o Realizado
+// da Tabela Semanal, que atribuem a produção ao dia que a OS foi aberta, e
+// mudar esse significado ali está fora do escopo desta correção).
+function diaEfetivoRealizado(item) {
+  return item.ultimaFotoEpoch != null ? Math.floor(item.ultimaFotoEpoch / 1440) : item.diaEpoch;
+}
+
+// Registro do histórico com o MAIOR diaEfetivo (desempatado pelo
+// ultimaFotoEpoch em minutos, quando dois caem no mesmo dia) que satisfaça
+// diaEfetivo <= diaAlvo e diaAlvo - diaEfetivo <= JANELA_ULTIMO_REALIZADO_DIAS.
+// null se não achar -- equipe sem produção recente até aquele dia nasce no
+// pool, nunca chutada (mesma garantia de quando a fonte era o texto da Sheet
+// EQ). Varre o histórico INTEIRO (não depende mais da ordem de
+// indexarProducaoOnline) porque diaEfetivo pode discordar da ordem por
+// diaEpoch -- uma OS velha (diaEpoch baixo) com Última Foto de hoje
+// (diaEfetivo alto) fica cedo no array ordenado por diaEpoch, mas é ela quem
+// tem que ganhar.
 function ultimoRealizadoAte(historico, diaAlvo) {
   var melhor = null;
+  var melhorDiaEfetivo = null;
   (historico || []).forEach(function (item) {
-    if (item.diaEpoch > diaAlvo) return;
-    if (diaAlvo - item.diaEpoch > JANELA_ULTIMO_REALIZADO_DIAS) return;
-    melhor = item;
+    var diaEfetivo = diaEfetivoRealizado(item);
+    if (diaEfetivo > diaAlvo) return;
+    if (diaAlvo - diaEfetivo > JANELA_ULTIMO_REALIZADO_DIAS) return;
+    if (melhor === null || diaEfetivo > melhorDiaEfetivo
+      || (diaEfetivo === melhorDiaEfetivo && (item.ultimaFotoEpoch || 0) > (melhor.ultimaFotoEpoch || 0))) {
+      melhor = item;
+      melhorDiaEfetivo = diaEfetivo;
+    }
   });
   return melhor;
 }
