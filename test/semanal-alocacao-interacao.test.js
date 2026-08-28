@@ -631,7 +631,7 @@ test('particionarSupsPorLocalizacao separa SUPs com e sem coordenada', () => {
 // célula/pool (linha 254 acima) já usam.
 function elementoFalsoPino(sup) {
   const el = { getAttribute: (attr) => (attr === 'data-sup' ? sup : null) };
-  el.closest = (sel) => (sel === '.marcador-alocacao-mapa' ? el : null);
+  el.closest = (sel) => (sel === '.marcador-alocacao-mapa, .marcador-alocacao-mapa-equipe' ? el : null);
   return el;
 }
 
@@ -641,6 +641,61 @@ test('resolverAlvoAlocacao reconhece um marcador do mapa (.marcador-alocacao-map
   // document.elementFromPoint é chamado por resolverAlvoAlocacao -- o
   // documento falso deste arquivo não implementa elementFromPoint, então
   // caímos no fallback e.target (ver o comentário de resolverAlvoAlocacao).
+  const alvo = cliente.resolverAlvoAlocacao({ target: elFalso });
+  assert.deepStrictEqual({ tipo: alvo.tipo, sup: alvo.el.getAttribute('data-sup') }, { tipo: 'pino', sup: 'SUP-A' });
+});
+
+// --- "Efeito kanban": agruparEquipesAlocadasPorSup (equipe no mapa) ---
+//
+// Função PURA, separada de desenharEquipesNoMapa (que mexe no MapLibre/DOM)
+// -- mesma separação que particionarSupsPorLocalizacao/desenharPinosMapa já
+// estabelecem logo acima. A criação de Marker em si só é verificável
+// manualmente, mesma limitação já documentada pro resto do mapa.
+test('agruparEquipesAlocadasPorSup agrupa só equipes com destino E com coordenada conhecida', () => {
+  const cliente = montarClienteAlocacao();
+  const porEquipe = [
+    { id: '1', sup: 'SUP-A', coluna: 'SP' },
+    { id: '2', sup: 'SUP-A', coluna: 'SM' },
+    { id: '3', sup: 'SUP-B', coluna: 'SP' }, // SUP-B sem coordenada -- fica de fora
+    { id: '4', sup: null, coluna: null }, // no pool -- fica de fora
+  ];
+  const coordenadas = { 'SUP-A': { lat: -25.5, lon: -49.2 } };
+  const grupos = cliente.agruparEquipesAlocadasPorSup(porEquipe, coordenadas);
+  assert.deepStrictEqual(normalizar(Object.keys(grupos)), ['SUP-A']);
+  assert.deepStrictEqual(normalizar(grupos['SUP-A'].map((e) => e.id)), ['1', '2']);
+});
+
+test('agruparEquipesAlocadasPorSup preserva a ORDEM original de porEquipe dentro de cada grupo', () => {
+  const cliente = montarClienteAlocacao();
+  const porEquipe = [
+    { id: '9', sup: 'SUP-A', coluna: 'SP' },
+    { id: '2', sup: 'SUP-A', coluna: 'SM' },
+    { id: '5', sup: 'SUP-A', coluna: 'ST' },
+  ];
+  const coordenadas = { 'SUP-A': { lat: -25.5, lon: -49.2 } };
+  const grupos = cliente.agruparEquipesAlocadasPorSup(porEquipe, coordenadas);
+  assert.deepStrictEqual(normalizar(grupos['SUP-A'].map((e) => e.id)), ['9', '2', '5']);
+});
+
+test('agruparEquipesAlocadasPorSup sem nenhuma equipe alocada devolve objeto vazio, nunca lança', () => {
+  const cliente = montarClienteAlocacao();
+  assert.deepStrictEqual(normalizar(cliente.agruparEquipesAlocadasPorSup([], {})), {});
+  assert.deepStrictEqual(normalizar(cliente.agruparEquipesAlocadasPorSup(null, null)), {});
+});
+
+// "Efeito kanban" (2026-08-28): o cartão de uma equipe JÁ alocada é
+// desenhado como marcador próprio em cima do pino do SUP dela
+// (desenharEquipesNoMapa) -- soltar outra equipe ali tem de valer o mesmo
+// que soltar no pino em si.
+function elementoFalsoCartaoEquipeMapa(sup) {
+  const el = { getAttribute: (attr) => (attr === 'data-sup' ? sup : null) };
+  el.closest = (sel) => (sel === '.marcador-alocacao-mapa, .marcador-alocacao-mapa-equipe' ? el : null);
+  return el;
+}
+
+test('resolverAlvoAlocacao reconhece o cartão de equipe do mapa (.marcador-alocacao-mapa-equipe) como alvo tipo pino', async () => {
+  const cliente = montarClienteAlocacao();
+  const elFalso = elementoFalsoCartaoEquipeMapa('SUP-A');
   const alvo = cliente.resolverAlvoAlocacao({ target: elFalso });
   assert.deepStrictEqual({ tipo: alvo.tipo, sup: alvo.el.getAttribute('data-sup') }, { tipo: 'pino', sup: 'SUP-A' });
 });

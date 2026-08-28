@@ -300,7 +300,7 @@ function criarDocumentoFalso() {
           getAttribute: (attr) => (attr === 'data-sup' ? String(sup) : null),
           sup: String(sup),
         });
-        marcador.closest = (sel) => (sel === '.marcador-alocacao-mapa' ? marcador : null);
+        marcador.closest = (sel) => (sel === '.marcador-alocacao-mapa, .marcador-alocacao-mapa-equipe' ? marcador : null);
         marcadoresAlocacao.push(marcador);
       });
       return marcadoresAlocacao;

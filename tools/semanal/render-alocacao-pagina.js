@@ -170,6 +170,7 @@ function inicializarMapaAlocacao() {
 
   MAPA_ALOCACAO.instancia = mapa;
   MAPA_ALOCACAO.marcadores = {};
+  MAPA_ALOCACAO.marcadoresEquipe = {};
   // enquadrouUmaVez (fitBounds, ver desenharPinosMapa): nasce false a cada
   // instância NOVA do mapa -- um mapa recriado do zero (semRoster ligou e
   // desligou de novo, ver o comentário em montarMapaAlocacao) merece um novo
@@ -721,6 +722,7 @@ function montarMapaAlocacao(prep, dadosPrecomputados) {
       MAPA_ALOCACAO.instancia.remove();
       MAPA_ALOCACAO.instancia = null;
       MAPA_ALOCACAO.marcadores = {};
+      MAPA_ALOCACAO.marcadoresEquipe = {};
       // FIX (achado Minor 5 da revisão final): sem isto, ESTADO_RODOVIAS.ordem
       // sobrevive à destruição da instância (é estado do SELETOR, não do
       // mapa), mas MAPA_ALOCACAO.camadasRodovia continuava com os ids de
@@ -1052,6 +1054,84 @@ function popupHtmlDoPino(sup) {
     + '</div>';
 }
 
+// "Efeito kanban" no mapa (2026-08-28): agrupa resumo.porEquipe (o MESMO
+// resumo que a tabela usa -- nenhum cálculo novo) por SUP, restrito a quem
+// JÁ tem destino (campo sup truthy) E cujo SUP tem coordenada conhecida (sem
+// coordenada não há onde pousar o cartão -- essa equipe continua contada
+// normalmente no resumo, só não ganha marcador no mapa). Função PURA, sem
+// DOM/MapLibre -- testável isoladamente (ver
+// test/semanal-alocacao-interacao.test.js). A ordem dentro de cada
+// grupo é a mesma de porEquipe (estável), pra não embaralhar a fileira de
+// cartões a cada redesenho sem necessidade.
+function agruparEquipesAlocadasPorSup(porEquipe, coordenadasPorSup) {
+  var coords = coordenadasPorSup || {};
+  var grupos = {};
+  (porEquipe || []).forEach(function (e) {
+    if (!e.sup || !coords[e.sup]) return;
+    if (!grupos[e.sup]) grupos[e.sup] = [];
+    grupos[e.sup].push(e);
+  });
+  return grupos;
+}
+
+// Deslocamento em pixels (não em grau de lat/lon -- fica constante em
+// qualquer zoom): enfileira os cartões do MESMO SUP numa fileira horizontal
+// logo abaixo do pino dele.
+var OFFSET_EQUIPE_MAPA_X_PX = 30;
+var OFFSET_EQUIPE_MAPA_Y_PX = 30;
+
+// Desenha, como marcador PRÓPRIO do MapLibre, o MESMO cartão que já aparece
+// no pool/na célula do Kanban (RenderAbaAlocacao.renderCartaoEquipe -- zero
+// markup novo) em cima do pino do SUP onde a equipe está alocada. É isto que
+// dá o "efeito kanban" pedido: mover a equipe de SUP tira o cartão de um
+// pino e recria no outro no PRÓXIMO desenharPinosMapa (chamado depois de
+// TODO aplicarMovimento, mesmo padrão que já redesenha a tabela) -- a
+// equipe "pula" de pino em pino do jeito que já pulava de célula em célula.
+//
+// Nenhuma regra de negócio nova: o cartão nasce com data-equipe/
+// data-arrastavel="sim" (o PRÓPRIO renderCartaoEquipe já decide isso, igual
+// em qualquer outro lugar que o desenha) -- o listener delegado em
+// #secao-mapa-alocacao (inicializarInteracaoAlocacao) já reconhece esse
+// seletor não importa onde ele apareça no DOM, então arrastar um cartão do
+// mapa funciona sem nenhum wireup extra. A classe
+// .marcador-alocacao-mapa-equipe + data-sup é o que faz resolverAlvoAlocacao
+// aceitar SOLTAR em cima de um cartão já alocado como se fosse soltar no
+// próprio pino (ver o comentário lá).
+function desenharEquipesNoMapa(dados, coordenadasPorSup) {
+  var mapa = MAPA_ALOCACAO.instancia;
+  if (!MAPA_ALOCACAO.marcadoresEquipe) MAPA_ALOCACAO.marcadoresEquipe = {};
+  Object.keys(MAPA_ALOCACAO.marcadoresEquipe).forEach(function (id) {
+    MAPA_ALOCACAO.marcadoresEquipe[id].remove();
+  });
+  MAPA_ALOCACAO.marcadoresEquipe = {};
+
+  var grupos = agruparEquipesAlocadasPorSup(dados.resumo.porEquipe, coordenadasPorSup);
+  Object.keys(grupos).forEach(function (sup) {
+    var coords = coordenadasPorSup[sup];
+    var lista = grupos[sup];
+    lista.forEach(function (resumoEquipe, i) {
+      var equipe = dados.equipesPorId[resumoEquipe.id];
+      if (!equipe) return; // não deveria acontecer -- porEquipe vem das mesmas equipes
+      var wrap = document.createElement('div');
+      wrap.innerHTML = RenderAbaAlocacao.renderCartaoEquipe(
+        equipe, resumoEquipe, dados.somenteLeitura, false, resumoEquipe.coluna
+      );
+      var slot = wrap.firstElementChild;
+      if (!slot) return;
+      var cartao = slot.querySelector('.cartao-equipe');
+      if (cartao) {
+        cartao.classList.add('marcador-alocacao-mapa-equipe');
+        cartao.setAttribute('data-sup', sup);
+      }
+      var deslocX = (i - (lista.length - 1) / 2) * OFFSET_EQUIPE_MAPA_X_PX;
+      var marcador = new maplibregl.Marker({ element: slot, offset: [deslocX, OFFSET_EQUIPE_MAPA_Y_PX] })
+        .setLngLat([coords.lon, coords.lat])
+        .addTo(mapa);
+      MAPA_ALOCACAO.marcadoresEquipe[resumoEquipe.id] = marcador;
+    });
+  });
+}
+
 // Redesenha os pinos a partir do zero a cada chamada -- mesma filosofia de
 // montarAbaAlocacao pro Kanban (redesenha inteiro; mais simples e barato o
 // bastante que otimizar incrementalmente não vale a pena aqui: no máximo
@@ -1114,6 +1194,8 @@ function desenharPinosMapa(dados, coordenadasPorSup) {
       .addTo(mapa);
     MAPA_ALOCACAO.marcadores[sup.sup] = marcador;
   });
+
+  desenharEquipesNoMapa(dados, coordenadasPorSup);
 
   var painelSemLocalizacao = document.getElementById('mapa-alocacao-sem-localizacao');
   if (painelSemLocalizacao) {
@@ -1331,7 +1413,16 @@ function resolverAlvoAlocacao(e) {
   // acima (cuja ordem importa porque uma célula pode, em tese, estar dentro
   // de um layout que também bate '.pool-alocacao'). Checada por último só
   // porque é a mais nova, não por precisar ceder a nada.
-  var pino = sob.closest('.marcador-alocacao-mapa');
+  //
+  // .marcador-alocacao-mapa-equipe (efeito kanban, 2026-08-28): o CARTÃO da
+  // equipe alocada, desenhado como marcador PRÓPRIO em cima do pino do SUP
+  // dela (desenharEquipesNoMapa) -- ganha data-sup no mesmo formato do pino,
+  // então soltar em cima de um cartão de equipe já alocada tem exatamente o
+  // mesmo efeito de soltar no pino: aplicarMovimentoNoPino decide a coluna e
+  // aplicarMovimento decide se aceita. Reconhecido no MESMO closest() do
+  // pino -- as duas classes nunca aninham uma dentro da outra por construção
+  // (marcador-equipe é ele mesmo o alvo, não um filho do marcador-pino).
+  var pino = sob.closest('.marcador-alocacao-mapa, .marcador-alocacao-mapa-equipe');
   if (pino) return { tipo: 'pino', el: pino };
   return null;
 }
@@ -1862,6 +1953,18 @@ function renderAlocacaoPagina({
     width: 18px; height: 18px; border-radius: 50%;
     border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.5);
     cursor: pointer;
+  }
+  /* "Efeito kanban" (2026-08-28): o cartão da equipe alocada, pousado sobre
+     o pino do SUP dela -- mesmo .cartao-equipe do pool/Kanban, só com sombra
+     extra (flutua sobre tiles de mapa/satélite, que variam de brilho, ao
+     contrário do fundo sólido de --surface-1 de onde o cartão normalmente
+     vem) e fonte um pouco menor pra caber várias lado a lado sem disputar
+     espaço com o pino. Cor/borda continuam de --surface-1/--border (a base
+     do dashboard já é escura -- ver :root em render-shell.js -- por isso o
+     cartão não precisa de um tema próprio aqui, ao contrário dos PAINÉIS da
+     aba Mapa, que usam a paleta Suporte Infra à parte). */
+  #secao-mapa-alocacao .marcador-alocacao-mapa-equipe {
+    font-size: 11px; box-shadow: 0 2px 8px rgba(0,0,0,0.6);
   }
   #secao-mapa-alocacao .maplibregl-popup-content { color: #1a1d24; }
   #secao-mapa-alocacao .popup-pino-alocacao { font-family: "Poppins", sans-serif; font-size: 13px; }
