@@ -50,8 +50,15 @@ function opcoes(extra) {
   }, extra || {});
 }
 
+// Task 5 acrescentou 2 tabelas extras (Produtividade média/Equipe) abaixo da
+// tabela principal -- linhasDe é escopada só à tabela principal
+// (id="tabela-consolidado") para que as asserções escritas antes daquela
+// tarefa continuem provando o que sempre provaram, sem ver linhas dos blocos
+// novos.
 function linhasDe(html) {
-  return (html.match(/<tr class="[^"]*">[\s\S]*?<\/tr>/g) || []);
+  var m = html.match(/<table id="tabela-consolidado">[\s\S]*?<\/table>/);
+  var escopo = m ? m[0] : html;
+  return (escopo.match(/<tr class="[^"]*">[\s\S]*?<\/tr>/g) || []);
 }
 
 function celulasDe(linha) {
@@ -475,7 +482,13 @@ test('em Volume e em Financeiro nao ha nota de dimensao -- a barra e a tabela co
 test('o colspan da nota cobre a tabela inteira -- uma nota mais curta que o cabecalho deixaria a linha torta', () => {
   const registros = [registro({ sup: 'SUP-A', volume: 310 })];
   // `/<th[ >]/` e não `/<th/`: este último casa também dentro de "<thead>".
-  const contarThs = (h) => (h.match(/<th[ >]/g) || []).length;
+  // Escopado à tabela PRINCIPAL (id="tabela-consolidado") -- os 2 blocos
+  // extras de Task 5 (Produtividade média/Equipe) têm cabeçalho próprio, com
+  // 6 <th> cada, e não fazem parte da tabela que esta nota cobre.
+  const contarThs = (h) => {
+    const m = h.match(/<table id="tabela-consolidado">[\s\S]*?<\/table>/);
+    return ((m ? m[0] : h).match(/<th[ >]/g) || []).length;
+  };
   // 4 colunas de texto + as 4 do resumo (Previsto até a data/Realizado/
   // Desvio até a data/Semana total) = 8, para qualquer dimensão (as colunas
   // de premissa saíram da tabela no Task 4).
@@ -488,4 +501,58 @@ test('renderControles inclui o botão "Gerar relatório Excel" e o span de statu
   const html = renderControles({ semanas: SEMANAS, semanaIdx: 0 });
   assert.match(html, /<button id="gerar-relatorio-excel" type="button">Gerar relatório Excel<\/button>/);
   assert.match(html, /<span id="status-relatorio-excel" class="status-atualizacao"><\/span>/);
+});
+
+// --- Task 5: blocos Produtividade média e Equipe ----------------------------
+// Cada um traz Tendência congelada (só do snapshot, sem fallback de recálculo
+// local) + Realizado, percorrendo a MESMA hierarquia SUP/tipologia da tabela
+// principal.
+
+// Semana S2 (06/07 a 12/07), encerrada com hoje em 15/07: 20 furos em 08/07
+// (demandasEspalhadas já usa esse número no resto da suíte -- ver o teste
+// "o Realizado exibido continua sendo o de HOJE"), e uma foto de equipes de 4
+// equipes/dia em todos os dias úteis da semana (dom sai da conta em
+// somarEquipesNoIntervalo) -- soma 24 equipe-dia / 6 dias úteis = 4.
+function equipesPorDiaConstante(chave, inicio, fim, valor) {
+  const porDia = {};
+  for (let dia = inicio; dia <= fim; dia++) porDia[dia] = valor;
+  return { [chave]: porDia };
+}
+
+function demandasComEquipes(demandasBase, equipesPorDia) {
+  return Object.assign({}, demandasBase, { equipesPorDia: equipesPorDia });
+}
+
+test('aba mostra bloco Produtividade media e bloco Equipe, cada um com Tendencia congelada e Realizado', () => {
+  const semanaIdx = 1; // S2 (06/07 a 12/07)
+  const equipesPorDia = equipesPorDiaConstante('SUP-A||ST', diaJul(6), diaJul(12), 4);
+  const demandas = demandasComEquipes(demandasEspalhadas(), equipesPorDia);
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx, demandas, hojeEpoch: diaJul(15) }));
+  assert.match(html, /Produtividade média/);
+  assert.match(html, /Equipe/);
+  // 3 tabelas na aba: a principal (Volume/Financeiro) + 2 novas.
+  const ocorrencias = html.match(/<table/g) || [];
+  assert.strictEqual(ocorrencias.length, 3);
+});
+
+test('Realizado de Produtividade media = Realizado Volume / Realizado Equipe da mesma semana', () => {
+  const semanaIdx = 1; // S2 (06/07 a 12/07), encerrada com hoje em 15/07
+  const equipesPorDia = equipesPorDiaConstante('SUP-A||ST', diaJul(6), diaJul(12), 4);
+  const demandas = demandasComEquipes(demandasEspalhadas(), equipesPorDia);
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx, demandas, hojeEpoch: diaJul(15) }));
+
+  // Fixture: Realizado de volume da S2 = 20 furos (mesmo número que o teste
+  // "o Realizado exibido continua sendo o de HOJE" já prova para essa
+  // semana); Realizado de equipe = 24 equipe-dia / 6 dias úteis = 4
+  // (ceil). Produtividade média Realizado = 20 / 4 = 5.
+  const REALIZADO_VOLUME_TOTAL_GERAL = 20;
+  const REALIZADO_EQUIPE_TOTAL_GERAL = 4;
+  const esperado = REALIZADO_VOLUME_TOTAL_GERAL / REALIZADO_EQUIPE_TOTAL_GERAL;
+
+  const linhasProdutividade = linhasDe(html.split('Produtividade média')[1].split('Equipe')[0]);
+  const celulasTotalGeral = celulasDe(linhasProdutividade.filter((l) => l.indexOf('linha-total-geral') !== -1 && l.indexOf('linha-total-geral-tipologia') === -1)[0]);
+  // celulas: SUP/Grupo/Tomador/Tipologia/Tendência congelada/Realizado.
+  // Realizado sai com 2 casas (mesma convenção do resto da aba pra
+  // grandezas não-inteiras) -- 20/4 = 5,00.
+  assert.strictEqual(celulasTotalGeral[5], esperado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 });

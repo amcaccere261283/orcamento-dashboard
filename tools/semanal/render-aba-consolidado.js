@@ -286,6 +286,112 @@ function renderLinhaResumo(celulas, classe, registros, indices, ctx) {
     + '</tr>';
 }
 
+// Task 5 (2026-08-31): Produtividade média e Equipe -- dois blocos extras,
+// abaixo da tabela principal, com Tendência congelada (SÓ do snapshot, sem o
+// fallback de recálculo local que renderLinhaResumo tem) + Realizado.
+//
+// Produtividade média não existe como série própria em
+// calcularSeriesSemanaisDimensao (é derivada de Volume ÷ Equipes), então
+// "recalcular localmente" a Tendência exigiria refazer essa mesma divisão
+// fora do snapshot -- possível, mas não pedido nesta rodada. Sem entrada no
+// snapshot para a semana em tela, a célula de Tendência fica sem dado: é uma
+// limitação aceita (o congelamento de sexta ainda não rodou para aquela
+// semana), não um bug.
+//
+// realizadoDoBloco: (registros, indices, ctx) => number|null. Recebido pronto
+// em vez de reusar tendenciaExternaDoCtx sozinha porque nem Produtividade
+// média nem Equipe têm Realizado saindo de calcularSeriesSemanaisDimensao
+// como as outras dimensões (volume/financeiro) -- ver realizadoProdutividadeMedia/
+// realizadoEquipe abaixo.
+function renderLinhaResumoGenerica(celulas, classe, registros, indices, ctx, chaveDimensaoSnapshot, realizadoDoBloco) {
+  var congeladoPorSemana = ctx.congeladoPorSemana;
+  var tendenciaExterna;
+  if (congeladoPorSemana && congeladoPorSemana.porRegistro && indices.length === 1) {
+    var chave = chaveMatriz(registros[indices[0]].sup, registros[indices[0]].tipologia);
+    var entrada = congeladoPorSemana.porRegistro[chave];
+    if (entrada && entrada[chaveDimensaoSnapshot] && entrada[chaveDimensaoSnapshot].tendencia !== undefined) {
+      tendenciaExterna = entrada[chaveDimensaoSnapshot].tendencia;
+    }
+  }
+  var tendencia = tendenciaExterna !== undefined ? tendenciaExterna : null;
+  var realizado = realizadoDoBloco(registros, indices, ctx);
+  function num(v, casas) { return v === null || v === undefined ? '<td class="num sem-dado"></td>' : '<td class="num">' + formatarNumero(v, casas === undefined ? 2 : casas) + '</td>'; }
+  return '<tr class="' + classe + '">' + celulas + num(tendencia) + num(realizado) + '</tr>';
+}
+
+// Produtividade média Realizado = Volume Realizado ÷ Equipe Realizado da
+// mesma semana (Decisão 3 do design) -- as duas séries já saem de
+// serieDaSemana, a mesma função que a tabela principal usa.
+function realizadoProdutividadeMedia(registros, indices, ctx) {
+  var alvo = { semana: ctx.semanaEscolhida, mesIdx: ctx.mesIdx, semanasDoMesAlvo: ctx.semanas, indiceNoMes: ctx.semanaIdx };
+  var serieCtx = { hojeEpoch: ctx.hojeEpoch, temSemanasReais: ctx.temSemanasReais, demandas: ctx.demandas };
+  var serieVolume = serieDaSemana(registros, indices, 'volume', alvo, serieCtx);
+  var serieEquipe = serieDaSemana(registros, indices, 'equipes', alvo, serieCtx);
+  if (serieVolume.realizado === null || !serieEquipe.realizado) return null;
+  return serieVolume.realizado / serieEquipe.realizado;
+}
+
+// Equipe Realizado = demandas.equipesPorDia agregado pela mesma janela que a
+// Tabela Semanal já usa para o Realizado de Equipes (somarEquipesNoIntervalo,
+// dentro de calcularSeriesSemanaisDimensao com dimensao === 'equipes').
+function realizadoEquipe(registros, indices, ctx) {
+  var alvo = { semana: ctx.semanaEscolhida, mesIdx: ctx.mesIdx, semanasDoMesAlvo: ctx.semanas, indiceNoMes: ctx.semanaIdx };
+  var serieCtx = { hojeEpoch: ctx.hojeEpoch, temSemanasReais: ctx.temSemanasReais, demandas: ctx.demandas };
+  var serieEquipe = serieDaSemana(registros, indices, 'equipes', alvo, serieCtx);
+  return serieEquipe.realizado;
+}
+
+// Cabeçalho dos dois blocos extras: SUP/Grupo/Tomador/Tipologia + Tendência
+// congelada + Realizado -- 6 colunas, mais estreito que renderCabecalho (que
+// tem Previsto até a data/Desvio até a data/Semana total, que estes blocos
+// não têm).
+function renderCabecalhoGenerico() {
+  return '<thead><tr>'
+    + '<th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th>'
+    + '<th class="num">Tendência congelada</th>'
+    + '<th class="num">Realizado</th>'
+    + '</tr></thead>';
+}
+
+// Monta um bloco extra (Produtividade média ou Equipe) percorrendo a MESMA
+// hierarquia TOTAL GERAL / por tipologia / por SUP / TOTAL do SUP que a
+// tabela principal usa.
+function renderBlocoGenerico(titulo, chaveDimensaoSnapshot, realizadoDoBloco, registros, todos, ctx) {
+  var linhas = renderLinhaResumoGenerica(
+    celula('col-sup', '—') + celula('col-grupo', 'Todos') + celula('col-tomador', 'Todos')
+      + celulaChipTotal('TOTAL GERAL', 'chip-total-geral'),
+    'linha-total-geral', registros, todos, ctx, chaveDimensaoSnapshot, realizadoDoBloco
+  );
+
+  tipologiasPresentes(registros, todos).forEach(function (bloco) {
+    linhas += renderLinhaResumoGenerica(
+      celula('col-sup', '—') + celula('col-grupo', 'Todos') + celula('col-tomador', 'Todos')
+        + celulaChip(bloco.tipologia),
+      'linha-total-geral linha-total-geral-tipologia', registros, bloco.indices, ctx, chaveDimensaoSnapshot, realizadoDoBloco
+    );
+  });
+
+  blocosPorSup(registros, todos).forEach(function (bloco) {
+    bloco.indices.forEach(function (idx) {
+      var registro = registros[idx];
+      linhas += renderLinhaResumoGenerica(
+        celula('col-sup', registro.sup) + celula('col-grupo', registro.grupo)
+          + celula('col-tomador', registro.tomador) + celulaChip(registro.tipologia),
+        'linha-consolidado', registros, [idx], ctx, chaveDimensaoSnapshot, realizadoDoBloco
+      );
+    });
+    var primeiro = registros[bloco.indices[0]];
+    linhas += renderLinhaResumoGenerica(
+      celula('col-sup', bloco.sup) + celula('col-grupo', primeiro.grupo)
+        + celula('col-tomador', primeiro.tomador) + celulaChipTotal('TOTAL'),
+      'linha-total-sup', registros, bloco.indices, ctx, chaveDimensaoSnapshot, realizadoDoBloco
+    );
+  });
+
+  return '<h3>' + escapeHtml(titulo) + '</h3>'
+    + '<table>' + renderCabecalhoGenerico() + '<tbody>' + linhas + '</tbody></table>';
+}
+
 function celula(classe, texto) {
   return '<td class="' + classe + '">' + escapeHtml(texto) + '</td>';
 }
@@ -447,9 +553,17 @@ function renderAbaConsolidado(registros, indices, opcoes) {
     );
   });
 
+  // Task 5: dois blocos extras abaixo da tabela principal, mesma hierarquia,
+  // Tendência congelada (só do snapshot) + Realizado.
+  var blocoProdutividade = renderBlocoGenerico(
+    'Produtividade média', 'produtividadeMedia', realizadoProdutividadeMedia, registros, todos, ctx
+  );
+  var blocoEquipe = renderBlocoGenerico('Equipe', 'equipe', realizadoEquipe, registros, todos, ctx);
+
   return controles + renderNota(dimensao)
     + '<table id="tabela-consolidado">' + renderCabecalho(dimensao, semanas[semanaIdx], !!congeladoPorSemana)
-    + '<tbody>' + linhas + '</tbody></table>';
+    + '<tbody>' + linhas + '</tbody></table>'
+    + blocoProdutividade + blocoEquipe;
 }
 
 module.exports = {
@@ -457,4 +571,5 @@ module.exports = {
   formatarChaveSemana,
   produtividadeEsperada, ticketMedioPrevisto, somarPrevistoMes,
   blocosPorSup, tipologiasPresentes, tipologiaColor,
+  renderLinhaResumoGenerica, realizadoProdutividadeMedia, realizadoEquipe,
 };
