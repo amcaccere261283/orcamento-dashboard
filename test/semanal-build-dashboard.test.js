@@ -295,3 +295,84 @@ test('subtítulo do cabeçalho mostra só mês/ano quando não há aviso', () =>
   });
   assert.match(html, /<div class="generated">Jan\/1970<\/div>/);
 });
+
+// --- Snapshot congelado + montarRegistrosEDemandas (2026-08-31) -------------
+//
+// Os três testes abaixo exercitam o BUILD de verdade (MATRIZ viva no G:\ +
+// os CSVs de dist/ já commitados), não uma fixture sintética. Por isso são
+// PULADOS quando a planilha da MATRIZ não está acessível: numa máquina sem o
+// Google Drive montado eles não teriam o que ler, e reprovar ali seria
+// reprovar o ambiente, não o código (mesmo espírito de
+// tools/medicoes/verificar-planilha-real.js no repositório irmão -- prova
+// contra a fonte real, mas sem prender a suíte offline).
+const fsBuild = require('node:fs');
+const pathBuild = require('node:path');
+const osBuild = require('node:os');
+const configOrcamento = require('../tools/orcamento/config.js');
+const { montarRegistrosEDemandas, build } = require('../tools/semanal/build-dashboard.js');
+
+const TEM_MATRIZ = fsBuild.existsSync(configOrcamento.caminhoArquivo);
+const RAIZ_REPO = pathBuild.join(__dirname, '..');
+const CAMINHO_SNAPSHOT_REPO = pathBuild.join(RAIZ_REPO, 'docs', 'tendencia-congelada-semanal.json');
+const SENHA_BUILD_FAKE = 'senha-fake-de-teste-nao-e-a-real';
+
+// async/await de propósito: com `return fn()` (sem await) o finally rodaria
+// ANTES do build terminar, apagando a fixture no meio da leitura.
+async function comSnapshot(conteudo, fn) {
+  // Guarda o arquivo real (se existir) e restaura no fim -- este caminho é
+  // fixo em build-dashboard.js, então o teste tem de escrever no lugar certo.
+  const existia = fsBuild.existsSync(CAMINHO_SNAPSHOT_REPO);
+  const anterior = existia ? fsBuild.readFileSync(CAMINHO_SNAPSHOT_REPO, 'utf8') : null;
+  try {
+    if (conteudo === null) { if (existia) fsBuild.unlinkSync(CAMINHO_SNAPSHOT_REPO); }
+    else fsBuild.writeFileSync(CAMINHO_SNAPSHOT_REPO, conteudo, 'utf8');
+    return await fn();
+  } finally {
+    if (anterior === null) { if (fsBuild.existsSync(CAMINHO_SNAPSHOT_REPO)) fsBuild.unlinkSync(CAMINHO_SNAPSHOT_REPO); }
+    else fsBuild.writeFileSync(CAMINHO_SNAPSHOT_REPO, anterior, 'utf8');
+  }
+}
+
+function saidaTemporaria() {
+  const dir = fsBuild.mkdtempSync(pathBuild.join(osBuild.tmpdir(), 'semanal-build-'));
+  return pathBuild.join(dir, 'planejamento-semanal.html');
+}
+
+test('montarRegistrosEDemandas devolve registros e demandas sem precisar de ORCAMENTO_SENHA nem escrever nada em disco',
+  { skip: TEM_MATRIZ ? false : 'MATRIZ do G:\ indisponível nesta máquina' }, async () => {
+    const senhaAntes = process.env.ORCAMENTO_SENHA;
+    delete process.env.ORCAMENTO_SENHA;
+    try {
+      const { registros, demandas } = await montarRegistrosEDemandas();
+      assert.ok(Array.isArray(registros) && registros.length > 0);
+      assert.ok(demandas && demandas.porRegistroEventos);
+    } finally {
+      if (senhaAntes !== undefined) process.env.ORCAMENTO_SENHA = senhaAntes;
+    }
+  });
+
+test('build embute window.__CONGELADO_SEMANAL__ quando docs/tendencia-congelada-semanal.json existe',
+  { skip: TEM_MATRIZ ? false : 'MATRIZ do G:\ indisponível nesta máquina' }, async () => {
+    const fixture = { '2026-W35': { geradoEm: '2026-08-28T22:00:00.000Z', porRegistro: { 'SUP-TESTE-99||ST': { volume: { tendencia: 123.5 } } } } };
+    const outPath = saidaTemporaria();
+    const html = await comSnapshot(JSON.stringify(fixture, null, 2) + '\n', async () => {
+      await build({ outPath, today: new Date('2026-08-31T12:00:00Z'), senha: SENHA_BUILD_FAKE });
+      return fsBuild.readFileSync(outPath, 'utf8');
+    });
+    assert.match(html, /window\.__CONGELADO_SEMANAL__ = \{/);
+    assert.ok(html.indexOf('"2026-W35"') !== -1, 'a chave da semana do snapshot precisa chegar ao HTML');
+    assert.ok(html.indexOf('123.5') !== -1, 'a tendência congelada precisa chegar ao HTML');
+  });
+
+test('build funciona normalmente (sem quebrar) quando o arquivo de snapshot NÃO existe -- o global sai {}, nunca undefined',
+  { skip: TEM_MATRIZ ? false : 'MATRIZ do G:\ indisponível nesta máquina' }, async () => {
+    const outPath = saidaTemporaria();
+    const html = await comSnapshot(null, async () => {
+      await build({ outPath, today: new Date('2026-08-31T12:00:00Z'), senha: SENHA_BUILD_FAKE });
+      return fsBuild.readFileSync(outPath, 'utf8');
+    });
+    // {} e não undefined: o cliente lê window.__CONGELADO_SEMANAL__[chave] a
+    // cada redesenho do Consolidado, e um undefined ali exigiria uma checagem
+    // em cada leitura.
+    assert.match(html, /window\.__CONGELADO_SEMANAL__ = \{\};/);
+  });

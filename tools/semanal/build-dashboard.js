@@ -299,12 +299,23 @@ function montarEquipesAtivas(furos, csvEspelho) {
   return { equipesPorDia: r.porDia, equipesPeriodo: periodo, tipologiaPorSondador, equipesCsv: csvEspelho, osParaSup };
 }
 
-async function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
+// Todo o LEVANTAMENTO de dados do build, sem senha e sem escrever nada em
+// disco: MATRIZ + linha de base + as fontes online já baixadas em dist/,
+// terminando em { registros, demandas } -- o mesmo par que o cliente recebe
+// como window.__REGISTROS__/window.__DEMANDAS__.
+//
+// Extraída de dentro de build() em 2026-08-31 para o CLI de congelamento
+// (tools/semanal/congelar-tendencia-semanal.js) poder recalcular a tendência
+// da semana alvo a partir EXATAMENTE do mesmo dado que a página publicada
+// mostra, sem cifrar nem renderizar HTML nenhum. build() continua fazendo o
+// que fazia -- só chama esta função no lugar do trecho que foi cortado.
+//
+// periodos/baseline vêm no mesmo retorno porque build() precisa dos dois logo
+// em seguida e recomputá-los custaria reler as duas planilhas; quem só quer o
+// par do CLI simplesmente ignora os dois campos extras.
+async function montarRegistrosEDemandas() {
   const equipesAtivasCsv = await buscarEspelhoEq();
   const pessoasAtivasCsv = await buscarPessoasAtivas();
-  if (!senha) {
-    throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
-  }
 
   const grid = readXlsxSheet(config.caminhoArquivo, config.nomeAba);
   const registros = parseMatriz(grid);
@@ -596,6 +607,28 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
   const sups = reconciliarSups(furosLidos, registros);
   console.log(`Demandas/SUP: ${sups.furosSemSupNaMatriz} furo(s) em ${sups.soNoAvancos.length} SUP(s) que a MATRIZ não tem (${sups.soNoAvancos.join(', ') || 'nenhum'}); ${sups.soNaMatriz.length} SUP(s) da MATRIZ sem nenhum furo (${sups.soNaMatriz.join(', ') || 'nenhum'}).`);
 
+  return { registros, demandas, periodos, baseline };
+}
+
+// Snapshot de tendência congelada (2026-08-31), gravado pelo CLI
+// tools/semanal/congelar-tendencia-semanal.js toda sexta 22h e versionado em
+// docs/ (é servido pelo Pages junto com a página). OPCIONAL, mesmo padrão
+// condicional de demandas-sondagem-online.csv: sem o arquivo o build roda
+// normalmente e o global sai {} -- nunca undefined, senão o cliente teria de
+// checar em cada leitura.
+const CAMINHO_CONGELADO_SEMANAL = path.join(__dirname, '..', '..', 'docs', 'tendencia-congelada-semanal.json');
+function lerCongeladoSemanal() {
+  if (!fs.existsSync(CAMINHO_CONGELADO_SEMANAL)) return {};
+  return JSON.parse(fs.readFileSync(CAMINHO_CONGELADO_SEMANAL, 'utf8'));
+}
+
+async function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
+  if (!senha) {
+    throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
+  }
+
+  const { registros, demandas, periodos, baseline } = await montarRegistrosEDemandas();
+
   const CAMINHO_HEARTBEAT_VOLUME = path.join(__dirname, '..', '..', 'dist', 'heartbeat-atualizacao-volume.csv');
   const avisoAtualizacao = lerAvisoAtualizacaoVolume(CAMINHO_HEARTBEAT_VOLUME);
   // Aviso "sem atualização hoje" (2026-08-21): ISO cru da última linha 'ok',
@@ -607,6 +640,7 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
     registros, baseline, demandas, periodos, senha, geradoEm: today,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
     avisoAtualizacao, ultimaAtualizacaoOkIso: ultimaAtualizacaoOkIsoValor,
+    congeladoSemanal: lerCongeladoSemanal(),
   });
 
   const resolvedOutPath = outPath || path.join(__dirname, '..', '..', 'dist', 'planejamento-semanal.html');
@@ -646,6 +680,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-  build, baselineParaCliente, redirecionarSupsDesconhecidos, montarEquipesAtivas,
+  build, montarRegistrosEDemandas, baselineParaCliente, redirecionarSupsDesconhecidos, montarEquipesAtivas,
   montarEquipesRealizado, parseRosterOnlineCsvBruto, parseProducaoOnlineCsv,
 };
