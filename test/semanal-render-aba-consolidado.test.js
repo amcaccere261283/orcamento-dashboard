@@ -4,11 +4,12 @@ const assert = require('node:assert');
 const {
   renderAbaConsolidado, renderControles, renderCabecalho, colunasExtras, dimensaoDaTabela,
   produtividadeEsperada, ticketMedioPrevisto, somarPrevistoMes,
-  blocosPorSup, tipologiasPresentes,
+  blocosPorSup, tipologiasPresentes, formatarChaveSemana,
 } = require('../tools/semanal/render-aba-consolidado.js');
 const { semanasDoMes, diaEpoch, indiceSemanaAtual } = require('../tools/semanal/compute-semanal.js');
 const { calcularSeriesSemanaisDimensao } = require('../tools/semanal/render-aba-semanal.js');
 const { DIAS_PREMISSA_MES } = require('../tools/comum/calculo-equipes.js');
+const { chaveMatriz } = require('../tools/comum/linha-base.js');
 
 const ANO = 2026;
 const JULHO = 6; // 5 semanas reais, [5,7,7,7,5] dias de 31
@@ -70,74 +71,16 @@ function demandasEspalhadas() {
 const REGISTROS_A = [registro({ sup: 'SUP-A', tipologia: 'ST', volume: 310 })];
 const inteiro = (v) => Math.round(v).toLocaleString('pt-BR');
 
-test('a coluna Previsto sumiu do Consolidado', () => {
-  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
-    semanaIdx: 1, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15),
-  }));
-  const cabecalho = html.match(/<thead>[\s\S]*?<\/thead>/)[0];
-  assert.strictEqual(cabecalho.indexOf('>Previsto'), -1, 'Previsto nao pode mais ser coluna');
-  assert.ok(cabecalho.indexOf('>Realizado') !== -1);
-  assert.ok(cabecalho.indexOf('Tend') !== -1);
-});
-
-test('semana encerrada: a Tendencia e a CONGELADA no 1o dia dela, nao a projecao de hoje', () => {
-  const demandas = demandasEspalhadas();
-  const hoje = diaJul(15);
-  const inicioS2 = SEMANAS[1].inicio;
-  const serie = (epoch) => calcularSeriesSemanaisDimensao(
-    REGISTROS_A, [0], 'volume', JULHO, SEMANAS, SEMANAS.length, true,
-    indiceSemanaAtual(SEMANAS, epoch), demandas, epoch
-  ).semanasTendenciaCompleta[1];
-  const congelada = serie(inicioS2);
-  const aoVivo = serie(hoje);
-  assert.notStrictEqual(inteiro(congelada), inteiro(aoVivo),
-    'a fixture precisa produzir valores DIFERENTES, senao o teste nao prova nada');
-
-  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
-    semanaIdx: 1, demandas, hojeEpoch: hoje,
-  }));
-  const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
-  assert.strictEqual(celulas[5], inteiro(congelada), 'a celula de Tendencia traz a congelada');
-});
-
 test('o Realizado exibido continua sendo o de HOJE, nao o congelado', () => {
   const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
     semanaIdx: 1, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15),
   }));
   const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
-  assert.strictEqual(celulas[4], '20',
+  // Layout novo (Task 4): SUP/Grupo/Tomador/Tipologia/Previsto ate a
+  // data/Realizado/Desvio ate a data/Semana total -- Realizado e a 6a
+  // celula (indice 5, zero-based).
+  assert.strictEqual(celulas[5], '20',
     'a S2 teve 20 furos; congelar o Realizado no 1o dia dela daria 0');
-});
-
-test('semana futura usa a projecao de hoje, e o cabecalho diz isso', () => {
-  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
-    semanaIdx: 4, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15),
-  }));
-  const cabecalho = html.match(/<thead>[\s\S]*?<\/thead>/)[0];
-  assert.ok(cabecalho.indexOf('projeção de hoje') !== -1);
-  assert.strictEqual(cabecalho.indexOf('congelada'), -1);
-});
-
-// O contrato é que o cabeçalho DIFERENCIE os três estados (encerrada, em curso
-// e futura) -- e a diferença entre as duas congeladas é a data-âncora. O
-// rótulo encurtou em 2026-08-04 (era "Tendência congelada em 06/07 (06/07 a
-// 12/07)", com a âncora repetida no intervalo e quebrando em duas linhas),
-// então a asserção passou a casar o <th> INTEIRO em vez de um pedaço: mais
-// forte que a anterior, e prende também a ausência da duplicação.
-function thTendencia(html) {
-  return html.match(/<th class="num">Tend[\s\S]*?<\/th>/)[0];
-}
-
-test('semana encerrada e semana em curso trazem a data-ancora no cabecalho, sem repeti-la no intervalo', () => {
-  const demandas = demandasEspalhadas();
-  const encerrada = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx: 1, demandas, hojeEpoch: diaJul(15) }));
-  assert.strictEqual(thTendencia(encerrada),
-    '<th class="num">Tendência congelada em 06/07 (até 12/07)</th>', 'a S2 vai de 06/07 a 12/07');
-  const emCurso = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx: 2, demandas, hojeEpoch: diaJul(15) }));
-  assert.strictEqual(thTendencia(emCurso),
-    '<th class="num">Tendência congelada em 13/07 (até 19/07)</th>', 'a S3 vai de 13/07 a 19/07');
-  // A âncora aparece UMA vez dentro do rótulo -- era o que duplicava.
-  assert.strictEqual((thTendencia(encerrada).match(/06\/07/g) || []).length, 1);
 });
 
 // HISTÓRICO -- leia antes de "consertar" este teste.
@@ -176,14 +119,44 @@ test('a Tendência congelada é recalculada na âncora: a semana ancorada não c
     semanaIdx: 1, demandas: demandasCom({ 'SUP-A||ST': eventos }), hojeEpoch: diaJul(15),
   }));
   const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
-  assert.strictEqual(celulas[5], '97',
+  // Layout novo (Task 4): SUP/Grupo/Tomador/Tipologia/Previsto ate a
+  // data/Realizado/Desvio ate a data/Semana total -- a congelada aparece
+  // agora em "Semana total" (indice 7, zero-based), que e' janela.tendencia.
+  assert.strictEqual(celulas[7], '97',
     'os 30 furos de 06/07 ENTRAM: com o corte em HOJE, a janela da S2 ancorada em 06/07 é o próprio dia 06/07');
 
   // E o Realizado exibido NUNCA congela -- ele sai do hoje real, então os
   // mesmos 30 furos aparecem nele. É o contraste que prova que são duas
   // séries com âncoras diferentes, não uma só.
-  assert.strictEqual(celulas[4], '30',
+  assert.strictEqual(celulas[5], '30',
     'o Realizado da S2 vê os 30 furos de 06/07, porque é calculado com o hoje real (15/07)');
+});
+
+// --- Resumo por SUP x Tipologia (substitui Realizado/Tendencia/premissas, Task 4) --
+
+test('resumo mostra Previsto ate a data / Realizado / Desvio ate a data / Semana total, por SUP e tipologia', () => {
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) }));
+  assert.match(html, /Previsto até a data/);
+  assert.match(html, /Realizado/);
+  assert.match(html, /Desvio até a data/);
+  assert.match(html, /Semana total/);
+});
+
+test('com congeladoSemanal presente para a semana em tela, a Tendencia exibida vem do snapshot (nao do recalculo)', () => {
+  const opcoesBase = opcoes({ semanaIdx: 1, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) });
+  const chaveSemana = formatarChaveSemana(opcoesBase.semanas[opcoesBase.semanaIdx].inicio);
+  const congeladoSemanal = {
+    [chaveSemana]: { porRegistro: { [chaveMatriz(REGISTROS_A[0].sup, REGISTROS_A[0].tipologia)]: { volume: { tendencia: 12345 } } } },
+  };
+  const html = renderAbaConsolidado(REGISTROS_A, [0], Object.assign({}, opcoesBase, { congeladoSemanal }));
+  assert.match(html, /12\.345/); // formatarNumero(12345, 0) -> '12.345' em pt-BR
+  assert.match(html, /congelada/i);
+});
+
+test('sem entrada no snapshot para a semana em tela, cai no recalculo de hoje e rotula "recalculada"', () => {
+  const opcoesBase = opcoes({ semanaIdx: 1, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) });
+  const html = renderAbaConsolidado(REGISTROS_A, [0], Object.assign({}, opcoesBase, { congeladoSemanal: {} }));
+  assert.match(html, /recalculada/i);
 });
 
 // --- Abertura de linhas: a hierarquia da Tabela do orçamento --------------
@@ -236,7 +209,9 @@ test('a coluna Realizado é da SEMANA escolhida, não do mês', () => {
   const eventos = [diaJul(2), diaJul(2), diaJul(2), diaJul(8), diaJul(8), diaJul(8), diaJul(8), diaJul(8)];
   const demandas = demandasCom({ 'SUP-A||ST': eventos });
   const html = (semanaIdx) => renderAbaConsolidado(registros, [0], opcoes({ semanaIdx, demandas, hojeEpoch: diaJul(15) }));
-  const realizadoDe = (h) => celulasDe(linhasDe(h)[0])[4];
+  // Layout novo (Task 4): Realizado é a 6ª célula (índice 5, zero-based) --
+  // SUP/Grupo/Tomador/Tipologia/Previsto até a data/Realizado/...
+  const realizadoDe = (h) => celulasDe(linhasDe(h)[0])[5];
   assert.strictEqual(realizadoDe(html(0)), '3');
   assert.strictEqual(realizadoDe(html(1)), '5');
 });
@@ -247,8 +222,8 @@ test('o Realizado da semana conta só os furos concluídos DENTRO dela', () => {
   const html = renderAbaConsolidado(registros, [0], opcoes({
     semanaIdx: 0, demandas: demandasCom({ 'SUP-A||ST': eventos }),
   }));
-  // Previsto saiu da tabela: Realizado agora é a 5ª célula ([4], zero-based).
-  assert.strictEqual(celulasDe(linhasDe(html)[0])[4], '3');
+  // Layout novo (Task 4): Realizado é a 6ª célula (índice 5, zero-based).
+  assert.strictEqual(celulasDe(linhasDe(html)[0])[5], '3');
 });
 
 test('o seletor de semana lista S1..Sn com as datas reais e marca a escolhida', () => {
@@ -271,51 +246,48 @@ test('semanaIdx fora da faixa é clampado em vez de produzir coluna vazia', () =
   const html = renderAbaConsolidado(registros, [0], opcoes({
     semanaIdx: 99, demandas: demandasCom({ 'SUP-A||ST': eventos }), hojeEpoch: emAgosto,
   }));
-  assert.strictEqual(celulasDe(linhasDe(html)[0])[4], '3', 'clampa na última semana (S5) e conta os 3 furos dela');
+  // Layout novo (Task 4): Realizado é a 6ª célula (índice 5, zero-based).
+  assert.strictEqual(celulasDe(linhasDe(html)[0])[5], '3', 'clampa na última semana (S5) e conta os 3 furos dela');
 });
 
 // --- Volume x Financeiro: nunca misturados ---------------------------------
 
+// As colunas de premissa (Equipes previstas/Produtividade/Ticket médio)
+// saíram da tabela do Consolidado no Task 4 -- o resumo é só Previsto até a
+// data/Realizado/Desvio até a data/Semana total. colunasExtras/valorExtra/
+// produtividadeEsperada/ticketMedioPrevisto continuam exportadas (podem ter
+// outro consumidor) e mantêm cobertura própria, só não aparecem mais no HTML
+// de renderCabecalho/renderAbaConsolidado -- por isso os testes abaixo
+// verificam só as funções puras, não mais o markup.
 test('em Volume as colunas extras são Equipes previstas e Produtividade média esperada -- ticket não aparece', () => {
   assert.deepStrictEqual(colunasExtras('volume').map((c) => c.chave), ['equipes', 'produtividade']);
-  const html = renderCabecalho('volume', SEMANAS[0]);
-  assert.match(html, /<th class="num cabecalho-premissa cabecalho-premissa-inicio">Equipes previstas<\/th>/);
-  assert.match(html, /<th class="num cabecalho-premissa">Produtividade média esperada<\/th>/);
-  assert.doesNotMatch(html, /Ticket/);
 });
 
 test('em Financeiro a única coluna extra é o Ticket médio -- equipes e produtividade não aparecem', () => {
   assert.deepStrictEqual(colunasExtras('financeiro').map((c) => c.chave), ['ticket']);
-  const html = renderCabecalho('financeiro', SEMANAS[0]);
-  assert.match(html, /<th class="num cabecalho-premissa cabecalho-premissa-inicio">Ticket médio previsto \(R\$\/furo\)<\/th>/);
-  assert.doesNotMatch(html, /Equipes previstas/);
-  assert.doesNotMatch(html, /Produtividade/);
 });
 
-test('o cabeçalho carrega o intervalo de datas da semana nas 2 colunas de série', () => {
-  // Previsto saiu; a Tendência sem congelamento (3º argumento omitido) rende
-  // com o rótulo "(projeção de hoje)" ANTES do intervalo da semana.
-  const html = renderCabecalho('volume', SEMANAS[0]);
-  assert.match(html, /Realizado \(01\/07 a 05\/07\)/);
-  assert.match(html, /Tendência \(projeção de hoje\) \(01\/07 a 05\/07\)/);
+test('o cabeçalho carrega o intervalo de datas da semana e o rótulo (congelada)/(recalculada)', () => {
+  const congelada = renderCabecalho('volume', SEMANAS[0], true);
+  assert.match(congelada, /Previsto até a data \(01\/07 a 05\/07\) \(congelada\)/);
+  const recalculada = renderCabecalho('volume', SEMANAS[0], false);
+  assert.match(recalculada, /Previsto até a data \(01\/07 a 05\/07\) \(recalculada\)/);
+  assert.match(recalculada, /<th class="num">Realizado<\/th>/);
+  assert.match(recalculada, /<th class="num">Desvio até a data<\/th>/);
+  assert.match(recalculada, /<th class="num">Semana total<\/th>/);
 });
 
-test('a nota da aba diz, na tela, que as premissas são do mês e as séries são da semana', () => {
+test('a nota da aba diz, na tela, que Realizado e Tendência são da semana e a Tendência de semana já começada é a congelada', () => {
   const registros = [registro({ sup: 'SUP-A', volume: 310 })];
-  assert.match(renderAbaConsolidado(registros, [0], opcoes()), /Equipes previstas são a foto do mês|equipes previstas são a foto do mês/i);
-  assert.match(renderAbaConsolidado(registros, [0], opcoes({ dimensao: 'financeiro' })), /ticket médio previsto é a premissa TICKET/i);
+  assert.match(renderAbaConsolidado(registros, [0], opcoes()), /a Tendência exibida é a CONGELADA no 1º dia dela/i);
 });
 
-// --- As premissas: mesma regra de dois ramos do orçamento ------------------
+// --- As premissas: mesma regra de dois ramos do orçamento (funções puras, --
+// não aparecem mais na tabela do Consolidado desde o Task 4) ---------------
 
 test('equipes previstas somam através dos registros do grupo (times simultâneos se somam) e não se repartem por semana', () => {
   const registros = [registro({ sup: 'SUP-A', equipes: 2 }), registro({ sup: 'SUP-B', equipes: 3 })];
   assert.strictEqual(somarPrevistoMes(registros, [0, 1], 'equipes', JULHO), 5);
-  const html = (semanaIdx) => renderAbaConsolidado(registros, [0, 1], opcoes({ semanaIdx }));
-  // Previsto saiu da tabela: Equipes previstas passou de [7] pra [6].
-  const equipesDe = (h) => celulasDe(linhasDe(h)[0])[6];
-  assert.strictEqual(equipesDe(html(0)), '5,00');
-  assert.strictEqual(equipesDe(html(3)), '5,00', 'a foto do mês é a mesma em qualquer semana');
 });
 
 test('produtividade de UM registro é a premissa PROD. da planilha, lida direto', () => {
@@ -342,11 +314,10 @@ test('ticket de UM registro é a premissa TICKET; de um agregado, financeiro ÷ 
   assert.strictEqual(ticketMedioPrevisto(registros, [0, 1], JULHO), 400); // 80000 / 200
 });
 
-test('premissa ausente vira "—", nunca zero -- sem PROD./TICKET cadastrado não há premissa a mostrar', () => {
+test('premissa ausente vira null, nunca zero -- sem PROD./TICKET cadastrado não há premissa a calcular', () => {
   const registros = [registro({ sup: 'SUP-A', volume: 310, equipes: 2 })]; // prod/ticket null
   assert.strictEqual(produtividadeEsperada(registros, [0], JULHO), null);
   assert.strictEqual(ticketMedioPrevisto(registros, [0], JULHO), null);
-  assert.match(renderAbaConsolidado(registros, [0], opcoes()), /<td class="num celula-premissa">—<\/td>/);
 });
 
 test('agregado sem equipes lançadas não vira divisão por zero -- devolve sem dado', () => {
@@ -369,35 +340,11 @@ test('recorte vazio (todos os registros filtrados fora) rende só o TOTAL GERAL,
 });
 
 // --- Achados da revisão de design do Open Design (2026-08-03) --------------
-// A faixa que separa "colunas da semana" de "colunas do mês" é desenhada por
-// CLASSE, não por posição: a versão sugerida na revisão usava
-// :nth-child(n+8), que quebra em silêncio no dia em que uma coluna entrar ou
-// sair. Estes testes prendem as classes que o CSS depende.
-
-test('as colunas de premissa carregam .celula-premissa no corpo e .cabecalho-premissa no cabeçalho -- a faixa começa no rótulo, não uma linha abaixo dele', () => {
-  const registros = [registro({ sup: 'SUP-A', volume: 310, equipes: 2, prod: 5 })];
-  const html = renderAbaConsolidado(registros, [0], opcoes());
-  // Volume tem 2 premissas (equipes + produtividade); o cabeçalho tem uma
-  // marcação por coluna, e o corpo uma por coluna POR LINHA.
-  assert.strictEqual((html.match(/class="num cabecalho-premissa/g) || []).length, 2);
-  assert.ok((html.match(/class="num celula-premissa/g) || []).length >= 2);
-});
-
-test('só a PRIMEIRA coluna de premissa marca o início da faixa -- uma divisória por coluna viraria compartimento, não bloco', () => {
-  const registros = [registro({ sup: 'SUP-A', volume: 310, equipes: 2, prod: 5 })];
-  const html = renderAbaConsolidado(registros, [0], opcoes());
-  assert.strictEqual((html.match(/cabecalho-premissa-inicio/g) || []).length, 1);
-  // Uma linha de corpo por abertura (total geral + tipologia + registro + total do SUP)
-  const linhas = linhasDe(html).length;
-  assert.strictEqual((html.match(/celula-premissa-inicio/g) || []).length, linhas);
-});
-
-test('em Financeiro, a única premissa é também o início da faixa', () => {
-  const registros = [registro({ sup: 'SUP-A', volume: 310, financeiro: 500000, ticket: 1600 })];
-  const html = renderAbaConsolidado(registros, [0], opcoes({ dimensao: 'financeiro' }));
-  assert.strictEqual((html.match(/class="num cabecalho-premissa cabecalho-premissa-inicio"/g) || []).length, 1);
-  assert.strictEqual((html.match(/class="num cabecalho-premissa"/g) || []).length, 0, 'não há segunda premissa em Financeiro');
-});
+// As classes .celula-premissa/.cabecalho-premissa desenhavam a faixa das
+// colunas de premissa -- essas colunas saíram da tabela do Consolidado no
+// Task 4, então as classes não são mais emitidas por renderCabecalho/
+// renderAbaConsolidado. Os três testes que prendiam essa faixa saíram junto;
+// colunasExtras continua com cobertura própria acima.
 
 test('ticket medio previsto sai inteiro', () => {
   const colunas = colunasExtras('financeiro');
@@ -421,8 +368,8 @@ test('num mês PASSADO, o Realizado da semana não absorve furos dos meses segui
     demandas: demandasCom({ 'SUP-A||ST': eventos }),
     hojeEpoch: emAgosto(3), // olhando JULHO em 03/08
   }));
-  // Previsto saiu da tabela: Realizado agora é a 5ª célula ([4], zero-based).
-  assert.strictEqual(celulasDe(linhasDe(html)[0])[4], '3', 'só os 3 furos da S5 de julho');
+  // Layout novo (Task 4): Realizado é a 6ª célula (índice 5, zero-based).
+  assert.strictEqual(celulasDe(linhasDe(html)[0])[5], '3', 'só os 3 furos da S5 de julho');
 });
 
 test('as linhas de total NÃO emitem a classe .linha-total -- as regras de fechamento desta aba são próprias, e reusar aquela classe herdaria a cor de série Tendência', () => {
@@ -469,9 +416,6 @@ test('com a barra em Equipes, a aba avisa NA TELA que os numeros exibidos sao de
   assert.match(html, /<tr class="linha-nota-alertas"><td colspan="8">/);
   assert.match(html, /Equipes<\/strong> não se aplica ao Consolidado/);
   assert.match(html, /são de <strong>Volume<\/strong>/);
-  // E as colunas continuam sendo mesmo as de Volume, não as de Financeiro.
-  assert.ok(html.indexOf('Equipes previstas') !== -1);
-  assert.strictEqual(html.indexOf('Ticket médio'), -1);
 });
 
 test('em Volume e em Financeiro nao ha nota de dimensao -- a barra e a tabela concordam', () => {
@@ -484,21 +428,12 @@ test('o colspan da nota cobre a tabela inteira -- uma nota mais curta que o cabe
   const registros = [registro({ sup: 'SUP-A', volume: 310 })];
   // `/<th[ >]/` e não `/<th/`: este último casa também dentro de "<thead>".
   const contarThs = (h) => (h.match(/<th[ >]/g) || []).length;
-  // Equipes cai em Volume: 4 colunas de texto + Realizado + Tendência + as 2
-  // premissas físicas = 8.
+  // 4 colunas de texto + as 4 do resumo (Previsto até a data/Realizado/
+  // Desvio até a data/Semana total) = 8, para qualquer dimensão (as colunas
+  // de premissa saíram da tabela no Task 4).
   const emVolume = renderAbaConsolidado(registros, [0], opcoes({ dimensao: 'equipes' }));
   assert.strictEqual(contarThs(emVolume), 8);
   assert.match(emVolume, /<td colspan="8">/);
-});
-
-test('a dimensao recebida ainda troca as colunas de premissa', () => {
-  const extra = { demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) };
-  const volume = renderAbaConsolidado(REGISTROS_A, [0], opcoes(Object.assign({ dimensao: 'volume' }, extra)));
-  assert.ok(volume.indexOf('Equipes previstas') !== -1);
-  assert.strictEqual(volume.indexOf('Ticket médio'), -1);
-  const financeiro = renderAbaConsolidado(REGISTROS_A, [0], opcoes(Object.assign({ dimensao: 'financeiro' }, extra)));
-  assert.ok(financeiro.indexOf('Ticket médio') !== -1);
-  assert.strictEqual(financeiro.indexOf('Equipes previstas'), -1);
 });
 
 test('renderControles inclui o botão "Gerar relatório Excel" e o span de status, ao lado do seletor de semana', () => {

@@ -2,6 +2,8 @@
 const { indiceSemanaAtual } = require('./compute-semanal.js');
 const { calcularSeriesSemanaisDimensao, formatarIntervaloSemana } = require('./render-aba-semanal.js');
 const { DIAS_PREMISSA_MES } = require('../comum/calculo-equipes.js');
+const { chaveMatriz } = require('../comum/linha-base.js');
+const { serieDaSemana } = require('./compute-relatorio-semanal.js');
 
 // Aba CONSOLIDADO (2026-08-03) -- "uma tabela com o consolidado da semana, na
 // mesma abertura de linhas da planilha tabela do orçamento, porém com as
@@ -197,71 +199,87 @@ function dataCurta(diaEp) {
   return (dia < 10 ? '0' : '') + dia + '/' + (mes < 10 ? '0' : '') + mes;
 }
 
+// '2026-07-06' -- mesma conta que chaveSemanaSeguinteDeSexta (Task 1) usa
+// para o formato YYYY-MM-DD, aplicada direto a um diaEpoch sem procurar
+// sexta-feira nenhuma. Usada aqui para escolher a entrada de
+// opcoes.congeladoSemanal que corresponde à semana em tela, e no futuro por
+// quem gerar o link entre o snapshot e a semana.
+function formatarChaveSemana(diaEpoch) {
+  var d = new Date(diaEpoch * 86400000);
+  var ano = d.getUTCFullYear();
+  var mes = String(d.getUTCMonth() + 1).padStart(2, '0');
+  var dia = String(d.getUTCDate()).padStart(2, '0');
+  return ano + '-' + mes + '-' + dia;
+}
+
 // 'congeladaEm' é o diaEpoch do 1º dia da semana quando a Tendência está
 // congelada, ou null quando ela é a projeção de hoje (semana futura). O
 // rótulo TEM de dizer qual das duas está na tela: as duas se chamam
 // "Tendência" e significam coisas opostas -- uma é registro histórico do que
 // se projetava naquele momento, a outra é a projeção corrente.
-function renderCabecalho(dimensao, semana, congeladaEm) {
+function renderCabecalho(dimensao, semana, congelada) {
   var sufixo = semana ? ' (' + formatarIntervaloSemana(semana.inicio, semana.fim) + ')' : '';
-  // Congelada: a data-âncora É sempre o 1º dia da semana exibida, que já é o
-  // início do intervalo. Repetir os dois dava "Tendência congelada em 06/07
-  // (06/07 a 12/07)" -- e como #tabela-consolidado th não tem white-space:
-  // nowrap (só .cabecalho-premissa e as colunas de texto têm), o rótulo
-  // quebrava em duas linhas. A informação não sai, só deixa de aparecer duas
-  // vezes: a âncora fica no "em dd/MM" e o sufixo fecha o intervalo no "até".
-  var rotuloTendencia = congeladaEm === null || congeladaEm === undefined
-    ? 'Tendência (projeção de hoje)' + sufixo
-    : 'Tendência congelada em ' + dataCurta(congeladaEm)
-      + (semana ? ' (até ' + dataCurta(semana.fim) + ')' : '');
-  var ths = '<th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th>'
-    + '<th class="num">Realizado' + escapeHtml(sufixo) + '</th>'
-    + '<th class="num">' + escapeHtml(rotuloTendencia) + '</th>';
-  // A faixa das colunas de premissa começa no CABEÇALHO, não só no corpo --
-  // sem isso o rótulo fica fora da região que o fundo delimita e a fronteira
-  // semana/mês parece começar uma linha abaixo de onde começa (achado da
-  // revisão de design de 2026-08-03). '-inicio' marca só a PRIMEIRA delas: é
-  // ela que carrega a linha divisória; as demais só o fundo, senão cada
-  // premissa viraria um compartimento próprio em vez de um bloco só.
-  colunasExtras(dimensao).forEach(function (c, i) {
-    ths += '<th class="num cabecalho-premissa' + (i === 0 ? ' cabecalho-premissa-inicio' : '') + '">'
-      + escapeHtml(c.rotulo) + '</th>';
-  });
-  return '<thead><tr>' + ths + '</tr></thead>';
+  var rotuloTendencia = congelada === true ? ' (congelada)' : congelada === false ? ' (recalculada)' : '';
+  return '<thead><tr>'
+    + '<th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th>'
+    + '<th class="num">Previsto até a data' + escapeHtml(sufixo + rotuloTendencia) + '</th>'
+    + '<th class="num">Realizado</th>'
+    + '<th class="num">Desvio até a data</th>'
+    + '<th class="num">Semana total</th>'
+    + '</tr></thead>';
+}
+
+// congeladoPorSemana: a fatia de opcoes.congeladoSemanal já resolvida para a
+// chave da semana em tela (congeladoSemanal[formatarChaveSemana(semana.inicio)]
+// || null), resolvida uma vez em renderAbaConsolidado e passada via ctx --
+// evita recalcular a chave a cada linha.
+function tendenciaExternaDoCtx(ctx) {
+  if (!ctx.congeladoPorSemana || !ctx.congeladoPorSemana.porRegistro) return undefined;
+  var porRegistro = ctx.congeladoPorSemana.porRegistro;
+  return function (chave) {
+    var entrada = porRegistro[chave];
+    if (!entrada || !entrada[ctx.dimensaoSnapshot]) return undefined;
+    var v = entrada[ctx.dimensaoSnapshot].tendencia;
+    return v === undefined ? undefined : v;
+  };
 }
 
 // Uma linha da tabela. 'celulas' são as 4 primeiras (SUP/Grupo/Tomador/
 // Tipologia), montadas por quem chama porque é só nelas que os 4 tipos de
 // linha (registro, total do SUP, total geral, total geral por tipologia)
 // diferem -- mesma decomposição de renderBlocosDimensao no orçamento.
-function renderLinha(celulas, classe, registros, indices, ctx) {
-  // Realizado sai SEMPRE do hoje real: congelar o Realizado mostraria ~0 numa
-  // semana que de fato produziu, porque a contagem pararia no 1º dia dela.
-  var seriesAoVivo = calcularSeriesSemanaisDimensao(
-    registros, indices, ctx.dimensao, ctx.mesIdx, ctx.semanas, ctx.numSemanas,
-    ctx.temSemanasReais, ctx.indiceAtual, ctx.demandas, ctx.hojeEpoch
-  );
-  // Tendência sai do hoje EFETIVO: igual ao real na semana futura, e o 1º dia
-  // da semana quando ela está congelada. Nesse recálculo aquela semana É a
-  // vigente, então o valor devolvido é a projeção que se fazia para ela
-  // inteira no momento em que ela começou.
-  var seriesTendencia = ctx.hojeEfetivo === ctx.hojeEpoch ? seriesAoVivo : calcularSeriesSemanaisDimensao(
-    registros, indices, ctx.dimensao, ctx.mesIdx, ctx.semanas, ctx.numSemanas,
-    ctx.temSemanasReais, ctx.indiceAtualEfetivo, ctx.demandas, ctx.hojeEfetivo
-  );
-  function celulaSemana(fatias) {
-    var v = Array.isArray(fatias) ? fatias[ctx.semanaIdx] : null;
-    if (v === null || v === undefined) return '<td class="num sem-dado"></td>';
-    return '<td class="num">' + formatarNumero(v, 0) + '</td>';
-  }
-  var html = '<tr class="' + classe + '">' + celulas
-    + celulaSemana(seriesAoVivo.semanasRealizado)
-    + celulaSemana(seriesTendencia.semanasTendenciaCompleta);
-  colunasExtras(ctx.dimensao).forEach(function (c, i) {
-    html += '<td class="num celula-premissa' + (i === 0 ? ' celula-premissa-inicio' : '') + '">'
-      + formatarNumero(valorExtra(c.chave, registros, indices, ctx.mesIdx), c.casas) + '</td>';
-  });
-  return html + '</tr>';
+function renderLinhaResumo(celulas, classe, registros, indices, ctx) {
+  var alvo = { semana: ctx.semanaEscolhida, mesIdx: ctx.mesIdx, semanasDoMesAlvo: ctx.semanas, indiceNoMes: ctx.semanaIdx };
+  var serieCtx = {
+    hojeEpoch: ctx.hojeEpoch, temSemanasReais: ctx.temSemanasReais, demandas: ctx.demandas,
+    tendenciaExterna: tendenciaExternaDoCtx(ctx),
+    chaveDoRegistro: function (r) { return chaveMatriz(r.sup, r.tipologia); },
+  };
+  var janela = serieDaSemana(registros, indices, ctx.dimensaoSnapshot, alvo, serieCtx);
+  // "Previsto até a data": fração do Previsto da semana proporcional aos dias
+  // já passados dela (mesma leitura do .xlsx) -- dias corridos, não úteis,
+  // porque é isso que "até a data" descreve num calendário civil.
+  var diasNaSemana = Math.round((ctx.semanaEscolhida.fim - ctx.semanaEscolhida.inicio + 1));
+  var diasDecorridos = Math.max(0, Math.min(diasNaSemana, ctx.hojeEpoch - ctx.semanaEscolhida.inicio + 1));
+  var previstoAteAData = janela.previsto === null ? null : janela.previsto * (diasDecorridos / diasNaSemana);
+  var numeradorDesvio = ctx.semanaEscolhida.inicio <= ctx.hojeEpoch && ctx.semanaEscolhida.fim > ctx.hojeEpoch
+    ? janela.tendencia // semana em curso: compara contra a projeção, não o parcial cru
+    : janela.realizado;
+  var desvio = (numeradorDesvio === null || numeradorDesvio === undefined || !previstoAteAData)
+    ? null : (numeradorDesvio / previstoAteAData) - 1;
+
+  function num(v, casas) { return v === null || v === undefined ? '<td class="num sem-dado"></td>' : '<td class="num">' + formatarNumero(v, casas === undefined ? 0 : casas) + '</td>'; }
+  function pct(v) { return v === null || v === undefined ? '<td class="num sem-dado"></td>' : '<td class="num">' + formatarNumero(v * 100, 1) + '%</td>'; }
+
+  // "Semana total": o total projetado da semana -- janela.tendencia, não
+  // janela.previsto (a META do mês repartida). É essa coluna que carrega o
+  // congelamento: numa semana já começada ela é a Tendência CONGELADA no seu
+  // 1º dia (ou lida do snapshot, quando ctx.congeladoPorSemana tem entrada
+  // para o registro); numa semana futura é a projeção de hoje -- mesmo
+  // conteúdo que a extinta coluna "Tendência" já mostrava.
+  return '<tr class="' + classe + '">' + celulas
+    + num(previstoAteAData) + num(janela.realizado) + pct(desvio) + num(janela.tendencia)
+    + '</tr>';
 }
 
 function celula(classe, texto) {
@@ -352,7 +370,11 @@ function renderNota(dimensao) {
 // CSS_SEMANAL e vale para a página inteira; não há componente novo.
 function renderNotaDimensao(dimensaoBarra, dimensaoTabela) {
   if (dimensaoBarra !== 'equipes') return '';
-  var colunas = 4 + 2 + colunasExtras(dimensaoTabela).length;
+  // 4 colunas de texto (SUP/Grupo/Tomador/Tipologia) + as 4 do resumo
+  // (Previsto até a data/Realizado/Desvio até a data/Semana total) -- as
+  // colunas de premissa saíram da tabela (Task 4), então a contagem não
+  // depende mais de colunasExtras(dimensaoTabela).
+  var colunas = 4 + 4;
   return '<tr class="linha-nota-alertas"><td colspan="' + colunas + '">'
     + 'A dimensão <strong>Equipes</strong> não se aplica ao Consolidado — a página não mede '
     + 'equipes por semana em lugar nenhum. Os números abaixo são de <strong>Volume</strong>.'
@@ -379,33 +401,25 @@ function renderAbaConsolidado(registros, indices, opcoes) {
   // Congela na semana JÁ COMEÇADA (encerrada ou em curso): inicio <= hoje.
   // A futura (inicio > hoje) não tem o que congelar -- nunca começou.
   var semanaEscolhida = semanas[semanaIdx];
-  var congelar = !!semanaEscolhida && typeof o.hojeEpoch === 'number'
-    && semanaEscolhida.inicio <= o.hojeEpoch;
-  var hojeEfetivo = congelar ? semanaEscolhida.inicio : o.hojeEpoch;
+  var chaveSemanaEscolhida = formatarChaveSemana(semanaEscolhida.inicio);
+  var congeladoPorSemana = (o.congeladoSemanal && o.congeladoSemanal[chaveSemanaEscolhida]) || null;
   var ctx = {
     dimensao: dimensao, mesIdx: o.mesIdx, semanas: semanas, numSemanas: numSemanas,
     temSemanasReais: temDemandas,
-    // indiceSemanaAtual (a semana que CONTÉM hoje), e não `elapsadas - 1` (a
-    // última que já começou). Os dois coincidem no mês vigente e divergem em
-    // qualquer outro: num mês passado o segundo aponta para a última semana do
-    // mês, que calcularSeriesSemanaisDimensao então conta de seu início até
-    // HOJE -- somando todos os meses seguintes dentro dela. É a mesma função
-    // que a Tabela Semanal usa, para as duas nunca discordarem.
-    indiceAtual: typeof o.hojeEpoch === 'number' ? indiceSemanaAtual(semanas, o.hojeEpoch) : -1,
     demandas: o.demandas, hojeEpoch: o.hojeEpoch, semanaIdx: semanaIdx,
-    hojeEfetivo: hojeEfetivo,
-    indiceAtualEfetivo: typeof hojeEfetivo === 'number' ? indiceSemanaAtual(semanas, hojeEfetivo) : -1,
+    semanaEscolhida: semanaEscolhida, congeladoPorSemana: congeladoPorSemana,
+    dimensaoSnapshot: dimensao,
   };
 
   var todos = indices || [];
-  var linhas = renderNotaDimensao(o.dimensao, dimensao) + renderLinha(
+  var linhas = renderNotaDimensao(o.dimensao, dimensao) + renderLinhaResumo(
     celula('col-sup', '—') + celula('col-grupo', 'Todos') + celula('col-tomador', 'Todos')
       + celulaChipTotal('TOTAL GERAL', 'chip-total-geral'),
     'linha-total-geral', registros, todos, ctx
   );
 
   tipologiasPresentes(registros, todos).forEach(function (bloco) {
-    linhas += renderLinha(
+    linhas += renderLinhaResumo(
       celula('col-sup', '—') + celula('col-grupo', 'Todos') + celula('col-tomador', 'Todos')
         + celulaChip(bloco.tipologia),
       'linha-total-geral linha-total-geral-tipologia', registros, bloco.indices, ctx
@@ -415,14 +429,14 @@ function renderAbaConsolidado(registros, indices, opcoes) {
   blocosPorSup(registros, todos).forEach(function (bloco) {
     bloco.indices.forEach(function (idx) {
       var registro = registros[idx];
-      linhas += renderLinha(
+      linhas += renderLinhaResumo(
         celula('col-sup', registro.sup) + celula('col-grupo', registro.grupo)
           + celula('col-tomador', registro.tomador) + celulaChip(registro.tipologia),
         'linha-consolidado', registros, [idx], ctx
       );
     });
     var primeiro = registros[bloco.indices[0]];
-    linhas += renderLinha(
+    linhas += renderLinhaResumo(
       celula('col-sup', bloco.sup) + celula('col-grupo', primeiro.grupo)
         + celula('col-tomador', primeiro.tomador) + celulaChipTotal('TOTAL'),
       'linha-total-sup', registros, bloco.indices, ctx
@@ -430,12 +444,13 @@ function renderAbaConsolidado(registros, indices, opcoes) {
   });
 
   return controles + renderNota(dimensao)
-    + '<table id="tabela-consolidado">' + renderCabecalho(dimensao, semanas[semanaIdx], congelar ? hojeEfetivo : null)
+    + '<table id="tabela-consolidado">' + renderCabecalho(dimensao, semanas[semanaIdx], !!congeladoPorSemana)
     + '<tbody>' + linhas + '</tbody></table>';
 }
 
 module.exports = {
   renderAbaConsolidado, renderControles, renderCabecalho, colunasExtras, dimensaoDaTabela,
+  formatarChaveSemana,
   produtividadeEsperada, ticketMedioPrevisto, somarPrevistoMes,
   blocosPorSup, tipologiasPresentes, tipologiaColor,
 };
