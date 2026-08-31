@@ -4,6 +4,12 @@ const { calcularSeriesSemanaisDimensao, formatarIntervaloSemana } = require('./r
 const { DIAS_PREMISSA_MES } = require('../comum/calculo-equipes.js');
 const { chaveMatriz } = require('../comum/linha-base.js');
 const { serieDaSemana } = require('./compute-relatorio-semanal.js');
+// blocosPorSup/tipologiasPresentes moram em consolidado-hierarquia.js desde
+// 2026-08-31 -- eram definidas aqui, e compute-relatorio-semanal.js as
+// importava daqui, o que fechava um ciclo de require com o import de
+// serieDaSemana acima (ver o cabeçalho de consolidado-hierarquia.js). Elas
+// continuam sendo RE-EXPORTADAS por este módulo: a API pública não mudou.
+const { blocosPorSup, tipologiasPresentes } = require('./consolidado-hierarquia.js');
 
 // Aba CONSOLIDADO (2026-08-03) -- "uma tabela com o consolidado da semana, na
 // mesma abertura de linhas da planilha tabela do orçamento, porém com as
@@ -437,34 +443,6 @@ function celulaChip(tipologia) {
 function celulaChipTotal(rotulo, classeExtra) {
   return '<td class="col-tipologia"><span class="tipologia-chip tipologia-chip-total'
     + (classeExtra ? ' ' + classeExtra : '') + '">' + escapeHtml(rotulo) + '</span></td>';
-}
-
-// Agrupa por SUP preservando a ordem em que os SUPs aparecem nos registros --
-// a MATRIZ já vem ordenada por SUP, e reordenar aqui faria a aba discordar da
-// ordem que a Tabela do orçamento mostra para os mesmos dados.
-function blocosPorSup(registros, indices) {
-  var porSup = {};
-  var ordem = [];
-  (indices || []).forEach(function (i) {
-    var registro = registros[i];
-    if (!registro) return;
-    if (!porSup[registro.sup]) { porSup[registro.sup] = []; ordem.push(registro.sup); }
-    porSup[registro.sup].push(i);
-  });
-  return ordem.map(function (sup) { return { sup: sup, indices: porSup[sup] }; });
-}
-
-function tipologiasPresentes(registros, indices) {
-  var porTipologia = {};
-  var ordem = [];
-  (indices || []).forEach(function (i) {
-    var registro = registros[i];
-    if (!registro || !registro.tipologia) return;
-    if (!porTipologia[registro.tipologia]) { porTipologia[registro.tipologia] = []; ordem.push(registro.tipologia); }
-    porTipologia[registro.tipologia].push(i);
-  });
-  ordem.sort();
-  return ordem.map(function (t) { return { tipologia: t, indices: porTipologia[t] }; });
 }
 
 // 2026-08-04: o seletor de dimensão PRÓPRIO saiu daqui -- a aba passou a usar

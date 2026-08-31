@@ -2,7 +2,11 @@
 const { semanasDoMes, indiceSemanaAtual } = require('./compute-semanal.js');
 const { calcularSeriesSemanaisDimensao } = require('./render-aba-semanal.js');
 const { agregarFatias, janelaDoPeriodo, semanasElapsadas, classificarSemaforo, PERIODO_ACUMULADO } = require('./render-aba-alertas.js');
-const { blocosPorSup, tipologiasPresentes } = require('./render-aba-consolidado.js');
+// NUNCA importar blocosPorSup/tipologiasPresentes de render-aba-consolidado.js:
+// aquele módulo importa serieDaSemana DESTE módulo, e o par fecharia um ciclo
+// de require que o bundle do navegador não resolve (ver o cabeçalho de
+// consolidado-hierarquia.js).
+const { blocosPorSup, tipologiasPresentes } = require('./consolidado-hierarquia.js');
 
 // Módulo dual Node+navegador (bundle) -- mesmo padrão 'var'/'function' e
 // requires same-dir de render-aba-alertas.js/render-aba-consolidado.js.

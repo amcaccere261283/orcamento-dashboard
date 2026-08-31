@@ -1223,8 +1223,11 @@ test('depois da senha a aba Consolidado é montada, abre em Financeiro (a dimens
   assert.notStrictEqual(secao, '', '#secao-consolidado continua vazia depois da senha -- o módulo está no bundle mas nunca é chamado');
   assert.match(secao, /<table id="tabela-consolidado">/);
   assert.match(secao, /TOTAL GERAL/);
-  assert.match(secao, /Ticket médio/, 'a barra abre com Financeiro marcado (filtrosSelecionadosSemanal.dimensao), e o Consolidado segue essa dimensão');
-  assert.doesNotMatch(secao, /Equipes previstas/);
+  // As COLUNAS de premissa (Ticket médio / Equipes previstas) saíram da tabela
+  // em 2026-08-31 (resumo Previsto até a data/Realizado/Desvio/Semana total) --
+  // quem ainda distingue a dimensão na tela é a nota do rodapé (renderNota).
+  assert.match(secao, /ticket médio previsto/, 'a barra abre com Financeiro marcado (filtrosSelecionadosSemanal.dimensao), e o Consolidado segue essa dimensão');
+  assert.doesNotMatch(secao, /As equipes previstas são a foto do mês/);
 
   documentoFalso.getElementById('aba-consolidado').listeners.click();
   assert.strictEqual(documentoFalso.getElementById('secao-consolidado').style.display, '');
@@ -1249,7 +1252,7 @@ test('marcar Volume na barra compartilhada troca as colunas de premissa do Conso
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
 
-  assert.match(documentoFalso.getElementById('secao-consolidado').innerHTML, /Ticket médio/, 'pré-condição: abre em Financeiro');
+  assert.match(documentoFalso.getElementById('secao-consolidado').innerHTML, /ticket médio previsto/, 'pré-condição: abre em Financeiro');
 
   const painelDimensao = documentoFalso.getElementById('seletor-dimensao-painel');
   const checkboxVolume = painelDimensao.querySelectorAll('input[type="checkbox"]').filter((c) => c.value === 'volume')[0];
@@ -1258,8 +1261,8 @@ test('marcar Volume na barra compartilhada troca as colunas de premissa do Conso
   checkboxVolume.listeners.change();
 
   const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
-  assert.match(secao, /Equipes previstas/, 'Volume vem ANTES de Financeiro na ordem canônica (DIMENSOES_CONFIG_SEMANAL) -- dimensoes[0] passa a ser volume');
-  assert.doesNotMatch(secao, /Ticket médio/);
+  assert.match(secao, /As equipes previstas são a foto do mês/, 'Volume vem ANTES de Financeiro na ordem canônica (DIMENSOES_CONFIG_SEMANAL) -- dimensoes[0] passa a ser volume');
+  assert.doesNotMatch(secao, /ticket médio previsto/);
 });
 
 test('a aba Consolidado abre na semana EM CURSO do mês selecionado, não em S1', async () => {
@@ -1422,8 +1425,8 @@ test('com Equipes marcada na barra, o Consolidado recorta os ativos por VOLUME -
   financeiro.listeners.change();
 
   const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
-  assert.ok(secao.indexOf('Equipes previstas') !== -1,
-    'pré-condição: com Equipes na barra a tabela desenha as colunas de Volume');
+  assert.ok(secao.indexOf('As equipes previstas são a foto do mês') !== -1,
+    'pré-condição: com Equipes na barra a tabela é a de Volume (a nota do rodapé é quem diz)');
   assert.ok(secao.indexOf('SUP-0003-24') !== -1,
     'o SUP tem 300 de volume previsto no mês e 0 equipes -- recortar por equipes o esconderia de uma tabela que mostra Volume');
   assert.ok(secao.indexOf('não se aplica ao Consolidado') !== -1,

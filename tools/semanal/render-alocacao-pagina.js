@@ -55,7 +55,15 @@ const MARKUP_ACOES_ALOCACAO = `      <div class="filtros-acoes">
 // dependência) -- não foi reordenado.
 const BUNDLE_ARQUIVOS_ALOCACAO = [
   'compute-semanal.js', 'compute-tendencia-semanal.js', 'render-aba-semanal.js',
-  'render-aba-alertas.js', 'render-aba-consolidado.js',
+  'render-aba-alertas.js',
+  // 2026-08-31: render-aba-consolidado.js passou a consumir serieDaSemana de
+  // compute-relatorio-semanal.js, e as duas funções de agrupamento que ele
+  // exportava saíram para consolidado-hierarquia.js (quebra do ciclo de
+  // require -- ver o cabeçalho daquele arquivo). Esta página só usa
+  // tipologiaColor do Consolidado, mas o bundle é concatenação de texto: o
+  // require reescrito roda ao carregar, então os dois módulos novos têm de
+  // estar registrados em MODULOS ANTES dele.
+  'consolidado-hierarquia.js', 'compute-relatorio-semanal.js', 'render-aba-consolidado.js',
   'parse-matriz-cliente.js', 'classificar-dia-equipe.js', 'compute-equipes-ativas.js',
   'parse-avancos.js', 'parse-lab.js', 'compute-demandas.js',
   'grupos-veiculo.js', 'pessoas-ativas.js', 'equipes-alocaveis.js', 'coordenadas-sup.js',

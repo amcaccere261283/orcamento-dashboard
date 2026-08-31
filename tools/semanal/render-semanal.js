@@ -819,16 +819,29 @@ const BUNDLE_ARQUIVOS = [
   // compute-tendencia-semanal.js (2026-08-04) consome compute-semanal.js
   // (diasNaSemana) e é consumido por render-aba-semanal.js -- por isso entra
   // ENTRE os dois. A ordem desta lista é o contrato de dependência.
-  'compute-semanal.js', 'compute-tendencia-semanal.js', 'render-aba-semanal.js', 'render-aba-alertas.js', 'render-aba-consolidado.js',
+  // consolidado-hierarquia.js (2026-08-31) não consome nada -- são as duas
+  // funções puras de agrupamento (blocosPorSup/tipologiasPresentes) que
+  // render-aba-consolidado.js e compute-relatorio-semanal.js compartilham.
+  // Elas moravam em render-aba-consolidado.js; como o Consolidado passou a
+  // consumir serieDaSemana de compute-relatorio-semanal.js, deixá-las lá
+  // fechava um ciclo de require -- e o bundle, que é concatenação de texto
+  // nesta ordem, só resolve UMA direção do ciclo (a outra lê undefined de
+  // MODULOS). Ela entra ANTES dos dois.
+  // E render-aba-consolidado.js DESCEU: desde 2026-08-31 ele consome
+  // serieDaSemana de compute-relatorio-semanal.js (tendência congelada do
+  // snapshot), então tem de vir DEPOIS dele -- o inverso da ordem anterior.
+  'compute-semanal.js', 'compute-tendencia-semanal.js', 'render-aba-semanal.js', 'render-aba-alertas.js',
+  'consolidado-hierarquia.js',
   // Relatório Semanal em Excel (2026-08-16): zip-writer-browser.js e
   // xlsx-writer-browser.js não consomem nada same-dir (zip depende só de
   // zip-writer-browser.js, que já entra antes dele). compute-relatorio-
   // semanal.js consome compute-semanal.js, render-aba-semanal.js,
-  // render-aba-alertas.js e render-aba-consolidado.js -- todos já
+  // render-aba-alertas.js e consolidado-hierarquia.js -- todos já
   // registrados acima. render-relatorio-semanal-xlsx.js consome compute-
   // relatorio-semanal.js e xlsx-writer-browser.js, ambos logo antes dele.
   // historico-relatorio-sheet.js não consome nada same-dir.
   'zip-writer-browser.js', 'xlsx-writer-browser.js', 'compute-relatorio-semanal.js',
+  'render-aba-consolidado.js',
   'render-relatorio-semanal-xlsx.js', 'historico-relatorio-sheet.js',
   // Os dois de 2026-08-04. compute-alertas-tendencia.js só tem um
   // require('../comum/calculo-equipes.js'), que o bundler REMOVE
