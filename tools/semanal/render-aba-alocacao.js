@@ -160,17 +160,23 @@ function renderBotoesSemana(semanas, semanaAtual, desabilitado) {
   return html + '</span>';
 }
 
-// Status: modo de persistência (local/sheet) e a fila de movimentos não
-// gravados. Nunca escondido -- é o que diz à pessoa se o que ela está vendo
-// já está publicado para todo mundo ou só nesta máquina.
-function renderStatus(modoPersistencia, pendentes) {
+// Status: movimentos ainda não salvos (represados até o clique em "Salvar
+// alocação"), modo de persistência (local/sheet) e a fila de reenvio de uma
+// falha de rede. Nunca escondido -- é o que diz à pessoa se o que ela está
+// vendo já está publicado para todo mundo, só nesta máquina, ou nem isso
+// ainda.
+function renderStatus(modoPersistencia, pendentes, naoSalvos) {
   var partes = [];
+  var ns = naoSalvos || 0;
+  if (ns > 0) {
+    partes.push(ns + ' movimento(s) não salvo(s) — clique em "Salvar alocação"');
+  }
   if (modoPersistencia === 'local') {
     partes.push('gravando só neste navegador — a planilha de alocação ainda não foi publicada');
   }
   var n = pendentes || 0;
   if (n > 0) {
-    partes.push(n + ' movimento(s) não gravado(s)'
+    partes.push(n + ' movimento(s) não gravado(s) na planilha'
       + ' <button type="button" data-acao="tentar-de-novo">Tentar de novo</button>');
   }
   if (!partes.length) partes.push('alocação em dia com a planilha');
@@ -179,8 +185,12 @@ function renderStatus(modoPersistencia, pendentes) {
 
 function renderControles(o, somenteLeitura) {
   var desabilitado = !!somenteLeitura;
+  var semNadaParaSalvar = !o.naoSalvos;
   return '<div class="controles-alocacao">'
     + renderBotoesSemana(o.semanas, o.semana, desabilitado)
+    + '<button type="button" data-acao="salvar-alocacao" class="botao-salvar-alocacao"'
+    + (desabilitado || semNadaParaSalvar ? ' disabled' : '') + '>Salvar alocação'
+    + (o.naoSalvos ? ' (' + o.naoSalvos + ')' : '') + '</button>'
     + '<button type="button" data-acao="repor-realizado"' + (desabilitado ? ' disabled' : '') + '>Repor o realizado</button>'
     + '<button type="button" data-acao="limpar-alocacao"' + (desabilitado ? ' disabled' : '') + '>Limpar alocação</button>'
     // Controle PRÓPRIO da aba, e não da barra de filtros compartilhada: aquela
@@ -200,7 +210,7 @@ function renderControles(o, somenteLeitura) {
         + escapeHtml(c.rotulo) + '</option>';
     }).join('')
     + '</select>'
-    + renderStatus(o.modoPersistencia, o.pendentes)
+    + renderStatus(o.modoPersistencia, o.pendentes, o.naoSalvos)
     + '</div>';
 }
 

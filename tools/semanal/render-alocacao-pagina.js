@@ -300,7 +300,7 @@ function fecharTendenciaVigente(dados) {
 var ESTADO_ALOCACAO = {
   semanaIdx: -1, alocacao: {}, equipes: [], foraDoQuadro: [], cliente: null,
   semanaCarregada: null, geracaoAlocacao: 0, busca: '', tipologia: '',
-  ultimaGrade: { linhas: [], colunas: [] },
+  ultimaGrade: { linhas: [], colunas: [] }, filaSalvar: {},
 };
 
 // MARCADOR DE SEMANA JÁ VISTA (Decisão 9 do spec, correção pós-verificação em
@@ -388,6 +388,37 @@ function chaveSemanaAtual() {
   return semana ? AlocacaoSheet.chaveSemana(window.__ANO__, semana.inicio) : null;
 }
 
+// Aplica LOCAL na hora (tela + localStorage, síncrono -- clienteAlocacao().
+// gravarLocal) e representa o envio ao Sheet para o clique de "Salvar
+// alocação". Ver o comentário grande em ESTADO_ALOCACAO.filaSalvar.
+function registrarParaSalvar(chave, equipeId, sup, coluna) {
+  if (!chave) return;
+  clienteAlocacao().gravarLocal({ chaveSemana: chave, equipeId: equipeId, sup: sup || null, coluna: coluna || null });
+  ESTADO_ALOCACAO.filaSalvar[chave + '|' + equipeId] = {
+    chaveSemana: chave, equipeId: equipeId, sup: sup || null, coluna: coluna || null,
+  };
+}
+
+function contarNaoSalvos() {
+  return Object.keys(ESTADO_ALOCACAO.filaSalvar).length;
+}
+
+// "Salvar alocação": envia ao Sheet TUDO que está represado, de qualquer
+// semana (cada item já carrega sua própria chaveSemana). Limpa a fila ANTES
+// do envio -- o mesmo raciocínio de "a tela nunca espera a rede" que
+// aplicarMovimento já seguia: se o envio falhar, o item cai na fila de
+// RETRANSMISSÃO de clienteAlocacao (a mesma que "Tentar de novo" já usava),
+// não de volta em filaSalvar -- reabrir filaSalvar reativaria o botão como se
+// nada tivesse sido tentado, escondendo a falha atrás de um botão que parece
+// não ter feito nada.
+function salvarAlocacao() {
+  var movimentos = Object.keys(ESTADO_ALOCACAO.filaSalvar).map(function (k) { return ESTADO_ALOCACAO.filaSalvar[k]; });
+  if (!movimentos.length) return;
+  ESTADO_ALOCACAO.filaSalvar = {};
+  montarAbaAlocacao();
+  clienteAlocacao().enviarLote(movimentos).then(function () { montarAbaAlocacao(); });
+}
+
 // Recusa fora do conjunto de colunas da equipe e equipe indisponível. Devolve
 // true quando aplicou -- é o que o handler de soltura usa para decidir se
 // redesenha ou mostra o motivo. Repare que NÃO consulta a grade/tendência: uma
@@ -420,17 +451,15 @@ function aplicarMovimento(equipeId, sup, coluna) {
   // equipe: o grupo é um gesto só.
   ESTADO_ALOCACAO.geracaoAlocacao++;
 
-  montarAbaAlocacao();
-  // A gravação vem DEPOIS do redesenho, e não é esperada: a tela nunca trava
-  // por causa da rede, e uma falha não desfaz o que o usuário acabou de ver.
-  // Uma gravação por equipe movida, mesmo laço de semearDoRealizado.
+  // Aplica local na hora (síncrono) e represa o envio ao Sheet para o clique
+  // de "Salvar alocação" -- ver o comentário grande em
+  // ESTADO_ALOCACAO.filaSalvar. Uma entrada por equipe movida, mesmo laço de
+  // semearDoRealizado.
   var chave = chaveSemanaAtual();
   movimentos.forEach(function (m) {
-    clienteAlocacao().gravar({
-      chaveSemana: chave, equipeId: m.id,
-      sup: m.sup || null, coluna: m.coluna || null,
-    }).then(function () { montarAbaAlocacao(); });
+    registrarParaSalvar(chave, m.id, m.sup, m.coluna);
   });
+  montarAbaAlocacao();
   return true;
 }
 
@@ -453,13 +482,11 @@ function semearDoRealizado() {
   // realizado" também é uma mudança de intenção que uma resposta tardia de
   // carregarAlocacaoDaSemana não pode desfazer.
   ESTADO_ALOCACAO.geracaoAlocacao++;
-  montarAbaAlocacao();
   var chave = chaveSemanaAtual();
   Object.keys(nova).forEach(function (id) {
-    clienteAlocacao().gravar({
-      chaveSemana: chave, equipeId: id, sup: nova[id].sup, coluna: nova[id].coluna,
-    }).then(function () { montarAbaAlocacao(); });
+    registrarParaSalvar(chave, id, nova[id].sup, nova[id].coluna);
   });
+  montarAbaAlocacao();
 }
 
 // "Limpar alocação": esvazia a semana inteira -- a outra ação destrutiva da
@@ -474,13 +501,12 @@ function limparAlocacao() {
   ESTADO_ALOCACAO.alocacao = {};
   // Ver o comentário em aplicarMovimento -- mesmo raciocínio.
   ESTADO_ALOCACAO.geracaoAlocacao++;
-  montarAbaAlocacao();
   var chave = chaveSemanaAtual();
   marcarSemanaVista(chave);
   idsAlocados.forEach(function (id) {
-    clienteAlocacao().gravar({ chaveSemana: chave, equipeId: id, sup: null, coluna: null })
-      .then(function () { montarAbaAlocacao(); });
+    registrarParaSalvar(chave, id, null, null);
   });
+  montarAbaAlocacao();
 }
 
 // Busca a alocação salva de 'chave' e decide se semeia do realizado
@@ -642,6 +668,9 @@ function prepararOpcoesAlocacao() {
     hojeEpoch: hojeEpochDoNavegador(),
     modoPersistencia: cliente.modo(),
     pendentes: cliente.pendentes().length,
+    // Movimentos já aplicados na tela/localStorage mas ainda represados,
+    // aguardando o clique em "Salvar alocação" -- ver ESTADO_ALOCACAO.filaSalvar.
+    naoSalvos: contarNaoSalvos(),
   };
   return { semanas: semanas, semana: semana, indices: indices, o: o, semRoster: semRoster };
 }
@@ -1785,6 +1814,8 @@ function inicializarInteracaoAlocacao(idSecao) {
         limparAlocacao();
       } else if (nome === 'tentar-de-novo') {
         clienteAlocacao().tentarDeNovo().then(montarAbaAlocacao);
+      } else if (nome === 'salvar-alocacao') {
+        salvarAlocacao();
       }
       return;
     }
@@ -1934,6 +1965,19 @@ document.getElementById('atualizar-dashboard').addEventListener('click', atualiz
 // nunca as alcançaria.
 inicializarInteracaoAlocacao('secao-kanban-alocacao');
 inicializarInteracaoAlocacao('secao-mapa-alocacao');
+
+// Com o envio ao Sheet represado até o clique em "Salvar alocação" (ver
+// ESTADO_ALOCACAO.filaSalvar), fechar a aba com movimentos não salvos os
+// perderia DO SHEET (continuam no localStorage desta máquina, mas outro
+// navegador nunca os veria) sem aviso nenhum. O aviso do navegador é
+// genérico -- não há como customizar o texto -- mas é melhor que nada.
+if (window.addEventListener) {
+  window.addEventListener('beforeunload', function (e) {
+    if (!contarNaoSalvos()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+}
 
 // Task 6: wireup do seletor de rodovias (busca lazy, camadas MapLibre, legenda).
 // #secao-mapa-alocacao já existe no HTML estático desde o load da página, então

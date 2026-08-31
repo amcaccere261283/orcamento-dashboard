@@ -135,6 +135,31 @@ function criarClienteAlocacao(opcoes) {
       }
     },
 
+    // Só aplica LOCAL, sem tocar na rede -- é o que o botão "Salvar alocação"
+    // precisa: a tela e o localStorage refletem o arrasto na hora (nunca
+    // esperam clique nenhum), e o envio ao Sheet fica represado até o clique.
+    // Ver o comentário grande em ESTADO_ALOCACAO.filaSalvar
+    // (render-alocacao-pagina.js) para o porquê da separação.
+    gravarLocal: function (movimento) {
+      return aplicarLocal(movimento);
+    },
+
+    // Envia um LOTE de movimentos já aplicados localmente -- é o clique em
+    // "Salvar alocação". Em modo local não há nada a enviar (aplicarLocal já
+    // fez tudo que existe para fazer); em modo sheet, cada falha entra na
+    // MESMA fila de reenvio que gravar() já usava, então "Tentar de novo"
+    // continua sendo o caminho de recuperação de uma falha de rede -- só a
+    // decisão de QUANDO tentar a 1ª vez que mudou.
+    enviarLote: async function (movimentos) {
+      if (local) return { ok: true, modo: 'local' };
+      var falhou = false;
+      for (var i = 0; i < movimentos.length; i++) {
+        try { await enviar(movimentos[i]); }
+        catch (err) { enfileirar(movimentos[i]); falhou = true; }
+      }
+      return { ok: !falhou, modo: 'sheet' };
+    },
+
     pendentes: function () { return lerJson(CHAVE_FILA, []); },
 
     tentarDeNovo: async function () {

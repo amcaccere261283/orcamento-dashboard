@@ -221,7 +221,7 @@ test('prepararOpcoesAlocacao devolve o MESMO roster e as MESMAS opções que mon
   const CHAVES_ESPERADAS = [
     'mesIdx', 'ano', 'semanas', 'semana', 'demandas', 'semRoster',
     'somenteLeitura', 'equipes', 'foraDoQuadro', 'alocacao', 'buscaEquipe',
-    'tipologiaAlocacao', 'hojeEpoch', 'modoPersistencia', 'pendentes',
+    'tipologiaAlocacao', 'hojeEpoch', 'modoPersistencia', 'pendentes', 'naoSalvos',
   ];
   assert.deepStrictEqual(Object.keys(prep.o).sort(), [...CHAVES_ESPERADAS].sort());
 
@@ -335,6 +335,48 @@ test('semear do realizado preenche a partir da última OS da semana', async () =
   cliente.semearDoRealizado();
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].sup, 'SUP-A');
   assert.strictEqual(cliente.ESTADO_ALOCACAO.alocacao['4'].coluna, 'SP');
+});
+
+// Pedido do dono do projeto em 2026-08-31: o envio ao Sheet passou a ficar
+// represado até o clique em "Salvar alocação" -- ver o comentário grande em
+// ESTADO_ALOCACAO.filaSalvar (render-alocacao-pagina.js). Este cliente de
+// teste roda em modo 'local' (nenhum window.__ALOCACAO_URL__ setado), então
+// não prova a rede em si (isso é semanal-alocacao-sheet.test.js, sobre
+// enviarLote) -- prova o CONTRATO do lado do cliente: a fila acumula um
+// movimento por gesto e salvarAlocacao() a esvazia, sem exigir clique nenhum
+// para a TELA/localStorage já refletirem o movimento (isso nunca mudou).
+test('aplicarMovimento represa o movimento em filaSalvar; salvarAlocacao esvazia a fila', async () => {
+  const cliente = montarClienteAlocacao();
+  marcarSemanasVistas(cliente, 1); // sem isto a semeadura automática já represaria a equipe 4
+  await cliente.selecionarSemanaAlocacao(1);
+  assert.strictEqual(cliente.contarNaoSalvos(), 0, 'pré-condição: nada represado ainda');
+
+  cliente.aplicarMovimento('4', 'SUP-A', 'SP');
+  // A 4 e a 77 dividem veículo -- a trava move as duas, então a fila carrega
+  // uma entrada POR equipe do grupo, mesma regra que já vale para o envio.
+  assert.strictEqual(cliente.contarNaoSalvos(), 2, 'um movimento represado por equipe do grupo (4 e 77)');
+
+  // localStorage já reflete o movimento SEM esperar salvarAlocacao -- é a
+  // parte que não mudou: só o envio de rede foi represado, nunca a gravação
+  // local.
+  const chave = cliente.AlocacaoSheet.chaveSemana(2026, SEMANAS_AGOSTO[1].inicio);
+  const salvoLocal = JSON.parse(cliente.localStorage.getItem('alocacao-equipes:' + chave));
+  assert.deepStrictEqual(normalizar(salvoLocal['4']), { sup: 'SUP-A', coluna: 'SP' });
+
+  cliente.salvarAlocacao();
+  assert.strictEqual(cliente.contarNaoSalvos(), 0, 'salvarAlocacao esvazia a fila represada');
+});
+
+// Achado óbvio de olhar o render: sem movimento represado, o botão não devia
+// convidar a um clique inútil.
+test('renderControles desabilita "Salvar alocação" sem movimentos represados, e mostra a contagem quando há', () => {
+  const { renderControles } = require('../tools/semanal/render-aba-alocacao.js');
+  const semNada = renderControles({ semanas: [], naoSalvos: 0 }, false);
+  assert.match(semNada, /data-acao="salvar-alocacao"[^>]*disabled/);
+
+  const comDois = renderControles({ semanas: [], naoSalvos: 2 }, false);
+  assert.doesNotMatch(comDois, /data-acao="salvar-alocacao"[^>]*disabled/);
+  assert.match(comDois, /Salvar alocação \(2\)/);
 });
 
 test('trocar de semana recarrega a alocação daquela semana, sem misturar', async () => {
