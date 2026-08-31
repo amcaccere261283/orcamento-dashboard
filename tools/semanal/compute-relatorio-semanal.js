@@ -48,16 +48,32 @@ function serieDaSemana(registros, indices, dimensao, alvo, ctx) {
     registros, indices, dimensao, alvo.mesIdx, semanas, semanas.length,
     ctx.temSemanasReais, indiceAtualReal, ctx.demandas, ctx.hojeEpoch, ctx.mesAtualReal
   );
-  var congelar = alvo.semana.inicio <= ctx.hojeEpoch;
-  var hojeEfetivo = congelar ? alvo.semana.inicio : ctx.hojeEpoch;
-  var seriesTendencia = hojeEfetivo === ctx.hojeEpoch ? seriesAoVivo : calcularSeriesSemanaisDimensao(
-    registros, indices, dimensao, alvo.mesIdx, semanas, semanas.length,
-    ctx.temSemanasReais, indiceSemanaAtual(semanas, hojeEfetivo), ctx.demandas, hojeEfetivo, ctx.mesAtualReal
-  );
+  // ctx.tendenciaExterna: função opcional (chaveRegistro) => number|null. Só faz
+  // sentido para GRUPOS de um registro só (indices.length === 1) -- um total
+  // agregado (SUP/tipologia/geral) não tem UMA chave, então cai sempre no
+  // recálculo local mesmo com tendenciaExterna presente. Quem quiser um total
+  // vindo do snapshot soma os registros individuais fora daqui (ver Consolidado,
+  // que já faz essa soma para as outras colunas).
+  var tendenciaCongelada;
+  if (typeof ctx.tendenciaExterna === 'function' && indices.length === 1) {
+    var registro = registros[indices[0]];
+    var chave = ctx.chaveDoRegistro ? ctx.chaveDoRegistro(registro) : null;
+    var externa = ctx.tendenciaExterna(chave);
+    if (externa !== undefined && externa !== null) tendenciaCongelada = externa;
+  }
+  if (tendenciaCongelada === undefined) {
+    var congelar = alvo.semana.inicio <= ctx.hojeEpoch;
+    var hojeEfetivo = congelar ? alvo.semana.inicio : ctx.hojeEpoch;
+    var seriesTendencia = hojeEfetivo === ctx.hojeEpoch ? seriesAoVivo : calcularSeriesSemanaisDimensao(
+      registros, indices, dimensao, alvo.mesIdx, semanas, semanas.length,
+      ctx.temSemanasReais, indiceSemanaAtual(semanas, hojeEfetivo), ctx.demandas, hojeEfetivo, ctx.mesAtualReal
+    );
+    tendenciaCongelada = seriesTendencia.semanasTendenciaCompleta[alvo.indiceNoMes];
+  }
   return {
     previsto: seriesAoVivo.semanasPrevisto[alvo.indiceNoMes],
     realizado: seriesAoVivo.semanasRealizado[alvo.indiceNoMes],
-    tendencia: seriesTendencia.semanasTendenciaCompleta[alvo.indiceNoMes],
+    tendencia: tendenciaCongelada,
   };
 }
 

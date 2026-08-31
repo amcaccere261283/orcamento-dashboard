@@ -194,6 +194,34 @@ test('resumoDesvios conta só porContrato (nível mais fino), não duplica com p
   assert.strictEqual(resumo.atencao, 1);
 });
 
+function fixtureTendenciaExterna() {
+  const JULHO = 6;
+  const semanas = semanasDoMes(ANO, JULHO);
+  const registros = [registro({ sup: 'SUP-A', mesIdx: JULHO, volume: 70, totalVolume: 70 })];
+  const hojeEpoch = semanas[1].inicio; // início da 2ª semana -- a vigente é semanas[1]
+  const indiceAtual = indiceSemanaAtual(semanas, hojeEpoch);
+  const ctxBase = {
+    ano: ANO, mesIdx: JULHO, semanas: semanas, indiceAtual: indiceAtual,
+    demandas: demandasCom({}), hojeEpoch: hojeEpoch, temSemanasReais: true,
+  };
+  const alvoSemanaVigente = { semana: semanas[indiceAtual], mesIdx: JULHO, semanasDoMesAlvo: semanas, indiceNoMes: indiceAtual };
+  return { registros, ctxBase, alvoSemanaVigente };
+}
+
+test('serieDaSemana usa ctx.tendenciaExterna quando fornecida, ignorando o recalculo', () => {
+  const { registros, ctxBase, alvoSemanaVigente } = fixtureTendenciaExterna();
+  const ctx = { ...ctxBase, tendenciaExterna: () => 999 }; // ctxBase = a fixture já existente do arquivo
+  const resultado = ComputeRelatorioSemanal.serieDaSemana(registros, [0], 'volume', alvoSemanaVigente, ctx); // alvoSemanaVigente = a mesma fixture de alvo já usada nos testes existentes
+  assert.equal(resultado.tendencia, 999);
+});
+
+test('serieDaSemana sem ctx.tendenciaExterna continua recalculando como antes (regressao)', () => {
+  const { registros, ctxBase, alvoSemanaVigente } = fixtureTendenciaExterna();
+  const ctx = { ...ctxBase }; // sem tendenciaExterna
+  const resultado = ComputeRelatorioSemanal.serieDaSemana(registros, [0], 'volume', alvoSemanaVigente, ctx);
+  assert.notEqual(resultado.tendencia, 999); // não é o valor mockado -- é o valor calculado de verdade
+});
+
 test('resumoDesvios.porDimensao quebra Crítico/Atenção corretamente entre Volume e Equipes', () => {
   const desvios = {
     porTipologia: [],
