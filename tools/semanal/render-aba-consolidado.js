@@ -277,8 +277,18 @@ function renderLinhaResumo(celulas, classe, registros, indices, ctx) {
   // já passados dela (mesma leitura do .xlsx).
   var fracaoDecorrida = calcularFracaoDecorrida(ctx.semanaEscolhida, ctx.hojeEpoch);
   var previstoAteAData = janela.previsto === null ? null : janela.previsto * fracaoDecorrida;
-  var numeradorDesvio = ctx.semanaEscolhida.inicio <= ctx.hojeEpoch && ctx.semanaEscolhida.fim > ctx.hojeEpoch
-    ? janela.tendencia // semana em curso: compara contra a projeção, não o parcial cru
+  var semanaEmCurso = ctx.semanaEscolhida.inicio <= ctx.hojeEpoch && ctx.semanaEscolhida.fim > ctx.hojeEpoch;
+  // Bug crítico corrigido em 2026-08-31: o numerador precisa ser prorateado
+  // pela MESMA fração que o denominador (previstoAteAData) já é -- janela.
+  // tendencia é a projeção da semana INTEIRA, e dividir ela crua pelo
+  // Previsto ATÉ A DATA inflava o desvio por 1/fracaoDecorrida (numa fixture
+  // sintética: +933% na segunda-feira, decaindo até bater com o .xlsx no
+  // domingo). Proratear os dois torna a razão equivalente a
+  // tendencia_cheia/previsto_cheio - 1, a mesma leitura do .xlsx (que o
+  // design exige que nunca divirja) e independente de quantos dias já
+  // passaram da semana.
+  var numeradorDesvio = semanaEmCurso
+    ? (janela.tendencia === null || janela.tendencia === undefined ? janela.tendencia : janela.tendencia * fracaoDecorrida)
     : janela.realizado;
   var desvio = (numeradorDesvio === null || numeradorDesvio === undefined || !previstoAteAData)
     ? null : (numeradorDesvio / previstoAteAData) - 1;
@@ -324,7 +334,7 @@ function renderLinhaResumo(celulas, classe, registros, indices, ctx) {
 // média nem Equipe têm Realizado saindo de calcularSeriesSemanaisDimensao
 // como as outras dimensões (volume/financeiro) -- ver realizadoProdutividadeMedia/
 // realizadoEquipe abaixo.
-function renderLinhaResumoGenerica(celulas, classe, registros, indices, ctx, chaveDimensaoSnapshot, realizadoDoBloco) {
+function renderLinhaResumoGenerica(celulas, classe, registros, indices, ctx, chaveDimensaoSnapshot, realizadoDoBloco, proratear) {
   var congeladoPorSemana = ctx.congeladoPorSemana;
   var tendenciaExterna;
   if (congeladoPorSemana && congeladoPorSemana.porRegistro && indices.length === 1) {
@@ -339,9 +349,20 @@ function renderLinhaResumoGenerica(celulas, classe, registros, indices, ctx, cha
   var tendenciaCheia = tendenciaExterna !== undefined ? tendenciaExterna : null;
   // "Tendência até a data": mesma fração de dias decorridos que a tabela
   // principal já usa em previstoAteAData (calcularFracaoDecorrida) -- só
-  // proratea quando há um valor cheio pra proratear.
+  // proratea quando há um valor cheio pra proratear E o bloco pediu proração
+  // (parâmetro 'proratear', explícito por chamador -- ver renderBlocoGenerico).
+  //
+  // Produtividade média é FLUXO (o Realizado acumula com os dias decorridos),
+  // então prorateia normalmente. Equipe é FOTO: a Tendência vem da linha
+  // BASE=T da MATRIZ, só repetida em cada semana (dividirEmSemanasInteiras
+  // não reparte headcount), e o Realizado é uma MÉDIA por dia
+  // (somarEquipesNoIntervalo faz Math.ceil(soma/totalDias)) -- prorateá-la e
+  // comparar contra uma média produz superávit falso (bug corrigido em
+  // 2026-08-31: tendência 4 equipes prorateada pra 1,14 numa terça-feira,
+  // Realizado 4, "Desvio +250%" onde não havia desvio nenhum). Bloco 'equipe'
+  // passa proratear=false para NÃO cair nessa armadilha de novo.
   var fracaoDecorrida = calcularFracaoDecorrida(ctx.semanaEscolhida, ctx.hojeEpoch);
-  var tendenciaAteAData = tendenciaCheia === null ? null : tendenciaCheia * fracaoDecorrida;
+  var tendenciaAteAData = (tendenciaCheia === null || !proratear) ? tendenciaCheia : tendenciaCheia * fracaoDecorrida;
   var realizado = realizadoDoBloco(registros, indices, ctx);
   // "Desvio até a data": mesmo formato que a tabela principal, mas o
   // numerador é o Realizado (não há Previsto aqui) -- null (nunca
@@ -395,18 +416,21 @@ function renderCabecalhoGenerico() {
 // Monta um bloco extra (Produtividade média ou Equipe) percorrendo a MESMA
 // hierarquia TOTAL GERAL / por tipologia / por SUP / TOTAL do SUP que a
 // tabela principal usa.
-function renderBlocoGenerico(titulo, chaveDimensaoSnapshot, realizadoDoBloco, registros, todos, ctx) {
+// proratear: true para blocos de FLUXO (produtividadeMedia), false para
+// blocos de FOTO (equipe) -- ver o comentário em renderLinhaResumoGenerica
+// sobre por que 'equipe' nunca prorateia.
+function renderBlocoGenerico(titulo, chaveDimensaoSnapshot, realizadoDoBloco, registros, todos, ctx, proratear) {
   var linhas = renderLinhaResumoGenerica(
     celula('col-sup', '—') + celula('col-grupo', 'Todos') + celula('col-tomador', 'Todos')
       + celulaChipTotal('TOTAL GERAL', 'chip-total-geral'),
-    'linha-total-geral', registros, todos, ctx, chaveDimensaoSnapshot, realizadoDoBloco
+    'linha-total-geral', registros, todos, ctx, chaveDimensaoSnapshot, realizadoDoBloco, proratear
   );
 
   tipologiasPresentes(registros, todos).forEach(function (bloco) {
     linhas += renderLinhaResumoGenerica(
       celula('col-sup', '—') + celula('col-grupo', 'Todos') + celula('col-tomador', 'Todos')
         + celulaChip(bloco.tipologia),
-      'linha-total-geral linha-total-geral-tipologia', registros, bloco.indices, ctx, chaveDimensaoSnapshot, realizadoDoBloco
+      'linha-total-geral linha-total-geral-tipologia', registros, bloco.indices, ctx, chaveDimensaoSnapshot, realizadoDoBloco, proratear
     );
   });
 
@@ -416,14 +440,14 @@ function renderBlocoGenerico(titulo, chaveDimensaoSnapshot, realizadoDoBloco, re
       linhas += renderLinhaResumoGenerica(
         celula('col-sup', registro.sup) + celula('col-grupo', registro.grupo)
           + celula('col-tomador', registro.tomador) + celulaChip(registro.tipologia),
-        'linha-consolidado', registros, [idx], ctx, chaveDimensaoSnapshot, realizadoDoBloco
+        'linha-consolidado', registros, [idx], ctx, chaveDimensaoSnapshot, realizadoDoBloco, proratear
       );
     });
     var primeiro = registros[bloco.indices[0]];
     linhas += renderLinhaResumoGenerica(
       celula('col-sup', bloco.sup) + celula('col-grupo', primeiro.grupo)
         + celula('col-tomador', primeiro.tomador) + celulaChipTotal('TOTAL'),
-      'linha-total-sup', registros, bloco.indices, ctx, chaveDimensaoSnapshot, realizadoDoBloco
+      'linha-total-sup', registros, bloco.indices, ctx, chaveDimensaoSnapshot, realizadoDoBloco, proratear
     );
   });
 
@@ -567,9 +591,11 @@ function renderAbaConsolidado(registros, indices, opcoes) {
   // Task 5: dois blocos extras abaixo da tabela principal, mesma hierarquia,
   // Tendência congelada (só do snapshot) + Realizado.
   var blocoProdutividade = renderBlocoGenerico(
-    'Produtividade média', 'produtividadeMedia', realizadoProdutividadeMedia, registros, todos, ctx
+    'Produtividade média', 'produtividadeMedia', realizadoProdutividadeMedia, registros, todos, ctx, true
   );
-  var blocoEquipe = renderBlocoGenerico('Equipe', 'equipe', realizadoEquipe, registros, todos, ctx);
+  // proratear=false: Equipe é FOTO (headcount), não FLUXO -- ver o comentário
+  // em renderLinhaResumoGenerica.
+  var blocoEquipe = renderBlocoGenerico('Equipe', 'equipe', realizadoEquipe, registros, todos, ctx, false);
 
   return controles + renderNota(dimensao)
     + '<table id="tabela-consolidado">' + renderCabecalho(dimensao, semanas[semanaIdx], !!congeladoPorSemana)

@@ -151,8 +151,11 @@ test('a Tendência congelada é recalculada na âncora, e (numa semana em curso)
   const previstoSemana = seriesAoVivo.semanasPrevisto[semanaIdx];
   const diasNaSemana = semana.fim - semana.inicio + 1;
   const diasDecorridos = Math.max(0, Math.min(diasNaSemana, hoje - semana.inicio + 1));
-  const previstoAteAData = previstoSemana * (diasDecorridos / diasNaSemana);
-  const desvioEsperado = (tendenciaCongelada / previstoAteAData) - 1;
+  const fracaoDecorrida = diasDecorridos / diasNaSemana;
+  const previstoAteAData = previstoSemana * fracaoDecorrida;
+  // Bug corrigido em 2026-08-31: numerador prorateado pela MESMA fração --
+  // equivale a tendenciaCongelada/previstoSemana - 1.
+  const desvioEsperado = ((tendenciaCongelada * fracaoDecorrida) / previstoAteAData) - 1;
   const pctEsperado = (Math.round(desvioEsperado * 1000) / 10).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
   assert.strictEqual(celulas[6], pctEsperado,
     'Desvio até a data usa a Tendência CONGELADA (recalculada na âncora), não a projeção ao vivo de hoje');
@@ -198,14 +201,63 @@ test('com congeladoSemanal presente para uma semana EM CURSO, o Desvio ate a dat
   const previstoSemana = seriesAoVivo.semanasPrevisto[semanaIdx];
   const diasNaSemana = semana.fim - semana.inicio + 1;
   const diasDecorridos = Math.max(0, Math.min(diasNaSemana, hoje - semana.inicio + 1));
-  const previstoAteAData = previstoSemana * (diasDecorridos / diasNaSemana);
-  const desvioEsperado = (tendenciaSnapshot / previstoAteAData) - 1;
+  const fracaoDecorrida = diasDecorridos / diasNaSemana;
+  const previstoAteAData = previstoSemana * fracaoDecorrida;
+  // Bug corrigido em 2026-08-31: o numerador precisa ser prorateado pela
+  // MESMA fracaoDecorrida que o denominador -- ver render-aba-consolidado.js.
+  // Isso torna o desvio equivalente a tendenciaSnapshot/previstoSemana - 1
+  // (a fracao se cancela), a mesma leitura do .xlsx.
+  const desvioEsperado = ((tendenciaSnapshot * fracaoDecorrida) / previstoAteAData) - 1;
   const pctEsperado = (Math.round(desvioEsperado * 1000) / 10).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
 
   const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
   assert.strictEqual(celulas[6], pctEsperado,
     'Desvio ate a data usa a Tendencia do snapshot como numerador, nao o recalculo local -- prova que ctx.tendenciaExterna chegou em serieDaSemana');
   assert.match(html, /congelada/i);
+});
+
+// Bug critico corrigido em 2026-08-31 (regressao ao vivo): o numerador do
+// Desvio ate a data era a Tendencia da semana INTEIRA, dividida pelo
+// Previsto ATE A DATA (prorateado) -- o desvio inflava por
+// 1/fracaoDecorrida, subindo a medida que o dia corrente se afasta do inicio
+// da semana. Com a correcao, o desvio de uma semana em curso e SEMPRE
+// tendencia_cheia/previsto_cheio - 1, independente de quantos dias ja
+// passaram: prova-se rodando o MESMO snapshot/registro com dois hojeEpoch
+// diferentes, dentro da mesma semana, e conferindo que o percentual e
+// identico nos dois.
+test('Desvio ate a data numa semana em curso bate com tendencia_cheia/previsto_cheio - 1, e NAO depende de quantos dias decorreram (invariancia)', () => {
+  const semanaIdx = 2; // S3 (13/07 a 19/07)
+  const semana = SEMANAS[semanaIdx];
+  const chaveSemana = formatarChaveSemana(semana.inicio);
+  const chaveRegistro = chaveMatriz(REGISTROS_A[0].sup, REGISTROS_A[0].tipologia);
+  const tendenciaSnapshot = 103; // igual ao exemplo do bug relatado (~ +47% contra previsto 70)
+  const congeladoSemanal = {
+    [chaveSemana]: { porRegistro: { [chaveRegistro]: { volume: { tendencia: tendenciaSnapshot } } } },
+  };
+
+  function pctDesvioNoDia(hoje) {
+    const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+      semanaIdx, demandas: demandasEspalhadas(), hojeEpoch: hoje, congeladoSemanal,
+    }));
+    const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
+    return celulas[6];
+  }
+
+  const pctSegunda = pctDesvioNoDia(diaJul(13)); // 1º dia da semana (fracaoDecorrida pequena)
+  const pctSabado = pctDesvioNoDia(diaJul(18));  // quase toda a semana decorrida
+
+  assert.strictEqual(pctSegunda, pctSabado,
+    'o desvio nao pode mudar so porque o dia corrente mudou dentro da mesma semana');
+
+  // E o valor bate com a leitura do .xlsx: tendencia_cheia/previsto_cheio - 1.
+  const seriesAoVivo = calcularSeriesSemanaisDimensao(
+    REGISTROS_A, [0], 'volume', JULHO, SEMANAS, SEMANAS.length, true,
+    indiceSemanaAtual(SEMANAS, diaJul(13)), demandasEspalhadas(), diaJul(13)
+  );
+  const previstoSemana = seriesAoVivo.semanasPrevisto[semanaIdx];
+  const desvioEsperado = (tendenciaSnapshot / previstoSemana) - 1;
+  const pctEsperado = (Math.round(desvioEsperado * 1000) / 10).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+  assert.strictEqual(pctSegunda, pctEsperado);
 });
 
 test('sem entrada no snapshot para a semana em tela, cai no recalculo de hoje e rotula "recalculada"', () => {
@@ -616,10 +668,15 @@ test('com congeladoSemanal presente, Tendencia ate a data e Semana total dos 2 b
   assert.strictEqual(celulasProdutividade[4], dois(TENDENCIA_PRODUTIVIDADE * fracao), 'Tendência até a data = tendência congelada x fração decorrida');
   assert.strictEqual(celulasProdutividade[7], dois(TENDENCIA_PRODUTIVIDADE), 'Semana total = tendência congelada CHEIA, sem proratear');
 
+  // Bug corrigido em 2026-08-31: Equipe é FOTO (headcount da linha BASE=T da
+  // MATRIZ), não FLUXO -- ao contrário de Produtividade média, NÃO prorateia.
+  // "Tendência até a data" == "Semana total" aqui, mesmo numa semana
+  // parcialmente decorrida.
   const blocoEquipe = linhasDe(html.split('Equipe')[1]);
   const celulasEquipe = celulasDe(blocoEquipe.filter((l) => l.indexOf('linha-total-geral') !== -1 && l.indexOf('linha-total-geral-tipologia') === -1)[0]);
-  assert.strictEqual(celulasEquipe[4], dois(TENDENCIA_EQUIPE * fracao), 'bloco Equipe: mesma regra de prorateio, chave de snapshot "equipe"');
+  assert.strictEqual(celulasEquipe[4], dois(TENDENCIA_EQUIPE), 'bloco Equipe: Tendência até a data NÃO prorateia (foto, não fluxo)');
   assert.strictEqual(celulasEquipe[7], dois(TENDENCIA_EQUIPE));
+  assert.strictEqual(celulasEquipe[4], celulasEquipe[7], 'Tendência até a data == Semana total no bloco Equipe');
 });
 
 test('Produtividade media Realizado e null (sem-dado), nunca Infinity/NaN, quando Equipe Realizado e zero', () => {
