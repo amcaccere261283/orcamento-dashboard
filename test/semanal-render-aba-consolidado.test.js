@@ -92,44 +92,63 @@ test('o Realizado exibido continua sendo o de HOJE, nao o congelado', () => {
 // 97 -- contra 74 com o índice trocado.
 //
 // A regra de 2026-08-10 ("realizado sempre considerar até d-1") APAGOU essa
-// diferença por um tempo: congelar ancora hojeEfetivo no PRIMEIRO dia da
-// semana k, e com o corte em d-1 a janela de Realizado dela ia de
-// semanas[k].inicio até semanas[k].inicio - 1 -- vazia por construção.
+// diferença por um tempo -- ver o histórico completo no commit anterior a
+// 2026-08-31.
 //
-// O corte em HOJE (2026-08-17, ver
-// docs/superpowers/specs/2026-08-17-realizado-ate-hoje-design.md) DEVOLVEU a
-// diferença: a janela da semana ancorada passa a ser [inicio, inicio], um dia
-// -- justamente o dia em que a fixture põe os 30 furos. O esperado voltou a
-// ser 97, o mesmo número da fixture original, e o parâmetro
-// ctx.indiceAtualEfetivo voltou a ser observável aqui (com ctx.indiceAtual no
-// lugar dele, o teste falha de novo).
-//
-// O que este teste prende agora é o mecanismo que sobrou e importa: a
-// Tendência congelada é RECALCULADA na âncora, e por isso a semana ancorada
-// não carrega nenhum Realizado dela mesma -- é a projeção que se fazia para
-// a semana inteira no dia em que ela começou.
-test('a Tendência congelada é recalculada na âncora: a semana ancorada não conta Realizado dela mesma', () => {
+// **Fix round 1 (2026-08-31, revisão da Task 4):** os índices
+// `ctx.indiceAtualEfetivo`/`ctx.indiceAtual` que este teste originalmente
+// mutava NÃO EXISTEM MAIS em `render-aba-consolidado.js` -- o recálculo
+// congelado saiu inteiro daqui e virou `serieDaSemana`
+// (`compute-relatorio-semanal.js`, Task 3), que tem sua própria suíte e sua
+// própria proteção de mutação. O que este arquivo ainda tem que provar é só
+// a FIAÇÃO: que `ctx.hojeEpoch`/`ctx.semanaEscolhida` chegam corretos em
+// `serieDaSemana` e que o valor congelado sai onde a Decisão 2 do design
+// manda -- numa semana AINDA EM CURSO, como numerador de "Desvio até a
+// data" (não em "Semana total", que é sempre `janela.previsto` puro, nunca
+// `janela.tendencia` -- ver Decisão 3 e o comentário em `renderLinhaResumo`).
+// Por isso a fixture trocou de semana ENCERRADA (S2) para EM CURSO (S3): é o
+// único estado em que a Tendência aparece como número cru na tabela.
+test('a Tendência congelada é recalculada na âncora, e (numa semana em curso) alimenta o Desvio até a data -- o Realizado exibido nunca congela', () => {
   // T = 310 (igual ao Previsto usado no resto da bateria) só pra ter uma
   // Tendência não-nula aqui -- sem T preenchido, a congelada e o Realizado
   // exibido não têm nada a distinguir além de zero, e o teste não provaria nada.
   const registrosComT = [registro({ sup: 'SUP-A', tipologia: 'ST', volume: 310, totalVolume: 310 })];
+  const semanaIdx = 2; // S3 (13/07 a 19/07) -- em curso com hoje em 15/07
+  const hoje = diaJul(15);
+  const semana = SEMANAS[semanaIdx];
   const eventos = [];
-  for (let i = 0; i < 30; i++) eventos.push(diaJul(6)); // 06/07 = 1º dia da S2
-  const html = renderAbaConsolidado(registrosComT, [0], opcoes({
-    semanaIdx: 1, demandas: demandasCom({ 'SUP-A||ST': eventos }), hojeEpoch: diaJul(15),
-  }));
+  for (let i = 0; i < 30; i++) eventos.push(diaJul(13)); // 13/07 = 1º dia da S3
+  const demandas = demandasCom({ 'SUP-A||ST': eventos });
+  const html = renderAbaConsolidado(registrosComT, [0], opcoes({ semanaIdx, demandas, hojeEpoch: hoje }));
   const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
-  // Layout novo (Task 4): SUP/Grupo/Tomador/Tipologia/Previsto ate a
-  // data/Realizado/Desvio ate a data/Semana total -- a congelada aparece
-  // agora em "Semana total" (indice 7, zero-based), que e' janela.tendencia.
-  assert.strictEqual(celulas[7], '97',
-    'os 30 furos de 06/07 ENTRAM: com o corte em HOJE, a janela da S2 ancorada em 06/07 é o próprio dia 06/07');
 
-  // E o Realizado exibido NUNCA congela -- ele sai do hoje real, então os
-  // mesmos 30 furos aparecem nele. É o contraste que prova que são duas
-  // séries com âncoras diferentes, não uma só.
+  // O Realizado exibido NUNCA congela -- sai do hoje real, então os mesmos
+  // 30 furos aparecem nele.
   assert.strictEqual(celulas[5], '30',
-    'o Realizado da S2 vê os 30 furos de 06/07, porque é calculado com o hoje real (15/07)');
+    'o Realizado da S3 vê os 30 furos de 13/07, porque é calculado com o hoje real (15/07)');
+
+  // Valor esperado da Tendência congelada: mesmo recálculo que serieDaSemana
+  // faz internamente (hojeEpoch = início da semana escolhida).
+  const seriesAncorada = calcularSeriesSemanaisDimensao(
+    registrosComT, [0], 'volume', JULHO, SEMANAS, SEMANAS.length, true,
+    indiceSemanaAtual(SEMANAS, semana.inicio), demandas, semana.inicio
+  );
+  const tendenciaCongelada = seriesAncorada.semanasTendenciaCompleta[semanaIdx];
+  const seriesAoVivo = calcularSeriesSemanaisDimensao(
+    registrosComT, [0], 'volume', JULHO, SEMANAS, SEMANAS.length, true,
+    indiceSemanaAtual(SEMANAS, hoje), demandas, hoje
+  );
+  assert.notStrictEqual(tendenciaCongelada, seriesAoVivo.semanasTendenciaCompleta[semanaIdx],
+    'a fixture precisa produzir valores DIFERENTES entre a congelada e a ao-vivo, senão o teste não prova nada');
+
+  const previstoSemana = seriesAoVivo.semanasPrevisto[semanaIdx];
+  const diasNaSemana = semana.fim - semana.inicio + 1;
+  const diasDecorridos = Math.max(0, Math.min(diasNaSemana, hoje - semana.inicio + 1));
+  const previstoAteAData = previstoSemana * (diasDecorridos / diasNaSemana);
+  const desvioEsperado = (tendenciaCongelada / previstoAteAData) - 1;
+  const pctEsperado = (Math.round(desvioEsperado * 1000) / 10).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+  assert.strictEqual(celulas[6], pctEsperado,
+    'Desvio até a data usa a Tendência CONGELADA (recalculada na âncora), não a projeção ao vivo de hoje');
 });
 
 // --- Resumo por SUP x Tipologia (substitui Realizado/Tendencia/premissas, Task 4) --
@@ -142,14 +161,43 @@ test('resumo mostra Previsto ate a data / Realizado / Desvio ate a data / Semana
   assert.match(html, /Semana total/);
 });
 
-test('com congeladoSemanal presente para a semana em tela, a Tendencia exibida vem do snapshot (nao do recalculo)', () => {
-  const opcoesBase = opcoes({ semanaIdx: 1, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) });
-  const chaveSemana = formatarChaveSemana(opcoesBase.semanas[opcoesBase.semanaIdx].inicio);
+// Decisao 2 do design: "Desvio ate a data" so usa a Tendencia (congelada ou
+// do snapshot) como numerador quando a semana escolhida AINDA NAO terminou
+// -- numa semana ja encerrada o numerador e' janela.realizado, e o valor do
+// snapshot legitimamente nao aparece em nenhuma celula como numero cru. Por
+// isso este teste usa uma semana EM CURSO (S3, 13/07 a 19/07, com hoje em
+// 15/07) e confere o snapshot no CALCULO do Desvio, nao em "Semana total"
+// (que e' sempre o Previsto puro -- ver Decisao 3 e o comentario em
+// renderLinhaResumo).
+test('com congeladoSemanal presente para uma semana EM CURSO, o Desvio ate a data usa a Tendencia do snapshot como numerador (Decisao 2)', () => {
+  const semanaIdx = 2; // S3 (13/07 a 19/07) -- em curso com hoje em 15/07
+  const hoje = diaJul(15);
+  const semana = SEMANAS[semanaIdx];
+  const opcoesBase = opcoes({ semanaIdx, demandas: demandasEspalhadas(), hojeEpoch: hoje });
+  const chaveSemana = formatarChaveSemana(semana.inicio);
+  const tendenciaSnapshot = 99999; // bem distinto de qualquer recalculo local possivel
   const congeladoSemanal = {
-    [chaveSemana]: { porRegistro: { [chaveMatriz(REGISTROS_A[0].sup, REGISTROS_A[0].tipologia)]: { volume: { tendencia: 12345 } } } },
+    [chaveSemana]: { porRegistro: { [chaveMatriz(REGISTROS_A[0].sup, REGISTROS_A[0].tipologia)]: { volume: { tendencia: tendenciaSnapshot } } } },
   };
   const html = renderAbaConsolidado(REGISTROS_A, [0], Object.assign({}, opcoesBase, { congeladoSemanal }));
-  assert.match(html, /12\.345/); // formatarNumero(12345, 0) -> '12.345' em pt-BR
+
+  // "Previsto ate a data" nao muda com o snapshot (so a Tendencia e' afetada
+  // por ctx.tendenciaExterna) -- recomputa pelo MESMO caminho que
+  // renderLinhaResumo usa, pra achar o Desvio esperado.
+  const seriesAoVivo = calcularSeriesSemanaisDimensao(
+    REGISTROS_A, [0], 'volume', JULHO, SEMANAS, SEMANAS.length, true,
+    indiceSemanaAtual(SEMANAS, hoje), demandasEspalhadas(), hoje
+  );
+  const previstoSemana = seriesAoVivo.semanasPrevisto[semanaIdx];
+  const diasNaSemana = semana.fim - semana.inicio + 1;
+  const diasDecorridos = Math.max(0, Math.min(diasNaSemana, hoje - semana.inicio + 1));
+  const previstoAteAData = previstoSemana * (diasDecorridos / diasNaSemana);
+  const desvioEsperado = (tendenciaSnapshot / previstoAteAData) - 1;
+  const pctEsperado = (Math.round(desvioEsperado * 1000) / 10).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+
+  const celulas = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-consolidado') !== -1)[0]);
+  assert.strictEqual(celulas[6], pctEsperado,
+    'Desvio ate a data usa a Tendencia do snapshot como numerador, nao o recalculo local -- prova que ctx.tendenciaExterna chegou em serieDaSemana');
   assert.match(html, /congelada/i);
 });
 

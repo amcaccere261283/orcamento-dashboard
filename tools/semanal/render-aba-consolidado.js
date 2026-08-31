@@ -271,14 +271,18 @@ function renderLinhaResumo(celulas, classe, registros, indices, ctx) {
   function num(v, casas) { return v === null || v === undefined ? '<td class="num sem-dado"></td>' : '<td class="num">' + formatarNumero(v, casas === undefined ? 0 : casas) + '</td>'; }
   function pct(v) { return v === null || v === undefined ? '<td class="num sem-dado"></td>' : '<td class="num">' + formatarNumero(v * 100, 1) + '%</td>'; }
 
-  // "Semana total": o total projetado da semana -- janela.tendencia, não
-  // janela.previsto (a META do mês repartida). É essa coluna que carrega o
-  // congelamento: numa semana já começada ela é a Tendência CONGELADA no seu
-  // 1º dia (ou lida do snapshot, quando ctx.congeladoPorSemana tem entrada
-  // para o registro); numa semana futura é a projeção de hoje -- mesmo
-  // conteúdo que a extinta coluna "Tendência" já mostrava.
+  // "Semana total": Previsto da semana INTEIRA -- janela.previsto, não
+  // janela.tendencia. Decisão 3 do design: "'Previsto até a data' e 'Semana
+  // total' replicam a mesma dupla que o .xlsx já mostra: Previsto acumulado
+  // até hoje dentro da semana (fração dela) vs. Previsto da semana inteira."
+  // Fora do ramo R≈P a Tendência diverge do Previsto por construção -- usar
+  // janela.tendencia aqui faria "Semana total" mostrar uma projeção em vez
+  // do valor planejado/orçado, o número que a Decisão 3 pede para NUNCA
+  // divergir do .xlsx. O status congelada/recalculada já é comunicado só
+  // pelo rótulo do cabeçalho (renderCabecalho) -- esta coluna não precisa
+  // (e não deve) reagir a ctx.tendenciaExterna.
   return '<tr class="' + classe + '">' + celulas
-    + num(previstoAteAData) + num(janela.realizado) + pct(desvio) + num(janela.tendencia)
+    + num(previstoAteAData) + num(janela.realizado) + pct(desvio) + num(janela.previsto)
     + '</tr>';
 }
 
