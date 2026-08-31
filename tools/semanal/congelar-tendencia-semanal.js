@@ -117,6 +117,25 @@ function precisaRodarHoje() {
   return !jaAtualizadoHoje(lerHeartbeatDoOrigin());
 }
 
+// Desfaz a escrita de UM arquivo feita nesta rodada perdida (outra máquina
+// venceu a corrida entre o cálculo do snapshot e a 2ª checagem de
+// precisaRodarHoje()) -- ANTES do 'stash pop' do finally rodar, senão o pop
+// devolve por cima de um working tree sujo (arquivo sem commit) e pode
+// colidir se o stash original tocava o mesmo arquivo. Se o arquivo já
+// existia (estava committed) antes desta rodada, `git checkout` restaura o
+// conteúdo de HEAD, descartando só a escrita de agora; se não existia,
+// remove com fs.rmSync -- nunca um `git clean` genérico, que poderia levar
+// junto arquivos untracked de outra origem.
+// `execGit` é injetável para teste isolado (default: git real via execFileSync).
+function descartarEscritaNaoCommitada(caminhoArquivo, existiaAntes, execGit) {
+  var exec = execGit || function (args) { return execFileSync('git', args, { cwd: RAIZ, encoding: 'utf8' }); };
+  if (existiaAntes) {
+    exec(['checkout', '--', caminhoArquivo]);
+  } else {
+    fs.rmSync(caminhoArquivo, { force: true });
+  }
+}
+
 async function main() {
   console.log('Checando se o congelamento de hoje já rodou (via git, sem recalcular)...');
   if (!precisaRodarHoje()) {
@@ -131,6 +150,13 @@ async function main() {
   }
 
   try {
+    // Estado ANTES de escrever nada nesta rodada -- se a corrida for
+    // perdida (2ª checagem abaixo), é a este estado que
+    // descartarEscritaNaoCommitada devolve os dois arquivos, antes do
+    // 'stash pop' do finally rodar por cima.
+    const snapshotExistiaAntes = fs.existsSync(CAMINHO_SNAPSHOT);
+    const heartbeatExistiaAntes = fs.existsSync(CAMINHO_HEARTBEAT);
+
     // Lê o build corrente (já publicado) -- não busca nada online, o
     // congelamento usa exatamente o dado que a página de hoje já mostra.
     const { montarRegistrosEDemandas } = require('./build-dashboard.js');
@@ -148,6 +174,12 @@ async function main() {
 
     if (!precisaRodarHoje()) {
       console.log('Outra máquina já congelou hoje enquanto rodávamos -- descartando, não vamos publicar de novo.');
+      // Corrida perdida: os dois arquivos foram escritos sem commit acima.
+      // Restaura o working tree ANTES do 'stash pop' do finally, senão o
+      // pop roda por cima dessa sujeira (e pode colidir se o stash também
+      // tocava esses arquivos).
+      descartarEscritaNaoCommitada(CAMINHO_SNAPSHOT, snapshotExistiaAntes);
+      descartarEscritaNaoCommitada(CAMINHO_HEARTBEAT, heartbeatExistiaAntes);
       return;
     }
 
@@ -166,5 +198,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-  chaveSemanaSeguinteDeSexta, calcularSnapshotSemanaAlvo, gravarSnapshotNoArquivo, main,
+  chaveSemanaSeguinteDeSexta, calcularSnapshotSemanaAlvo, gravarSnapshotNoArquivo,
+  descartarEscritaNaoCommitada, main,
 };

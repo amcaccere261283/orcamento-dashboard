@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { calcularSnapshotSemanaAlvo, chaveSemanaSeguinteDeSexta, gravarSnapshotNoArquivo } = require('../tools/semanal/congelar-tendencia-semanal.js');
+const { calcularSnapshotSemanaAlvo, chaveSemanaSeguinteDeSexta, gravarSnapshotNoArquivo, descartarEscritaNaoCommitada } = require('../tools/semanal/congelar-tendencia-semanal.js');
 
 // Sexta 2026-09-04 -> a semana seguinte começa segunda 2026-09-07.
 test('chaveSemanaSeguinteDeSexta acha a segunda seguinte à sexta em epoch de dias', () => {
@@ -84,4 +84,33 @@ test('gravarSnapshotNoArquivo SOBRESCREVE a mesma semana-alvo (job rodou 2x no m
   assert.equal(Object.keys(conteudo).length, 1);
   assert.equal(conteudo['2026-09-07'].porRegistro.X.volume.tendencia, 2);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// Cobre a corrida perdida: precisaRodarHoje() dá true na 1a checagem
+// (então o job escreve snapshot+heartbeat), mas false na 2a (outra máquina
+// venceu enquanto isso). O achado da revisão foi que essa escrita não
+// committed ficava suja no working tree para o 'stash pop' do finally
+// rodar por cima. Aqui isolamos a função de limpeza (não o main() inteiro,
+// que precisaria mockar git fetch/stash/commit/push de ponta a ponta) --
+// prova que ela restaura CADA um dos dois arquivos ao estado anterior.
+test('descartarEscritaNaoCommitada remove o arquivo quando ele NÃO existia antes (fs.rmSync)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tendencia-congelada-'));
+  const caminho = path.join(dir, 'novo.json');
+  fs.writeFileSync(caminho, '{"escrito-nesta-rodada":true}');
+  assert.ok(fs.existsSync(caminho));
+
+  descartarEscritaNaoCommitada(caminho, false);
+
+  assert.equal(fs.existsSync(caminho), false, 'arquivo criado nesta rodada perdida deve ser removido');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('descartarEscritaNaoCommitada chama "git checkout -- <arquivo>" quando ele JÁ existia antes (committed)', () => {
+  const chamadas = [];
+  const execGitFalso = (args) => { chamadas.push(args); };
+
+  descartarEscritaNaoCommitada('/caminho/qualquer/tendencia-congelada-semanal.json', true, execGitFalso);
+
+  assert.equal(chamadas.length, 1);
+  assert.deepEqual(chamadas[0], ['checkout', '--', '/caminho/qualquer/tendencia-congelada-semanal.json']);
 });
