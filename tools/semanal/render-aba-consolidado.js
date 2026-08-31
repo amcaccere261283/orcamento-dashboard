@@ -244,6 +244,17 @@ function tendenciaExternaDoCtx(ctx) {
   };
 }
 
+// Fração de dias já decorridos da semana escolhida, em relação ao hoje real --
+// dias corridos, não úteis, porque é isso que "até a data" descreve num
+// calendário civil. Extraída para ser reusada pelos blocos genéricos (Task 5,
+// Fix round 1: "Tendência até a data" precisa da MESMA fração que "Previsto
+// até a data" já usa aqui, em vez de duplicar a fórmula).
+function calcularFracaoDecorrida(semanaEscolhida, hojeEpoch) {
+  var diasNaSemana = Math.round((semanaEscolhida.fim - semanaEscolhida.inicio + 1));
+  var diasDecorridos = Math.max(0, Math.min(diasNaSemana, hojeEpoch - semanaEscolhida.inicio + 1));
+  return diasDecorridos / diasNaSemana;
+}
+
 // Uma linha da tabela. 'celulas' são as 4 primeiras (SUP/Grupo/Tomador/
 // Tipologia), montadas por quem chama porque é só nelas que os 4 tipos de
 // linha (registro, total do SUP, total geral, total geral por tipologia)
@@ -257,11 +268,9 @@ function renderLinhaResumo(celulas, classe, registros, indices, ctx) {
   };
   var janela = serieDaSemana(registros, indices, ctx.dimensaoSnapshot, alvo, serieCtx);
   // "Previsto até a data": fração do Previsto da semana proporcional aos dias
-  // já passados dela (mesma leitura do .xlsx) -- dias corridos, não úteis,
-  // porque é isso que "até a data" descreve num calendário civil.
-  var diasNaSemana = Math.round((ctx.semanaEscolhida.fim - ctx.semanaEscolhida.inicio + 1));
-  var diasDecorridos = Math.max(0, Math.min(diasNaSemana, ctx.hojeEpoch - ctx.semanaEscolhida.inicio + 1));
-  var previstoAteAData = janela.previsto === null ? null : janela.previsto * (diasDecorridos / diasNaSemana);
+  // já passados dela (mesma leitura do .xlsx).
+  var fracaoDecorrida = calcularFracaoDecorrida(ctx.semanaEscolhida, ctx.hojeEpoch);
+  var previstoAteAData = janela.previsto === null ? null : janela.previsto * fracaoDecorrida;
   var numeradorDesvio = ctx.semanaEscolhida.inicio <= ctx.hojeEpoch && ctx.semanaEscolhida.fim > ctx.hojeEpoch
     ? janela.tendencia // semana em curso: compara contra a projeção, não o parcial cru
     : janela.realizado;
@@ -287,14 +296,20 @@ function renderLinhaResumo(celulas, classe, registros, indices, ctx) {
 }
 
 // Task 5 (2026-08-31): Produtividade média e Equipe -- dois blocos extras,
-// abaixo da tabela principal, com Tendência congelada (SÓ do snapshot, sem o
-// fallback de recálculo local que renderLinhaResumo tem) + Realizado.
+// abaixo da tabela principal, com 4 colunas: Tendência até a data / Realizado
+// / Desvio até a data / Semana total -- as MESMAS 4 da tabela principal
+// (Decisão 3 do design), só que a base de comparação é a Tendência CONGELADA
+// (SÓ do snapshot, sem o fallback de recálculo local que renderLinhaResumo
+// tem), porque nenhum dos dois blocos tem "Previsto" (não são premissa de
+// planilha). Pedido explícito do dono do projeto (revisão da Task 5, "Fix
+// round 1"): "na tendência até a data, fazer a média por dia x os dias
+// decorridos para comparar com o realizado até a data".
 //
 // Produtividade média não existe como série própria em
 // calcularSeriesSemanaisDimensao (é derivada de Volume ÷ Equipes), então
 // "recalcular localmente" a Tendência exigiria refazer essa mesma divisão
 // fora do snapshot -- possível, mas não pedido nesta rodada. Sem entrada no
-// snapshot para a semana em tela, a célula de Tendência fica sem dado: é uma
+// snapshot para a semana em tela, as 4 células ficam sem dado: é uma
 // limitação aceita (o congelamento de sexta ainda não rodou para aquela
 // semana), não um bug.
 //
@@ -313,10 +328,26 @@ function renderLinhaResumoGenerica(celulas, classe, registros, indices, ctx, cha
       tendenciaExterna = entrada[chaveDimensaoSnapshot].tendencia;
     }
   }
-  var tendencia = tendenciaExterna !== undefined ? tendenciaExterna : null;
+  // "Semana total": a Tendência congelada CHEIA, sem proratear -- é o valor
+  // bruto do snapshot, ou sem dado se ele não existir para a semana em tela.
+  var tendenciaCheia = tendenciaExterna !== undefined ? tendenciaExterna : null;
+  // "Tendência até a data": mesma fração de dias decorridos que a tabela
+  // principal já usa em previstoAteAData (calcularFracaoDecorrida) -- só
+  // proratea quando há um valor cheio pra proratear.
+  var fracaoDecorrida = calcularFracaoDecorrida(ctx.semanaEscolhida, ctx.hojeEpoch);
+  var tendenciaAteAData = tendenciaCheia === null ? null : tendenciaCheia * fracaoDecorrida;
   var realizado = realizadoDoBloco(registros, indices, ctx);
+  // "Desvio até a data": mesmo formato que a tabela principal, mas o
+  // numerador é o Realizado (não há Previsto aqui) -- null (nunca
+  // Infinity/NaN) quando a Tendência até a data for 0/sem dado.
+  var desvio = (realizado === null || realizado === undefined || !tendenciaAteAData)
+    ? null : (realizado / tendenciaAteAData) - 1;
+
   function num(v, casas) { return v === null || v === undefined ? '<td class="num sem-dado"></td>' : '<td class="num">' + formatarNumero(v, casas === undefined ? 2 : casas) + '</td>'; }
-  return '<tr class="' + classe + '">' + celulas + num(tendencia) + num(realizado) + '</tr>';
+  function pct(v) { return v === null || v === undefined ? '<td class="num sem-dado"></td>' : '<td class="num">' + formatarNumero(v * 100, 1) + '%</td>'; }
+  return '<tr class="' + classe + '">' + celulas
+    + num(tendenciaAteAData) + num(realizado) + pct(desvio) + num(tendenciaCheia)
+    + '</tr>';
 }
 
 // Produtividade média Realizado = Volume Realizado ÷ Equipe Realizado da
@@ -341,15 +372,17 @@ function realizadoEquipe(registros, indices, ctx) {
   return serieEquipe.realizado;
 }
 
-// Cabeçalho dos dois blocos extras: SUP/Grupo/Tomador/Tipologia + Tendência
-// congelada + Realizado -- 6 colunas, mais estreito que renderCabecalho (que
-// tem Previsto até a data/Desvio até a data/Semana total, que estes blocos
-// não têm).
+// Cabeçalho dos dois blocos extras: SUP/Grupo/Tomador/Tipologia + as MESMAS 4
+// colunas de resumo que a tabela principal tem (renderCabecalho), só que a
+// base de comparação é sempre a Tendência congelada (nunca "Previsto") --
+// Fix round 1 da revisão da Task 5.
 function renderCabecalhoGenerico() {
   return '<thead><tr>'
     + '<th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th>'
-    + '<th class="num">Tendência congelada</th>'
+    + '<th class="num">Tendência até a data</th>'
     + '<th class="num">Realizado</th>'
+    + '<th class="num">Desvio até a data</th>'
+    + '<th class="num">Semana total</th>'
     + '</tr></thead>';
 }
 

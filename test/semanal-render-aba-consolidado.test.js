@@ -551,8 +551,92 @@ test('Realizado de Produtividade media = Realizado Volume / Realizado Equipe da 
 
   const linhasProdutividade = linhasDe(html.split('Produtividade média')[1].split('Equipe')[0]);
   const celulasTotalGeral = celulasDe(linhasProdutividade.filter((l) => l.indexOf('linha-total-geral') !== -1 && l.indexOf('linha-total-geral-tipologia') === -1)[0]);
-  // celulas: SUP/Grupo/Tomador/Tipologia/Tendência congelada/Realizado.
+  // celulas (Fix round 1 -- 4 colunas de resumo, iguais à tabela principal):
+  // SUP/Grupo/Tomador/Tipologia/Tendência até a data/Realizado/Desvio até a
+  // data/Semana total -- Realizado continua sendo o índice 5.
   // Realizado sai com 2 casas (mesma convenção do resto da aba pra
   // grandezas não-inteiras) -- 20/4 = 5,00.
   assert.strictEqual(celulasTotalGeral[5], esperado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+});
+
+// --- Fix round 1 (revisão da Task 5, 2026-08-31) ---------------------------
+// 1. As 4 colunas por bloco (Tendência até a data/Realizado/Desvio até a
+//    data/Semana total), com "Tendência até a data" = tendência congelada
+//    prorateada pelos dias decorridos -- já cobertas nas asserções acima
+//    (celulasTotalGeral[5] continua sendo Realizado) e no cabeçalho abaixo.
+// 2. Caminho COM snapshot presente -- nenhum teste anterior provava que as
+//    chaves 'produtividadeMedia'/'equipe' realmente puxam o valor do
+//    snapshot; o teste abaixo fecha essa lacuna.
+// 3. Divisão por zero de Produtividade média Realizado -- Equipe Realizado
+//    zero/sem dado tem de dar null (sem-dado), nunca Infinity/NaN.
+
+test('cabecalho dos blocos extras tem as MESMAS 4 colunas de resumo da tabela principal', () => {
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ demandas: demandasEspalhadas(), hojeEpoch: diaJul(15) }));
+  const blocoProdutividade = html.split('Produtividade média')[1].split('Equipe')[0];
+  assert.match(blocoProdutividade, /<th class="num">Tendência até a data<\/th>/);
+  assert.match(blocoProdutividade, /<th class="num">Realizado<\/th>/);
+  assert.match(blocoProdutividade, /<th class="num">Desvio até a data<\/th>/);
+  assert.match(blocoProdutividade, /<th class="num">Semana total<\/th>/);
+});
+
+test('com congeladoSemanal presente, Tendencia ate a data e Semana total dos 2 blocos novos batem com o snapshot (prorateado e cheio)', () => {
+  const semanaIdx = 2; // S3 (13/07 a 19/07) -- em curso, hoje em 15/07
+  const hoje = diaJul(15);
+  const semana = SEMANAS[semanaIdx];
+  const chaveSemana = formatarChaveSemana(semana.inicio);
+  const chaveRegistro = chaveMatriz(REGISTROS_A[0].sup, REGISTROS_A[0].tipologia);
+
+  // Snapshot distinto de qualquer recálculo local possível.
+  const TENDENCIA_PRODUTIVIDADE = 70;
+  const TENDENCIA_EQUIPE = 14;
+  const congeladoSemanal = {
+    [chaveSemana]: {
+      porRegistro: {
+        [chaveRegistro]: {
+          produtividadeMedia: { tendencia: TENDENCIA_PRODUTIVIDADE },
+          equipe: { tendencia: TENDENCIA_EQUIPE },
+        },
+      },
+    },
+  };
+
+  const equipesPorDia = equipesPorDiaConstante(chaveRegistro, diaJul(13), diaJul(15), 4);
+  const demandas = demandasComEquipes(demandasEspalhadas(), equipesPorDia);
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx, demandas, hojeEpoch: hoje, congeladoSemanal,
+  }));
+
+  // Fração decorrida: 13/07-15/07 = 3 dos 7 dias da semana (13 a 19/07).
+  const fracao = 3 / 7;
+  const dois = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const blocoProdutividade = linhasDe(html.split('Produtividade média')[1].split('Equipe')[0]);
+  const celulasProdutividade = celulasDe(blocoProdutividade.filter((l) => l.indexOf('linha-total-geral') !== -1 && l.indexOf('linha-total-geral-tipologia') === -1)[0]);
+  // celulas: SUP/Grupo/Tomador/Tipologia/Tendência até a data/Realizado/Desvio até a data/Semana total.
+  assert.strictEqual(celulasProdutividade[4], dois(TENDENCIA_PRODUTIVIDADE * fracao), 'Tendência até a data = tendência congelada x fração decorrida');
+  assert.strictEqual(celulasProdutividade[7], dois(TENDENCIA_PRODUTIVIDADE), 'Semana total = tendência congelada CHEIA, sem proratear');
+
+  const blocoEquipe = linhasDe(html.split('Equipe')[1]);
+  const celulasEquipe = celulasDe(blocoEquipe.filter((l) => l.indexOf('linha-total-geral') !== -1 && l.indexOf('linha-total-geral-tipologia') === -1)[0]);
+  assert.strictEqual(celulasEquipe[4], dois(TENDENCIA_EQUIPE * fracao), 'bloco Equipe: mesma regra de prorateio, chave de snapshot "equipe"');
+  assert.strictEqual(celulasEquipe[7], dois(TENDENCIA_EQUIPE));
+});
+
+test('Produtividade media Realizado e null (sem-dado), nunca Infinity/NaN, quando Equipe Realizado e zero', () => {
+  const semanaIdx = 1; // S2 (06/07 a 12/07)
+  const chaveRegistro = chaveMatriz(REGISTROS_A[0].sup, REGISTROS_A[0].tipologia);
+  // Roster presente (achouAlgumaChave = true) mas com 0 equipes todo dia --
+  // Equipe Realizado sai 0, não "sem dado" por ausência de fonte.
+  const equipesPorDia = equipesPorDiaConstante(chaveRegistro, diaJul(6), diaJul(12), 0);
+  const demandas = demandasComEquipes(demandasEspalhadas(), equipesPorDia);
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({ semanaIdx, demandas, hojeEpoch: diaJul(15) }));
+
+  const blocoProdutividade = linhasDe(html.split('Produtividade média')[1].split('Equipe')[0]);
+  const linhaTotalGeral = blocoProdutividade.filter((l) => l.indexOf('linha-total-geral') !== -1 && l.indexOf('linha-total-geral-tipologia') === -1)[0];
+  const celulasProdutividade = celulasDe(linhaTotalGeral);
+  // Realizado (índice 5) fica vazio (sem-dado), nunca "Infinity"/"NaN".
+  assert.strictEqual(celulasProdutividade[5], '');
+  assert.match(linhaTotalGeral, /<td class="num sem-dado"><\/td>/);
+  assert.doesNotMatch(html, /Infinity/);
+  assert.doesNotMatch(html, /NaN/);
 });
