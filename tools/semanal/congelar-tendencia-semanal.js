@@ -86,7 +86,16 @@ function gravarSnapshotNoArquivo(caminhoArquivo, snapshot) {
     atual = JSON.parse(fs.readFileSync(caminhoArquivo, 'utf8'));
   }
   atual[snapshot.chaveSemanaAlvo] = { geradoEm: snapshot.geradoEmIso, porRegistro: snapshot.porRegistro };
-  fs.writeFileSync(caminhoArquivo, JSON.stringify(atual, null, 2) + '\n');
+  // Gravação ATÔMICA: arquivo temporário no MESMO diretório (rename entre
+  // volumes diferentes não é atômico) e depois renameSync por cima do destino.
+  // Sem isso, um job morto no meio da escrita -- ou disco cheio -- deixaria um
+  // JSON truncado em docs/, e o build-dashboard.js que o lê quebraria as DUAS
+  // páginas até alguém apagar o arquivo à mão. O leitor também se protege
+  // (lerCongeladoSemanal, build-dashboard.js), mas um recurso opcional não pode
+  // depender só disso: aqui o estado truncado nunca chega a ficar visível.
+  var temporario = caminhoArquivo + '.tmp';
+  fs.writeFileSync(temporario, JSON.stringify(atual, null, 2) + '\n');
+  fs.renameSync(temporario, caminhoArquivo);
 }
 
 // --- CLI, mesmo padrão de corrida segura de atualizar-diario-escalonado.js:

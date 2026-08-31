@@ -376,3 +376,61 @@ test('build funciona normalmente (sem quebrar) quando o arquivo de snapshot NÃO
     // em cada leitura.
     assert.match(html, /window\.__CONGELADO_SEMANAL__ = \{\};/);
   });
+
+// --- Fix round 1 (2026-08-31): snapshot corrompido não pode derrubar o build --
+//
+// Os dois lados da mesma proteção, e os dois testes rodam OFFLINE (não tocam
+// na MATRIZ do G:\): o LEITOR nunca lança, e o ESCRITOR nunca deixa um estado
+// truncado visível.
+const { lerCongeladoSemanal: lerCongeladoSemanalDireto } = require('../tools/semanal/build-dashboard.js');
+const { gravarSnapshotNoArquivo } = require('../tools/semanal/congelar-tendencia-semanal.js');
+
+test('lerCongeladoSemanal com JSON malformado devolve {} e NÃO lança -- um snapshot corrompido não pode derrubar as duas páginas', () => {
+  const avisos = [];
+  const warnOriginal = console.warn;
+  console.warn = (msg) => avisos.push(String(msg));
+  try {
+    const lido = comSnapshotSync('{"2026-W35": {"porRegistro": ', () => lerCongeladoSemanalDireto());
+    assert.deepStrictEqual(lido, {});
+  } finally {
+    console.warn = warnOriginal;
+  }
+  assert.ok(avisos.some((m) => m.indexOf('tendencia-congelada-semanal.json') !== -1),
+    'o aviso precisa dizer QUAL arquivo está ilegível');
+  assert.ok(avisos.some((m) => /IGNORADO|ignorado/.test(m)),
+    'o aviso precisa dizer que o congelamento vai ser ignorado neste build');
+});
+
+// Versão síncrona de comSnapshot (acima), para o teste síncrono do leitor.
+function comSnapshotSync(conteudo, fn) {
+  const existia = fsBuild.existsSync(CAMINHO_SNAPSHOT_REPO);
+  const anterior = existia ? fsBuild.readFileSync(CAMINHO_SNAPSHOT_REPO, 'utf8') : null;
+  try {
+    fsBuild.writeFileSync(CAMINHO_SNAPSHOT_REPO, conteudo, 'utf8');
+    return fn();
+  } finally {
+    if (anterior === null) fsBuild.unlinkSync(CAMINHO_SNAPSHOT_REPO);
+    else fsBuild.writeFileSync(CAMINHO_SNAPSHOT_REPO, anterior, 'utf8');
+  }
+}
+
+test('gravarSnapshotNoArquivo grava de forma atômica: não sobra .tmp e o conteúdo final é JSON válido', () => {
+  const dir = fsBuild.mkdtempSync(pathBuild.join(osBuild.tmpdir(), 'congelado-'));
+  const alvo = pathBuild.join(dir, 'tendencia-congelada-semanal.json');
+
+  gravarSnapshotNoArquivo(alvo, {
+    chaveSemanaAlvo: '2026-09-07', geradoEmIso: '2026-09-04T22:00:00.000Z',
+    porRegistro: { 'SUP-TESTE-99||ST': { volume: { tendencia: 10 } } },
+  });
+  // Segunda gravação: o caminho que LÊ o arquivo existente antes de reescrever.
+  gravarSnapshotNoArquivo(alvo, {
+    chaveSemanaAlvo: '2026-09-14', geradoEmIso: '2026-09-11T22:00:00.000Z',
+    porRegistro: { 'SUP-TESTE-99||ST': { volume: { tendencia: 20 } } },
+  });
+
+  assert.ok(!fsBuild.existsSync(alvo + '.tmp'), 'o arquivo temporário tem de sumir no rename');
+  assert.deepStrictEqual(fsBuild.readdirSync(dir), ['tendencia-congelada-semanal.json']);
+  const lido = JSON.parse(fsBuild.readFileSync(alvo, 'utf8'));
+  assert.deepStrictEqual(Object.keys(lido).sort(), ['2026-09-07', '2026-09-14']);
+  assert.strictEqual(lido['2026-09-14'].porRegistro['SUP-TESTE-99||ST'].volume.tendencia, 20);
+});
