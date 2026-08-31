@@ -1813,6 +1813,15 @@ function inicializarInteracaoAlocacao(idSecao) {
           && !window.confirm('Limpar toda a alocação desta semana?')) return;
         limparAlocacao();
       } else if (nome === 'tentar-de-novo') {
+        // Sem isto o botão fica idêntico do clique até a promise resolver --
+        // com N itens na fila e a rede lenta/instável (cada POST pode levar
+        // dezenas de segundos até estourar timeout), isso passa fácil de um
+        // minuto sem NADA mudar na tela, e lê como "o botão não fez nada".
+        // acaoEl aqui é o próprio <button>: desabilita e troca o rótulo na
+        // hora, síncrono, antes do await -- o próximo montarAbaAlocacao()
+        // (dentro do .then) substitui esse HTML inteiro de qualquer forma.
+        acaoEl.disabled = true;
+        acaoEl.textContent = 'Tentando...';
         clienteAlocacao().tentarDeNovo().then(montarAbaAlocacao);
       } else if (nome === 'salvar-alocacao') {
         salvarAlocacao();
