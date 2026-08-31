@@ -1,7 +1,10 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { calcularSnapshotSemanaAlvo, chaveSemanaSeguinteDeSexta } = require('../tools/semanal/congelar-tendencia-semanal.js');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { calcularSnapshotSemanaAlvo, chaveSemanaSeguinteDeSexta, gravarSnapshotNoArquivo } = require('../tools/semanal/congelar-tendencia-semanal.js');
 
 // Sexta 2026-09-04 -> a semana seguinte começa segunda 2026-09-07.
 test('chaveSemanaSeguinteDeSexta acha a segunda seguinte à sexta em epoch de dias', () => {
@@ -49,4 +52,36 @@ test('calcularSnapshotSemanaAlvo devolve produtividadeMedia null quando equipe �
   const hojeEpoch = Date.UTC(2026, 8, 4) / 86400000;
   const snapshot = calcularSnapshotSemanaAlvo(registros, demandas, hojeEpoch);
   assert.equal(snapshot.porRegistro['SUP-2||ST'].produtividadeMedia.tendencia, null);
+});
+
+test('gravarSnapshotNoArquivo cria o arquivo na 1a chamada e mescla na 2a, sem apagar semanas antigas', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tendencia-congelada-'));
+  const caminho = path.join(dir, 'tendencia-congelada-semanal.json');
+
+  gravarSnapshotNoArquivo(caminho, {
+    chaveSemanaAlvo: '2026-08-31', geradoEmIso: '2026-08-28T22:00:00.000Z',
+    porRegistro: { 'SUP-1|SP': { volume: { tendencia: 10 } } },
+  });
+  gravarSnapshotNoArquivo(caminho, {
+    chaveSemanaAlvo: '2026-09-07', geradoEmIso: '2026-09-04T22:00:00.000Z',
+    porRegistro: { 'SUP-1|SP': { volume: { tendencia: 20 } } },
+  });
+
+  const conteudo = JSON.parse(fs.readFileSync(caminho, 'utf8'));
+  assert.ok(conteudo['2026-08-31'], 'semana anterior preservada');
+  assert.ok(conteudo['2026-09-07'], 'semana nova presente');
+  assert.equal(conteudo['2026-09-07'].porRegistro['SUP-1|SP'].volume.tendencia, 20);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('gravarSnapshotNoArquivo SOBRESCREVE a mesma semana-alvo (job rodou 2x no mesmo dia)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tendencia-congelada-'));
+  const caminho = path.join(dir, 'tendencia-congelada-semanal.json');
+  gravarSnapshotNoArquivo(caminho, { chaveSemanaAlvo: '2026-09-07', geradoEmIso: 'a', porRegistro: { X: { volume: { tendencia: 1 } } } });
+  gravarSnapshotNoArquivo(caminho, { chaveSemanaAlvo: '2026-09-07', geradoEmIso: 'b', porRegistro: { X: { volume: { tendencia: 2 } } } });
+  const conteudo = JSON.parse(fs.readFileSync(caminho, 'utf8'));
+  assert.equal(Object.keys(conteudo).length, 1);
+  assert.equal(conteudo['2026-09-07'].porRegistro.X.volume.tendencia, 2);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
