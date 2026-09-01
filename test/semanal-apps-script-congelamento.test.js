@@ -19,20 +19,41 @@ const TOKEN_BOM = 'token-de-teste-abc123';
 // UTC ('...T00:00:00Z') não daria dente ao teste: em fuso negativo (o nosso)
 // os getters getUTC* e os locais bateriam com o mesmo dia mesmo estando
 // errados, e a mutação que remove a proteção não derrubaria nada.
+//
+// O formato é por CÉLULA, não por chamada de getRange: o script formata só as
+// duas colunas de data (SemanaInicio e CongeladoEm) e depois escreve a faixa
+// inteira de 9 colunas de uma vez. Um dublê que guardasse o formato "da faixa"
+// não conseguiria distinguir isso, e o teste passaria com qualquer combinação.
+//
+// As colunas NUMÉRICAS em texto também são modeladas: o Sheets guardaria o
+// número na representação do locale ('3,5'), que na releitura vira NaN.
 function criarSheetsDuble() {
   const linhas = [['Ano', 'SemanaInicio', 'Chave', 'Volume', 'Financeiro', 'Equipe', 'ProdutividadeMedia', 'Autor', 'CongeladoEm']];
-  function faixa(inicioLinha, numLinhas) {
-    let formatoTexto = false;
+  const formatoTextoDe = new Map(); // 'linha,coluna' (1-based) -> bool
+  function chaveCelula(l, c) { return l + ',' + c; }
+  function faixa(inicioLinha, inicioColuna, numLinhas, numColunas) {
     return {
-      setNumberFormat(f) { formatoTexto = (f === '@'); return this; },
+      setNumberFormat(f) {
+        for (let l = inicioLinha; l < inicioLinha + numLinhas; l++) {
+          for (let c = inicioColuna; c < inicioColuna + numColunas; c++) {
+            formatoTextoDe.set(chaveCelula(l, c), f === '@');
+          }
+        }
+        return this;
+      },
       setValues(valores) {
         valores.forEach((linha, i) => {
-          linhas[inicioLinha - 1 + i] = linha.map((v) => {
+          const numeroDaLinha = inicioLinha + i;
+          linhas[numeroDaLinha - 1] = linha.map((v, j) => {
+            const texto = formatoTextoDe.get(chaveCelula(numeroDaLinha, inicioColuna + j)) === true;
             // A coerção só acontece quando a célula NÃO está formatada como texto.
-            if (!formatoTexto && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+            if (!texto && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
               const [ano, mes, dia] = v.split('-').map(Number);
               return new Date(ano, mes - 1, dia);
             }
+            // Número numa célula de TEXTO: o Sheets guarda a representação
+            // textual seguindo o locale da planilha (pt-BR usa vírgula).
+            if (texto && typeof v === 'number') return String(v).replace('.', ',');
             return v;
           });
         });
@@ -40,11 +61,15 @@ function criarSheetsDuble() {
       },
     };
   }
+  const contadores = { getDataRange: 0 };
   const aba = {
-    getDataRange: () => ({ getValues: () => linhas.map((l) => l.slice()) }),
+    getDataRange: () => {
+      contadores.getDataRange++;
+      return { getValues: () => linhas.map((l) => l.slice()) };
+    },
     getLastRow: () => linhas.length,
     getMaxRows: () => Math.max(linhas.length, 1000),
-    getRange: (l, c, nl, nc) => faixa(l, nl),
+    getRange: (l, c, nl, nc) => faixa(l, c, nl, nc),
     appendRow: (l) => { linhas.push(l); },
     // Escreve uma linha IGNORANDO qualquer formato de célula, para simular o
     // que uma gravação torta deixaria na planilha (sem setNumberFormat('@')
@@ -60,6 +85,7 @@ function criarSheetsDuble() {
   return {
     aba,
     linhas,
+    contadores,
     SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: () => aba, insertSheet: () => aba }) },
   };
 }
@@ -84,7 +110,21 @@ function carregarScript(duble) {
 
 function corpoDe(saida) { return JSON.parse(saida.conteudo); }
 
-test('doPost grava e doGet le de volta a MESMA chave de semana (sobrevive a coercao de data)', () => {
+// A LEITURA é POST com acao: 'ler' -- o token saiu da query string do GET,
+// onde aparecia nos logs de execução do Apps Script (um token vazado permite
+// recuperar a senha do dashboard).
+function ler(ctx, semana, token) {
+  return corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
+    acao: 'ler', token: token, semana: semana,
+  }) } }));
+}
+
+test('doGet nao le nada -- responde que a leitura e por POST', () => {
+  const ctx = carregarScript(criarSheetsDuble());
+  assert.equal(corpoDe(ctx.doGet({ parameter: { semana: '2026-08-31', token: TOKEN_BOM } })).erro, 'use-post');
+});
+
+test('doPost grava e a leitura por POST traz de volta a MESMA chave de semana (sobrevive a coercao de data)', () => {
   const duble = criarSheetsDuble();
   const ctx = carregarScript(duble);
   const gravado = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
@@ -94,7 +134,7 @@ test('doPost grava e doGet le de volta a MESMA chave de semana (sobrevive a coer
   assert.equal(gravado.ok, true);
   assert.equal(gravado.gravadas, 1);
 
-  const lido = corpoDe(ctx.doGet({ parameter: { semana: '2026-08-31', token: TOKEN_BOM } }));
+  const lido = ler(ctx, '2026-08-31', TOKEN_BOM);
   assert.equal(lido.linhas.length, 1, 'a linha gravada tem de ser encontrada na releitura');
   assert.equal(lido.linhas[0].chaveMatriz, 'SUP-1||SP');
   assert.equal(lido.linhas[0].volume, 10);
@@ -112,7 +152,7 @@ test('doPost RECUSA quando a semana ja tem qualquer linha, sem sobrescrever', ()
   assert.equal(segunda.erro, 'ja-congelada');
   assert.equal(segunda.autor, 'primeiro');
 
-  const lido = corpoDe(ctx.doGet({ parameter: { semana: '2026-08-31', token: TOKEN_BOM } }));
+  const lido = ler(ctx, '2026-08-31', TOKEN_BOM);
   assert.equal(lido.linhas[0].volume, 10, 'o valor original NAO pode ter sido sobrescrito');
 });
 
@@ -145,7 +185,7 @@ test('a leitura cura linha já gravada como Date (sem proteção de texto), no f
   const ctx = carregarScript(duble);
   duble.aba.__injetarLinhaCrua(['2026', '2026-08-31', 'SUP-2||ST', 5, 15, 1, 5, 'antigo', '2026-08-20T00:00:00Z']);
 
-  const lido = corpoDe(ctx.doGet({ parameter: { semana: '2026-08-31', token: TOKEN_BOM } }));
+  const lido = ler(ctx, '2026-08-31', TOKEN_BOM);
   assert.equal(lido.linhas.length, 1, 'a linha gravada como Date tem de ser encontrada na releitura');
   assert.equal(lido.linhas[0].chaveMatriz, 'SUP-2||ST');
 });
@@ -153,8 +193,74 @@ test('a leitura cura linha já gravada como Date (sem proteção de texto), no f
 test('token errado e recusado na leitura e na escrita', () => {
   const duble = criarSheetsDuble();
   const ctx = carregarScript(duble);
-  assert.equal(corpoDe(ctx.doGet({ parameter: { semana: '2026-08-31', token: 'errado' } })).erro, 'token');
+  assert.equal(ler(ctx, '2026-08-31', 'errado').erro, 'token');
   assert.equal(corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
     token: 'errado', chaveSegunda: '2026-08-31', linhas: [],
   }) } })).erro, 'token');
+});
+
+// Achado 4 da revisão final: o cinto de setNumberFormat('@') estava sendo
+// aplicado à faixa INTEIRA de 9 colunas, incluindo as 4 numéricas. Número em
+// célula de texto vira a representação do locale ('3,5'), e Number('3,5') é
+// NaN -- que não é null, passa direto pelos `=== null` do .gs e contamina
+// somarTendenciaCongelada em silêncio.
+test('valor fracionario volta como NUMERO na releitura, nunca string nem NaN', () => {
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'teste', congeladoEm: '2026-08-28T22:00:00Z',
+    linhas: [{ chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 3.5, financeiro: 20.25, equipe: 1.5, produtividadeMedia: 2.75 }],
+  }) } });
+
+  const lido = ler(ctx, '2026-08-31', TOKEN_BOM);
+  assert.equal(typeof lido.linhas[0].volume, 'number');
+  assert.equal(lido.linhas[0].volume, 3.5, 'Volume nao pode virar NaN nem string por causa do formato de texto');
+  assert.equal(lido.linhas[0].financeiro, 20.25);
+  assert.equal(lido.linhas[0].equipe, 1.5);
+  assert.equal(lido.linhas[0].produtividadeMedia, 2.75);
+});
+
+// Achado 1 da revisão final: doPost varria a Sheet INTEIRA uma vez por LINHA do
+// payload (~340 linhas reais, no máximo 2 chaves distintas de semana), com o
+// custo crescendo com o quadrado das semanas já congeladas até estourar o
+// limite de 6 min do Apps Script.
+test('doPost le a planilha um numero CONSTANTE de vezes, nao uma por linha do payload', () => {
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  const linhasPayload = [];
+  for (let i = 0; i < 200; i++) {
+    linhasPayload.push({ chave: i % 2 ? '2026-08-31' : '2026-09-01', chaveMatriz: 'SUP-' + i + '||SP',
+      volume: i, financeiro: i, equipe: 1, produtividadeMedia: 1 });
+  }
+  duble.contadores.getDataRange = 0;
+  const r = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'teste', congeladoEm: '2026-08-28T22:00:00Z',
+    linhas: linhasPayload,
+  }) } }));
+  assert.equal(r.ok, true);
+  assert.equal(r.gravadas, 200);
+  assert.ok(duble.contadores.getDataRange <= 2,
+    'a checagem de "ja congelada" tem de ler a planilha UMA vez, nao uma vez por linha do payload (leu '
+    + duble.contadores.getDataRange + ' vezes)');
+});
+
+// A regra observável da recusa não pode mudar com a reescrita: basta UMA linha
+// de QUALQUER uma das chaves-alvo já existir para recusar a gravação inteira --
+// inclusive quando a colisão está no SEGUNDO fragmento (semana que cruza mês).
+test('doPost recusa quando so o SEGUNDO fragmento da semana ja existe', () => {
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'primeiro', congeladoEm: '2026-08-28T22:00:00Z',
+    linhas: [{ chave: '2026-09-01', chaveMatriz: 'SUP-9||SP', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1 }],
+  }) } });
+  const segunda = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'segundo', congeladoEm: '2026-08-31T22:00:00Z',
+    linhas: [
+      { chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1 },
+      { chave: '2026-09-01', chaveMatriz: 'SUP-9||SP', volume: 2, financeiro: 2, equipe: 1, produtividadeMedia: 1 },
+    ],
+  }) } }));
+  assert.equal(segunda.erro, 'ja-congelada');
+  assert.equal(segunda.autor, 'primeiro');
 });

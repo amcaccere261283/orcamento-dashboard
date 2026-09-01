@@ -9,9 +9,27 @@
 //  2. Datas são gravadas como TEXTO. O Sheets coage '2026-08-31' pra Date, e
 //     String(Date) nunca casa com a string ISO na releitura -- o script
 //     gravaria e descartaria a própria linha, em silêncio.
+//
+// O formato de texto vale SÓ para as duas colunas de data (SemanaInicio e
+// CongeladoEm). Aplicá-lo à faixa inteira colocava as 4 colunas NUMÉRICAS em
+// texto também, e aí o Sheets pode guardar o número na representação textual
+// do locale da planilha ('3,5' em vez de '3.5'): na releitura Number('3,5')
+// vira NaN, que não é null e passa direto pelos `=== null` abaixo, contaminando
+// qualquer soma em silêncio.
 var ABA = 'Congelamento';
 var CABECALHO = ['Ano', 'SemanaInicio', 'Chave', 'Volume', 'Financeiro', 'Equipe',
   'ProdutividadeMedia', 'Autor', 'CongeladoEm'];
+var COL_SEMANA_INICIO = 2;
+var COL_CONGELADO_EM = 9;
+
+// Formata como TEXTO PURO só as duas colunas de data da faixa que começa em
+// 'primeiraLinha' e tem 'numLinhas' linhas. Duas chamadas em faixas separadas:
+// as colunas não são contíguas, e getRangeList não expõe setNumberFormat em
+// todas as versões do runtime -- duas faixas explícitas funcionam em qualquer.
+function formatarColunasDeDataComoTexto(aba, primeiraLinha, numLinhas) {
+  aba.getRange(primeiraLinha, COL_SEMANA_INICIO, numLinhas, 1).setNumberFormat('@');
+  aba.getRange(primeiraLinha, COL_CONGELADO_EM, numLinhas, 1).setNumberFormat('@');
+}
 
 function tokenEsperado() {
   return PropertiesService.getScriptProperties().getProperty('TOKEN_DASHBOARD');
@@ -28,10 +46,11 @@ function abaCongelamento() {
   if (!aba) {
     aba = planilha.insertSheet(ABA);
     aba.getRange(1, 1, 1, CABECALHO.length).setValues([CABECALHO]);
-    // Colunas em TEXTO PURO desde o nascimento -- ver normalizarDia abaixo
-    // para o motivo. Protege quem pré-preencher uma linha à mão antes do
-    // primeiro doPost.
-    aba.getRange(1, 1, aba.getMaxRows(), CABECALHO.length).setNumberFormat('@');
+    // Colunas de DATA em TEXTO PURO desde o nascimento -- ver normalizarDia
+    // abaixo para o motivo. Protege quem pré-preencher uma linha à mão antes
+    // do primeiro doPost. As numéricas ficam de fora de propósito (ver o
+    // comentário no topo).
+    formatarColunasDeDataComoTexto(aba, 1, aba.getMaxRows());
   }
   return aba;
 }
@@ -82,15 +101,20 @@ function resposta(objeto) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function doGet(e) {
-  var p = (e && e.parameter) || {};
-  if (!tokenValido(p.token)) return resposta({ erro: 'token' });
-  return resposta({ linhas: linhasDaSemana(p.semana) });
+// A LEITURA também é POST (corpo com acao: 'ler'), não GET. O token viajava na
+// query string do GET, onde aparece nos logs de execução do Apps Script e em
+// qualquer registro de requisição -- e um token vazado é senha do dashboard
+// vazada. No corpo do POST ele não é registrado.
+//
+// doGet fica só como resposta explícita a quem abrir a URL no navegador.
+function doGet() {
+  return resposta({ erro: 'use-post' });
 }
 
 function doPost(e) {
   var corpo = JSON.parse(e.postData.contents);
   if (!tokenValido(corpo.token)) return resposta({ erro: 'token' });
+  if (corpo.acao === 'ler') return resposta({ linhas: linhasDaSemana(corpo.semana) });
 
   var trava = LockService.getScriptLock();
   trava.waitLock(30000);
@@ -99,12 +123,27 @@ function doPost(e) {
     // mesma chaveSegunda entram como linhas com chaves diferentes, então a
     // varredura é por qualquer linha cuja SemanaInicio pertença a esta
     // gravação). Basta uma linha existir pra recusar.
+    //
+    // UMA leitura da planilha, não uma por linha do payload: o payload tem
+    // ~340 linhas e no máximo 2 chaves distintas de semana, e linhasDaSemana
+    // faz getDataRange().getValues() (a planilha INTEIRA) a cada chamada --
+    // varrer por linha custava até 340 leituras completas por clique, com o
+    // custo crescendo com o QUADRADO das semanas já congeladas até estourar o
+    // limite de 6 min do Apps Script. Extrai as chaves DISTINTAS primeiro e
+    // varre os dados uma vez só. Regra observável idêntica: recusa quando
+    // qualquer linha de qualquer chave-alvo já existe, com autor/congeladoEm
+    // do primeiro achado.
+    var chaves = {};
+    (corpo.linhas || []).forEach(function (l) { chaves[String(l.chave)] = true; });
+    var dados = abaCongelamento().getDataRange().getValues();
     var existentes = [];
-    (corpo.linhas || []).forEach(function (linha) {
-      if (existentes.length) return;
-      var achadas = linhasDaSemana(linha.chave);
-      if (achadas.length) existentes = achadas;
-    });
+    for (var i = 1; i < dados.length && !existentes.length; i++) {
+      // normalizarDia: mesma proteção contra a coerção de Date que
+      // linhasDaSemana usa na releitura.
+      if (chaves[normalizarDia(dados[i][COL_SEMANA_INICIO - 1])]) {
+        existentes = [{ autor: String(dados[i][7] || ''), congeladoEm: String(dados[i][8] || '') }];
+      }
+    }
     if (existentes.length) {
       return resposta({ erro: 'ja-congelada', autor: existentes[0].autor, congeladoEm: existentes[0].congeladoEm });
     }
@@ -117,9 +156,10 @@ function doPost(e) {
     });
     if (linhasParaGravar.length) {
       var primeira = Math.max(aba.getLastRow() + 1, 2);
-      var faixa = aba.getRange(primeira, 1, linhasParaGravar.length, CABECALHO.length);
-      faixa.setNumberFormat('@'); // ANTES de escrever -- é o que impede a coerção de data
-      faixa.setValues(linhasParaGravar);
+      // ANTES de escrever -- é o que impede a coerção de data. Só as duas
+      // colunas de data: ver o comentário no topo do arquivo.
+      formatarColunasDeDataComoTexto(aba, primeira, linhasParaGravar.length);
+      aba.getRange(primeira, 1, linhasParaGravar.length, CABECALHO.length).setValues(linhasParaGravar);
     }
     return resposta({ ok: true, gravadas: linhasParaGravar.length });
   } finally {
