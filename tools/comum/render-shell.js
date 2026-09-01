@@ -433,6 +433,20 @@ function mostrarErroSenha(msg) {
   erro.style.display = 'block';
 }
 
+// Sal fixo e PÚBLICO -- ele não esconde a senha, só impede que o token sirva
+// em outro lugar. Quem já tem a senha deriva o token de qualquer jeito; quem
+// não tem esbarra no PBKDF2 do blob antes. O que faz a comparação valer é o
+// valor esperado morar no servidor (Script Properties do Apps Script).
+var SAL_TOKEN = 'congelamento-semanal:v1:';
+
+async function derivarTokenSheet(senha) {
+  var bytes = new TextEncoder().encode(SAL_TOKEN + senha);
+  var hash = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.prototype.map.call(new Uint8Array(hash), function (b) {
+    return ('0' + b.toString(16)).slice(-2);
+  }).join('');
+}
+
 async function tentarDesbloquear() {
   var campo = document.getElementById('campo-senha');
   var botao = document.getElementById('btn-desbloquear');
@@ -441,6 +455,7 @@ async function tentarDesbloquear() {
   botao.textContent = 'Verificando…';
   try {
     var jsonTexto = await decifrarComSenha(window.__DADOS_CIFRADOS__, senha);
+    window.__TOKEN_SHEET__ = await derivarTokenSheet(senha);
     window.__REGISTROS__ = JSON.parse(jsonTexto);
     window.__REGISTROS__ = fecharTendenciaVigente(window.__REGISTROS__, window.__VIGENTE_IDX__);
     document.getElementById('gate-senha').style.display = 'none';

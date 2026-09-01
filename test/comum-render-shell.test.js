@@ -1,6 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
+const crypto = require('node:crypto');
 const { cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio, scriptFiltros } = require('../tools/comum/render-shell.js');
 
 test('cssBase traz os tokens e os componentes compartilhados', () => {
@@ -146,4 +147,37 @@ test('montarFiltroMulti recebe estado e aoMudar como parâmetros explícitos -- 
   const js = scriptFiltros();
   assert.match(js, /function montarFiltroMulti\(cfg, registros, estado, aoMudar\)/);
   assert.doesNotMatch(js, /estado \|\| filtrosSelecionados/);
+});
+
+// O token de congelamento (Task 5 do plano congelar-semana-botao): derivado
+// da senha logo após decifrarComSenha resolver (senha já provada correta),
+// pra o Apps Script poder autenticar quem chama sem guardar a senha crua em
+// lugar nenhum. O token tem de ser SHA-256 de SAL_TOKEN + senha, em hex
+// minúsculo -- reproduzível fora do navegador com node:crypto, porque o
+// usuário calcula o mesmo valor por linha de comando pra colar nas Script
+// Properties do Apps Script. Se a derivação mudar, o botão para de
+// funcionar com "token recusado".
+test('o token e SHA-256 de SAL_TOKEN + senha, em hex minusculo', async () => {
+  const fonte = scriptDesbloqueio();
+  const m = fonte.match(/var SAL_TOKEN = '([^']+)'/);
+  assert.ok(m, 'SAL_TOKEN precisa existir como constante literal no script do cliente');
+  const sal = m[1];
+  const esperado = crypto.createHash('sha256').update(sal + 'senha-de-teste').digest('hex');
+  assert.match(esperado, /^[0-9a-f]{64}$/);
+  assert.match(fonte, /window\.__TOKEN_SHEET__ = await derivarTokenSheet\(senha\)/);
+});
+
+test('o token e derivado depois de decifrarComSenha resolver e antes de montarDashboard', () => {
+  const fonte = scriptDesbloqueio();
+  const idxDecifrar = fonte.indexOf('decifrarComSenha(window.__DADOS_CIFRADOS__, senha)');
+  const idxToken = fonte.indexOf('window.__TOKEN_SHEET__');
+  const idxMontar = fonte.indexOf('montarDashboard(window.__REGISTROS__)');
+  assert.ok(idxDecifrar !== -1 && idxToken !== -1 && idxMontar !== -1);
+  assert.ok(idxDecifrar < idxToken && idxToken < idxMontar);
+});
+
+test('a senha crua não fica retida em nenhum global -- só o token derivado', () => {
+  const fonte = scriptDesbloqueio();
+  assert.doesNotMatch(fonte, /window\.__SENHA__/);
+  assert.doesNotMatch(fonte, /window\.senha/);
 });
