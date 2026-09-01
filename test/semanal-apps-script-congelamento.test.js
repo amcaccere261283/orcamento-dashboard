@@ -71,6 +71,8 @@ function criarSheetsDuble() {
     getMaxRows: () => Math.max(linhas.length, 1000),
     getRange: (l, c, nl, nc) => faixa(l, c, nl, nc),
     appendRow: (l) => { linhas.push(l); },
+    // 1-based, igual ao Sheets real: remove a linha e desloca as seguintes.
+    deleteRow: (l) => { linhas.splice(l - 1, 1); },
     // Escreve uma linha IGNORANDO qualquer formato de célula, para simular o
     // que uma gravação torta deixaria na planilha (sem setNumberFormat('@')
     // antes de setValues) -- o mesmo mecanismo que
@@ -263,4 +265,79 @@ test('doPost recusa quando so o SEGUNDO fragmento da semana ja existe', () => {
   }) } }));
   assert.equal(segunda.erro, 'ja-congelada');
   assert.equal(segunda.autor, 'primeiro');
+});
+
+test('doPost com acao desfazer apaga so as linhas das chaves pedidas', () => {
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  // Duas semanas congeladas, uma linha cada.
+  ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, acao: 'congelar', chaveSegunda: '2026-08-31', autor: 'a', congeladoEm: 'x',
+    linhas: [{ chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1 }],
+  }) } });
+  ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, acao: 'congelar', chaveSegunda: '2026-09-07', autor: 'a', congeladoEm: 'x',
+    linhas: [{ chave: '2026-09-07', chaveMatriz: 'SUP-1||SP', volume: 2, financeiro: 2, equipe: 2, produtividadeMedia: 2 }],
+  }) } });
+
+  const resultado = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, acao: 'desfazer', chaves: ['2026-08-31'],
+  }) } }));
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.apagadas, 1);
+
+  // doGet nao le nada (so devolve {erro:'use-post'}) -- leitura e sempre via
+  // doPost com acao 'ler', mesmo padrao que os testes de 'ler'/'congelar' ja
+  // usam neste arquivo.
+  const lida0831 = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({ token: TOKEN_BOM, acao: 'ler', semana: '2026-08-31' }) } }));
+  const lida0907 = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({ token: TOKEN_BOM, acao: 'ler', semana: '2026-09-07' }) } }));
+  assert.equal(lida0831.linhas.length, 0, 'a semana apagada nao pode mais aparecer');
+  assert.equal(lida0907.linhas.length, 1, 'a semana NAO listada pra apagar continua intacta');
+});
+
+test('doPost com acao desfazer apaga os DOIS fragmentos de uma semana que cruza mes', () => {
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, acao: 'congelar', chaveSegunda: '2026-08-31', autor: 'a', congeladoEm: 'x',
+    linhas: [
+      { chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1 },
+      { chave: '2026-09-01', chaveMatriz: 'SUP-1||SP', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1 },
+    ],
+  }) } });
+
+  const resultado = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, acao: 'desfazer', chaves: ['2026-08-31', '2026-09-01'],
+  }) } }));
+  assert.equal(resultado.apagadas, 2);
+
+  const lida = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({ token: TOKEN_BOM, acao: 'ler', semana: '2026-08-31' }) } }));
+  assert.equal(lida.linhas.length, 0);
+});
+
+test('doPost com acao desfazer e token errado recusa sem apagar nada', () => {
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, acao: 'congelar', chaveSegunda: '2026-08-31', autor: 'a', congeladoEm: 'x',
+    linhas: [{ chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1 }],
+  }) } });
+
+  const resultado = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
+    token: 'errado', acao: 'desfazer', chaves: ['2026-08-31'],
+  }) } }));
+  assert.equal(resultado.erro, 'token');
+
+  const lida = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({ token: TOKEN_BOM, acao: 'ler', semana: '2026-08-31' }) } }));
+  assert.equal(lida.linhas.length, 1, 'nada pode ter sido apagado com token errado');
+});
+
+test('doPost com acao desfazer e nenhuma linha encontrada devolve sucesso com apagadas 0, nao erro', () => {
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  const resultado = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, acao: 'desfazer', chaves: ['2099-01-01'],
+  }) } }));
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.apagadas, 0);
 });

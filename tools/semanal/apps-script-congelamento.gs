@@ -116,6 +116,28 @@ function doPost(e) {
   if (!tokenValido(corpo.token)) return resposta({ erro: 'token' });
   if (corpo.acao === 'ler') return resposta({ linhas: linhasDaSemana(corpo.semana) });
 
+  if (corpo.acao === 'desfazer') {
+    var travaDesfazer = LockService.getScriptLock();
+    travaDesfazer.waitLock(30000);
+    try {
+      var chavesApagar = {};
+      (corpo.chaves || []).forEach(function (c) { chavesApagar[String(c)] = true; });
+      var abaDesfazer = abaCongelamento();
+      var dadosDesfazer = abaDesfazer.getDataRange().getValues();
+      var linhasParaApagar = [];
+      for (var j = 1; j < dadosDesfazer.length; j++) {
+        if (chavesApagar[normalizarDia(dadosDesfazer[j][COL_SEMANA_INICIO - 1])]) linhasParaApagar.push(j + 1);
+      }
+      // De trás pra frente: apagar de cima pra baixo desloca o índice das
+      // linhas seguintes, e o próximo deleteRow erraria a linha.
+      linhasParaApagar.sort(function (a, b) { return b - a; })
+        .forEach(function (linha) { abaDesfazer.deleteRow(linha); });
+      return resposta({ ok: true, apagadas: linhasParaApagar.length });
+    } finally {
+      travaDesfazer.releaseLock();
+    }
+  }
+
   var trava = LockService.getScriptLock();
   trava.waitLock(30000);
   try {
