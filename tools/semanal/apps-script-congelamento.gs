@@ -28,20 +28,34 @@ function abaCongelamento() {
   if (!aba) {
     aba = planilha.insertSheet(ABA);
     aba.getRange(1, 1, 1, CABECALHO.length).setValues([CABECALHO]);
+    // Colunas em TEXTO PURO desde o nascimento -- ver normalizarDia abaixo
+    // para o motivo. Protege quem pré-preencher uma linha à mão antes do
+    // primeiro doPost.
+    aba.getRange(1, 1, aba.getMaxRows(), CABECALHO.length).setNumberFormat('@');
   }
   return aba;
 }
 
 // O Sheets pode devolver Date onde gravamos texto (planilha antiga, edição
 // manual). Normaliza os dois casos pra 'YYYY-MM-DD'.
+//
+// getFullYear/getMonth/getDate, e NÃO os getUTC*: uma célula de data-sem-hora
+// volta como meia-noite no fuso da PLANILHA. Em fuso negativo (o nosso,
+// GMT-3) os dois dariam o mesmo dia, mas em fuso positivo o getUTC* cairia no
+// dia anterior -- e o erro só apareceria para quem mudasse o fuso da
+// planilha.
+//
+// Object.prototype.toString em vez de instanceof: o Date pode vir de outro
+// contexto de execução, e aí instanceof devolve false sem avisar.
 function normalizarDia(valor) {
-  if (valor instanceof Date) {
-    var ano = valor.getUTCFullYear();
-    var mes = ('0' + (valor.getUTCMonth() + 1)).slice(-2);
-    var dia = ('0' + valor.getUTCDate()).slice(-2);
-    return ano + '-' + mes + '-' + dia;
+  if (Object.prototype.toString.call(valor) === '[object Date]') {
+    var mes = valor.getMonth() + 1;
+    var dia = valor.getDate();
+    return valor.getFullYear()
+      + '-' + (mes < 10 ? '0' : '') + mes
+      + '-' + (dia < 10 ? '0' : '') + dia;
   }
-  return String(valor || '');
+  return String(valor === undefined || valor === null ? '' : valor);
 }
 
 function linhasDaSemana(chaveSemana) {
