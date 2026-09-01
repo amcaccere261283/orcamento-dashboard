@@ -2119,7 +2119,7 @@ document.getElementById('atualizar-dashboard').addEventListener('click', atualiz
 // nunca soltos no markup ou no JS de cliente -- porque SUP/Grupo/Tomador/
 // Tipologia são protegidos pela senha e este HTML vai pra um GitHub Pages
 // público.
-function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm, logoDataUri, iconDataUri, avisoAtualizacao, ultimaAtualizacaoOkIso, congeladoSemanal }) {
+function renderSemanal({ registros, baseline, demandas, periodos, senha, geradoEm, logoDataUri, iconDataUri, avisoAtualizacao, ultimaAtualizacaoOkIso }) {
   if (!senha) {
     throw new Error('renderSemanal requer "senha" -- os registros (SUP/Grupo/Tomador/Tipologia/valores) são cifrados com ela antes de ir pro HTML.');
   }
@@ -2236,16 +2236,7 @@ ${markupFiltros(FILTROS_ALERTAS_SEMANAL, { recuo: '      ', classes: 'filtros-al
   </div>
   </main>
   <script>window.__VIGENTE_IDX__ = ${vigenteIdx}; window.__ANO__ = ${periodos[0].getUTCFullYear()};</script>
-  <!-- window.__CONGELADO_SEMANAL__: snapshot de tendencia congelada
-       (2026-08-31), gravado toda sexta 22h por
-       tools/semanal/congelar-tendencia-semanal.js e lido de docs/ pelo build.
-       Sempre um objeto -- {} quando nao ha snapshot nenhum, nunca undefined:
-       o Consolidado le esse global a cada redesenho. Vai na MESMA tag de
-       __ULTIMA_ATUALIZACAO_OK__ de proposito: varios testes contam as tags
-       de script da pagina como prova de estrutura (e a propria contagem e
-       feita por regex sobre o HTML, entao nem esta explicacao pode escrever a
-       tag literalmente aqui). -->
-  <script>window.__ULTIMA_ATUALIZACAO_OK__ = ${ultimaAtualizacaoOkIso ? JSON.stringify(ultimaAtualizacaoOkIso) : 'null'}; window.__CONGELADO_SEMANAL__ = ${JSON.stringify(congeladoSemanal || {})};</script>
+  <script>window.__ULTIMA_ATUALIZACAO_OK__ = ${ultimaAtualizacaoOkIso ? JSON.stringify(ultimaAtualizacaoOkIso) : 'null'};</script>
   <script>${SCRIPT_AVISO_ATUALIZACAO_ATRASADA}</script>
   <script>window.__DADOS_CIFRADOS__ = ${dadosCifradosJson};</script>
   <script>${scriptDesbloqueio()}</script>

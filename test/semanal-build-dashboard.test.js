@@ -296,47 +296,28 @@ test('subtítulo do cabeçalho mostra só mês/ano quando não há aviso', () =>
   assert.match(html, /<div class="generated">Jan\/1970<\/div>/);
 });
 
-// --- Snapshot congelado + montarRegistrosEDemandas (2026-08-31) -------------
+// --- montarRegistrosEDemandas (2026-08-31) ----------------------------------
 //
-// Os três testes abaixo exercitam o BUILD de verdade (MATRIZ viva no G:\ +
-// os CSVs de dist/ já commitados), não uma fixture sintética. Por isso são
-// PULADOS quando a planilha da MATRIZ não está acessível: numa máquina sem o
-// Google Drive montado eles não teriam o que ler, e reprovar ali seria
-// reprovar o ambiente, não o código (mesmo espírito de
+// Exercita o BUILD de verdade (MATRIZ viva no G:\ + os CSVs de dist/ já
+// commitados), não uma fixture sintética. Por isso é PULADO quando a
+// planilha da MATRIZ não está acessível: numa máquina sem o Google Drive
+// montado o teste não teria o que ler, e reprovar ali seria reprovar o
+// ambiente, não o código (mesmo espírito de
 // tools/medicoes/verificar-planilha-real.js no repositório irmão -- prova
 // contra a fonte real, mas sem prender a suíte offline).
+//
+// Os testes do snapshot de tendência congelada (window.__CONGELADO_SEMANAL__
+// baked no build a partir de docs/tendencia-congelada-semanal.json,
+// lerCongeladoSemanal e gravarSnapshotNoArquivo) saíram na Task 9
+// (2026-09-01): o mecanismo de assar o congelado no HTML publicado virou
+// código morto quando o Consolidado passou a buscá-lo em tempo de execução
+// via Apps Script (Task 8) -- exatamente o vazamento (dado real num JSON
+// publicado no Pages) que motivou trocar o cron pelo botão "Congelar semana".
 const fsBuild = require('node:fs');
-const pathBuild = require('node:path');
-const osBuild = require('node:os');
 const configOrcamento = require('../tools/orcamento/config.js');
-const { montarRegistrosEDemandas, build } = require('../tools/semanal/build-dashboard.js');
+const { montarRegistrosEDemandas } = require('../tools/semanal/build-dashboard.js');
 
 const TEM_MATRIZ = fsBuild.existsSync(configOrcamento.caminhoArquivo);
-const RAIZ_REPO = pathBuild.join(__dirname, '..');
-const CAMINHO_SNAPSHOT_REPO = pathBuild.join(RAIZ_REPO, 'docs', 'tendencia-congelada-semanal.json');
-const SENHA_BUILD_FAKE = 'senha-fake-de-teste-nao-e-a-real';
-
-// async/await de propósito: com `return fn()` (sem await) o finally rodaria
-// ANTES do build terminar, apagando a fixture no meio da leitura.
-async function comSnapshot(conteudo, fn) {
-  // Guarda o arquivo real (se existir) e restaura no fim -- este caminho é
-  // fixo em build-dashboard.js, então o teste tem de escrever no lugar certo.
-  const existia = fsBuild.existsSync(CAMINHO_SNAPSHOT_REPO);
-  const anterior = existia ? fsBuild.readFileSync(CAMINHO_SNAPSHOT_REPO, 'utf8') : null;
-  try {
-    if (conteudo === null) { if (existia) fsBuild.unlinkSync(CAMINHO_SNAPSHOT_REPO); }
-    else fsBuild.writeFileSync(CAMINHO_SNAPSHOT_REPO, conteudo, 'utf8');
-    return await fn();
-  } finally {
-    if (anterior === null) { if (fsBuild.existsSync(CAMINHO_SNAPSHOT_REPO)) fsBuild.unlinkSync(CAMINHO_SNAPSHOT_REPO); }
-    else fsBuild.writeFileSync(CAMINHO_SNAPSHOT_REPO, anterior, 'utf8');
-  }
-}
-
-function saidaTemporaria() {
-  const dir = fsBuild.mkdtempSync(pathBuild.join(osBuild.tmpdir(), 'semanal-build-'));
-  return pathBuild.join(dir, 'planejamento-semanal.html');
-}
 
 test('montarRegistrosEDemandas devolve registros e demandas sem precisar de ORCAMENTO_SENHA nem escrever nada em disco',
   { skip: TEM_MATRIZ ? false : 'MATRIZ do G:\ indisponível nesta máquina' }, async () => {
@@ -350,87 +331,3 @@ test('montarRegistrosEDemandas devolve registros e demandas sem precisar de ORCA
       if (senhaAntes !== undefined) process.env.ORCAMENTO_SENHA = senhaAntes;
     }
   });
-
-test('build embute window.__CONGELADO_SEMANAL__ quando docs/tendencia-congelada-semanal.json existe',
-  { skip: TEM_MATRIZ ? false : 'MATRIZ do G:\ indisponível nesta máquina' }, async () => {
-    const fixture = { '2026-W35': { geradoEm: '2026-08-28T22:00:00.000Z', porRegistro: { 'SUP-TESTE-99||ST': { volume: { tendencia: 123.5 } } } } };
-    const outPath = saidaTemporaria();
-    const html = await comSnapshot(JSON.stringify(fixture, null, 2) + '\n', async () => {
-      await build({ outPath, today: new Date('2026-08-31T12:00:00Z'), senha: SENHA_BUILD_FAKE });
-      return fsBuild.readFileSync(outPath, 'utf8');
-    });
-    assert.match(html, /window\.__CONGELADO_SEMANAL__ = \{/);
-    assert.ok(html.indexOf('"2026-W35"') !== -1, 'a chave da semana do snapshot precisa chegar ao HTML');
-    assert.ok(html.indexOf('123.5') !== -1, 'a tendência congelada precisa chegar ao HTML');
-  });
-
-test('build funciona normalmente (sem quebrar) quando o arquivo de snapshot NÃO existe -- o global sai {}, nunca undefined',
-  { skip: TEM_MATRIZ ? false : 'MATRIZ do G:\ indisponível nesta máquina' }, async () => {
-    const outPath = saidaTemporaria();
-    const html = await comSnapshot(null, async () => {
-      await build({ outPath, today: new Date('2026-08-31T12:00:00Z'), senha: SENHA_BUILD_FAKE });
-      return fsBuild.readFileSync(outPath, 'utf8');
-    });
-    // {} e não undefined: o cliente lê window.__CONGELADO_SEMANAL__[chave] a
-    // cada redesenho do Consolidado, e um undefined ali exigiria uma checagem
-    // em cada leitura.
-    assert.match(html, /window\.__CONGELADO_SEMANAL__ = \{\};/);
-  });
-
-// --- Fix round 1 (2026-08-31): snapshot corrompido não pode derrubar o build --
-//
-// Os dois lados da mesma proteção, e os dois testes rodam OFFLINE (não tocam
-// na MATRIZ do G:\): o LEITOR nunca lança, e o ESCRITOR nunca deixa um estado
-// truncado visível.
-const { lerCongeladoSemanal: lerCongeladoSemanalDireto } = require('../tools/semanal/build-dashboard.js');
-const { gravarSnapshotNoArquivo } = require('../tools/semanal/congelar-tendencia-semanal.js');
-
-test('lerCongeladoSemanal com JSON malformado devolve {} e NÃO lança -- um snapshot corrompido não pode derrubar as duas páginas', () => {
-  const avisos = [];
-  const warnOriginal = console.warn;
-  console.warn = (msg) => avisos.push(String(msg));
-  try {
-    const lido = comSnapshotSync('{"2026-W35": {"porRegistro": ', () => lerCongeladoSemanalDireto());
-    assert.deepStrictEqual(lido, {});
-  } finally {
-    console.warn = warnOriginal;
-  }
-  assert.ok(avisos.some((m) => m.indexOf('tendencia-congelada-semanal.json') !== -1),
-    'o aviso precisa dizer QUAL arquivo está ilegível');
-  assert.ok(avisos.some((m) => /IGNORADO|ignorado/.test(m)),
-    'o aviso precisa dizer que o congelamento vai ser ignorado neste build');
-});
-
-// Versão síncrona de comSnapshot (acima), para o teste síncrono do leitor.
-function comSnapshotSync(conteudo, fn) {
-  const existia = fsBuild.existsSync(CAMINHO_SNAPSHOT_REPO);
-  const anterior = existia ? fsBuild.readFileSync(CAMINHO_SNAPSHOT_REPO, 'utf8') : null;
-  try {
-    fsBuild.writeFileSync(CAMINHO_SNAPSHOT_REPO, conteudo, 'utf8');
-    return fn();
-  } finally {
-    if (anterior === null) fsBuild.unlinkSync(CAMINHO_SNAPSHOT_REPO);
-    else fsBuild.writeFileSync(CAMINHO_SNAPSHOT_REPO, anterior, 'utf8');
-  }
-}
-
-test('gravarSnapshotNoArquivo grava de forma atômica: não sobra .tmp e o conteúdo final é JSON válido', () => {
-  const dir = fsBuild.mkdtempSync(pathBuild.join(osBuild.tmpdir(), 'congelado-'));
-  const alvo = pathBuild.join(dir, 'tendencia-congelada-semanal.json');
-
-  gravarSnapshotNoArquivo(alvo, {
-    chaveSemanaAlvo: '2026-09-07', geradoEmIso: '2026-09-04T22:00:00.000Z',
-    porRegistro: { 'SUP-TESTE-99||ST': { volume: { tendencia: 10 } } },
-  });
-  // Segunda gravação: o caminho que LÊ o arquivo existente antes de reescrever.
-  gravarSnapshotNoArquivo(alvo, {
-    chaveSemanaAlvo: '2026-09-14', geradoEmIso: '2026-09-11T22:00:00.000Z',
-    porRegistro: { 'SUP-TESTE-99||ST': { volume: { tendencia: 20 } } },
-  });
-
-  assert.ok(!fsBuild.existsSync(alvo + '.tmp'), 'o arquivo temporário tem de sumir no rename');
-  assert.deepStrictEqual(fsBuild.readdirSync(dir), ['tendencia-congelada-semanal.json']);
-  const lido = JSON.parse(fsBuild.readFileSync(alvo, 'utf8'));
-  assert.deepStrictEqual(Object.keys(lido).sort(), ['2026-09-07', '2026-09-14']);
-  assert.strictEqual(lido['2026-09-14'].porRegistro['SUP-TESTE-99||ST'].volume.tendencia, 20);
-});

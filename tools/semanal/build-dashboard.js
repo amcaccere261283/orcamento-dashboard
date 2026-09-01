@@ -610,34 +610,6 @@ async function montarRegistrosEDemandas() {
   return { registros, demandas, periodos, baseline };
 }
 
-// Snapshot de tendência congelada (2026-08-31), gravado pelo CLI
-// tools/semanal/congelar-tendencia-semanal.js toda sexta 22h e versionado em
-// docs/ (é servido pelo Pages junto com a página). OPCIONAL, mesmo padrão
-// condicional de demandas-sondagem-online.csv: sem o arquivo o build roda
-// normalmente e o global sai {} -- nunca undefined, senão o cliente teria de
-// checar em cada leitura.
-const CAMINHO_CONGELADO_SEMANAL = path.join(__dirname, '..', '..', 'docs', 'tendencia-congelada-semanal.json');
-// NUNCA lança: um arquivo corrompido (JSON truncado por um job morto no meio da
-// gravação, disco cheio) derrubaria TODO build a partir daí -- as duas páginas,
-// inclusive o publish agendado do atualizar-arquivos.js -- até alguém apagar o
-// arquivo à mão. Um recurso opcional, que já tem fallback quando o arquivo não
-// existe, não pode ter blast radius maior quando ele existe e está ilegível.
-// (O escritor também virou atômico: ver gravarSnapshotNoArquivo,
-// congelar-tendencia-semanal.js -- são as duas metades da mesma proteção.)
-function lerCongeladoSemanal() {
-  if (!fs.existsSync(CAMINHO_CONGELADO_SEMANAL)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(CAMINHO_CONGELADO_SEMANAL, 'utf8'));
-  } catch (err) {
-    console.warn(
-      `AVISO: ${CAMINHO_CONGELADO_SEMANAL} existe mas não pôde ser lido/parseado (${err.message}) -- ` +
-      `o congelamento vai ser IGNORADO neste build (a aba Consolidado volta a recalcular a Tendência). ` +
-      `Apague ou corrija o arquivo e reconstrua para recuperá-lo.`
-    );
-    return {};
-  }
-}
-
 async function build({ outPath, today = new Date(), senha = process.env.ORCAMENTO_SENHA } = {}) {
   if (!senha) {
     throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
@@ -656,7 +628,6 @@ async function build({ outPath, today = new Date(), senha = process.env.ORCAMENT
     registros, baseline, demandas, periodos, senha, geradoEm: today,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
     avisoAtualizacao, ultimaAtualizacaoOkIso: ultimaAtualizacaoOkIsoValor,
-    congeladoSemanal: lerCongeladoSemanal(),
   });
 
   const resolvedOutPath = outPath || path.join(__dirname, '..', '..', 'dist', 'planejamento-semanal.html');
@@ -696,6 +667,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-  build, montarRegistrosEDemandas, lerCongeladoSemanal, baselineParaCliente, redirecionarSupsDesconhecidos, montarEquipesAtivas,
+  build, montarRegistrosEDemandas, baselineParaCliente, redirecionarSupsDesconhecidos, montarEquipesAtivas,
   montarEquipesRealizado, parseRosterOnlineCsvBruto, parseProducaoOnlineCsv,
 };

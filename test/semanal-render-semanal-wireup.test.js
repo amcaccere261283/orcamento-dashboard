@@ -1266,17 +1266,16 @@ test('marcar Volume na barra compartilhada troca as colunas de premissa do Conso
   assert.doesNotMatch(secao, /ticket médio previsto/);
 });
 
-// Snapshot congelado (2026-08-31): o build embute window.__CONGELADO_SEMANAL__
-// (build-dashboard.js le docs/tendencia-congelada-semanal.json) e
-// montarAbaConsolidado repassa esse global em opcoes.congeladoSemanal. Sem o
-// repasse, a aba continuaria RECALCULANDO a tendencia da semana -- e o
-// cabecalho diria "(recalculada)", que e exatamente o que este teste separa.
-// Task 7 (2026-09-01): o rótulo "(congelada)/(recalculada)" agora só acende
-// quando ALGUMA linha VISÍVEL realmente consumiu o valor congelado do snapshot.
-// Antes acendia só porque o snapshot EXISTIA. O novo comportamento é testado
-// em semanal-render-aba-consolidado.test.js, onde se pode controlar precisely
-// quais linhas são visíveis (via indices). O teste de wireup acima era do
-// comportamento antigo e foi removido.
+// Snapshot congelado: histórico. Este teste testava o mecanismo ANTIGO de
+// embutir window.__CONGELADO_SEMANAL__ no build (build-dashboard.js lendo
+// docs/tendencia-congelada-semanal.json) e montarAbaConsolidado repassando
+// esse global em opcoes.congeladoSemanal. Task 7 (2026-09-01) já tinha
+// removido o teste de wireup (o rótulo "(congelada)/(recalculada)" passou a
+// depender de linha VISÍVEL consumir o valor, testado em
+// semanal-render-aba-consolidado.test.js). Task 9 (2026-09-01) removeu o
+// próprio mecanismo de embedding no build: o Consolidado hoje busca o
+// congelado em tempo de execução via Apps Script, não mais de um snapshot
+// assado no HTML publicado.
 
 test('a aba Consolidado abre na semana EM CURSO do mês selecionado, não em S1', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];

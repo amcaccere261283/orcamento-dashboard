@@ -6,11 +6,13 @@
 // (BUNDLE_ARQUIVOS, render-semanal.js) -- por isso não pode ter nenhum
 // require de módulo Node puro (fs/path/child_process) nem de nada fora do
 // diretório same-dir que não seja suprido como global por fonteParaCliente():
-// um antigo job de linha de comando que rodava aqui (publicava o snapshot
-// direto no git às sextas 22h, substituído pelo botão) chegou a viver neste
-// mesmo arquivo com esses requires -- adicioná-lo ao bundle sem removê-los
-// primeiro quebra o <script> do cliente inteiro em silêncio (ReferenceError:
-// require is not defined, na primeira linha que os usa).
+// um require desses no ESCOPO DO MÓDULO rodaria na hora zero da IIFE do
+// bundle (buildBrowserBundle envolve cada arquivo assim) e quebraria o
+// <script> do cliente inteiro em silêncio (ReferenceError: require is not
+// defined, na primeira linha que o usa). Este arquivo já hospedou um job de
+// linha de comando que gravava o snapshot em disco (publicado direto no git
+// às sextas 22h) -- removido quando o botão passou a gravar direto na Sheet
+// via Apps Script (congelamento-sheet.js); daí o cuidado documentado aqui.
 const { chaveMatriz } = require('../comum/linha-base.js');
 const { semanasDoMes, indiceSemanaAtual } = require('./compute-semanal.js');
 const { calcularSeriesSemanaisDimensao } = require('./render-aba-semanal.js');
@@ -113,38 +115,6 @@ function calcularSnapshotSemanaAlvo(registros, demandas, hojeEpoch, chaveSegunda
   return { chaveSegunda: chaveSegundaAlvo, geradoEmIso: new Date().toISOString(), linhas: linhas };
 }
 
-// Grava o snapshot de tendência congelada em disco -- consumida hoje só por
-// build-dashboard.js (mecanismo antigo, window.__CONGELADO_SEMANAL__, ver o
-// comentário lá) e pelo teste de escrita atômica. NUNCA chamada do lado do
-// navegador (o botão "Congelar semana" grava direto na Sheet, via
-// congelamento-sheet.js) -- por isso os requires de fs/path ficam LAZY,
-// dentro da função, em vez de no topo do arquivo: um require de módulo Node
-// puro no ESCOPO DO MÓDULO rodaria na hora zero da IIFE do bundle
-// (buildBrowserBundle envolve cada arquivo assim) e quebraria o <script> do
-// cliente inteiro em silêncio -- dentro da função, só quebraria SE fosse
-// chamada, o que nunca acontece no navegador.
-function gravarSnapshotNoArquivo(caminhoArquivo, snapshot) {
-  var fs = require('node:fs');
-  var path = require('node:path');
-  fs.mkdirSync(path.dirname(caminhoArquivo), { recursive: true });
-  var atual = {};
-  if (fs.existsSync(caminhoArquivo)) {
-    atual = JSON.parse(fs.readFileSync(caminhoArquivo, 'utf8'));
-  }
-  atual[snapshot.chaveSemanaAlvo] = { geradoEm: snapshot.geradoEmIso, porRegistro: snapshot.porRegistro };
-  // Gravação ATÔMICA: arquivo temporário no MESMO diretório (rename entre
-  // volumes diferentes não é atômico) e depois renameSync por cima do destino.
-  // Sem isso, um job morto no meio da escrita -- ou disco cheio -- deixaria um
-  // JSON truncado em docs/, e o build-dashboard.js que o lê quebraria as DUAS
-  // páginas até alguém apagar o arquivo à mão. O leitor também se protege
-  // (lerCongeladoSemanal, build-dashboard.js), mas um recurso opcional não pode
-  // depender só disso: aqui o estado truncado nunca chega a ficar visível.
-  var temporario = caminhoArquivo + '.tmp';
-  fs.writeFileSync(temporario, JSON.stringify(atual, null, 2) + '\n');
-  fs.renameSync(temporario, caminhoArquivo);
-}
-
 module.exports = {
   proximaSegunda, formatarDiaIso, fragmentosDaSemanaAlvo, calcularSnapshotSemanaAlvo,
-  gravarSnapshotNoArquivo,
 };
