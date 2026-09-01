@@ -382,12 +382,12 @@ test('em Financeiro a única coluna extra é o Ticket médio -- equipes e produt
 });
 
 test('o cabeçalho carrega o intervalo de datas da semana e o rótulo (congelada)/(recalculada)', () => {
-  const congelada = renderCabecalho('volume', SEMANAS[0], true);
-  assert.match(congelada, /Previsto até a data \(01\/07 a 05\/07\) \(congelada\)/);
-  const recalculada = renderCabecalho('volume', SEMANAS[0], false);
-  assert.match(recalculada, /Previsto até a data \(01\/07 a 05\/07\) \(recalculada\)/);
+  const congelada = renderCabecalho(SEMANAS[0], true);
+  assert.match(congelada, /Desvio até a data \(congelada\)/);
+  const recalculada = renderCabecalho(SEMANAS[0], false);
+  assert.match(recalculada, /Desvio até a data \(recalculada\)/);
   assert.match(recalculada, /<th class="num">Realizado<\/th>/);
-  assert.match(recalculada, /<th class="num">Desvio até a data<\/th>/);
+  assert.match(recalculada, /<th class="num">Desvio até a data/);
   assert.match(recalculada, /<th class="num">Semana total<\/th>/);
 });
 
@@ -752,4 +752,44 @@ test('Produtividade media Realizado e null (sem-dado), nunca Infinity/NaN, quand
   assert.match(linhaTotalGeral, /<td class="num sem-dado"><\/td>/);
   assert.doesNotMatch(html, /Infinity/);
   assert.doesNotMatch(html, /NaN/);
+});
+
+// --- Task 7: Rótulo honesto no cabeçalho (2026-09-01) -----------------------
+// O rótulo "(congelada)/(recalculada)" sai de "Previsto até a data" e vai para
+// "Desvio até a data". E só acende quando ALGUMA linha visível realmente usou
+// o congelado, não quando o snapshot simplesmente existe.
+
+test('o rotulo "congelada" acende na coluna do Desvio, nao na do Previsto', () => {
+  const chaveSemana = formatarChaveSemana(SEMANAS[2].inicio);
+  const c1 = chaveMatriz(REGISTROS_A[0].sup, REGISTROS_A[0].tipologia);
+  const congeladoSemanal = { [chaveSemana]: { porRegistro: { [c1]: { volume: { tendencia: 99 } } } } };
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 2, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15), congeladoSemanal,
+  }));
+  const cabecalho = html.slice(html.indexOf('<thead'), html.indexOf('</thead>'));
+  const ths = cabecalho.split('<th').map((t) => t.replace(/<[^>]*>/g, ''));
+  const thPrevisto = ths.find((t) => t.indexOf('Previsto até a data') !== -1) || '';
+  const thDesvio = ths.find((t) => t.indexOf('Desvio até a data') !== -1) || '';
+  assert.ok(thPrevisto.indexOf('congelada') === -1, 'Previsto nunca congela -- o rotulo nao pode ficar nele');
+  assert.ok(thDesvio.indexOf('congelada') !== -1, 'o rotulo pertence a coluna que consome o valor congelado');
+});
+
+test('sem NENHUMA linha visivel usando o congelado, o rotulo diz "recalculada"', () => {
+  const html = renderAbaConsolidado(REGISTROS_A, [0], opcoes({
+    semanaIdx: 2, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15), congeladoSemanal: {},
+  }));
+  assert.match(html, /recalculada/);
+  assert.ok(html.indexOf('(congelada)') === -1);
+});
+
+test('com snapshot presente MAS sem nenhuma linha no indices (vazio), o rotulo diz "recalculada"', () => {
+  const chaveSemana = formatarChaveSemana(SEMANAS[2].inicio);
+  const c1 = chaveMatriz(REGISTROS_A[0].sup, REGISTROS_A[0].tipologia);
+  const congeladoSemanal = { [chaveSemana]: { porRegistro: { [c1]: { volume: { tendencia: 99 } } } } };
+  // indices vazio = nenhuma linha visível, mesmo que o snapshot exista
+  const html = renderAbaConsolidado(REGISTROS_A, [], opcoes({
+    semanaIdx: 2, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15), congeladoSemanal,
+  }));
+  assert.match(html, /recalculada/, 'sem linhas visíveis, ninguém consumiu o congelado, logo "recalculada"');
+  assert.ok(html.indexOf('(congelada)') === -1, 'mesmo com snapshot, sem linhas visíveis não há "(congelada)"');
 });

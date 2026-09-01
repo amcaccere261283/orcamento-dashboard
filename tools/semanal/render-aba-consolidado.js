@@ -218,19 +218,19 @@ function formatarChaveSemana(diaEpoch) {
   return ano + '-' + mes + '-' + dia;
 }
 
-// 'congeladaEm' é o diaEpoch do 1º dia da semana quando a Tendência está
-// congelada, ou null quando ela é a projeção de hoje (semana futura). O
-// rótulo TEM de dizer qual das duas está na tela: as duas se chamam
-// "Tendência" e significam coisas opostas -- uma é registro histórico do que
-// se projetava naquele momento, a outra é a projeção corrente.
-function renderCabecalho(dimensao, semana, congelada) {
-  var sufixo = semana ? ' (' + formatarIntervaloSemana(semana.inicio, semana.fim) + ')' : '';
-  var rotuloTendencia = congelada === true ? ' (congelada)' : congelada === false ? ' (recalculada)' : '';
+// O rótulo da Tendência "(congelada)/(recalculada)" agora vai na coluna
+// "Desvio até a data" e só acende quando ALGUMA linha visível realmente
+// consumiu o valor congelado. usouCongelado é true/false indicando se
+// somarTendenciaCongelada(registros, indices, porRegistro, dimensao) devolveu
+// non-null para as linhas visíveis.
+function renderCabecalho(semana, usouCongelado) {
+  var sufixoSemana = semana ? ' (' + formatarIntervaloSemana(semana.inicio, semana.fim) + ')' : '';
+  var rotulo = usouCongelado ? ' (congelada)' : ' (recalculada)';
   return '<thead><tr>'
     + '<th>SUP</th><th>Grupo</th><th>Tomador</th><th>Tipologia</th>'
-    + '<th class="num">Previsto até a data' + escapeHtml(sufixo + rotuloTendencia) + '</th>'
+    + '<th class="num">' + escapeHtml('Previsto até a data' + sufixoSemana) + '</th>'
     + '<th class="num">Realizado</th>'
-    + '<th class="num">Desvio até a data</th>'
+    + '<th class="num">' + escapeHtml('Desvio até a data' + rotulo) + '</th>'
     + '<th class="num">Semana total</th>'
     + '</tr></thead>';
 }
@@ -622,8 +622,14 @@ function renderAbaConsolidado(registros, indices, opcoes) {
   // em renderLinhaResumoGenerica.
   var blocoEquipe = renderBlocoGenerico('Equipe', 'equipe', realizadoEquipe, registros, todos, ctx, false);
 
+  // O rótulo só é honesto se alguma linha realmente consumiu o congelado.
+  // Antes ele acendia por o snapshot EXISTIR, mesmo numa semana em que nenhuma
+  // linha visível o usava.
+  var usouCongelado = !!(congeladoPorSemana && congeladoPorSemana.porRegistro
+    && somarTendenciaCongelada(registros, todos, congeladoPorSemana.porRegistro, dimensao) !== null);
+
   return controles + renderNota(dimensao)
-    + '<table id="tabela-consolidado">' + renderCabecalho(dimensao, semanas[semanaIdx], !!congeladoPorSemana)
+    + '<table id="tabela-consolidado">' + renderCabecalho(semanas[semanaIdx], usouCongelado)
     + '<tbody>' + linhas + '</tbody></table>'
     + blocoProdutividade + blocoEquipe;
 }

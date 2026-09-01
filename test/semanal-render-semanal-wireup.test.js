@@ -1270,36 +1270,12 @@ test('marcar Volume na barra compartilhada troca as colunas de premissa do Conso
 // montarAbaConsolidado repassa esse global em opcoes.congeladoSemanal. Sem o
 // repasse, a aba continuaria RECALCULANDO a tendencia da semana -- e o
 // cabecalho diria "(recalculada)", que e exatamente o que este teste separa.
-test('o Consolidado usa window.__CONGELADO_SEMANAL__ na semana que o snapshot cobre -- e recalcula quando ele nao cobre', async () => {
-  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  const base = {
-    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
-    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
-  };
-  // A semana que a aba abre depende do relogio de quem roda o teste (a aba
-  // mostra a ULTIMA semana ja comecada do mes selecionado, e o mes vem de
-  // geradoEm) -- por isso o snapshot cobre o primeiro dia de TODAS as semanas
-  // de julho/2026, em vez de apostar numa.
-  const fatia = { geradoEm: '2026-07-10T22:00:00.000Z', porRegistro: { 'SUP-0001-24||ST': { volume: { tendencia: 777 } } } };
-  const snapshot = {
-    '2026-07-01': fatia, '2026-07-06': fatia, '2026-07-13': fatia,
-    '2026-07-20': fatia, '2026-07-27': fatia,
-  };
-
-  const comSnapshot = montarSandbox(renderSemanal({ ...base, congeladoSemanal: snapshot }));
-  comSnapshot.documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
-  await comSnapshot.sandbox.tentarDesbloquear();
-  const secaoCongelada = comSnapshot.documentoFalso.getElementById('secao-consolidado').innerHTML;
-  assert.ok(secaoCongelada.indexOf('(congelada)') !== -1,
-    'com o snapshot cobrindo a semana em tela, o cabecalho tem de dizer que a Tendencia e a congelada');
-
-  const semSnapshot = montarSandbox(renderSemanal({ ...base, congeladoSemanal: {} }));
-  semSnapshot.documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
-  await semSnapshot.sandbox.tentarDesbloquear();
-  const secaoRecalculada = semSnapshot.documentoFalso.getElementById('secao-consolidado').innerHTML;
-  assert.ok(secaoRecalculada.indexOf('(recalculada)') !== -1,
-    'sem snapshot, a aba volta ao recalculo de sempre');
-});
+// Task 7 (2026-09-01): o rótulo "(congelada)/(recalculada)" agora só acende
+// quando ALGUMA linha VISÍVEL realmente consumiu o valor congelado do snapshot.
+// Antes acendia só porque o snapshot EXISTIA. O novo comportamento é testado
+// em semanal-render-aba-consolidado.test.js, onde se pode controlar precisely
+// quais linhas são visíveis (via indices). O teste de wireup acima era do
+// comportamento antigo e foi removido.
 
 test('a aba Consolidado abre na semana EM CURSO do mês selecionado, não em S1', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
