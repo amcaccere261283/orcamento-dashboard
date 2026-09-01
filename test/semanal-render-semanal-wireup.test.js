@@ -2243,3 +2243,60 @@ test('desfazerCongelamentoDaSemana calcula as chaves com segundaDaSemana + fragm
   assert.ok(Array.isArray(chavesRecebidas) && chavesRecebidas.length >= 1,
     'as chaves mandadas pro Apps Script precisam vir de fragmentosDaSemanaAlvo(segundaDaSemana(semana em tela))');
 });
+
+// Achado Important da revisão da Task 5: desfazerCongelamentoDaSemana lia
+// ESTADO_CONGELAMENTO.chave no início, mas aplicava o sucesso (zerar
+// congelado/erro + redesenhar) sem reconferir se essa ainda era a semana em
+// tela depois do await -- mesma classe do bug já coberto acima para
+// carregarCongeladoDaSemana ("resposta atrasada da semana ANTERIOR nao
+// sobrescreve..."), só que do lado do desfazer: a resposta atrasada do
+// desfazer de uma semana ANTIGA apagaria o congelado de uma semana NOVA que
+// o usuário tivesse trocado para enquanto o POST estava em voo -- mesmo que
+// essa semana nova continuasse genuinamente congelada na planilha.
+test('resposta atrasada do desfazer da semana ANTERIOR nao apaga o congelado da semana NOVA em tela', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  let resolverDesfazer;
+  const fetchMock = async (url, opcoes) => {
+    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao === 'ler') return { ok: true, json: async () => ({ linhas: [
+      { chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 10, equipe: 1, produtividadeMedia: 10, autor: 'ana', congeladoEm: '2026-08-28T22:00:00Z' },
+    ] }) };
+    if (corpo.acao === 'desfazer') {
+      // Fica pendurado até o teste resolver à mão -- é o que deixa o
+      // usuário "trocar de semana" enquanto este POST ainda está no ar.
+      return new Promise((resolve) => { resolverDesfazer = resolve; });
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.confirm = () => true;
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  // Dispara o desfazer da semana original, mas não espera -- o fetch fica
+  // pendurado em resolverDesfazer.
+  const promessaDesfazer = sandbox.desfazerCongelamentoDaSemana();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  // Usuário troca de semana enquanto o POST está em voo: simula a semana
+  // NOVA já com seu próprio congelado carregado (o guard olha só
+  // ESTADO_CONGELAMENTO.chave/.congelado -- não precisa navegar pela UI de
+  // verdade pra exercitar a corrida).
+  sandbox.ESTADO_CONGELAMENTO.chave = '2026-07-06';
+  sandbox.ESTADO_CONGELAMENTO.congelado = { porRegistro: { 'SUP-0001-24||ST': { financeiro: { tendencia: 999 } } } };
+
+  // Só agora a resposta atrasada do desfazer (da semana ANTIGA) chega.
+  resolverDesfazer({ ok: true, json: async () => ({ ok: true, apagadas: 1 }) });
+  await promessaDesfazer;
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.chave, '2026-07-06');
+  assert.notEqual(sandbox.ESTADO_CONGELAMENTO.congelado, null,
+    'a resposta atrasada do desfazer da semana antiga nao pode apagar o congelado da semana NOVA em tela');
+});

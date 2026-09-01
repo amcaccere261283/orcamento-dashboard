@@ -1797,6 +1797,15 @@ async function desfazerCongelamentoDaSemana() {
 
     var r = await clienteCongelamento().desfazer(chaves);
     if (r.ok) {
+      // Perdeu a corrida: enquanto o POST estava no ar, o usuario trocou de
+      // semana (ESTADO_CONGELAMENTO.chave mudou). Aplicar o sucesso aqui
+      // apagaria o congelado da semana NOVA -- que continua congelada na
+      // planilha -- e a tela mentiria "(recalculada)" ate o proximo reload ou
+      // troca de semana. Mesmo guard que carregarCongeladoDaSemana ja faz
+      // (mesma classe do bug de ESTADO_ALOCACAO.alocacao); aqui a resposta em
+      // si nao e descartavel (o desfazer aconteceu de verdade na Sheet), so o
+      // efeito colateral na tela precisa esperar a semana certa voltar.
+      if (ESTADO_CONGELAMENTO.chave !== chaveSemanaEmTela) return;
       ESTADO_CONGELAMENTO.congelado = null;
       ESTADO_CONGELAMENTO.erro = null;
       status.textContent = '';
