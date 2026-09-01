@@ -116,6 +116,23 @@ test('doPost RECUSA quando a semana ja tem qualquer linha, sem sobrescrever', ()
   assert.equal(lido.linhas[0].volume, 10, 'o valor original NAO pode ter sido sobrescrito');
 });
 
+test('doPost grava a SemanaInicio como STRING na celula, nunca como Date', () => {
+  // Espelho do teste de leitura acima, mas para o cinto de ESCRITA: inspeciona
+  // DIRETO o array interno do dublê (sem passar por doGet/normalizarDia), então
+  // este teste só morde se setNumberFormat('@') estiver de fato protegendo a
+  // gravação -- normalizarDia estar correto na leitura não ajuda em nada aqui.
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'teste', congeladoEm: '2026-08-28T22:00:00Z',
+    linhas: [{ chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 10, financeiro: 20, equipe: 2, produtividadeMedia: 5 }],
+  }) } });
+
+  const linhaGravada = duble.linhas[duble.linhas.length - 1];
+  assert.equal(typeof linhaGravada[1], 'string', 'a coluna SemanaInicio tem de ser gravada como string, nunca coagida a Date');
+  assert.equal(linhaGravada[1], '2026-08-31');
+});
+
 test('a leitura cura linha já gravada como Date (sem proteção de texto), no fuso da planilha', () => {
   // Isola o `normalizarDia` do resto do doPost: injeta uma linha JÁ coagida a
   // Date (como uma gravação antiga, sem setNumberFormat('@'), teria deixado
