@@ -29,6 +29,22 @@ function proximaSegunda(hojeEpoch) {
   return formatarDiaIso(hojeEpoch + faltam);
 }
 
+// dia-epoch -> 'YYYY-MM-DD' da segunda-feira da semana ISO que contém esse
+// dia -- anda pra TRÁS, incluindo o próprio dia se já for segunda. Distinta
+// de proximaSegunda, que anda pra FRENTE e nunca devolve o mesmo dia.
+//
+// Usada para achar a segunda-feira "verdadeira" de uma semana que, EM TELA,
+// pode estar aparecendo como um fragmento truncado por cruzar virada de mês
+// (semanaEscolhida.inicio nesse caso não é uma segunda) -- sem isso, desfazer
+// o congelamento de um fragmento assim só acharia a chave do próprio
+// fragmento, nunca o outro lado da mesma semana congelada.
+function segundaDaSemana(diaEpoch) {
+  var data = new Date(diaEpoch * 86400000);
+  var diaSemana = data.getUTCDay(); // 0=domingo .. 6=sábado
+  var voltar = (diaSemana + 6) % 7; // segunda=0, terça=1, ..., domingo=6
+  return formatarDiaIso(diaEpoch - voltar);
+}
+
 // dia-epoch -> 'YYYY-MM-DD'. Extraído porque proximaSegunda e
 // fragmentosDaSemanaAlvo precisam do mesmo formato.
 function formatarDiaIso(diaEpoch) {
@@ -116,5 +132,5 @@ function calcularSnapshotSemanaAlvo(registros, demandas, hojeEpoch, chaveSegunda
 }
 
 module.exports = {
-  proximaSegunda, formatarDiaIso, fragmentosDaSemanaAlvo, calcularSnapshotSemanaAlvo,
+  proximaSegunda, formatarDiaIso, fragmentosDaSemanaAlvo, calcularSnapshotSemanaAlvo, segundaDaSemana,
 };

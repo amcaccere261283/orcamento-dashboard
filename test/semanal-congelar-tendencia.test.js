@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { calcularSnapshotSemanaAlvo, proximaSegunda, fragmentosDaSemanaAlvo } = require('../tools/semanal/congelar-tendencia-semanal.js');
+const { calcularSnapshotSemanaAlvo, proximaSegunda, fragmentosDaSemanaAlvo, segundaDaSemana } = require('../tools/semanal/congelar-tendencia-semanal.js');
 
 // 2026-08-28 é uma SEXTA. A semana seguinte começa em 2026-08-31.
 // 2026-08-31 é uma SEGUNDA. A semana seguinte a ela começa em 2026-09-07.
@@ -64,4 +64,22 @@ test('fragmentosDaSemanaAlvo devolve UM fragmento para semana inteira dentro do 
   const frags = fragmentosDaSemanaAlvo('2026-09-07'); // 07/09 a 13/09, tudo em setembro
   assert.equal(frags.length, 1);
   assert.equal(frags[0].chave, '2026-09-07');
+});
+
+test('segundaDaSemana anda pra TRAS ate a segunda, incluindo o proprio dia quando ja e segunda', () => {
+  const dia = (ano, mes1, d) => Date.UTC(ano, mes1 - 1, d) / 86400000;
+  assert.equal(segundaDaSemana(dia(2026, 8, 31)), '2026-08-31'); // segunda -> ela mesma
+  assert.equal(segundaDaSemana(dia(2026, 9, 1)), '2026-08-31');  // terça -> segunda anterior
+  assert.equal(segundaDaSemana(dia(2026, 9, 2)), '2026-08-31');  // quarta
+  assert.equal(segundaDaSemana(dia(2026, 9, 3)), '2026-08-31');  // quinta
+  assert.equal(segundaDaSemana(dia(2026, 9, 4)), '2026-08-31');  // sexta
+  assert.equal(segundaDaSemana(dia(2026, 9, 5)), '2026-08-31');  // sábado
+  assert.equal(segundaDaSemana(dia(2026, 9, 6)), '2026-08-31');  // domingo
+});
+
+test('segundaDaSemana achando o inicio de um fragmento truncado (virada de mes) devolve a MESMA segunda que fragmentosDaSemanaAlvo espera', () => {
+  // O fragmento de setembro da semana 31/08-06/09 começa em 2026-09-01 (terça,
+  // não segunda) -- exatamente o caso que motivou esta função.
+  const dia = Date.UTC(2026, 8, 1) / 86400000; // 2026-09-01
+  assert.equal(segundaDaSemana(dia), '2026-08-31');
 });
