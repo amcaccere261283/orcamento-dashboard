@@ -17,6 +17,13 @@ Duas dependências de máquina, ambas fora do git:
   essa senha. Como o HTML gerado vai para um Pages público, a senha **nunca** pode ser
   escrita em arquivo do repositório (código, config, docs ou qualquer outro) — só env var,
   no momento do build. Peça o valor ao dono do projeto.
+  **Rotacionar esta senha exige atualizar `TOKEN_DASHBOARD` também.** O token do botão
+  "Congelar semana" (ver "Congelamento da semana por botão" na seção Planejamento
+  Semanal) deriva de `ORCAMENTO_SENHA` — trocar a senha sem recalcular e regravar o
+  token nas Script Properties do Apps Script de congelamento faz o congelamento parar
+  com "token recusado", enquanto o resto do dashboard (que só depende da senha para
+  decifrar o blob) continua funcionando normalmente. Ninguém percebe pela página
+  principal.
 - **As planilhas de origem**, em caminhos `G:\Meu Drive\PMO\...` (ver
   `tools/orcamento/config.js`): a MATRIZ viva e o estudo de linha de base. Exige o Google
   Drive montado em `G:` com acesso à pasta PMO.
@@ -1300,6 +1307,57 @@ inteiro, **pool inclusive**, e a única exceção é a equipe indisponível, que
 - **`.cartao-companheiro` morre em `limparDestaquesAlocacao`**, junto de
   `celula-alvo`/`pool-alvo` — limpar em outro lugar deixaria o destaque preso em um
   dos quatro caminhos de saída do arrasto.
+
+## Congelamento da semana por botão (2026-09-01)
+
+O "Consolidado congelado" (ver seção acima, 2026-08-04) recalculava a Tendência
+congelada em TEMPO DE LEITURA, toda vez que a aba redesenhava — reproduzível, não
+persistido de verdade. Isso virou um botão explícito, "Congelar próxima semana", na aba
+Consolidado: um clique grava um SNAPSHOT real numa Google Sheet, e dali em diante a
+semana lê o valor gravado em vez de recalcular.
+
+**A Sheet é a origem única do congelado.** `tools/semanal/apps-script-congelamento.gs` é
+o Web App que grava/lê a aba `Congelamento` dessa Sheet; ver
+`docs/implantar-apps-script-congelamento.md` para o passo a passo completo de
+implantação (Script Property, permissão "qualquer pessoa" e por quê, como reimplantar
+sem trocar a URL). `URL_CONGELAMENTO` (`tools/semanal/render-semanal.js:1591`) começa
+como o literal `'PENDENTE-congelamento'`, mesmo padrão que `RE_URL_ALOCACAO_PENDENTE` já
+usa para a Alocação Equipes — com o literal ainda no lugar, o botão nasce desabilitado,
+explicando na tela que o congelamento não está configurado.
+
+**O token deriva da senha do dashboard, não é um segredo à parte.**
+`derivarTokenSheet(senha)` (`tools/comum/render-shell.js:442`) calcula SHA-256 de
+`SAL_TOKEN + senha`, com `SAL_TOKEN = 'congelamento-semanal:v1:'`
+(`tools/comum/render-shell.js:440`) — o sal é fixo e público, só existe para impedir que
+o mesmo token sirva em outro contexto; quem já tem a senha deriva o token de qualquer
+jeito. O token calculado fica em `window.__TOKEN_SHEET__`, guardado no momento em que a
+pessoa digita a senha para abrir o dashboard (não antes). O Apps Script compara contra a
+Script Property `TOKEN_DASHBOARD` — ver o aviso na seção `ORCAMENTO_SENHA` acima: **trocar
+a senha sem atualizar essa Script Property faz o congelamento recusar com "token
+recusado" em silêncio para o resto da página.**
+
+**Reclique é recusado, de propósito.** `doPost` no `.gs` varre a Sheet inteira antes de
+gravar: se QUALQUER linha da semana-alvo já existir — inclusive de uma gravação
+interrompida no meio — a gravação inteira é recusada (`{ erro: 'ja-congelada', autor,
+congeladoEm }`). É a promessa do recurso: o número, uma vez congelado, nunca muda.
+Refazer exige apagar as linhas na planilha à mão; não existe botão de "recongelar".
+
+**Semana que cruza mês grava DOIS fragmentos.** Como o calendário do projeto corta
+semanas sempre dentro do mês (segunda a domingo, mas nenhum dia de um mês conta no
+acompanhamento do vizinho — ver "Aba Semanal" em Planejamento Semanal), uma semana civil
+que atravessa a virada do mês corresponde a duas semanas-do-mês distintas, cada uma com
+sua própria Tendência calculada separadamente. `fragmentosDaSemanaAlvo`
+(`tools/semanal/congelar-tendencia-semanal.js`) é quem decide isso e gera os dois
+fragmentos a gravar — cada um vira uma "linha" própria no `doPost`, com sua própria
+`chave`. A leitura de volta (`somarTendenciaCongelada`,
+`tools/semanal/render-aba-consolidado.js:247`) soma os fragmentos da semana em tela na
+hora de reconstituir o total exibido.
+
+**Os totais mostrados vêm sempre do snapshot gravado, nunca de um recálculo ao vivo,**
+assim que a semana está congelada — `somarTendenciaCongelada` lê
+`congeladoPorSemana.porRegistro` (o que veio da Sheet), não chama
+`calcularSeriesSemanaisDimensao` de novo. Uma semana ainda não congelada continua no
+comportamento antigo (recálculo em tempo de leitura, "Consolidado congelado" acima).
 
 ## Aba Semanal: 1 origem por tipo de dado -- fim das cascatas de fallback (2026-08-21)
 
