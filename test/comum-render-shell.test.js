@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const crypto = require('node:crypto');
 const vm = require('node:vm');
 const { cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio, scriptFiltros } = require('../tools/comum/render-shell.js');
+const { ITERACOES_PBKDF2 } = require('../tools/comum/criptografia.js');
 
 // DOM mínimo o bastante pra SCRIPT_CLIENTE_GATE rodar de ponta a ponta dentro
 // de um vm.createContext -- ele termina com duas chamadas síncronas em
@@ -183,24 +184,39 @@ test('montarFiltroMulti recebe estado e aoMudar como parâmetros explícitos -- 
 // O token de congelamento (Task 5 do plano congelar-semana-botao): derivado
 // da senha logo após decifrarComSenha resolver (senha já provada correta),
 // pra o Apps Script poder autenticar quem chama sem guardar a senha crua em
-// lugar nenhum. O token tem de ser SHA-256 de SAL_TOKEN + senha, em hex
-// minúsculo -- reproduzível fora do navegador com node:crypto, porque o
-// usuário calcula o mesmo valor por linha de comando pra colar nas Script
-// Properties do Apps Script. Se a derivação mudar, o botão para de
-// funcionar com "token recusado".
-test('derivarTokenSheet(senha), RODADA de verdade num sandbox vm, bate com SHA-256(SAL_TOKEN + senha) calculado pelo Node', async () => {
+// lugar nenhum. O token tem de ser PBKDF2-SHA256 da senha com SAL_TOKEN como
+// sal, em hex minúsculo -- reproduzível fora do navegador com node:crypto,
+// porque o usuário calcula o mesmo valor por linha de comando pra colar nas
+// Script Properties do Apps Script (ver docs/implantar-apps-script-congelamento.md).
+// Se a derivação mudar, o botão para de funcionar com "token recusado".
+//
+// Era 1 rodada de SHA-256 puro até 2026-09-01: um token vazado (ele chegava a
+// viajar na query string de um GET) devolvia a senha do dashboard por
+// dicionário/máscara em segundos, e com ela o blob público inteiro. O custo
+// passou a ser o MESMO do blob (250.000 iterações, ITERACOES_PBKDF2 em
+// tools/comum/criptografia.js) -- pago uma vez por desbloqueio, ao lado de um
+// PBKDF2 idêntico que a página já paga.
+test('derivarTokenSheet(senha), RODADA de verdade num sandbox vm, bate com o PBKDF2 calculado pelo Node', async () => {
   const fonte = scriptDesbloqueio();
   const m = fonte.match(/var SAL_TOKEN = '([^']+)'/);
   assert.ok(m, 'SAL_TOKEN precisa existir como constante literal no script do cliente');
   const sal = m[1];
+  const mIter = fonte.match(/var ITERACOES_TOKEN = (\d+)/);
+  assert.ok(mIter, 'ITERACOES_TOKEN precisa existir como constante literal no script do cliente');
+  const iteracoes = Number(mIter[1]);
+  assert.strictEqual(iteracoes, ITERACOES_PBKDF2,
+    'o token usa o MESMO custo do blob -- se divergirem, a doc de implantação e o código deixam de bater');
 
   const sandbox = montarSandboxGate();
   assert.strictEqual(typeof sandbox.derivarTokenSheet, 'function');
   const tokenDoSandbox = await sandbox.derivarTokenSheet('senha-de-teste');
 
-  const esperado = crypto.createHash('sha256').update(sal + 'senha-de-teste').digest('hex');
+  const esperado = crypto.pbkdf2Sync('senha-de-teste', sal, iteracoes, 32, 'sha256').toString('hex');
   assert.match(esperado, /^[0-9a-f]{64}$/);
-  assert.strictEqual(tokenDoSandbox, esperado, 'o token calculado pelo crypto.subtle do navegador tem de bater byte a byte com SHA-256(SAL_TOKEN + senha) do Node -- é o cálculo que o usuário reproduz por linha de comando');
+  assert.strictEqual(tokenDoSandbox, esperado, 'o token calculado pelo crypto.subtle do navegador tem de bater byte a byte com o pbkdf2Sync do Node -- é o cálculo que o usuário reproduz por linha de comando');
+  // Regressão: uma rodada de SHA-256 do sal concatenado à senha era a derivação
+  // antiga. Se voltar, o token vira de novo um oráculo barato pra senha.
+  assert.notStrictEqual(tokenDoSandbox, crypto.createHash('sha256').update(sal + 'senha-de-teste').digest('hex'));
   assert.match(fonte, /window\.__TOKEN_SHEET__ = await derivarTokenSheet\(senha\)/);
 });
 

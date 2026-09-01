@@ -25,19 +25,30 @@ Na Sheet, vá em **Extensões > Apps Script**. Apague o conteúdo padrão do
 
 ### 3. Calcular o token
 
-O token é o SHA-256 (em hexadecimal) do SAL fixo `congelamento-semanal:v1:` seguido da
-senha do dashboard (`ORCAMENTO_SENHA`). O SAL está definido em
-`tools/comum/render-shell.js:440` (`var SAL_TOKEN = 'congelamento-semanal:v1:';`) — é
-público, só serve para impedir que o mesmo token calculado sirva em outro contexto; quem
-já tem a senha consegue derivá-lo de qualquer jeito.
+O token é **PBKDF2-SHA256** da senha do dashboard (`ORCAMENTO_SENHA`), com o SAL fixo
+`congelamento-semanal:v1:` como sal, **250.000 iterações** e 32 bytes de saída, em
+hexadecimal. O SAL está definido em `tools/comum/render-shell.js`
+(`var SAL_TOKEN = 'congelamento-semanal:v1:';`) e o número de iterações logo abaixo
+(`var ITERACOES_TOKEN = 250000;`, o mesmo `ITERACOES_PBKDF2` que
+`tools/comum/criptografia.js` usa para o blob cifrado). O SAL é público, só serve para
+impedir que o mesmo token sirva em outro contexto; quem já tem a senha consegue derivá-lo
+de qualquer jeito — o custo do PBKDF2 é o que impede o caminho inverso, recuperar a senha
+a partir de um token vazado.
 
 Rode localmente:
 
 ```bash
-node -e "console.log(require('node:crypto').createHash('sha256').update('congelamento-semanal:v1:'+process.argv[1]).digest('hex'))" '<senha do dashboard>'
+node -e "console.log(require('node:crypto').pbkdf2Sync(process.argv[1],'congelamento-semanal:v1:',250000,32,'sha256').toString('hex'))" '<senha do dashboard>'
 ```
 
-Isso imprime uma string hexadecimal de 64 caracteres — é o token.
+Isso imprime uma string hexadecimal de 64 caracteres — é o token. O cálculo demora
+alguns décimos de segundo, por causa das iterações; é o mesmo custo que a página paga
+uma vez, ao desbloquear.
+
+**Se qualquer um dos três (SAL, número de iterações, tamanho da saída) divergir do que
+está no código, o token sai diferente e o congelamento recusa com "token recusado", sem
+nenhuma outra pista.** `test/comum-render-shell.test.js` trava os três: ele roda
+`derivarTokenSheet` de verdade num sandbox e compara com este mesmo `pbkdf2Sync`.
 
 ### 4. Definir a Script Property
 
@@ -59,8 +70,15 @@ No editor: **Implantar > Nova implantação**. Escolha o tipo "App da Web" e con
 do dashboard — o dashboard não faz OAuth nem login Google. A autenticação de verdade é o
 **token** (passo 3/4), verificado em `tokenValido()` dentro do próprio `.gs`; a permissão
 "Qualquer pessoa" só libera a execução do script para qualquer requisição HTTP, sem
-exigir uma conta Google associada. Sem o token certo, `doGet`/`doPost` recusam com
+exigir uma conta Google associada. Sem o token certo, `doPost` recusa com
 `{ erro: 'token' }`, mesmo com "Qualquer pessoa" liberado.
+
+**Leitura e escrita são as duas POST.** `doGet` não lê nada — responde
+`{ erro: 'use-post' }` para quem abrir a URL no navegador. O token viajava na query
+string do GET, onde aparece nos logs de execução do Apps Script e em qualquer registro
+de requisição pelo caminho; no corpo do POST, não. A ação é escolhida pelo campo `acao`
+do corpo: `'ler'` (com `semana`) ou `'congelar'` (com `chaveSegunda`, `autor`,
+`congeladoEm` e `linhas`).
 
 ### 6. Copiar a URL de implantação
 
@@ -87,18 +105,26 @@ procedimento novo.
 ## Como testar sem publicar nada
 
 Antes de trocar `URL_CONGELAMENTO` de verdade no código, é possível confirmar que o
-Apps Script está respondendo corretamente abrindo a URL de implantação direto no
-navegador, com os parâmetros de uma requisição GET:
+Apps Script está respondendo corretamente com uma requisição de LEITURA (`acao: 'ler'`),
+que não escreve nada na planilha:
 
+```bash
+curl -sL --post302 -H 'Content-Type: text/plain;charset=utf-8' \
+  -d '{"acao":"ler","token":"<token calculado no passo 3>","semana":"2026-01-01"}' \
+  '<url-de-implantação>/exec'
 ```
-<url-de-implantação>/exec?semana=2026-01-01&token=<token calculado no passo 3>
-```
+
+`--post302` é obrigatório: o Apps Script responde `/exec` com um redirecionamento, e sem
+essa opção o `curl` reenvia como GET — que agora não lê nada e devolve
+`{"erro":"use-post"}`, dando a impressão falsa de que a implantação está errada.
 
 - Resposta esperada, com a Sheet ainda sem nenhuma linha para essa semana:
   `{"linhas":[]}` — confirma que o token foi aceito e a aba `Congelamento` foi
   criada/lida sem erro.
 - Se o token estiver errado ou a Script Property não tiver sido salva:
   `{"erro":"token"}`.
+- Abrir a URL direto no navegador (um GET) devolve `{"erro":"use-post"}` — isso é o
+  comportamento correto, não um defeito de implantação.
 - Qualquer outra coisa (página de erro do Google, HTML de login, timeout) indica que a
   implantação não está com "Executar como: eu" + "Quem tem acesso: qualquer pessoa"
   configurados corretamente, ou que a URL copiada está incompleta.

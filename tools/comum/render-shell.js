@@ -434,15 +434,28 @@ function mostrarErroSenha(msg) {
 }
 
 // Sal fixo e PÚBLICO -- ele não esconde a senha, só impede que o token sirva
-// em outro lugar. Quem já tem a senha deriva o token de qualquer jeito; quem
-// não tem esbarra no PBKDF2 do blob antes. O que faz a comparação valer é o
-// valor esperado morar no servidor (Script Properties do Apps Script).
+// em outro lugar. Quem já tem a senha deriva o token de qualquer jeito. O que
+// faz a comparação valer é o valor esperado morar no servidor (Script
+// Properties do Apps Script).
 var SAL_TOKEN = 'congelamento-semanal:v1:';
+// MESMO custo do blob (ITERACOES_PBKDF2 em tools/comum/criptografia.js). Uma
+// rodada de SHA-256 puro, que era o que estava aqui antes, tornava o token um
+// oráculo barato: vazado (log de execução do Apps Script, registro de
+// requisição), a senha do dashboard voltava por dicionário/máscara em segundos
+// e abria o blob público inteiro -- ~250.000x mais barato de atacar que o
+// próprio blob. Como o custo é pago UMA vez por desbloqueio, ao lado de um
+// PBKDF2 idêntico que a página já paga para decifrar, dobrá-lo é imperceptível.
+var ITERACOES_TOKEN = 250000;
 
 async function derivarTokenSheet(senha) {
-  var bytes = new TextEncoder().encode(SAL_TOKEN + senha);
-  var hash = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.prototype.map.call(new Uint8Array(hash), function (b) {
+  var codificador = new TextEncoder();
+  var chaveBase = await crypto.subtle.importKey('raw', codificador.encode(senha), 'PBKDF2', false, ['deriveBits']);
+  var bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: codificador.encode(SAL_TOKEN), iterations: ITERACOES_TOKEN, hash: 'SHA-256' },
+    chaveBase,
+    256
+  );
+  return Array.prototype.map.call(new Uint8Array(bits), function (b) {
     return ('0' + b.toString(16)).slice(-2);
   }).join('');
 }
