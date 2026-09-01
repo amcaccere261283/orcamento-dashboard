@@ -13,6 +13,10 @@ const fs = require('node:fs');
 // docs/superpowers/specs/2026-08-08-troca-origem-realizado-demandas-equipes-design.md.
 const MAPA_TIPO_ENSAIO_LAB = {
   'ABR.LA': 'LAB.E', ABSOR: 'LAB.E', 'ADENS.CD': 'LAB.E', 'ADENS.CS': 'LAB.E',
+  // Achados ao vivo em 2026-09-01 (Realizado de Lab). Ausentes da tabela do
+  // Frcst. Classificados como LAB.E pelo dono do projeto (ensaios de mistura
+  // asfáltica, mesma família dos COMP.* incomuns já mapeados como Especial).
+  'ASF.CD': 'LAB.E', 'ASF.DAP': 'LAB.E',
   'ADENS.I.9': 'LAB.E', 'ADENS.N.9': 'LAB.E', 'ADENS.PE': 'LAB.E', 'ADES.A': 'LAB.E',
   'APR.P': 'LAB.E', 'AV.DURAB': 'LAB.E',
   'CBR.1': 'LAB.C', 'CBR.3': 'LAB.C', 'CBR.5': 'LAB.C',
