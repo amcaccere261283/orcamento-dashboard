@@ -78,6 +78,22 @@ function criarClienteCongelamento(opcoes) {
         return { ok: false, motivo: 'rede' };
       }
     },
+
+    desfazer: async function (chaves) {
+      if (!url || !buscar) return { ok: false, motivo: 'rede' };
+      try {
+        var resposta = await buscar(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ token: token, acao: 'desfazer', chaves: chaves }),
+        });
+        var corpo = await resposta.json();
+        if (corpo && corpo.ok) return { ok: true, apagadas: corpo.apagadas };
+        return { ok: false, motivo: (corpo && corpo.erro) || 'rede' };
+      } catch (err) {
+        return { ok: false, motivo: 'rede' };
+      }
+    },
   };
 }
 

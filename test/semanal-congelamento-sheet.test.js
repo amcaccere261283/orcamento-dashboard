@@ -78,3 +78,30 @@ test('congelar manda token, autor e as linhas no corpo', async () => {
   assert.equal(corpo.autor, 'bruno');
   assert.equal(corpo.linhas.length, 2);
 });
+
+test('desfazer manda token, acao e as chaves no corpo', async () => {
+  const d = fetchDuble([{ ok: true, apagadas: 2 }]);
+  const cliente = criarClienteCongelamento({ url: 'https://exemplo/exec', fetch: d.fetch, token: 'tok' });
+  const r = await cliente.desfazer(['2026-08-31', '2026-09-01']);
+  assert.equal(r.ok, true);
+  assert.equal(r.apagadas, 2);
+  const corpo = JSON.parse(d.chamadas[0].opcoes.body);
+  assert.equal(corpo.token, 'tok');
+  assert.equal(corpo.acao, 'desfazer');
+  assert.deepEqual(corpo.chaves, ['2026-08-31', '2026-09-01']);
+});
+
+test('desfazer degrada pra {ok:false, motivo} em erro de token, sem lancar', async () => {
+  const d = fetchDuble([{ erro: 'token' }]);
+  const cliente = criarClienteCongelamento({ url: 'https://exemplo/exec', fetch: d.fetch, token: 'ruim' });
+  const r = await cliente.desfazer(['2026-08-31']);
+  assert.equal(r.ok, false);
+  assert.equal(r.motivo, 'token');
+});
+
+test('desfazer degrada pra {ok:false, motivo:"rede"} quando o fetch lanca, sem lancar', async () => {
+  const cliente = criarClienteCongelamento({ url: 'https://exemplo/exec', fetch: fetchDuble([new Error('offline')]).fetch, token: 'tok' });
+  const r = await cliente.desfazer(['2026-08-31']);
+  assert.equal(r.ok, false);
+  assert.equal(r.motivo, 'rede');
+});
