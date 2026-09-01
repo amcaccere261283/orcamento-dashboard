@@ -1326,21 +1326,57 @@ usa para a Alocação Equipes — com o literal ainda no lugar, o botão nasce d
 explicando na tela que o congelamento não está configurado.
 
 **O token deriva da senha do dashboard, não é um segredo à parte.**
-`derivarTokenSheet(senha)` (`tools/comum/render-shell.js:442`) calcula SHA-256 de
-`SAL_TOKEN + senha`, com `SAL_TOKEN = 'congelamento-semanal:v1:'`
-(`tools/comum/render-shell.js:440`) — o sal é fixo e público, só existe para impedir que
-o mesmo token sirva em outro contexto; quem já tem a senha deriva o token de qualquer
-jeito. O token calculado fica em `window.__TOKEN_SHEET__`, guardado no momento em que a
-pessoa digita a senha para abrir o dashboard (não antes). O Apps Script compara contra a
-Script Property `TOKEN_DASHBOARD` — ver o aviso na seção `ORCAMENTO_SENHA` acima: **trocar
-a senha sem atualizar essa Script Property faz o congelamento recusar com "token
-recusado" em silêncio para o resto da página.**
+`derivarTokenSheet(senha)` (`tools/comum/render-shell.js`) calcula **PBKDF2-SHA256** da
+senha, com `SAL_TOKEN = 'congelamento-semanal:v1:'` como sal e `ITERACOES_TOKEN = 250000`
+— o MESMO custo que `ITERACOES_PBKDF2` (`tools/comum/criptografia.js`) usa no blob
+cifrado. O sal é fixo e público, só existe para impedir que o mesmo token sirva em outro
+contexto; quem já tem a senha deriva o token de qualquer jeito. **O que o PBKDF2 impede é
+o caminho INVERSO.** Até 2026-09-01 isto era 1 rodada de SHA-256 puro, e o token ainda
+viajava na query string de um GET: vazado num log de execução do Apps Script, a senha do
+dashboard voltava por dicionário/máscara em segundos e abria o blob público inteiro — um
+oráculo ~250.000× mais barato de atacar que o próprio blob que a senha protege. O token
+calculado fica em `window.__TOKEN_SHEET__`, guardado no momento em que a pessoa digita a
+senha para abrir o dashboard (não antes). O Apps Script compara contra a Script Property
+`TOKEN_DASHBOARD` — ver o aviso na seção `ORCAMENTO_SENHA` acima: **trocar a senha sem
+atualizar essa Script Property faz o congelamento recusar com "token recusado".**
 
-**Reclique é recusado, de propósito.** `doPost` no `.gs` varre a Sheet inteira antes de
-gravar: se QUALQUER linha da semana-alvo já existir — inclusive de uma gravação
-interrompida no meio — a gravação inteira é recusada (`{ erro: 'ja-congelada', autor,
-congeladoEm }`). É a promessa do recurso: o número, uma vez congelado, nunca muda.
-Refazer exige apagar as linhas na planilha à mão; não existe botão de "recongelar".
+**Leitura e escrita são as duas POST**, distinguidas pelo campo `acao` do corpo
+(`'ler'` × `'congelar'`). `doGet` não lê nada — responde `{ erro: 'use-post' }`. Foi o que
+tirou o token da query string. Mexer num lado do contrato (`apps-script-congelamento.gs`
+ou `congelamento-sheet.js`) exige mexer no outro.
+
+**Falha de leitura não é "sem congelado".** `carregar` (`congelamento-sheet.js`) devolve
+`null` só para "esta semana nunca foi congelada"; token recusado vira `{ motivo: 'token' }`
+e rede fora vira `{ motivo: 'rede' }`. Colapsar os três em `null` fazia a senha rotacionada
+sem atualizar a Script Property virar "(recalculada)" na tela — tecnicamente honesto e
+escondendo que existe um congelamento inacessível. O aviso sai em
+`#status-congelamento-leitura` (span próprio: `#status-congelamento` é escrito de forma
+assíncrona por `atualizarBotaoCongelar`, que fala da semana-ALVO do botão, não da semana
+EM TELA), e o fallback de recálculo continua valendo.
+
+**Resposta de rede atrasada é descartada, não aplicada.** `carregarCongeladoDaSemana`
+(`render-semanal.js`) zera `congelado` junto com a troca de `chave` e, DEPOIS do `await`,
+confere se `ESTADO_CONGELAMENTO.chave` ainda é a semana que aquela chamada buscava — sem
+isso, a resposta atrasada de S1 sobrescrevia a de S2 e a aba mostrava a Tendência
+histórica de S1 nas linhas de S2, com o cabeçalho dizendo "(congelada)". Mesma classe do
+bug de `ESTADO_ALOCACAO.alocacao` documentado na Alocação Equipes, com o dano no próprio
+número que o recurso existe para proteger.
+
+**Reclique é recusado, de propósito.** `doPost` no `.gs` varre a Sheet antes de gravar:
+se QUALQUER linha da semana-alvo já existir — inclusive de uma gravação interrompida no
+meio — a gravação inteira é recusada (`{ erro: 'ja-congelada', autor, congeladoEm }`). É
+a promessa do recurso: o número, uma vez congelado, nunca muda. Refazer exige apagar as
+linhas na planilha à mão; não existe botão de "recongelar". **A varredura lê a planilha
+UMA vez**, sobre o conjunto de chaves DISTINTAS do payload: chamar `linhasDaSemana` por
+linha do payload (~340 linhas, no máximo 2 chaves) fazia até 340 leituras completas da
+planilha por clique, com o custo crescendo com o QUADRADO das semanas já congeladas até
+estourar o limite de 6 min do Apps Script.
+
+**`setNumberFormat('@')` vale só para as DUAS colunas de data** (`SemanaInicio`,
+`CongeladoEm`), nunca para a faixa inteira. O cinto existe contra a coerção de Date;
+aplicá-lo às 4 colunas numéricas faz o Sheets guardar o número na representação do locale
+(`"3,5"`), e na releitura `Number("3,5")` vira `NaN` — que não é `null`, passa direto
+pelos `if (v === null)` do `.gs` e contamina `somarTendenciaCongelada` em silêncio.
 
 **Semana que cruza mês grava DOIS fragmentos.** Como o calendário do projeto corta
 semanas sempre dentro do mês (segunda a domingo, mas nenhum dia de um mês conta no

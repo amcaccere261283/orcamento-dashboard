@@ -1909,9 +1909,11 @@ test('clicar em congelarProximaSemana envia o snapshot da semana-alvo pro Apps S
     senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
   });
   const chamadasPost = [];
+  // A leitura tambem e POST agora -- o que distingue as duas e o campo 'acao'.
   const fetchMock = (url, opcoes) => {
-    if (opcoes && opcoes.method === 'POST') {
-      chamadasPost.push(JSON.parse(opcoes.body));
+    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao === 'congelar') {
+      chamadasPost.push(corpo);
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
@@ -1942,7 +1944,8 @@ test('clicar em congelarProximaSemana quando a Sheet recusa por "ja-congelada" e
     senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
   });
   const fetchMock = (url, opcoes) => {
-    if (opcoes && opcoes.method === 'POST') {
+    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao === 'congelar') {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({ ok: false, erro: 'ja-congelada', autor: 'Ciclana', congeladoEm: '2026-08-31T10:00:00.000Z' }),
@@ -1991,8 +1994,11 @@ test('o congelado carregado da Sheet para a semana em tela chega a montarAbaCons
   const chave = formatarDiaIso(semanaEmTela.inicio);
 
   const linhaCongelada = { chaveMatriz: 'SUP-0001-24||ST', volume: null, financeiro: 999, equipe: null, produtividadeMedia: null };
-  const fetchMock = (url) => {
-    if (url.indexOf('semana=' + encodeURIComponent(chave)) !== -1) {
+  // A LEITURA e POST com { acao: 'ler', semana } no corpo -- o token nao viaja
+  // mais na query string. O mock despacha pelo corpo, nao pela URL.
+  const fetchMock = (url, opcoes) => {
+    var corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao === 'ler' && corpo.semana === chave) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [linhaCongelada] }) });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
@@ -2008,3 +2014,90 @@ test('o congelado carregado da Sheet para a semana em tela chega a montarAbaCons
   assert.match(secao, /\(congelada\)/, 'com o congelado carregado da Sheet cobrindo o registro visivel, o cabecalho tem que acender "(congelada)"');
 });
 
+
+// Achado 2 (Critical) da revisão final: carregarCongeladoDaSemana escrevia
+// ESTADO_CONGELAMENTO.congelado sem conferir, DEPOIS do await, se a semana em
+// tela ainda era a que a chamada estava buscando. A resposta atrasada de S1
+// sobrescrevia a de S2 e a aba passava a mostrar a Tendência histórica de S1
+// nas linhas de S2, com o cabeçalho dizendo "(congelada)" -- o número errado
+// com toda a confiança visual do rótulo. Mesma classe do bug de
+// ESTADO_ALOCACAO.alocacao.
+test('resposta atrasada da semana ANTERIOR nao sobrescreve o congelado da semana em tela', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  // Uma promise por semana, resolvida à mão -- é o que deixa a resposta de S1
+  // chegar DEPOIS da de S2, que é a ordem que produz o bug.
+  const pendentes = {};
+  const fetchMock = (url, opcoes) => {
+    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao !== 'ler') return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+    return new Promise((resolve) => { pendentes[corpo.semana] = resolve; });
+  };
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+
+  const linhaDe = (financeiro) => [{ chaveMatriz: 'SUP-0001-24||ST', volume: null, financeiro, equipe: null, produtividadeMedia: null, autor: 'a', congeladoEm: '2026-07-01T00:00:00Z' }];
+  const buscaS1 = sandbox.carregarCongeladoDaSemana('2026-07-06');
+  const buscaS2 = sandbox.carregarCongeladoDaSemana('2026-07-13');
+  // S2 responde primeiro (é a semana em tela), S1 responde depois.
+  pendentes['2026-07-13']({ ok: true, json: () => Promise.resolve({ linhas: linhaDe(222) }) });
+  await buscaS2;
+  pendentes['2026-07-06']({ ok: true, json: () => Promise.resolve({ linhas: linhaDe(111) }) });
+  await buscaS1;
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.chave, '2026-07-13');
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.congelado.porRegistro['SUP-0001-24||ST'].financeiro.tendencia, 222,
+    'a resposta atrasada da semana anterior nao pode sobrescrever o congelado da semana em tela');
+});
+
+// Achado 5 (Important): "sem congelado", "token recusado" e "rede fora" eram o
+// mesmo null, e a aba caía em "(recalculada)" sem dizer que existe um
+// congelamento inacessível -- o cenário da senha rotacionada sem atualizar a
+// Script Property TOKEN_DASHBOARD.
+test('leitura recusada por token avisa na tela, sem impedir o fallback de recalculo', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const fetchMock = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ erro: 'token' }) });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.erro, 'token');
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.congelado, null,
+    'um erro de leitura nunca pode virar o snapshot exibido');
+  const aviso = documentoFalso.getElementById('status-congelamento-leitura');
+  assert.match(aviso.textContent, /verifique o token/);
+  // O fallback continua: a aba desenha normalmente, recalculada.
+  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.match(secao, /\(recalculada\)/);
+});
+
+test('leitura que falha por rede avisa dizendo REDE, nao token', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const fetchMock = () => Promise.reject(new Error('offline'));
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.erro, 'rede');
+  const aviso = documentoFalso.getElementById('status-congelamento-leitura');
+  assert.match(aviso.textContent, /rede ou planilha fora do ar/);
+});

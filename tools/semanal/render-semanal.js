@@ -1592,7 +1592,25 @@ var URL_CONGELAMENTO = 'PENDENTE-congelamento';
 // 'chave' guarda a chave da semana para a qual 'congelado' foi carregado --
 // evita buscar de novo quando montarAbaConsolidado redesenha a aba por outro
 // motivo (troca de filtro, por exemplo) sem a semana em tela ter mudado.
-var ESTADO_CONGELAMENTO = { congelado: null, chave: null, carregando: false };
+// 'erro' guarda o motivo de uma LEITURA que falhou ('token' ou 'rede'), que e
+// diferente de "esta semana nunca foi congelada" (congelado null, erro null).
+// Sem essa distincao, uma senha rotacionada sem atualizar a Script Property
+// TOKEN_DASHBOARD fazia a aba mostrar "(recalculada)" em silencio, escondendo
+// que existe um congelamento inacessivel.
+var ESTADO_CONGELAMENTO = { congelado: null, chave: null, erro: null, carregando: false };
+
+// Frase de tela para cada motivo de falha de LEITURA. Em nenhum dos dois casos
+// a pagina para: o Consolidado cai no recalculo de sempre, so avisa que o
+// numero exibido nao e o congelado.
+function textoErroLeituraCongelamento(motivo) {
+  if (motivo === 'token') {
+    return 'Não foi possível ler o congelamento desta semana (verifique o token nas Script Properties). Os números abaixo foram recalculados.';
+  }
+  if (motivo === 'rede') {
+    return 'Não foi possível ler o congelamento desta semana (rede ou planilha fora do ar). Os números abaixo foram recalculados.';
+  }
+  return '';
+}
 
 function clienteCongelamento() {
   return CongelamentoSheet.criarClienteCongelamento({
@@ -1633,9 +1651,31 @@ function formatarDataHora(iso) {
 // montarAbaConsolidado saiba que esta chave ja foi resolvida e nao dispare
 // outro carregamento a cada redesenho.
 async function carregarCongeladoDaSemana(chaveSemana) {
+  // 'congelado' e zerado JUNTO com a troca de chave: o par tem de ser
+  // consistente o tempo todo. Marcando so a chave, o snapshot da semana
+  // ANTERIOR ficaria casado com a chave da semana NOVA durante a busca, e um
+  // redesenho nessa janela (troca de filtro, de dimensao) aplicaria o congelado
+  // errado -- o mesmo dano da corrida tratada logo abaixo, por outro caminho.
   ESTADO_CONGELAMENTO.chave = chaveSemana;
-  if (urlCongelamentoPendente()) { ESTADO_CONGELAMENTO.congelado = null; return null; }
+  ESTADO_CONGELAMENTO.congelado = null;
+  ESTADO_CONGELAMENTO.erro = null;
+  if (urlCongelamentoPendente()) return null;
   var congelado = await clienteCongelamento().carregar(chaveSemana);
+  // Perdeu a corrida: enquanto esta busca estava no ar, o usuario trocou de
+  // semana e outra chamada ja escreveu (ou vai escrever) o congelado da semana
+  // certa. Escrever aqui poria o snapshot de OUTRA semana em
+  // ESTADO_CONGELAMENTO com a chave apontando pra semana em tela, e qualquer
+  // redesenho seguinte mostraria numeros historicos errados rotulados
+  // "(congelada)". Mesma classe do bug de ESTADO_ALOCACAO.alocacao (atribuicao
+  // sem conferir se a corrida foi perdida), mas aqui o dano e o proprio numero
+  // que o recurso existe pra proteger.
+  if (ESTADO_CONGELAMENTO.chave !== chaveSemana) return null;
+  // Falha de leitura ('token'/'rede') NAO e um snapshot -- nunca pode entrar em
+  // 'congelado', ou o objeto de erro viraria a Tendencia da tela.
+  if (congelado && congelado.motivo) {
+    ESTADO_CONGELAMENTO.erro = congelado.motivo;
+    return null;
+  }
   ESTADO_CONGELAMENTO.congelado = congelado;
   return congelado;
 }
@@ -1660,6 +1700,17 @@ async function atualizarBotaoCongelar() {
   botao.disabled = true;
   status.textContent = 'Verificando…';
   var existente = await clienteCongelamento().carregar(chaveAlvo);
+  // Leitura que falhou nao e "ja congelada" -- dizer que esta congelada seria
+  // uma afirmacao que nao foi verificada. 'token' vai falhar na gravacao
+  // tambem, entao o botao fica travado com a causa na tela; 'rede' pode ser um
+  // soluco, entao vale tentar (a recusa de reclique mora no servidor).
+  if (existente && existente.motivo) {
+    botao.disabled = existente.motivo === 'token';
+    status.textContent = existente.motivo === 'token'
+      ? 'Não foi possível verificar esta semana: acesso recusado pela planilha (token). Confira o token nas Script Properties.'
+      : 'Não foi possível verificar esta semana (rede ou planilha fora do ar). Tente de novo.';
+    return;
+  }
   if (existente) {
     botao.disabled = true;
     status.textContent = 'Semana de ' + formatarDiaCurto(chaveAlvo) + ' congelada em '
@@ -1770,7 +1821,13 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
     + '<div class="controles-consolidado">'
     + '<button id="btn-congelar-semana" class="btn-secundario" disabled>Verificando…</button>'
     + '<span id="status-congelamento" class="nota-inline"></span>'
+    // Span PROPRIO para o aviso de leitura: #status-congelamento e escrito de
+    // forma assincrona por atualizarBotaoCongelar (que fala da semana-ALVO do
+    // botao, nao da semana EM TELA), e os dois se sobrescreveriam.
+    + '<span id="status-congelamento-leitura" class="nota-inline"></span>'
     + '</div>';
+  var statusLeitura = document.getElementById('status-congelamento-leitura');
+  if (statusLeitura) statusLeitura.textContent = textoErroLeituraCongelamento(ESTADO_CONGELAMENTO.erro);
   var seletorSemana = document.getElementById('consolidado-semana');
   if (seletorSemana) {
     seletorSemana.addEventListener('change', function (e) {
