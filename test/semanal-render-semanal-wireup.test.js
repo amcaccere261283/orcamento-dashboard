@@ -1839,10 +1839,14 @@ test('com URL PENDENTE o botao aparece desabilitado e explica, sem quebrar a aba
     senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
   });
   const { sandbox, documentoFalso } = montarSandbox(html);
+  // O Apps Script já foi implantado (Task 10, 2026-09-01) e URL_CONGELAMENTO
+  // no build real não é mais 'PENDENTE-...' -- este teste continua cobrindo
+  // o estado degradado (para uma futura reimplantação do zero, ver o
+  // comentário de RE_URL_ALOCACAO_PENDENTE em alocacao-sheet.js) forçando a
+  // URL pendente no sandbox, em vez de depender do literal do código-fonte.
+  sandbox.URL_CONGELAMENTO = 'PENDENTE-congelamento';
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
-
-  assert.match(sandbox.URL_CONGELAMENTO, /^PENDENTE-/, 'pré-condição: a URL ainda não foi configurada (Task 10)');
 
   const status = documentoFalso.getElementById('status-congelamento');
   assert.strictEqual(status.textContent, 'Congelamento ainda não configurado nesta planilha.');

@@ -1584,11 +1584,11 @@ var ESTADO_CONSOLIDADO = { semana: null };
 
 // Congelamento da semana (Task 8, 2026-09-01) -- botao #btn-congelar-semana
 // e o carregamento assincrono do snapshot gravado na Sheet, ambos dentro da
-// aba Consolidado. URL_CONGELAMENTO comeca como 'PENDENTE-congelamento' ate
-// o Apps Script ser implantado (Task 10, ainda nao feita) -- ate la o botao
-// nasce desabilitado, explicando que o congelamento nao esta configurado.
-// Mesmo padrao que RE_URL_ALOCACAO_PENDENTE ja cobre pra Alocacao Equipes.
-var URL_CONGELAMENTO = 'PENDENTE-congelamento';
+// aba Consolidado. Apps Script implantado em 2026-09-01
+// (docs/implantar-apps-script-congelamento.md) -- verificado end-to-end via
+// fetch() de um navegador real, sem login Google, a partir da propria origem
+// publicada: {"linhas":[]} para uma semana sem congelamento ainda.
+var URL_CONGELAMENTO = 'https://script.google.com/macros/s/AKfycbyOgmRHQa47Jiodw_Qfd65uPFeAdnB2-V_XkcHHsNM6p3tXn_gAnG5qJz5S0gDRku5oiw/exec';
 // 'chave' guarda a chave da semana para a qual 'congelado' foi carregado --
 // evita buscar de novo quando montarAbaConsolidado redesenha a aba por outro
 // motivo (troca de filtro, por exemplo) sem a semana em tela ter mudado.

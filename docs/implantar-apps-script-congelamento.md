@@ -104,30 +104,41 @@ procedimento novo.
 
 ## Como testar sem publicar nada
 
-Antes de trocar `URL_CONGELAMENTO` de verdade no código, é possível confirmar que o
-Apps Script está respondendo corretamente com uma requisição de LEITURA (`acao: 'ler'`),
-que não escreve nada na planilha:
+**`curl` NÃO serve para este teste — o Google bloqueia esse tipo de cliente como tráfego
+automatizado (403, sem corpo, mesmo com a implantação 100% correta).** Confirmado em
+2026-09-01: uma implantação com "Qualquer pessoa" configurado corretamente devolvia
+`403 Forbidden` pro `curl` (com ou sem `--post302`, com ou sem User-Agent de navegador),
+mas funcionava perfeitamente para um `fetch()` de dentro de um navegador real — que é
+exatamente como o dashboard usa a URL. Testar com `curl` e ver 403 não prova implantação
+errada; só prova que o Google não gosta de `curl`.
 
-```bash
-curl -sL --post302 -H 'Content-Type: text/plain;charset=utf-8' \
-  -d '{"acao":"ler","token":"<token calculado no passo 3>","semana":"2026-01-01"}' \
-  '<url-de-implantação>/exec'
+**O teste que vale é `fetch()` de um navegador de verdade**, sem login Google, a partir da
+MESMA origem que o dashboard usa (evita qualquer diferença de CORS/CSP entre origens):
+
+1. Abra `https://amcaccere261283.github.io/orcamento-dashboard/planejamento-semanal.html`
+   no navegador (sem precisar desbloquear com senha — o teste roda no console, antes do
+   gate).
+2. Abra o Console (F12) e rode:
+
+```javascript
+fetch('<url-de-implantação>/exec', {
+  method: 'POST',
+  headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  body: JSON.stringify({ acao: 'ler', token: '<token calculado no passo 3>', semana: '2026-01-01' }),
+}).then(r => r.text()).then(console.log);
 ```
-
-`--post302` é obrigatório: o Apps Script responde `/exec` com um redirecionamento, e sem
-essa opção o `curl` reenvia como GET — que agora não lê nada e devolve
-`{"erro":"use-post"}`, dando a impressão falsa de que a implantação está errada.
 
 - Resposta esperada, com a Sheet ainda sem nenhuma linha para essa semana:
   `{"linhas":[]}` — confirma que o token foi aceito e a aba `Congelamento` foi
   criada/lida sem erro.
 - Se o token estiver errado ou a Script Property não tiver sido salva:
   `{"erro":"token"}`.
-- Abrir a URL direto no navegador (um GET) devolve `{"erro":"use-post"}` — isso é o
-  comportamento correto, não um defeito de implantação.
-- Qualquer outra coisa (página de erro do Google, HTML de login, timeout) indica que a
-  implantação não está com "Executar como: eu" + "Quem tem acesso: qualquer pessoa"
-  configurados corretamente, ou que a URL copiada está incompleta.
+- Abrir a URL direto no navegador, logado na conta dona do script (um GET) devolve
+  `{"erro":"use-post"}` — isso é o comportamento correto, não um defeito de implantação.
+  **Mas não abra a URL deslogado/anônimo pra testar** — sem sessão Google nenhuma, o
+  próprio Google pode bloquear a navegação com uma página de erro do Drive ("Não foi
+  possível abrir o arquivo") mesmo com a implantação certa; use sempre o `fetch()` do
+  passo acima, nunca a barra de endereço, pra testar o caminho anônimo de verdade.
 
 Só depois de ver `{"linhas":[]}` (ou uma lista de linhas, se a semana testada já tiver
 sido congelada antes) é seguro colar a URL em `URL_CONGELAMENTO` e publicar.

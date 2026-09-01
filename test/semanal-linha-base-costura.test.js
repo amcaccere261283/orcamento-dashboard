@@ -157,7 +157,12 @@ function rodarPagina(html) {
   const blocos = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
   assert.equal(blocos.length, 8, 'esperava 8 <script> (vigenteIdx, dados cifrados, aviso de atualização atrasada x2, gate, fonteParaCliente, bundle, cliente)');
   const documentoFalso = criarDocumentoFalso();
-  const sandbox = { document: documentoFalso, atob, btoa, crypto, TextEncoder, TextDecoder, console };
+  // fetch stub: URL_CONGELAMENTO deixou de ser 'PENDENTE-...' (Apps Script
+  // implantado, 2026-09-01), então o botão de congelar dispara fetch() de
+  // verdade ao desbloquear -- sem isso, window.fetch.bind(window) lança
+  // "Cannot read properties of undefined" nesta sandbox, que não testa esse
+  // recurso. A falha de rede já degrada sem lançar (ver congelamento-sheet.js).
+  const sandbox = { document: documentoFalso, atob, btoa, crypto, TextEncoder, TextDecoder, console, fetch: async () => ({ ok: false, json: async () => ({}) }) };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(blocos.join('\n;\n'), sandbox, { filename: 'planejamento-semanal-linha-base.js' });
