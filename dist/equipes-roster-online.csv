@@ -25388,43 +25388,2693 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 678,20696,naoEquipe,0,,José Lourenço,SP
 679,20696,naoEquipe,0,,Danilo Rodrigues,SP
 680,20696,naoEquipe,0,,Franquiosmar Gadelha,SM
-337,20697,fora,0,,Silvanio Silva,SM
+4,20697,naoEquipe,0,,José I. Amaral,SM
+59,20697,naoEquipe,0,,Paulo S. Lima,SM
+79,20697,campoSemFuro,1,,Leonardo D. Marques,SM
+121,20697,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20697,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20697,mobilizada,0,,Gilmar M. Silva,SP
+154,20697,campoSemFuro,0,,Rudrigo Gadelha,SP
+164,20697,campoSemFuro,0,,Jucevan,SM
+171,20697,campoSemFuro,0,,Francinaldo G. Souza,SP
+175,20697,mobilizada,0,17489-26,João dos. Filho,SM
+175,20697,campoSemFuro,0,,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20697,mobilizada,0,,Alex A. SIlva,SM
+223,20697,campoSemFuro,0,,Cícero J.,SM
+257,20697,mobilizada,0,,Edy Itallo,CPTu | VT | SH
+276,20697,mobilizada,0,,Francinaldo Junior,SP
+286,20697,campoSemFuro,1,,Francisco Basílio,SM
+297,20697,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20697,campoSemFuro,0,,Lenildo Pereira,SP
+306,20697,mobilizada,0,17712-26,Jario Gomes,SM
+321,20697,campoSemFuro,0,,Deivid Moura,SP
+325,20697,campoSemFuro,1,,Kaique Oliveira da Silva,SM
+329,20697,campoSemFuro,0,,Everton dos Santos,SP
+337,20697,mobilizada,0,,Silvanio Silva,SM
+340,20697,mobilizada,0,17716-26,João Lenon,SM
+341,20697,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20697,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20697,mobilizada,0,,Mariano Alves,SP
 362,20697,fora,0,,Rodolfo Augusto,SM
+364,20697,mobilizada,0,,Francieudo Alves,SM
+373,20697,mobilizada,0,17716-26,Maurício José,SM
+377,20697,mobilizada,0,,Allan Patrick,SM
+378,20697,mobilizada,0,,José Robson Paz,SM
+389,20697,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20697,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20697,mobilizada,0,17489-26,Francisco Teotônio,SM
 405,20697,fora,0,,Edgar Pereira,SM
-337,20698,fora,0,,Silvanio Silva,SM
+409,20697,mobilizada,0,,Deyvisson,ST
+420,20697,naoEquipe,0,,Renato de Sousa Morais,SM
+428,20697,campoSemFuro,1,,Leandro Cabral,SM
+434,20697,campoSemFuro,1,,Jonas Santos,ST
+463,20697,mobilizada,0,,Maycon Pereira,SP
+468,20697,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20697,mobilizada,0,17656-26,Alisson Ferreira,SP
+503,20697,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20697,mobilizada,0,17746-26,Felipe Lima,SM
+513,20697,mobilizada,0,17919-26,Leomar Bezerra,ST
+519,20697,mobilizada,0,16948-25,Micael Santos,SP
+520,20697,mobilizada,0,17936-26,José Nauéliton,SM
+523,20697,mobilizada,0,,Inonaldo Filho,SP
+535,20697,mobilizada,0,17716-26,José Henrique,SM
+536,20697,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20697,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20697,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20697,fora,0,,Alison Pires,SP
+559,20697,mobilizada,0,17656-26,Lucas Santana,SP
+561,20697,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20697,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20697,campoSemFuro,0,,Bruno de Oliveira,SP
+571,20697,campoSemFuro,0,,Adonias da Silva,SP
+575,20697,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20697,mobilizada,0,17843-26,Anderson de Almeida,SP
+585,20697,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20697,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20697,mobilizada,0,17716-26,Júlio Silva,SM
+594,20697,mobilizada,0,,Rilher Gutemberg Luiz,SP
+595,20697,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20697,mobilizada,0,17122-25,Benedito Simith,PI
+602,20697,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20697,mobilizada,0,17913-26,Francisco José,SP
+604,20697,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20697,mobilizada,0,,Antonio Jose Araujo,SP
+606,20697,fora,0,,Wesley Andrade,ST
+607,20697,mobilizada,0,17783-26,Daniel Viana,SP
+611,20697,mobilizada,0,17489-26,Alisson Rodrigues,SM
+613,20697,fora,0,,Fabio Fernando,TST
+614,20697,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20697,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20697,mobilizada,0,17930-26,Antony Samuel,SM
+627,20697,mobilizada,0,,Francisco Wellignton,SM
+631,20697,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20697,mobilizada,0,17783-26,Flávio Silva,SP
+636,20697,mobilizada,0,,Artur José Nunes,SP
+638,20697,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20697,mobilizada,0,,Evamar Fernandes,SP
+641,20697,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20697,mobilizada,0,17353-26,Samuel Soares,ST
+645,20697,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20697,mobilizada,0,,Carlos Alberto da Silva,SM
+648,20697,mobilizada,0,,Jeferson Macedo,SP
+649,20697,campoSemFuro,1,,Markys Vinicius,SM
+652,20697,mobilizada,0,,Seza Evangelista,SP
+655,20697,mobilizada,0,17783-26,Natan Augusto,SP
+656,20697,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20697,mobilizada,0,17207-26,Samuel,PI
+659,20697,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20697,naoEquipe,0,,Luiz Lourenço,ST
+663,20697,campoSemFuro,0,,Jefferson Hudson,SP
+664,20697,mobilizada,0,,Emanuel Martins,SP
+665,20697,naoEquipe,0,,Raphael Vicente Almeida (Líder Intermitente),SP
+668,20697,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20697,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20697,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+671,20697,naoEquipe,0,,Marcos Rossi,PI
+672,20697,campoSemFuro,1,,Fellipe de Souza Genovez,ST
+674,20697,naoEquipe,0,,Indicação,PI
+675,20697,naoEquipe,0,,Indicar,SP
+677,20697,naoEquipe,0,,,SM
+678,20697,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20697,naoEquipe,0,,Danilo Rodrigues,SP
+4,20698,naoEquipe,0,,José I. Amaral,SM
+59,20698,naoEquipe,0,,Paulo S. Lima,SM
+79,20698,campoSemFuro,1,,Leonardo D. Marques,SM
+121,20698,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20698,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20698,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20698,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+164,20698,mobilizada,0,17930-26,Jucevan,SM
+171,20698,fora,0,,Francinaldo G. Souza,SP
+175,20698,mobilizada,0,17489-26,João dos. Filho,SM
+175,20698,campoSemFuro,1,,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20698,mobilizada,0,17712-26,Alex A. SIlva,SM
+223,20698,mobilizada,0,17930-26,Cícero J.,SM
+257,20698,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20698,mobilizada,0,17459-26,Francinaldo Junior,SP
+286,20698,campoSemFuro,1,,Francisco Basílio,SM
+297,20698,naoEquipe,0,,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20698,fora,0,,Lenildo Pereira,SP
+306,20698,mobilizada,0,17712-26,Jario Gomes,SM
+321,20698,fora,0,,Deivid Moura,SP
+325,20698,campoSemFuro,1,,Kaique Oliveira da Silva,SM
+329,20698,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20698,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20698,mobilizada,0,17716-26,João Lenon,SM
+341,20698,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20698,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20698,mobilizada,0,16948-25,Mariano Alves,SP
 362,20698,fora,0,,Rodolfo Augusto,SM
+364,20698,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20698,mobilizada,0,17716-26,Maurício José,SM
+377,20698,mobilizada,0,17489-26,Allan Patrick,SM
+378,20698,mobilizada,0,17936-26,José Robson Paz,SM
+389,20698,naoEquipe,0,,Ronielho Wallison,ST | PI | BL
+395,20698,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20698,mobilizada,0,17489-26,Francisco Teotônio,SM
 405,20698,fora,0,,Edgar Pereira,SM
-337,20699,fora,0,,Silvanio Silva,SM
+409,20698,mobilizada,0,17353-26,Deyvisson,ST
+420,20698,naoEquipe,0,,Renato de Sousa Morais,SM
+428,20698,campoSemFuro,1,,Leandro Cabral,SM
+434,20698,mobilizada,0,17353-26,Jonas Santos,ST
+463,20698,mobilizada,0,17197-26,Maycon Pereira,SP
+468,20698,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20698,mobilizada,0,17656-26,Alisson Ferreira,SP
+503,20698,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20698,mobilizada,0,17746-26,Felipe Lima,SM
+513,20698,mobilizada,0,17919-26,Leomar Bezerra,ST
+519,20698,mobilizada,0,16948-25,Micael Santos,SP
+520,20698,mobilizada,0,17936-26,José Nauéliton,SM
+523,20698,mobilizada,0,17197-26,Inonaldo Filho,SP
+535,20698,mobilizada,0,17716-26,José Henrique,SM
+536,20698,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20698,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20698,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20698,fora,0,,Alison Pires,SP
+559,20698,mobilizada,0,17656-26,Lucas Santana,SP
+561,20698,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20698,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20698,fora,0,,Bruno de Oliveira,SP
+571,20698,fora,0,,Adonias da Silva,SP
+575,20698,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20698,mobilizada,0,17843-26,Anderson de Almeida,SP
+585,20698,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20698,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20698,mobilizada,0,17716-26,Júlio Silva,SM
+594,20698,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20698,campoSemFuro,0,,Gabriel de Pereira,ST | PI | BL
+600,20698,mobilizada,0,17122-25,Benedito Simith,PI
+602,20698,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20698,mobilizada,0,17913-26,Francisco José,SP
+604,20698,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20698,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+606,20698,fora,0,,Wesley Andrade,ST
+607,20698,mobilizada,0,17783-26,Daniel Viana,SP
+611,20698,mobilizada,0,17489-26,Alisson Rodrigues,SM
+613,20698,campoSemFuro,0,,Fabio Fernando,TST
+614,20698,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20698,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20698,mobilizada,0,17930-26,Antony Samuel,SM
+627,20698,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20698,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20698,mobilizada,0,17783-26,Flávio Silva,SP
+636,20698,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20698,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20698,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20698,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20698,mobilizada,0,17353-26,Samuel Soares,ST
+645,20698,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20698,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20698,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20698,campoSemFuro,1,,Markys Vinicius,SM
+652,20698,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20698,mobilizada,0,17783-26,Natan Augusto,SP
+656,20698,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20698,campoSemFuro,0,,Samuel,PI
+659,20698,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20698,naoEquipe,0,,Luiz Lourenço,ST
+663,20698,campoSemFuro,0,,Jefferson Hudson,SP
+664,20698,mobilizada,0,17617-26,Emanuel Martins,SP
+665,20698,naoEquipe,0,,Raphael Vicente Almeida (Líder Intermitente),SP
+668,20698,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20698,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20698,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+671,20698,naoEquipe,0,,Marcos Rossi,PI
+672,20698,campoSemFuro,1,,Fellipe de Souza Genovez,ST
+674,20698,naoEquipe,0,,Indicação,PI
+675,20698,naoEquipe,0,,Indicar,SP
+677,20698,naoEquipe,0,,,SM
+678,20698,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20698,naoEquipe,0,,Danilo Rodrigues,SP
+4,20699,naoEquipe,0,,José I. Amaral,SM
+59,20699,naoEquipe,0,,Paulo S. Lima,SM
+79,20699,fora,0,,Leonardo D. Marques,SM
+121,20699,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20699,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20699,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20699,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+164,20699,mobilizada,0,17930-26,Jucevan,SM
+171,20699,fora,0,,Francinaldo G. Souza,SP
+175,20699,mobilizada,0,17489-26,João dos. Filho,SM
+175,20699,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20699,fora,0,,Alex A. SIlva,SM
+223,20699,mobilizada,0,17930-26,Cícero J.,SM
+257,20699,naoEquipe,0,,Edy Itallo,CPTu | VT | SH
+276,20699,mobilizada,0,17459-26,Francinaldo Junior,SP
+286,20699,campoSemFuro,1,,Francisco Basílio,SM
+297,20699,campoSemFuro,0,,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20699,fora,0,,Lenildo Pereira,SP
+306,20699,fora,0,,Jario Gomes,SM
+321,20699,fora,0,,Deivid Moura,SP
+325,20699,campoSemFuro,1,,Kaique Oliveira da Silva,SM
+329,20699,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20699,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20699,mobilizada,0,17716-26,João Lenon,SM
+341,20699,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20699,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20699,mobilizada,0,16948-25,Mariano Alves,SP
 362,20699,fora,0,,Rodolfo Augusto,SM
+364,20699,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20699,mobilizada,0,17716-26,Maurício José,SM
+377,20699,mobilizada,0,17489-26,Allan Patrick,SM
+378,20699,mobilizada,0,17936-26,José Robson Paz,SM
+389,20699,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20699,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20699,mobilizada,0,17489-26,Francisco Teotônio,SM
 405,20699,fora,0,,Edgar Pereira,SM
-337,20700,fora,0,,Silvanio Silva,SM
+409,20699,mobilizada,0,17353-26,Deyvisson,ST
+420,20699,naoEquipe,0,,Renato de Sousa Morais,SM
+428,20699,campoSemFuro,1,,Leandro Cabral,SM
+434,20699,mobilizada,0,17353-26,Jonas Santos,ST
+463,20699,mobilizada,0,17197-26,Maycon Pereira,SP
+468,20699,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20699,mobilizada,0,17656-26,Alisson Ferreira,SP
+503,20699,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20699,mobilizada,0,17746-26,Felipe Lima,SM
+513,20699,mobilizada,0,17919-26,Leomar Bezerra,ST
+519,20699,mobilizada,0,16948-25,Micael Santos,SP
+520,20699,mobilizada,0,17936-26,José Nauéliton,SM
+523,20699,mobilizada,0,17197-26,Inonaldo Filho,SP
+535,20699,mobilizada,0,17716-26,José Henrique,SM
+536,20699,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20699,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20699,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20699,fora,0,,Alison Pires,SP
+559,20699,mobilizada,0,17656-26,Lucas Santana,SP
+561,20699,fora,0,,Ronaldo Albuquerque dos Santos,SM
+564,20699,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20699,fora,0,,Bruno de Oliveira,SP
+571,20699,fora,0,,Adonias da Silva,SP
+575,20699,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20699,mobilizada,0,17843-26,Anderson de Almeida,SP
+585,20699,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20699,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20699,mobilizada,0,17716-26,Júlio Silva,SM
+594,20699,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20699,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20699,mobilizada,0,17122-25,Benedito Simith,PI
+602,20699,fora,0,,Francisco Nilton,SM
+603,20699,mobilizada,0,17913-26,Francisco José,SP
+604,20699,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20699,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+606,20699,fora,0,,Wesley Andrade,ST
+607,20699,mobilizada,0,17783-26,Daniel Viana,SP
+611,20699,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20699,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20699,fora,0,,Tiago Mateus,SM
+626,20699,mobilizada,0,17930-26,Antony Samuel,SM
+627,20699,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20699,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20699,mobilizada,0,17783-26,Flávio Silva,SP
+636,20699,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20699,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20699,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20699,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20699,mobilizada,0,17353-26,Samuel Soares,ST
+645,20699,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20699,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20699,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20699,campoSemFuro,1,,Markys Vinicius,SM
+652,20699,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20699,mobilizada,0,17783-26,Natan Augusto,SP
+656,20699,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20699,mobilizada,0,17679-26,Samuel,PI
+659,20699,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20699,naoEquipe,0,,Luiz Lourenço,ST
+663,20699,campoSemFuro,0,,Jefferson Hudson,SP
+664,20699,mobilizada,0,17617-26,Emanuel Martins,SP
+665,20699,naoEquipe,0,,Raphael Vicente Almeida (Líder Intermitente),SP
+668,20699,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20699,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20699,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+671,20699,naoEquipe,0,,Marcos Rossi,PI
+672,20699,campoSemFuro,1,,Fellipe de Souza Genovez,ST
+674,20699,naoEquipe,0,,Indicação,PI
+675,20699,naoEquipe,0,,Indicar,SP
+677,20699,naoEquipe,0,,,SM
+678,20699,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20699,naoEquipe,0,,Danilo Rodrigues,SP
+4,20700,fora,0,,José I. Amaral,SM
+59,20700,naoEquipe,0,,Paulo S. Lima,SM
+79,20700,fora,0,,Leonardo D. Marques,SM
+121,20700,fora,0,,Joaquim T. Lira,SM
+136,20700,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20700,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20700,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+164,20700,mobilizada,0,17930-26,Jucevan,SM
+171,20700,fora,0,,Francinaldo G. Souza,SP
+175,20700,fora,0,,João dos. Filho,SM
+175,20700,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20700,fora,0,,Alex A. SIlva,SM
+223,20700,mobilizada,0,17930-26,Cícero J.,SM
+257,20700,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20700,mobilizada,0,17459-26,Francinaldo Junior,SP
+286,20700,campoSemFuro,1,,Francisco Basílio,SM
+297,20700,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20700,fora,0,,Lenildo Pereira,SP
+306,20700,fora,0,,Jario Gomes,SM
+321,20700,fora,0,,Deivid Moura,SP
+325,20700,campoSemFuro,1,,Kaique Oliveira da Silva,SM
+329,20700,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20700,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20700,mobilizada,0,17716-26,João Lenon,SM
+341,20700,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20700,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20700,mobilizada,0,16948-25,Mariano Alves,SP
 362,20700,fora,0,,Rodolfo Augusto,SM
+364,20700,fora,0,,Francieudo Alves,SM
+373,20700,mobilizada,0,17716-26,Maurício José,SM
+377,20700,fora,0,,Allan Patrick,SM
+378,20700,mobilizada,0,17936-26,José Robson Paz,SM
+389,20700,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20700,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20700,fora,0,,Francisco Teotônio,SM
 405,20700,fora,0,,Edgar Pereira,SM
-337,20701,fora,0,,Silvanio Silva,SM
+409,20700,mobilizada,0,17353-26,Deyvisson,ST
+420,20700,naoEquipe,0,,Renato de Sousa Morais,SM
+428,20700,campoSemFuro,1,,Leandro Cabral,SM
+434,20700,mobilizada,0,17353-26,Jonas Santos,ST
+463,20700,mobilizada,0,17197-26,Maycon Pereira,SP
+468,20700,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20700,mobilizada,0,17656-26,Alisson Ferreira,SP
+503,20700,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20700,mobilizada,0,17746-26,Felipe Lima,SM
+513,20700,mobilizada,0,17919-26,Leomar Bezerra,ST
+519,20700,mobilizada,0,16948-25,Micael Santos,SP
+520,20700,mobilizada,0,17936-26,José Nauéliton,SM
+523,20700,mobilizada,0,17197-26,Inonaldo Filho,SP
+535,20700,mobilizada,0,17716-26,José Henrique,SM
+536,20700,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20700,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20700,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20700,fora,0,,Alison Pires,SP
+559,20700,mobilizada,0,17656-26,Lucas Santana,SP
+561,20700,fora,0,,Ronaldo Albuquerque dos Santos,SM
+564,20700,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20700,fora,0,,Bruno de Oliveira,SP
+571,20700,fora,0,,Adonias da Silva,SP
+575,20700,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20700,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20700,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20700,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20700,mobilizada,0,17716-26,Júlio Silva,SM
+594,20700,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20700,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20700,mobilizada,0,17122-25,Benedito Simith,PI
+602,20700,fora,0,,Francisco Nilton,SM
+603,20700,mobilizada,0,17913-26,Francisco José,SP
+604,20700,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20700,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+606,20700,fora,0,,Wesley Andrade,ST
+607,20700,mobilizada,0,17783-26,Daniel Viana,SP
+611,20700,fora,0,,Alisson Rodrigues,SM
+614,20700,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20700,fora,0,,Tiago Mateus,SM
+626,20700,mobilizada,0,17930-26,Antony Samuel,SM
+627,20700,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20700,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20700,mobilizada,0,17783-26,Flávio Silva,SP
+636,20700,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20700,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20700,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20700,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20700,mobilizada,0,17353-26,Samuel Soares,ST
+645,20700,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20700,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20700,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20700,campoSemFuro,1,,Markys Vinicius,SM
+652,20700,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20700,mobilizada,0,17783-26,Natan Augusto,SP
+656,20700,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20700,mobilizada,0,17679-26,Samuel,PI
+659,20700,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20700,naoEquipe,0,,Luiz Lourenço,ST
+663,20700,campoSemFuro,0,,Jefferson Hudson,SP
+664,20700,mobilizada,0,17617-26,Emanuel Martins,SP
+665,20700,naoEquipe,0,,Raphael Vicente Almeida (Líder Intermitente),SP
+668,20700,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20700,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20700,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+671,20700,naoEquipe,0,,Marcos Rossi,PI
+672,20700,campoSemFuro,1,,Fellipe de Souza Genovez,ST
+674,20700,naoEquipe,0,,Indicação,PI
+675,20700,naoEquipe,0,,Indicar,SP
+677,20700,naoEquipe,0,,,SM
+678,20700,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20700,naoEquipe,0,,Danilo Rodrigues,SP
+4,20701,fora,0,,José I. Amaral,SM
+59,20701,naoEquipe,0,,Paulo S. Lima,SM
+79,20701,fora,0,,Leonardo D. Marques,SM
+121,20701,fora,0,,Joaquim T. Lira,SM
+136,20701,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20701,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20701,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+164,20701,mobilizada,0,17930-26,Jucevan,SM
+171,20701,fora,0,,Francinaldo G. Souza,SP
+175,20701,fora,0,,João dos. Filho,SM
+175,20701,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20701,fora,0,,Alex A. SIlva,SM
+223,20701,mobilizada,0,17930-26,Cícero J.,SM
+257,20701,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20701,mobilizada,0,17459-26,Francinaldo Junior,SP
+286,20701,campoSemFuro,1,,Francisco Basílio,SM
+297,20701,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20701,fora,0,,Lenildo Pereira,SP
+306,20701,fora,0,,Jario Gomes,SM
+321,20701,fora,0,,Deivid Moura,SP
+325,20701,campoSemFuro,1,,Kaique Oliveira da Silva,SM
+329,20701,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20701,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20701,mobilizada,0,17716-26,João Lenon,SM
+341,20701,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20701,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20701,mobilizada,0,16948-25,Mariano Alves,SP
 362,20701,fora,0,,Rodolfo Augusto,SM
+364,20701,fora,0,,Francieudo Alves,SM
+373,20701,mobilizada,0,17716-26,Maurício José,SM
+377,20701,fora,0,,Allan Patrick,SM
+378,20701,mobilizada,0,17936-26,José Robson Paz,SM
+389,20701,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20701,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20701,fora,0,,Francisco Teotônio,SM
 405,20701,fora,0,,Edgar Pereira,SM
-337,20702,fora,0,,Silvanio Silva,SM
+409,20701,mobilizada,0,17353-26,Deyvisson,ST
+420,20701,naoEquipe,0,,Renato de Sousa Morais,SM
+428,20701,campoSemFuro,1,,Leandro Cabral,SM
+434,20701,mobilizada,0,17353-26,Jonas Santos,ST
+463,20701,mobilizada,0,17197-26,Maycon Pereira,SP
+468,20701,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20701,mobilizada,0,17656-26,Alisson Ferreira,SP
+503,20701,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20701,mobilizada,0,17746-26,Felipe Lima,SM
+513,20701,mobilizada,0,17919-26,Leomar Bezerra,ST
+519,20701,mobilizada,0,16948-25,Micael Santos,SP
+520,20701,mobilizada,0,17936-26,José Nauéliton,SM
+523,20701,mobilizada,0,17197-26,Inonaldo Filho,SP
+535,20701,mobilizada,0,17716-26,José Henrique,SM
+536,20701,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20701,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20701,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20701,fora,0,,Alison Pires,SP
+559,20701,mobilizada,0,17656-26,Lucas Santana,SP
+561,20701,fora,0,,Ronaldo Albuquerque dos Santos,SM
+564,20701,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20701,fora,0,,Bruno de Oliveira,SP
+571,20701,fora,0,,Adonias da Silva,SP
+575,20701,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20701,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20701,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20701,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20701,mobilizada,0,17716-26,Júlio Silva,SM
+594,20701,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20701,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20701,mobilizada,0,17122-25,Benedito Simith,PI
+602,20701,fora,0,,Francisco Nilton,SM
+603,20701,mobilizada,0,17913-26,Francisco José,SP
+604,20701,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20701,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+606,20701,fora,0,,Wesley Andrade,ST
+607,20701,mobilizada,0,17783-26,Daniel Viana,SP
+611,20701,fora,0,,Alisson Rodrigues,SM
+614,20701,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20701,fora,0,,Tiago Mateus,SM
+626,20701,mobilizada,0,17930-26,Antony Samuel,SM
+627,20701,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20701,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20701,mobilizada,0,17783-26,Flávio Silva,SP
+636,20701,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20701,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20701,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20701,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20701,mobilizada,0,17353-26,Samuel Soares,ST
+645,20701,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20701,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20701,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20701,campoSemFuro,1,,Markys Vinicius,SM
+652,20701,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20701,mobilizada,0,17783-26,Natan Augusto,SP
+656,20701,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20701,mobilizada,0,17679-26,Samuel,PI
+659,20701,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20701,naoEquipe,0,,Luiz Lourenço,ST
+663,20701,campoSemFuro,0,,Jefferson Hudson,SP
+664,20701,mobilizada,0,17617-26,Emanuel Martins,SP
+665,20701,naoEquipe,0,,Raphael Vicente Almeida (Líder Intermitente),SP
+668,20701,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20701,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20701,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+671,20701,naoEquipe,0,,Marcos Rossi,PI
+672,20701,campoSemFuro,1,,Fellipe de Souza Genovez,ST
+674,20701,naoEquipe,0,,Indicação,PI
+675,20701,naoEquipe,0,,Indicar,SP
+677,20701,naoEquipe,0,,,SM
+678,20701,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20701,naoEquipe,0,,Danilo Rodrigues,SP
+4,20702,fora,0,,José I. Amaral,SM
+59,20702,naoEquipe,0,,Paulo S. Lima,SM
+79,20702,fora,0,,Leonardo D. Marques,SM
+121,20702,fora,0,,Joaquim T. Lira,SM
+136,20702,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20702,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20702,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+164,20702,mobilizada,0,17930-26,Jucevan,SM
+171,20702,fora,0,,Francinaldo G. Souza,SP
+175,20702,fora,0,,João dos. Filho,SM
+175,20702,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20702,fora,0,,Alex A. SIlva,SM
+223,20702,mobilizada,0,17930-26,Cícero J.,SM
+257,20702,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20702,mobilizada,0,17459-26,Francinaldo Junior,SP
+286,20702,campoSemFuro,1,,Francisco Basílio,SM
+297,20702,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20702,fora,0,,Lenildo Pereira,SP
+306,20702,fora,0,,Jario Gomes,SM
+321,20702,fora,0,,Deivid Moura,SP
+325,20702,campoSemFuro,1,,Kaique Oliveira da Silva,SM
+329,20702,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20702,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20702,mobilizada,0,17716-26,João Lenon,SM
+341,20702,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20702,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20702,mobilizada,0,16948-25,Mariano Alves,SP
 362,20702,fora,0,,Rodolfo Augusto,SM
+364,20702,fora,0,,Francieudo Alves,SM
+373,20702,mobilizada,0,17716-26,Maurício José,SM
+377,20702,fora,0,,Allan Patrick,SM
+378,20702,mobilizada,0,17936-26,José Robson Paz,SM
+389,20702,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20702,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20702,fora,0,,Francisco Teotônio,SM
 405,20702,fora,0,,Edgar Pereira,SM
+409,20702,mobilizada,0,17353-26,Deyvisson,ST
+420,20702,naoEquipe,0,,Renato de Sousa Morais,SM
+428,20702,campoSemFuro,1,,Leandro Cabral,SM
+434,20702,mobilizada,0,17353-26,Jonas Santos,ST
+463,20702,mobilizada,0,17197-26,Maycon Pereira,SP
+468,20702,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20702,mobilizada,0,17656-26,Alisson Ferreira,SP
+503,20702,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20702,mobilizada,0,17746-26,Felipe Lima,SM
+513,20702,fora,0,,Leomar Bezerra,ST
+519,20702,mobilizada,0,16948-25,Micael Santos,SP
+520,20702,mobilizada,0,17936-26,José Nauéliton,SM
+523,20702,mobilizada,0,17197-26,Inonaldo Filho,SP
+535,20702,mobilizada,0,17716-26,José Henrique,SM
+536,20702,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20702,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20702,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20702,fora,0,,Alison Pires,SP
+559,20702,mobilizada,0,17656-26,Lucas Santana,SP
+561,20702,fora,0,,Ronaldo Albuquerque dos Santos,SM
+564,20702,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20702,fora,0,,Bruno de Oliveira,SP
+571,20702,fora,0,,Adonias da Silva,SP
+575,20702,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20702,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20702,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20702,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20702,mobilizada,0,17716-26,Júlio Silva,SM
+594,20702,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20702,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20702,mobilizada,0,17122-25,Benedito Simith,PI
+602,20702,fora,0,,Francisco Nilton,SM
+603,20702,mobilizada,0,17913-26,Francisco José,SP
+604,20702,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20702,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+606,20702,fora,0,,Wesley Andrade,ST
+607,20702,mobilizada,0,17783-26,Daniel Viana,SP
+611,20702,fora,0,,Alisson Rodrigues,SM
+614,20702,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20702,fora,0,,Tiago Mateus,SM
+626,20702,mobilizada,0,17930-26,Antony Samuel,SM
+627,20702,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20702,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20702,mobilizada,0,17783-26,Flávio Silva,SP
+636,20702,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20702,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20702,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20702,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20702,mobilizada,0,17353-26,Samuel Soares,ST
+645,20702,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20702,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20702,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20702,campoSemFuro,1,,Markys Vinicius,SM
+652,20702,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20702,mobilizada,0,17783-26,Natan Augusto,SP
+656,20702,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20702,mobilizada,0,17679-26,Samuel,PI
+659,20702,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20702,naoEquipe,0,,Luiz Lourenço,ST
+663,20702,campoSemFuro,0,,Jefferson Hudson,SP
+664,20702,mobilizada,0,17617-26,Emanuel Martins,SP
+665,20702,naoEquipe,0,,Raphael Vicente Almeida (Líder Intermitente),SP
+668,20702,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20702,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20702,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+671,20702,naoEquipe,0,,Marcos Rossi,PI
+672,20702,campoSemFuro,1,,Fellipe de Souza Genovez,ST
+674,20702,naoEquipe,0,,Indicação,PI
+675,20702,naoEquipe,0,,Indicar,SP
+677,20702,naoEquipe,0,,,SM
+678,20702,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20702,naoEquipe,0,,Danilo Rodrigues,SP
+4,20703,fora,0,,José I. Amaral,SM
+59,20703,naoEquipe,0,,Paulo S. Lima,SM
+79,20703,fora,0,,Leonardo D. Marques,SM
+121,20703,fora,0,,Joaquim T. Lira,SM
+136,20703,fora,0,,Marcos R. Sá,SM
+143,20703,fora,0,,Gilmar M. Silva,SP
+154,20703,fora,0,,Rudrigo Gadelha,SP
+164,20703,fora,0,,Jucevan,SM
+171,20703,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20703,fora,0,,João dos. Filho,SM
+175,20703,fora,0,,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20703,fora,0,,Alex A. SIlva,SM
+223,20703,fora,0,,Cícero J.,SM
+257,20703,fora,0,,Edy Itallo,CPTu | VT | SH
+276,20703,fora,0,,Francinaldo Junior,SP
+286,20703,campoSemFuro,1,,Francisco Basílio,SM
+297,20703,fora,0,,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20703,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20703,fora,0,,Jario Gomes,SM
+321,20703,mobilizada,0,17919-26,Deivid Moura,SP
+325,20703,campoSemFuro,1,,Kaique Oliveira da Silva,SM
+329,20703,fora,0,,Everton dos Santos,SP
 337,20703,fora,0,,Silvanio Silva,SM
+340,20703,fora,0,,João Lenon,SM
+341,20703,fora,0,,Sivanildo da Silva,SM
+353,20703,fora,0,,Lucas Oliveira,ST | PI | BL
+361,20703,fora,0,,Mariano Alves,SP
 362,20703,fora,0,,Rodolfo Augusto,SM
+364,20703,fora,0,,Francieudo Alves,SM
+373,20703,fora,0,,Maurício José,SM
+377,20703,fora,0,,Allan Patrick,SM
+378,20703,fora,0,,José Robson Paz,SM
+389,20703,fora,0,,Ronielho Wallison,ST | PI | BL
+395,20703,fora,0,,Aucélio Formiga,SM
+403,20703,fora,0,,Francisco Teotônio,SM
 405,20703,fora,0,,Edgar Pereira,SM
+409,20703,fora,0,,Deyvisson,ST
+420,20703,naoEquipe,0,,Renato de Sousa Morais,SM
+428,20703,campoSemFuro,1,,Leandro Cabral,SM
+434,20703,fora,0,,Jonas Santos,ST
+463,20703,fora,0,,Maycon Pereira,SP
+468,20703,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20703,fora,0,,Alisson Ferreira,SP
+503,20703,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20703,fora,0,,Felipe Lima,SM
+513,20703,campoSemFuro,1,,Leomar Bezerra,ST
+519,20703,fora,0,,Micael Santos,SP
+520,20703,fora,0,,José Nauéliton,SM
+523,20703,fora,0,,Inonaldo Filho,SP
+535,20703,fora,0,,José Henrique,SM
+536,20703,fora,0,,Fernando Ikaró,SP
+537,20703,fora,0,,Jeferson Pereira,SM
+540,20703,fora,0,,Filipe R. Ribeiro,SM
+552,20703,mobilizada,0,17919-26,Alison Pires,SP
+559,20703,fora,0,,Lucas Santana,SP
+561,20703,fora,0,,Ronaldo Albuquerque dos Santos,SM
+564,20703,fora,0,,Gustavo da Silva,CPTu | VT | SH
+568,20703,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20703,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20703,fora,0,,Carlos Junior,CPTu | VT | SH
+577,20703,fora,0,,Anderson de Almeida,SP
+583,20703,fora,0,,Jean Sousa dos Santos,PI
+585,20703,fora,0,,Fábio Bandeira Júnior,SM
+586,20703,fora,0,,Matheus Ramos,SP
+588,20703,fora,0,,Júlio Silva,SM
+590,20703,fora,0,,Tiago Henrique,Lab
+594,20703,fora,0,,Rilher Gutemberg Luiz,SP
+595,20703,fora,0,,Gabriel de Pereira,ST | PI | BL
+600,20703,fora,0,,Benedito Simith,PI
+602,20703,fora,0,,Francisco Nilton,SM
+603,20703,fora,0,,Francisco José,SP
+604,20703,fora,0,,Mailson Barbosa,SM
+605,20703,fora,0,,Antonio Jose Araujo,SP
+606,20703,fora,0,,Wesley Andrade,ST
+607,20703,fora,0,,Daniel Viana,SP
+611,20703,fora,0,,Alisson Rodrigues,SM
+613,20703,fora,0,,Fabio Fernando,TST
+614,20703,fora,0,,Bruno Monteiro,SP
+623,20703,fora,0,,Tiago Mateus,SM
+626,20703,fora,0,,Antony Samuel,SM
+627,20703,fora,0,,Francisco Wellignton,SM
+629,20703,fora,0,,Wanderson Silvestre,ST | PI | BL
+631,20703,fora,0,,Francisco Pereira,SM
+634,20703,fora,0,,Flávio Silva,SP
+636,20703,fora,0,,Artur José Nunes,SP
+638,20703,fora,0,,André Luiz Morais,SM
+640,20703,fora,0,,Evamar Fernandes,SP
+641,20703,fora,0,,Filipe Cosme,SP
+644,20703,fora,0,,Samuel Soares,ST
+645,20703,fora,0,,Leonardo de Sousa,SP
+647,20703,fora,0,,Carlos Alberto da Silva,SM
+648,20703,fora,0,,Jeferson Macedo,SP
+649,20703,fora,0,,Markys Vinicius,SM
+652,20703,fora,0,,Seza Evangelista,SP
+655,20703,fora,0,,Natan Augusto,SP
+656,20703,fora,0,,Joanderson Pinheiro,ST
+657,20703,fora,0,,Samuel,PI
+659,20703,fora,0,,Franquiosmar Gadelha,SM
+660,20703,naoEquipe,0,,Luiz Lourenço,ST
+663,20703,campoSemFuro,0,,Jefferson Hudson,SP
+664,20703,fora,0,,Emanuel Martins,SP
+665,20703,naoEquipe,0,,Raphael Vicente Almeida (Líder Intermitente),SP
+668,20703,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20703,fora,0,,Breno Brenner de Oliveira,SP
+670,20703,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+671,20703,naoEquipe,0,,Marcos Rossi,PI
+672,20703,campoSemFuro,1,,Fellipe de Souza Genovez,ST
+674,20703,naoEquipe,0,,Indicação,PI
+675,20703,naoEquipe,0,,Indicar,SP
+677,20703,naoEquipe,0,,,SM
+678,20703,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20703,naoEquipe,0,,Danilo Rodrigues,SP
+4,20704,fora,0,,José I. Amaral,SM
+59,20704,naoEquipe,0,,Paulo S. Lima,SM
+79,20704,fora,0,,Leonardo D. Marques,SM
+121,20704,fora,0,,Joaquim T. Lira,SM
+136,20704,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20704,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20704,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+164,20704,mobilizada,0,17930-26,Jucevan,SM
+171,20704,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20704,fora,0,,João dos. Filho,SM
+175,20704,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20704,mobilizada,0,17712-26,Alex A. SIlva,SM
+223,20704,mobilizada,0,17930-26,Cícero J.,SM
+257,20704,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20704,mobilizada,0,17459-26,Francinaldo Junior,SP
+286,20704,campoSemFuro,1,,Francisco Basílio,SM
+297,20704,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20704,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20704,mobilizada,0,17712-26,Jario Gomes,SM
+321,20704,mobilizada,0,17919-26,Deivid Moura,SP
+325,20704,campoSemFuro,1,,Kaique Oliveira da Silva,SM
+329,20704,mobilizada,0,17783-26,Everton dos Santos,SP
 337,20704,fora,0,,Silvanio Silva,SM
-362,20704,fora,0,,Rodolfo Augusto,SM
-405,20704,fora,0,,Edgar Pereira,SM
-337,20705,fora,0,,Silvanio Silva,SM
-362,20705,fora,0,,Rodolfo Augusto,SM
-405,20705,fora,0,,Edgar Pereira,SM
-337,20706,fora,0,,Silvanio Silva,SM
-362,20706,fora,0,,Rodolfo Augusto,SM
-405,20706,fora,0,,Edgar Pereira,SM
-337,20707,fora,0,,Silvanio Silva,SM
-362,20707,fora,0,,Rodolfo Augusto,SM
-405,20707,fora,0,,Edgar Pereira,SM
-337,20708,fora,0,,Silvanio Silva,SM
-362,20708,fora,0,,Rodolfo Augusto,SM
-405,20708,fora,0,,Edgar Pereira,SM
-337,20709,fora,0,,Silvanio Silva,SM
-362,20709,fora,0,,Rodolfo Augusto,SM
-405,20709,fora,0,,Edgar Pereira,SM
-479,20709,fora,0,,Jose Arlyson de Sousa,SM
+340,20704,mobilizada,0,17716-26,João Lenon,SM
+341,20704,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20704,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20704,mobilizada,0,16948-25,Mariano Alves,SP
+362,20704,campoSemFuro,0,,Rodolfo Augusto,SM
+364,20704,fora,0,,Francieudo Alves,SM
+373,20704,mobilizada,0,17716-26,Maurício José,SM
+377,20704,fora,0,,Allan Patrick,SM
+378,20704,mobilizada,0,17936-26,José Robson Paz,SM
+389,20704,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20704,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20704,fora,0,,Francisco Teotônio,SM
+405,20704,campoSemFuro,0,,Edgar Pereira,SM
+409,20704,mobilizada,0,17353-26,Deyvisson,ST
+420,20704,naoEquipe,0,,Renato de Sousa Morais,SM
+428,20704,campoSemFuro,1,,Leandro Cabral,SM
+434,20704,mobilizada,0,17353-26,Jonas Santos,ST
+463,20704,mobilizada,0,17197-26,Maycon Pereira,SP
+468,20704,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20704,mobilizada,0,17656-26,Alisson Ferreira,SP
+503,20704,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20704,mobilizada,0,17746-26,Felipe Lima,SM
+513,20704,mobilizada,0,17973-26,Leomar Bezerra,ST
+519,20704,mobilizada,0,16948-25,Micael Santos,SP
+520,20704,fora,0,,José Nauéliton,SM
+523,20704,mobilizada,0,17197-26,Inonaldo Filho,SP
+535,20704,mobilizada,0,17716-26,José Henrique,SM
+536,20704,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20704,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20704,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20704,fora,0,,Alison Pires,SP
+559,20704,mobilizada,0,17656-26,Lucas Santana,SP
+561,20704,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20704,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20704,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20704,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20704,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20704,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20704,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20704,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20704,mobilizada,0,17716-26,Júlio Silva,SM
+594,20704,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20704,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20704,mobilizada,0,17122-25,Benedito Simith,PI
+602,20704,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20704,mobilizada,0,17913-26,Francisco José,SP
+604,20704,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20704,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+606,20704,fora,0,,Wesley Andrade,ST
+607,20704,mobilizada,0,17783-26,Daniel Viana,SP
+611,20704,fora,0,,Alisson Rodrigues,SM
+614,20704,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20704,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20704,mobilizada,0,17930-26,Antony Samuel,SM
+627,20704,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20704,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20704,mobilizada,0,17783-26,Flávio Silva,SP
+636,20704,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20704,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20704,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20704,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20704,mobilizada,0,17353-26,Samuel Soares,ST
+645,20704,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20704,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20704,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20704,campoSemFuro,1,,Markys Vinicius,SM
+652,20704,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20704,mobilizada,0,17783-26,Natan Augusto,SP
+656,20704,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20704,mobilizada,0,17679-26,Samuel,PI
+659,20704,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20704,naoEquipe,0,,Luiz Lourenço,ST
+663,20704,campoSemFuro,0,,Jefferson Hudson,SP
+664,20704,mobilizada,0,17617-26,Emanuel Martins,SP
+665,20704,naoEquipe,0,,Raphael Vicente Almeida (Líder Intermitente),SP
+668,20704,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20704,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20704,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+671,20704,naoEquipe,0,,Marcos Rossi,PI
+672,20704,campoSemFuro,1,,Fellipe de Souza Genovez,ST
+674,20704,naoEquipe,0,,Indicação,PI
+675,20704,naoEquipe,0,,Indicar,SP
+677,20704,naoEquipe,0,,,SM
+678,20704,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20704,naoEquipe,0,,Danilo Rodrigues,SP
+4,20705,campoSemFuro,0,,José I. Amaral,SM
+59,20705,naoEquipe,0,,Paulo S. Lima,SM
+79,20705,fora,0,,Leonardo D. Marques,SM
+121,20705,campoSemFuro,0,,Joaquim T. Lira,SM
+136,20705,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20705,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20705,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+164,20705,mobilizada,0,17930-26,Jucevan,SM
+171,20705,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20705,campoSemFuro,0,,João dos. Filho,SM
+175,20705,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20705,mobilizada,0,17712-26,Alex A. SIlva,SM
+223,20705,mobilizada,0,17930-26,Cícero J.,SM
+257,20705,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20705,mobilizada,0,17459-26,Francinaldo Junior,SP
+286,20705,campoSemFuro,1,,Francisco Basílio,SM
+297,20705,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20705,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20705,mobilizada,0,17712-26,Jario Gomes,SM
+321,20705,mobilizada,0,17919-26,Deivid Moura,SP
+325,20705,campoSemFuro,1,,Kaique Oliveira da Silva,SM
+329,20705,mobilizada,0,17783-26,Everton dos Santos,SP
+340,20705,mobilizada,0,17716-26,João Lenon,SM
+341,20705,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20705,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20705,mobilizada,0,16948-25,Mariano Alves,SP
+362,20705,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20705,campoSemFuro,0,,Francieudo Alves,SM
+373,20705,mobilizada,0,17716-26,Maurício José,SM
+377,20705,campoSemFuro,0,,Allan Patrick,SM
+378,20705,mobilizada,0,17936-26,José Robson Paz,SM
+389,20705,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20705,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20705,campoSemFuro,0,,Francisco Teotônio,SM
+405,20705,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20705,mobilizada,0,17353-26,Deyvisson,ST
+420,20705,naoEquipe,0,,Renato de Sousa Morais,SM
+428,20705,campoSemFuro,1,,Leandro Cabral,SM
+434,20705,mobilizada,0,17353-26,Jonas Santos,ST
+463,20705,mobilizada,0,17197-26,Maycon Pereira,SP
+468,20705,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20705,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20705,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20705,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20705,mobilizada,0,17746-26,Felipe Lima,SM
+513,20705,mobilizada,0,17973-26,Leomar Bezerra,ST
+519,20705,mobilizada,0,16948-25,Micael Santos,SP
+520,20705,fora,0,,José Nauéliton,SM
+523,20705,mobilizada,0,17197-26,Inonaldo Filho,SP
+535,20705,mobilizada,0,17716-26,José Henrique,SM
+536,20705,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20705,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20705,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20705,fora,0,,Alison Pires,SP
+559,20705,mobilizada,0,17656-26,Lucas Santana,SP
+561,20705,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20705,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20705,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20705,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20705,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20705,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20705,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20705,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20705,mobilizada,0,17716-26,Júlio Silva,SM
+594,20705,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20705,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20705,mobilizada,0,17122-25,Benedito Simith,PI
+602,20705,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20705,mobilizada,0,17913-26,Francisco José,SP
+604,20705,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20705,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+606,20705,fora,0,,Wesley Andrade,ST
+607,20705,mobilizada,0,17783-26,Daniel Viana,SP
+611,20705,campoSemFuro,0,,Alisson Rodrigues,SM
+614,20705,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20705,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20705,mobilizada,0,17930-26,Antony Samuel,SM
+627,20705,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20705,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20705,mobilizada,0,17783-26,Flávio Silva,SP
+636,20705,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20705,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20705,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20705,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20705,mobilizada,0,17353-26,Samuel Soares,ST
+645,20705,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20705,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20705,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20705,campoSemFuro,1,,Markys Vinicius,SM
+652,20705,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20705,mobilizada,0,17783-26,Natan Augusto,SP
+656,20705,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20705,mobilizada,0,17679-26,Samuel,PI
+659,20705,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20705,naoEquipe,0,,Luiz Lourenço,ST
+663,20705,campoSemFuro,0,,Jefferson Hudson,SP
+664,20705,mobilizada,0,17617-26,Emanuel Martins,SP
+665,20705,campoSemFuro,1,,Raphael Vicente Almeida (Líder Intermitente),SP
+668,20705,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20705,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20705,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+671,20705,naoEquipe,0,,Marcos Rossi,PI
+672,20705,campoSemFuro,1,,Fellipe de Souza Genovez,ST
+674,20705,naoEquipe,0,,Indicação,PI
+675,20705,naoEquipe,0,,Indicar,SP
+677,20705,naoEquipe,0,,,SM
+678,20705,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20705,naoEquipe,0,,Danilo Rodrigues,SP
+4,20706,mobilizada,0,17489-26,José I. Amaral,SM
+59,20706,naoEquipe,0,,Paulo S. Lima,SM
+79,20706,campoSemFuro,1,,Leonardo D. Marques,SM
+121,20706,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20706,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20706,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20706,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+164,20706,mobilizada,0,17930-26,Jucevan,SM
+171,20706,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20706,mobilizada,0,17489-26,João dos. Filho,SM
+175,20706,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20706,mobilizada,0,17712-26,Alex A. SIlva,SM
+223,20706,mobilizada,0,17930-26,Cícero J.,SM
+257,20706,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20706,mobilizada,0,17459-26,Francinaldo Junior,SP
+286,20706,campoSemFuro,1,,Francisco Basílio,SM
+297,20706,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20706,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20706,mobilizada,0,17712-26,Jario Gomes,SM
+321,20706,mobilizada,0,17919-26,Deivid Moura,SP
+325,20706,campoSemFuro,1,,Kaique Oliveira da Silva,SM
+329,20706,mobilizada,0,17783-26,Everton dos Santos,SP
+340,20706,mobilizada,0,17716-26,João Lenon,SM
+341,20706,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20706,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20706,mobilizada,0,16948-25,Mariano Alves,SP
+362,20706,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20706,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20706,mobilizada,0,17716-26,Maurício José,SM
+377,20706,mobilizada,0,17489-26,Allan Patrick,SM
+378,20706,mobilizada,0,17936-26,José Robson Paz,SM
+389,20706,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20706,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20706,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20706,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20706,mobilizada,0,17353-26,Deyvisson,ST
+420,20706,naoEquipe,0,,Renato de Sousa Morais,SM
+428,20706,campoSemFuro,1,,Leandro Cabral,SM
+434,20706,mobilizada,0,17353-26,Jonas Santos,ST
+463,20706,mobilizada,0,17197-26,Maycon Pereira,SP
+468,20706,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20706,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20706,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20706,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20706,mobilizada,0,17746-26,Felipe Lima,SM
+513,20706,mobilizada,0,17973-26,Leomar Bezerra,ST
+519,20706,mobilizada,0,16948-25,Micael Santos,SP
+520,20706,fora,0,,José Nauéliton,SM
+523,20706,mobilizada,0,17197-26,Inonaldo Filho,SP
+535,20706,mobilizada,0,17716-26,José Henrique,SM
+536,20706,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20706,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20706,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20706,fora,0,,Alison Pires,SP
+559,20706,mobilizada,0,17656-26,Lucas Santana,SP
+561,20706,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20706,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20706,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20706,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20706,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20706,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20706,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20706,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20706,mobilizada,0,17716-26,Júlio Silva,SM
+594,20706,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20706,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20706,mobilizada,0,17122-25,Benedito Simith,PI
+602,20706,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20706,mobilizada,0,17913-26,Francisco José,SP
+604,20706,campoSemFuro,0,,Mailson Barbosa,SM
+605,20706,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+606,20706,fora,0,,Wesley Andrade,ST
+607,20706,mobilizada,0,17783-26,Daniel Viana,SP
+611,20706,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20706,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20706,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20706,mobilizada,0,17930-26,Antony Samuel,SM
+627,20706,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20706,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20706,mobilizada,0,17783-26,Flávio Silva,SP
+636,20706,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20706,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20706,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20706,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20706,mobilizada,0,17353-26,Samuel Soares,ST
+645,20706,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20706,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20706,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20706,campoSemFuro,1,,Markys Vinicius,SM
+652,20706,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20706,mobilizada,0,17783-26,Natan Augusto,SP
+656,20706,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20706,mobilizada,0,17679-26,Samuel,PI
+659,20706,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20706,naoEquipe,0,,Luiz Lourenço,ST
+663,20706,campoSemFuro,0,,Jefferson Hudson,SP
+664,20706,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20706,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20706,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20706,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+671,20706,naoEquipe,0,,Marcos Rossi,PI
+672,20706,campoSemFuro,0,,Fellipe de Souza Genovez,ST
+674,20706,naoEquipe,0,,Indicação,PI
+675,20706,naoEquipe,0,,Indicar,SP
+677,20706,naoEquipe,0,,,SM
+678,20706,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20706,naoEquipe,0,,Danilo Rodrigues,SP
+4,20707,mobilizada,0,17489-26,José I. Amaral,SM
+59,20707,naoEquipe,0,,Paulo S. Lima,SM
+121,20707,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20707,fora,0,,Marcos R. Sá,SM
+143,20707,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20707,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20707,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20707,mobilizada,0,17489-26,João dos. Filho,SM
+175,20707,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20707,mobilizada,0,17712-26,Alex A. SIlva,SM
+257,20707,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20707,mobilizada,0,17459-26,Francinaldo Junior,SP
+297,20707,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20707,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20707,mobilizada,0,17712-26,Jario Gomes,SM
+321,20707,mobilizada,0,17919-26,Deivid Moura,SP
+329,20707,mobilizada,0,17783-26,Everton dos Santos,SP
+340,20707,mobilizada,0,17716-26,João Lenon,SM
+341,20707,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20707,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20707,mobilizada,0,16948-25,Mariano Alves,SP
+362,20707,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20707,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20707,fora,0,,Maurício José,SM
+377,20707,mobilizada,0,17489-26,Allan Patrick,SM
+378,20707,mobilizada,0,17936-26,José Robson Paz,SM
+389,20707,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20707,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20707,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20707,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20707,mobilizada,0,17353-26,Deyvisson,ST
+420,20707,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20707,mobilizada,0,17353-26,Jonas Santos,ST
+463,20707,mobilizada,0,17197-26,Maycon Pereira,SP
+468,20707,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20707,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20707,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20707,mobilizada,0,17197-26,Gabriel Ribeiro,SP
+512,20707,mobilizada,0,17746-26,Felipe Lima,SM
+513,20707,mobilizada,0,17973-26,Leomar Bezerra,ST
+519,20707,mobilizada,0,16948-25,Micael Santos,SP
+520,20707,fora,0,,José Nauéliton,SM
+523,20707,mobilizada,0,17197-26,Inonaldo Filho,SP
+535,20707,mobilizada,0,17716-26,José Henrique,SM
+536,20707,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20707,fora,0,,Jeferson Pereira,SM
+540,20707,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20707,fora,0,,Alison Pires,SP
+559,20707,mobilizada,0,17656-26,Lucas Santana,SP
+561,20707,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20707,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20707,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20707,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20707,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20707,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20707,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20707,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20707,mobilizada,0,17716-26,Júlio Silva,SM
+594,20707,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20707,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20707,mobilizada,0,17122-25,Benedito Simith,PI
+602,20707,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20707,mobilizada,0,17913-26,Francisco José,SP
+604,20707,campoSemFuro,1,,Mailson Barbosa,SM
+605,20707,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+606,20707,fora,0,,Wesley Andrade,ST
+607,20707,mobilizada,0,17783-26,Daniel Viana,SP
+611,20707,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20707,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20707,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20707,mobilizada,0,17930-26,Antony Samuel,SM
+627,20707,fora,0,,Francisco Wellignton,SM
+631,20707,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20707,mobilizada,0,17783-26,Flávio Silva,SP
+636,20707,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20707,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20707,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20707,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20707,mobilizada,0,17353-26,Samuel Soares,ST
+645,20707,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20707,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20707,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20707,campoSemFuro,1,,Markys Vinicius,SM
+652,20707,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20707,mobilizada,0,17783-26,Natan Augusto,SP
+656,20707,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20707,campoSemFuro,0,,Samuel,PI
+659,20707,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20707,naoEquipe,0,,Luiz Lourenço,ST
+663,20707,campoSemFuro,0,,Jefferson Hudson,SP
+664,20707,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20707,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20707,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20707,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+672,20707,campoSemFuro,0,,Fellipe de Souza Genovez,ST
+675,20707,naoEquipe,0,,Indicar,SP
+677,20707,naoEquipe,0,,,SM
+678,20707,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20707,naoEquipe,0,,Danilo Rodrigues,SP
+4,20708,mobilizada,0,17489-26,José I. Amaral,SM
+59,20708,naoEquipe,0,,Paulo S. Lima,SM
+121,20708,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20708,fora,0,,Marcos R. Sá,SM
+143,20708,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20708,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20708,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20708,mobilizada,0,17489-26,João dos. Filho,SM
+175,20708,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20708,mobilizada,0,17712-26,Alex A. SIlva,SM
+257,20708,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20708,mobilizada,0,17459-26,Francinaldo Junior,SP
+297,20708,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20708,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20708,mobilizada,0,17712-26,Jario Gomes,SM
+321,20708,mobilizada,0,17919-26,Deivid Moura,SP
+329,20708,mobilizada,0,17783-26,Everton dos Santos,SP
+340,20708,mobilizada,0,17716-26,João Lenon,SM
+341,20708,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20708,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20708,mobilizada,0,16948-25,Mariano Alves,SP
+362,20708,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20708,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20708,fora,0,,Maurício José,SM
+377,20708,mobilizada,0,17489-26,Allan Patrick,SM
+378,20708,mobilizada,0,17936-26,José Robson Paz,SM
+389,20708,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20708,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20708,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20708,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20708,mobilizada,0,17353-26,Deyvisson,ST
+420,20708,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20708,mobilizada,0,17353-26,Jonas Santos,ST
+463,20708,fora,0,,Maycon Pereira,SP
+468,20708,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20708,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20708,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20708,fora,0,,Gabriel Ribeiro,SP
+512,20708,mobilizada,0,17746-26,Felipe Lima,SM
+513,20708,mobilizada,0,17973-26,Leomar Bezerra,ST
+519,20708,mobilizada,0,16948-25,Micael Santos,SP
+520,20708,fora,0,,José Nauéliton,SM
+523,20708,fora,0,,Inonaldo Filho,SP
+535,20708,mobilizada,0,17716-26,José Henrique,SM
+536,20708,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20708,fora,0,,Jeferson Pereira,SM
+540,20708,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20708,fora,0,,Alison Pires,SP
+559,20708,mobilizada,0,17656-26,Lucas Santana,SP
+561,20708,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20708,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20708,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20708,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20708,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20708,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20708,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20708,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20708,mobilizada,0,17716-26,Júlio Silva,SM
+594,20708,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20708,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20708,mobilizada,0,17122-25,Benedito Simith,PI
+602,20708,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20708,mobilizada,0,17913-26,Francisco José,SP
+604,20708,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20708,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20708,mobilizada,0,17783-26,Daniel Viana,SP
+611,20708,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20708,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20708,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20708,mobilizada,0,17930-26,Antony Samuel,SM
+627,20708,fora,0,,Francisco Wellignton,SM
+631,20708,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20708,mobilizada,0,17783-26,Flávio Silva,SP
+636,20708,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20708,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20708,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20708,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20708,mobilizada,0,17353-26,Samuel Soares,ST
+645,20708,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20708,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20708,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20708,campoSemFuro,1,,Markys Vinicius,SM
+652,20708,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20708,mobilizada,0,17783-26,Natan Augusto,SP
+656,20708,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20708,fora,0,,Samuel,PI
+659,20708,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20708,naoEquipe,0,,Luiz Lourenço,ST
+663,20708,campoSemFuro,0,,Jefferson Hudson,SP
+664,20708,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20708,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20708,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20708,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+675,20708,naoEquipe,0,,Indicar,SP
+677,20708,naoEquipe,0,,,SM
+678,20708,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20708,naoEquipe,0,,Danilo Rodrigues,SP
+4,20709,mobilizada,0,17489-26,José I. Amaral,SM
+59,20709,naoEquipe,0,,Paulo S. Lima,SM
+121,20709,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20709,fora,0,,Marcos R. Sá,SM
+143,20709,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20709,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20709,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20709,mobilizada,0,17489-26,João dos. Filho,SM
+175,20709,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20709,mobilizada,0,17712-26,Alex A. SIlva,SM
+257,20709,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20709,mobilizada,0,17459-26,Francinaldo Junior,SP
+297,20709,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20709,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20709,mobilizada,0,17712-26,Jario Gomes,SM
+321,20709,mobilizada,0,17919-26,Deivid Moura,SP
+329,20709,mobilizada,0,17783-26,Everton dos Santos,SP
+340,20709,mobilizada,0,17716-26,João Lenon,SM
+341,20709,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20709,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20709,mobilizada,0,16948-25,Mariano Alves,SP
+362,20709,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20709,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20709,fora,0,,Maurício José,SM
+377,20709,mobilizada,0,17489-26,Allan Patrick,SM
+378,20709,mobilizada,0,17936-26,José Robson Paz,SM
+389,20709,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20709,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20709,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20709,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20709,mobilizada,0,17353-26,Deyvisson,ST
+420,20709,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20709,mobilizada,0,17353-26,Jonas Santos,ST
+463,20709,fora,0,,Maycon Pereira,SP
+468,20709,fora,0,,Francinildo Jose da Silva Lima,SM
+478,20709,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20709,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20709,fora,0,,Gabriel Ribeiro,SP
+512,20709,mobilizada,0,17746-26,Felipe Lima,SM
+513,20709,mobilizada,0,17973-26,Leomar Bezerra,ST
+519,20709,mobilizada,0,16948-25,Micael Santos,SP
+520,20709,fora,0,,José Nauéliton,SM
+523,20709,fora,0,,Inonaldo Filho,SP
+535,20709,mobilizada,0,17716-26,José Henrique,SM
+536,20709,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20709,fora,0,,Jeferson Pereira,SM
+540,20709,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20709,fora,0,,Alison Pires,SP
+559,20709,mobilizada,0,17656-26,Lucas Santana,SP
+561,20709,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20709,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20709,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20709,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20709,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20709,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20709,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20709,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20709,mobilizada,0,17716-26,Júlio Silva,SM
+594,20709,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20709,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20709,mobilizada,0,17122-25,Benedito Simith,PI
+602,20709,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20709,mobilizada,0,17913-26,Francisco José,SP
+604,20709,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20709,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20709,mobilizada,0,17783-26,Daniel Viana,SP
+611,20709,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20709,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20709,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20709,mobilizada,0,17930-26,Antony Samuel,SM
+627,20709,fora,0,,Francisco Wellignton,SM
+631,20709,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20709,mobilizada,0,17783-26,Flávio Silva,SP
+636,20709,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20709,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20709,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20709,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20709,mobilizada,0,17353-26,Samuel Soares,ST
+645,20709,mobilizada,0,17930-26,Leonardo de Sousa,SP
+647,20709,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20709,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20709,campoSemFuro,1,,Markys Vinicius,SM
+652,20709,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20709,mobilizada,0,17783-26,Natan Augusto,SP
+656,20709,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20709,fora,0,,Samuel,PI
+659,20709,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20709,naoEquipe,0,,Luiz Lourenço,ST
+663,20709,campoSemFuro,0,,Jefferson Hudson,SP
+664,20709,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20709,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20709,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20709,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+675,20709,naoEquipe,0,,Indicar,SP
+677,20709,naoEquipe,0,,,SM
+678,20709,naoEquipe,0,,José Lourenço dos Santos Neto,SP
+679,20709,naoEquipe,0,,Danilo Rodrigues,SP
+4,20710,mobilizada,0,17489-26,José I. Amaral,SM
+59,20710,naoEquipe,0,,Paulo S. Lima,SM
+121,20710,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20710,fora,0,,Marcos R. Sá,SM
+143,20710,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20710,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20710,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20710,mobilizada,0,17489-26,João dos. Filho,SM
+175,20710,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20710,mobilizada,0,17712-26,Alex A. SIlva,SM
+257,20710,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+276,20710,mobilizada,0,17459-26,Francinaldo Junior,SP
+297,20710,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20710,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20710,mobilizada,0,17712-26,Jario Gomes,SM
+321,20710,mobilizada,0,17919-26,Deivid Moura,SP
+329,20710,mobilizada,0,17783-26,Everton dos Santos,SP
+340,20710,mobilizada,0,17716-26,João Lenon,SM
+341,20710,mobilizada,0,17828-26,Sivanildo da Silva,SM
+353,20710,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
+361,20710,mobilizada,0,16948-25,Mariano Alves,SP
+362,20710,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20710,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20710,fora,0,,Maurício José,SM
+377,20710,mobilizada,0,17489-26,Allan Patrick,SM
+378,20710,mobilizada,0,17936-26,José Robson Paz,SM
+389,20710,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
+395,20710,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20710,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20710,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20710,mobilizada,0,17353-26,Deyvisson,ST
+420,20710,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20710,mobilizada,0,17353-26,Jonas Santos,ST
+463,20710,fora,0,,Maycon Pereira,SP
+468,20710,campoSemFuro,0,,Francinildo Jose da Silva Lima,SM
+478,20710,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20710,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20710,fora,0,,Gabriel Ribeiro,SP
+512,20710,mobilizada,0,17746-26,Felipe Lima,SM
+513,20710,mobilizada,0,17973-26,Leomar Bezerra,ST
+519,20710,mobilizada,0,16948-25,Micael Santos,SP
+520,20710,fora,0,,José Nauéliton,SM
+523,20710,fora,0,,Inonaldo Filho,SP
+535,20710,mobilizada,0,17716-26,José Henrique,SM
+536,20710,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20710,fora,0,,Jeferson Pereira,SM
+540,20710,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+552,20710,campoSemFuro,0,,Alison Pires,SP
+559,20710,mobilizada,0,17656-26,Lucas Santana,SP
+561,20710,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20710,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20710,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20710,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20710,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20710,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20710,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20710,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20710,mobilizada,0,17716-26,Júlio Silva,SM
+594,20710,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+595,20710,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
+600,20710,mobilizada,0,17122-25,Benedito Simith,PI
+602,20710,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20710,mobilizada,0,17913-26,Francisco José,SP
+604,20710,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20710,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20710,mobilizada,0,17783-26,Daniel Viana,SP
+611,20710,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20710,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20710,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20710,campoSemFuro,0,,Antony Samuel,SM
+627,20710,fora,0,,Francisco Wellignton,SM
+631,20710,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20710,mobilizada,0,17783-26,Flávio Silva,SP
+636,20710,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20710,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20710,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20710,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20710,mobilizada,0,17353-26,Samuel Soares,ST
+645,20710,campoSemFuro,0,,Leonardo de Sousa,SP
+647,20710,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20710,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20710,campoSemFuro,1,,Markys Vinicius,SM
+652,20710,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20710,mobilizada,0,17783-26,Natan Augusto,SP
+656,20710,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20710,fora,0,,Samuel,PI
+659,20710,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20710,naoEquipe,0,,Luiz Lourenço,ST
+663,20710,campoSemFuro,0,,Jefferson Hudson,SP
+664,20710,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20710,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20710,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20710,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20711,mobilizada,0,17489-26,José I. Amaral,SM
+59,20711,naoEquipe,0,,Paulo S. Lima,SM
+121,20711,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20711,fora,0,,Marcos R. Sá,SM
+143,20711,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20711,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20711,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20711,mobilizada,0,17489-26,João dos. Filho,SM
+175,20711,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20711,mobilizada,0,17712-26,Alex A. SIlva,SM
+257,20711,mobilizada,0,17722-26,Edy Itallo,CPTu | VT | SH
+276,20711,mobilizada,0,17459-26,Francinaldo Junior,SP
+297,20711,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20711,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20711,mobilizada,0,17712-26,Jario Gomes,SM
+321,20711,mobilizada,0,17919-26,Deivid Moura,SP
+329,20711,mobilizada,0,17783-26,Everton dos Santos,SP
+340,20711,mobilizada,0,17716-26,João Lenon,SM
+341,20711,mobilizada,0,17828-26,Sivanildo da Silva,SM
+361,20711,mobilizada,0,16948-25,Mariano Alves,SP
+362,20711,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20711,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20711,fora,0,,Maurício José,SM
+377,20711,mobilizada,0,17489-26,Allan Patrick,SM
+378,20711,mobilizada,0,17936-26,José Robson Paz,SM
+395,20711,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20711,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20711,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20711,mobilizada,0,17353-26,Deyvisson,ST
+420,20711,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20711,mobilizada,0,17353-26,Jonas Santos,ST
+463,20711,fora,0,,Maycon Pereira,SP
+478,20711,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20711,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20711,fora,0,,Gabriel Ribeiro,SP
+512,20711,mobilizada,0,17746-26,Felipe Lima,SM
+513,20711,mobilizada,0,17746-26,Leomar Bezerra,ST
+519,20711,mobilizada,0,16948-25,Micael Santos,SP
+520,20711,fora,0,,José Nauéliton,SM
+523,20711,fora,0,,Inonaldo Filho,SP
+535,20711,mobilizada,0,17716-26,José Henrique,SM
+536,20711,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20711,fora,0,,Jeferson Pereira,SM
+540,20711,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20711,mobilizada,0,17656-26,Lucas Santana,SP
+561,20711,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20711,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20711,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20711,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20711,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20711,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20711,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20711,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20711,mobilizada,0,17716-26,Júlio Silva,SM
+594,20711,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20711,mobilizada,0,17122-25,Benedito Simith,PI
+602,20711,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20711,mobilizada,0,17913-26,Francisco José,SP
+604,20711,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20711,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20711,mobilizada,0,17783-26,Daniel Viana,SP
+611,20711,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20711,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20711,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20711,mobilizada,0,17810-26,Antony Samuel,SM
+627,20711,fora,0,,Francisco Wellignton,SM
+631,20711,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20711,mobilizada,0,17783-26,Flávio Silva,SP
+636,20711,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20711,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20711,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20711,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20711,mobilizada,0,17353-26,Samuel Soares,ST
+645,20711,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20711,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20711,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20711,campoSemFuro,1,,Markys Vinicius,SM
+652,20711,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20711,mobilizada,0,17783-26,Natan Augusto,SP
+656,20711,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20711,fora,0,,Samuel,PI
+659,20711,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20711,naoEquipe,0,,Luiz Lourenço,ST
+664,20711,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20711,naoEquipe,0,,Pedro Henrique Souza,SP
+669,20711,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+670,20711,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20712,mobilizada,0,17489-26,José I. Amaral,SM
+59,20712,naoEquipe,0,,Paulo S. Lima,SM
+121,20712,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20712,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20712,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20712,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20712,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20712,mobilizada,0,17489-26,João dos. Filho,SM
+175,20712,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20712,mobilizada,0,17712-26,Alex A. SIlva,SM
+257,20712,mobilizada,0,17722-26,Edy Itallo,CPTu | VT | SH
+276,20712,mobilizada,0,17459-26,Francinaldo Junior,SP
+297,20712,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20712,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20712,mobilizada,0,17712-26,Jario Gomes,SM
+321,20712,mobilizada,0,17919-26,Deivid Moura,SP
+329,20712,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20712,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20712,mobilizada,0,17716-26,João Lenon,SM
+341,20712,mobilizada,0,17828-26,Sivanildo da Silva,SM
+361,20712,mobilizada,0,16948-25,Mariano Alves,SP
+362,20712,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20712,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20712,mobilizada,0,17716-26,Maurício José,SM
+377,20712,mobilizada,0,17489-26,Allan Patrick,SM
+378,20712,mobilizada,0,17936-26,José Robson Paz,SM
+395,20712,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20712,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20712,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20712,mobilizada,0,17353-26,Deyvisson,ST
+420,20712,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20712,mobilizada,0,17353-26,Jonas Santos,ST
+463,20712,fora,0,,Maycon Pereira,SP
+478,20712,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20712,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20712,fora,0,,Gabriel Ribeiro,SP
+512,20712,mobilizada,0,17746-26,Felipe Lima,SM
+513,20712,mobilizada,0,17746-26,Leomar Bezerra,ST
+519,20712,mobilizada,0,16948-25,Micael Santos,SP
+520,20712,fora,0,,José Nauéliton,SM
+523,20712,fora,0,,Inonaldo Filho,SP
+535,20712,mobilizada,0,17716-26,José Henrique,SM
+536,20712,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20712,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20712,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20712,mobilizada,0,17656-26,Lucas Santana,SP
+561,20712,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20712,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20712,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20712,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20712,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20712,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20712,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20712,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20712,mobilizada,0,17716-26,Júlio Silva,SM
+594,20712,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20712,mobilizada,0,17122-25,Benedito Simith,PI
+602,20712,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20712,mobilizada,0,17913-26,Francisco José,SP
+604,20712,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20712,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20712,mobilizada,0,17783-26,Daniel Viana,SP
+611,20712,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20712,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20712,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20712,mobilizada,0,17810-26,Antony Samuel,SM
+627,20712,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20712,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20712,mobilizada,0,17783-26,Flávio Silva,SP
+636,20712,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20712,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20712,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20712,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20712,mobilizada,0,17353-26,Samuel Soares,ST
+645,20712,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20712,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20712,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20712,campoSemFuro,1,,Markys Vinicius,SM
+652,20712,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20712,mobilizada,0,17783-26,Natan Augusto,SP
+656,20712,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20712,fora,0,,Samuel,PI
+659,20712,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20712,naoEquipe,0,,Luiz Lourenço,ST
+664,20712,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20712,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20712,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20713,mobilizada,0,17489-26,José I. Amaral,SM
+59,20713,naoEquipe,0,,Paulo S. Lima,SM
+121,20713,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20713,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20713,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20713,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20713,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20713,mobilizada,0,17489-26,João dos. Filho,SM
+175,20713,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+216,20713,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20713,mobilizada,0,17459-26,Francinaldo Junior,SP
+297,20713,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
+299,20713,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20713,mobilizada,0,17712-26,Jario Gomes,SM
+321,20713,mobilizada,0,17919-26,Deivid Moura,SP
+329,20713,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20713,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20713,mobilizada,0,17716-26,João Lenon,SM
+341,20713,mobilizada,0,17828-26,Sivanildo da Silva,SM
+361,20713,mobilizada,0,16948-25,Mariano Alves,SP
+362,20713,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20713,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20713,mobilizada,0,17716-26,Maurício José,SM
+377,20713,mobilizada,0,17489-26,Allan Patrick,SM
+378,20713,mobilizada,0,17936-26,José Robson Paz,SM
+395,20713,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20713,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20713,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20713,mobilizada,0,17353-26,Deyvisson,ST
+420,20713,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20713,mobilizada,0,17353-26,Jonas Santos,ST
+463,20713,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20713,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20713,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20713,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+512,20713,mobilizada,0,17746-26,Felipe Lima,SM
+513,20713,mobilizada,0,17746-26,Leomar Bezerra,ST
+519,20713,mobilizada,0,16948-25,Micael Santos,SP
+520,20713,fora,0,,José Nauéliton,SM
+523,20713,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20713,mobilizada,0,17716-26,José Henrique,SM
+536,20713,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20713,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20713,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20713,mobilizada,0,17656-26,Lucas Santana,SP
+561,20713,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+564,20713,mobilizada,0,17714-26,Gustavo da Silva,CPTu | VT | SH
+568,20713,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20713,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20713,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20713,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20713,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20713,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20713,mobilizada,0,17716-26,Júlio Silva,SM
+594,20713,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20713,mobilizada,0,17122-25,Benedito Simith,PI
+602,20713,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20713,mobilizada,0,17913-26,Francisco José,SP
+604,20713,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20713,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20713,mobilizada,0,17783-26,Daniel Viana,SP
+611,20713,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20713,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20713,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20713,mobilizada,0,17810-26,Antony Samuel,SM
+627,20713,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20713,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20713,mobilizada,0,17783-26,Flávio Silva,SP
+636,20713,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20713,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20713,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20713,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20713,mobilizada,0,17353-26,Samuel Soares,ST
+645,20713,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20713,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20713,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20713,campoSemFuro,1,,Markys Vinicius,SM
+652,20713,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20713,mobilizada,0,17783-26,Natan Augusto,SP
+656,20713,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20713,campoSemFuro,0,,Samuel,PI
+659,20713,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20713,naoEquipe,0,,Luiz Lourenço,ST
+664,20713,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20713,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20713,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20714,mobilizada,0,17489-26,José I. Amaral,SM
+59,20714,naoEquipe,0,,Paulo S. Lima,SM
+121,20714,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20714,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20714,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20714,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20714,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20714,mobilizada,0,17489-26,João dos. Filho,SM
+216,20714,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20714,mobilizada,0,17459-26,Francinaldo Junior,SP
+299,20714,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20714,mobilizada,0,17712-26,Jario Gomes,SM
+321,20714,mobilizada,0,17919-26,Deivid Moura,SP
+329,20714,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20714,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20714,mobilizada,0,17716-26,João Lenon,SM
+341,20714,mobilizada,0,17828-26,Sivanildo da Silva,SM
+361,20714,mobilizada,0,16948-25,Mariano Alves,SP
+362,20714,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20714,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20714,mobilizada,0,17716-26,Maurício José,SM
+377,20714,mobilizada,0,17489-26,Allan Patrick,SM
+378,20714,mobilizada,0,17936-26,José Robson Paz,SM
+395,20714,mobilizada,0,17746-26,Aucélio Formiga,SM
+403,20714,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20714,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20714,mobilizada,0,17353-26,Deyvisson,ST
+420,20714,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20714,mobilizada,0,17353-26,Jonas Santos,ST
+463,20714,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20714,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20714,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20714,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+512,20714,mobilizada,0,17746-26,Felipe Lima,SM
+513,20714,mobilizada,0,17746-26,Leomar Bezerra,ST
+519,20714,mobilizada,0,16948-25,Micael Santos,SP
+520,20714,fora,0,,José Nauéliton,SM
+523,20714,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20714,mobilizada,0,17716-26,José Henrique,SM
+536,20714,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20714,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20714,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20714,mobilizada,0,17656-26,Lucas Santana,SP
+561,20714,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+568,20714,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20714,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20714,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20714,mobilizada,0,17703-26,Anderson de Almeida,SP
+585,20714,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
+586,20714,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20714,mobilizada,0,17716-26,Júlio Silva,SM
+594,20714,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20714,mobilizada,0,17122-25,Benedito Simith,PI
+602,20714,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20714,mobilizada,0,17913-26,Francisco José,SP
+604,20714,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20714,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20714,mobilizada,0,17783-26,Daniel Viana,SP
+611,20714,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20714,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20714,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20714,mobilizada,0,17810-26,Antony Samuel,SM
+627,20714,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20714,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20714,mobilizada,0,17783-26,Flávio Silva,SP
+636,20714,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20714,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20714,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20714,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20714,mobilizada,0,17353-26,Samuel Soares,ST
+645,20714,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20714,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20714,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20714,campoSemFuro,1,,Markys Vinicius,SM
+652,20714,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20714,mobilizada,0,17783-26,Natan Augusto,SP
+656,20714,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20714,mobilizada,0,17679-26,Samuel,PI
+659,20714,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
+660,20714,naoEquipe,0,,Luiz Lourenço,ST
+664,20714,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20714,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20714,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20715,mobilizada,0,17489-26,José I. Amaral,SM
+59,20715,naoEquipe,0,,Paulo S. Lima,SM
+121,20715,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20715,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20715,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20715,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20715,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20715,mobilizada,0,17489-26,João dos. Filho,SM
+216,20715,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20715,mobilizada,0,17459-26,Francinaldo Junior,SP
+299,20715,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20715,mobilizada,0,17712-26,Jario Gomes,SM
+321,20715,mobilizada,0,17919-26,Deivid Moura,SP
+329,20715,fora,0,,Everton dos Santos,SP
+337,20715,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20715,mobilizada,0,17716-26,João Lenon,SM
+361,20715,mobilizada,0,16948-25,Mariano Alves,SP
+362,20715,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20715,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20715,mobilizada,0,17716-26,Maurício José,SM
+377,20715,mobilizada,0,17489-26,Allan Patrick,SM
+378,20715,mobilizada,0,17936-26,José Robson Paz,SM
+403,20715,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20715,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20715,mobilizada,0,17353-26,Deyvisson,ST
+420,20715,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20715,mobilizada,0,17353-26,Jonas Santos,ST
+463,20715,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20715,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20715,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20715,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+513,20715,mobilizada,0,17746-26,Leomar Bezerra,ST
+519,20715,mobilizada,0,16948-25,Micael Santos,SP
+520,20715,fora,0,,José Nauéliton,SM
+523,20715,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20715,mobilizada,0,17716-26,José Henrique,SM
+536,20715,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20715,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20715,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20715,mobilizada,0,17656-26,Lucas Santana,SP
+561,20715,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+568,20715,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20715,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20715,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20715,mobilizada,0,17703-26,Anderson de Almeida,SP
+586,20715,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20715,mobilizada,0,17716-26,Júlio Silva,SM
+594,20715,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20715,mobilizada,0,17122-25,Benedito Simith,PI
+602,20715,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20715,mobilizada,0,17913-26,Francisco José,SP
+604,20715,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20715,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20715,fora,0,,Daniel Viana,SP
+611,20715,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20715,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20715,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20715,mobilizada,0,17810-26,Antony Samuel,SM
+627,20715,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20715,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20715,mobilizada,0,17783-26,Flávio Silva,SP
+636,20715,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20715,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20715,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20715,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20715,mobilizada,0,17353-26,Samuel Soares,ST
+645,20715,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20715,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20715,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20715,campoSemFuro,1,,Markys Vinicius,SM
+652,20715,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20715,fora,0,,Natan Augusto,SP
+656,20715,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20715,mobilizada,0,17679-26,Samuel,PI
+660,20715,naoEquipe,0,,Luiz Lourenço,ST
+664,20715,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20715,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20715,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20716,mobilizada,0,17489-26,José I. Amaral,SM
+59,20716,naoEquipe,0,,Paulo S. Lima,SM
+121,20716,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20716,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20716,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20716,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20716,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20716,mobilizada,0,17489-26,João dos. Filho,SM
+216,20716,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20716,mobilizada,0,17459-26,Francinaldo Junior,SP
+299,20716,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20716,mobilizada,0,17712-26,Jario Gomes,SM
+321,20716,mobilizada,0,17919-26,Deivid Moura,SP
+329,20716,fora,0,,Everton dos Santos,SP
+337,20716,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20716,mobilizada,0,17716-26,João Lenon,SM
+361,20716,mobilizada,0,16948-25,Mariano Alves,SP
+362,20716,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20716,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20716,mobilizada,0,17716-26,Maurício José,SM
+377,20716,mobilizada,0,17489-26,Allan Patrick,SM
+378,20716,mobilizada,0,17936-26,José Robson Paz,SM
+403,20716,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20716,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20716,mobilizada,0,17353-26,Deyvisson,ST
+420,20716,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20716,mobilizada,0,17353-26,Jonas Santos,ST
+463,20716,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20716,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20716,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20716,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+513,20716,mobilizada,0,17746-26,Leomar Bezerra,ST
+519,20716,mobilizada,0,16948-25,Micael Santos,SP
+520,20716,fora,0,,José Nauéliton,SM
+523,20716,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20716,mobilizada,0,17716-26,José Henrique,SM
+536,20716,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20716,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20716,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20716,mobilizada,0,17656-26,Lucas Santana,SP
+561,20716,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+568,20716,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20716,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20716,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20716,mobilizada,0,17703-26,Anderson de Almeida,SP
+586,20716,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20716,mobilizada,0,17716-26,Júlio Silva,SM
+594,20716,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20716,mobilizada,0,17122-25,Benedito Simith,PI
+602,20716,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20716,mobilizada,0,17913-26,Francisco José,SP
+604,20716,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20716,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20716,fora,0,,Daniel Viana,SP
+611,20716,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20716,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20716,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20716,mobilizada,0,17810-26,Antony Samuel,SM
+627,20716,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20716,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20716,mobilizada,0,17783-26,Flávio Silva,SP
+636,20716,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20716,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20716,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20716,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20716,mobilizada,0,17353-26,Samuel Soares,ST
+645,20716,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20716,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20716,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20716,campoSemFuro,1,,Markys Vinicius,SM
+652,20716,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20716,fora,0,,Natan Augusto,SP
+656,20716,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20716,mobilizada,0,17679-26,Samuel,PI
+660,20716,naoEquipe,0,,Luiz Lourenço,ST
+664,20716,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20716,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20716,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20717,mobilizada,0,17489-26,José I. Amaral,SM
+59,20717,naoEquipe,0,,Paulo S. Lima,SM
+121,20717,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20717,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20717,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20717,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20717,mobilizada,0,17919-26,Francinaldo G. Souza,SP
+175,20717,mobilizada,0,17489-26,João dos. Filho,SM
+216,20717,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20717,mobilizada,0,17459-26,Francinaldo Junior,SP
+299,20717,mobilizada,0,17919-26,Lenildo Pereira,SP
+306,20717,mobilizada,0,17712-26,Jario Gomes,SM
+321,20717,mobilizada,0,17919-26,Deivid Moura,SP
+329,20717,fora,0,,Everton dos Santos,SP
+337,20717,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20717,mobilizada,0,17716-26,João Lenon,SM
+361,20717,mobilizada,0,16948-25,Mariano Alves,SP
+362,20717,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20717,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20717,mobilizada,0,17716-26,Maurício José,SM
+377,20717,mobilizada,0,17489-26,Allan Patrick,SM
+378,20717,mobilizada,0,17936-26,José Robson Paz,SM
+403,20717,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20717,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20717,mobilizada,0,17353-26,Deyvisson,ST
+420,20717,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20717,mobilizada,0,17353-26,Jonas Santos,ST
+463,20717,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20717,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20717,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20717,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+519,20717,mobilizada,0,16948-25,Micael Santos,SP
+520,20717,fora,0,,José Nauéliton,SM
+523,20717,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20717,mobilizada,0,17716-26,José Henrique,SM
+536,20717,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20717,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20717,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20717,mobilizada,0,17656-26,Lucas Santana,SP
+561,20717,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+568,20717,mobilizada,0,17919-26,Bruno de Oliveira,SP
+571,20717,mobilizada,0,17919-26,Adonias da Silva,SP
+575,20717,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20717,mobilizada,0,17703-26,Anderson de Almeida,SP
+586,20717,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20717,mobilizada,0,17716-26,Júlio Silva,SM
+594,20717,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20717,mobilizada,0,17122-25,Benedito Simith,PI
+602,20717,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20717,mobilizada,0,17913-26,Francisco José,SP
+604,20717,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20717,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20717,fora,0,,Daniel Viana,SP
+611,20717,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20717,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20717,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20717,mobilizada,0,17810-26,Antony Samuel,SM
+627,20717,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20717,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20717,mobilizada,0,17783-26,Flávio Silva,SP
+636,20717,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20717,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20717,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20717,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20717,mobilizada,0,17353-26,Samuel Soares,ST
+645,20717,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20717,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20717,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20717,campoSemFuro,1,,Markys Vinicius,SM
+652,20717,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20717,fora,0,,Natan Augusto,SP
+656,20717,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20717,mobilizada,0,17679-26,Samuel,PI
+660,20717,naoEquipe,0,,Luiz Lourenço,ST
+664,20717,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20717,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20717,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20718,mobilizada,0,17489-26,José I. Amaral,SM
+59,20718,naoEquipe,0,,Paulo S. Lima,SM
+121,20718,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20718,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20718,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20718,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+171,20718,campoSemFuro,0,,Francinaldo G. Souza,SP
+175,20718,mobilizada,0,17489-26,João dos. Filho,SM
+216,20718,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20718,mobilizada,0,17459-26,Francinaldo Junior,SP
+299,20718,campoSemFuro,0,,Lenildo Pereira,SP
+306,20718,mobilizada,0,17712-26,Jario Gomes,SM
+321,20718,campoSemFuro,0,,Deivid Moura,SP
+329,20718,fora,0,,Everton dos Santos,SP
+337,20718,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20718,mobilizada,0,17716-26,João Lenon,SM
+361,20718,mobilizada,0,16948-25,Mariano Alves,SP
+362,20718,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20718,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20718,mobilizada,0,17716-26,Maurício José,SM
+377,20718,mobilizada,0,17489-26,Allan Patrick,SM
+378,20718,mobilizada,0,17936-26,José Robson Paz,SM
+403,20718,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20718,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20718,mobilizada,0,17353-26,Deyvisson,ST
+420,20718,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20718,mobilizada,0,17353-26,Jonas Santos,ST
+463,20718,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20718,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20718,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20718,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+519,20718,mobilizada,0,16948-25,Micael Santos,SP
+520,20718,fora,0,,José Nauéliton,SM
+523,20718,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20718,mobilizada,0,17716-26,José Henrique,SM
+536,20718,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20718,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20718,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20718,mobilizada,0,17656-26,Lucas Santana,SP
+561,20718,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+568,20718,campoSemFuro,0,,Bruno de Oliveira,SP
+571,20718,campoSemFuro,0,,Adonias da Silva,SP
+575,20718,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20718,mobilizada,0,17703-26,Anderson de Almeida,SP
+586,20718,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20718,mobilizada,0,17716-26,Júlio Silva,SM
+594,20718,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20718,mobilizada,0,17122-25,Benedito Simith,PI
+602,20718,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20718,mobilizada,0,17913-26,Francisco José,SP
+604,20718,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20718,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20718,fora,0,,Daniel Viana,SP
+611,20718,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20718,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20718,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20718,mobilizada,0,17810-26,Antony Samuel,SM
+627,20718,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20718,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20718,mobilizada,0,17783-26,Flávio Silva,SP
+636,20718,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20718,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20718,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20718,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20718,mobilizada,0,17353-26,Samuel Soares,ST
+645,20718,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20718,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20718,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20718,campoSemFuro,1,,Markys Vinicius,SM
+652,20718,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20718,fora,0,,Natan Augusto,SP
+656,20718,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20718,mobilizada,0,17679-26,Samuel,PI
+660,20718,naoEquipe,0,,Luiz Lourenço,ST
+664,20718,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20718,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20718,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20719,mobilizada,0,17489-26,José I. Amaral,SM
+59,20719,naoEquipe,0,,Paulo S. Lima,SM
+121,20719,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20719,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20719,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20719,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+175,20719,mobilizada,0,17489-26,João dos. Filho,SM
+216,20719,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20719,mobilizada,0,17459-26,Francinaldo Junior,SP
+306,20719,mobilizada,0,17712-26,Jario Gomes,SM
+329,20719,fora,0,,Everton dos Santos,SP
+337,20719,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20719,mobilizada,0,17716-26,João Lenon,SM
+361,20719,mobilizada,0,16948-25,Mariano Alves,SP
+362,20719,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20719,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20719,mobilizada,0,17716-26,Maurício José,SM
+377,20719,mobilizada,0,17489-26,Allan Patrick,SM
+378,20719,mobilizada,0,17936-26,José Robson Paz,SM
+403,20719,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20719,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20719,mobilizada,0,17353-26,Deyvisson,ST
+420,20719,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20719,mobilizada,0,17353-26,Jonas Santos,ST
+463,20719,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20719,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20719,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20719,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+519,20719,mobilizada,0,16948-25,Micael Santos,SP
+520,20719,fora,0,,José Nauéliton,SM
+523,20719,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20719,mobilizada,0,17716-26,José Henrique,SM
+536,20719,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20719,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20719,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20719,mobilizada,0,17656-26,Lucas Santana,SP
+561,20719,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+575,20719,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20719,mobilizada,0,17703-26,Anderson de Almeida,SP
+586,20719,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20719,mobilizada,0,17716-26,Júlio Silva,SM
+594,20719,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20719,mobilizada,0,17122-25,Benedito Simith,PI
+602,20719,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20719,mobilizada,0,17913-26,Francisco José,SP
+604,20719,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20719,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20719,fora,0,,Daniel Viana,SP
+611,20719,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20719,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20719,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20719,mobilizada,0,17810-26,Antony Samuel,SM
+627,20719,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20719,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20719,mobilizada,0,17783-26,Flávio Silva,SP
+636,20719,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20719,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20719,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20719,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20719,mobilizada,0,17353-26,Samuel Soares,ST
+645,20719,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20719,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20719,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20719,campoSemFuro,1,,Markys Vinicius,SM
+652,20719,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20719,fora,0,,Natan Augusto,SP
+656,20719,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20719,mobilizada,0,17679-26,Samuel,PI
+660,20719,naoEquipe,0,,Luiz Lourenço,ST
+664,20719,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20719,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20719,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20720,mobilizada,0,17489-26,José I. Amaral,SM
+59,20720,naoEquipe,0,,Paulo S. Lima,SM
+121,20720,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20720,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20720,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20720,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+175,20720,mobilizada,0,17489-26,João dos. Filho,SM
+216,20720,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20720,mobilizada,0,17459-26,Francinaldo Junior,SP
+306,20720,mobilizada,0,17712-26,Jario Gomes,SM
+329,20720,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20720,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20720,mobilizada,0,17716-26,João Lenon,SM
+361,20720,mobilizada,0,16948-25,Mariano Alves,SP
+362,20720,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20720,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20720,mobilizada,0,17716-26,Maurício José,SM
+377,20720,mobilizada,0,17489-26,Allan Patrick,SM
+378,20720,mobilizada,0,17936-26,José Robson Paz,SM
+403,20720,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20720,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20720,mobilizada,0,17353-26,Deyvisson,ST
+420,20720,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20720,mobilizada,0,17353-26,Jonas Santos,ST
+463,20720,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20720,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20720,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20720,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+519,20720,mobilizada,0,16948-25,Micael Santos,SP
+520,20720,fora,0,,José Nauéliton,SM
+523,20720,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20720,mobilizada,0,17716-26,José Henrique,SM
+536,20720,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20720,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20720,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20720,mobilizada,0,17656-26,Lucas Santana,SP
+561,20720,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+575,20720,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20720,mobilizada,0,17703-26,Anderson de Almeida,SP
+586,20720,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20720,mobilizada,0,17716-26,Júlio Silva,SM
+594,20720,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20720,mobilizada,0,17122-25,Benedito Simith,PI
+602,20720,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20720,mobilizada,0,17913-26,Francisco José,SP
+604,20720,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20720,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20720,mobilizada,0,17783-26,Daniel Viana,SP
+611,20720,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20720,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20720,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20720,mobilizada,0,17810-26,Antony Samuel,SM
+627,20720,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20720,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20720,mobilizada,0,17783-26,Flávio Silva,SP
+636,20720,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20720,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20720,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20720,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20720,mobilizada,0,17353-26,Samuel Soares,ST
+645,20720,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20720,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20720,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20720,campoSemFuro,1,,Markys Vinicius,SM
+652,20720,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20720,mobilizada,0,17783-26,Natan Augusto,SP
+656,20720,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20720,mobilizada,0,17679-26,Samuel,PI
+660,20720,naoEquipe,0,,Luiz Lourenço,ST
+664,20720,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20720,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20720,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20721,mobilizada,0,17489-26,José I. Amaral,SM
+59,20721,naoEquipe,0,,Paulo S. Lima,SM
+121,20721,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20721,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20721,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20721,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+175,20721,mobilizada,0,17489-26,João dos. Filho,SM
+216,20721,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20721,mobilizada,0,17459-26,Francinaldo Junior,SP
+306,20721,mobilizada,0,17712-26,Jario Gomes,SM
+329,20721,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20721,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20721,mobilizada,0,17716-26,João Lenon,SM
+361,20721,mobilizada,0,16948-25,Mariano Alves,SP
+362,20721,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20721,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20721,mobilizada,0,17716-26,Maurício José,SM
+377,20721,mobilizada,0,17489-26,Allan Patrick,SM
+378,20721,mobilizada,0,17936-26,José Robson Paz,SM
+403,20721,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20721,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20721,mobilizada,0,17353-26,Deyvisson,ST
+420,20721,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20721,mobilizada,0,17353-26,Jonas Santos,ST
+463,20721,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20721,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20721,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20721,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+519,20721,mobilizada,0,16948-25,Micael Santos,SP
+520,20721,fora,0,,José Nauéliton,SM
+523,20721,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20721,mobilizada,0,17716-26,José Henrique,SM
+536,20721,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20721,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20721,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20721,mobilizada,0,17656-26,Lucas Santana,SP
+561,20721,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+575,20721,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20721,fora,0,,Anderson de Almeida,SP
+586,20721,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20721,mobilizada,0,17716-26,Júlio Silva,SM
+594,20721,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20721,mobilizada,0,17122-25,Benedito Simith,PI
+602,20721,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20721,fora,0,,Francisco José,SP
+604,20721,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20721,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20721,mobilizada,0,17783-26,Daniel Viana,SP
+611,20721,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20721,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20721,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20721,mobilizada,0,17810-26,Antony Samuel,SM
+627,20721,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20721,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20721,mobilizada,0,17783-26,Flávio Silva,SP
+636,20721,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20721,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20721,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20721,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20721,mobilizada,0,17353-26,Samuel Soares,ST
+645,20721,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20721,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20721,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20721,campoSemFuro,1,,Markys Vinicius,SM
+652,20721,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20721,mobilizada,0,17783-26,Natan Augusto,SP
+656,20721,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20721,mobilizada,0,17679-26,Samuel,PI
+660,20721,naoEquipe,0,,Luiz Lourenço,ST
+664,20721,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20721,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20721,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20722,mobilizada,0,17489-26,José I. Amaral,SM
+59,20722,naoEquipe,0,,Paulo S. Lima,SM
+121,20722,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20722,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20722,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20722,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+175,20722,mobilizada,0,17489-26,João dos. Filho,SM
+216,20722,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20722,mobilizada,0,17459-26,Francinaldo Junior,SP
+306,20722,mobilizada,0,17712-26,Jario Gomes,SM
+329,20722,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20722,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20722,mobilizada,0,17716-26,João Lenon,SM
+361,20722,mobilizada,0,16948-25,Mariano Alves,SP
+362,20722,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20722,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20722,mobilizada,0,17716-26,Maurício José,SM
+377,20722,mobilizada,0,17489-26,Allan Patrick,SM
+378,20722,mobilizada,0,17936-26,José Robson Paz,SM
+403,20722,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20722,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20722,mobilizada,0,17353-26,Deyvisson,ST
+420,20722,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20722,mobilizada,0,17353-26,Jonas Santos,ST
+463,20722,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20722,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20722,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20722,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+519,20722,mobilizada,0,16948-25,Micael Santos,SP
+520,20722,fora,0,,José Nauéliton,SM
+523,20722,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20722,mobilizada,0,17716-26,José Henrique,SM
+536,20722,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20722,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20722,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20722,mobilizada,0,17656-26,Lucas Santana,SP
+561,20722,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+575,20722,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20722,fora,0,,Anderson de Almeida,SP
+586,20722,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20722,mobilizada,0,17716-26,Júlio Silva,SM
+594,20722,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20722,mobilizada,0,17122-25,Benedito Simith,PI
+602,20722,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20722,fora,0,,Francisco José,SP
+604,20722,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20722,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20722,mobilizada,0,17783-26,Daniel Viana,SP
+611,20722,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20722,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20722,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20722,mobilizada,0,17810-26,Antony Samuel,SM
+627,20722,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20722,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20722,mobilizada,0,17783-26,Flávio Silva,SP
+636,20722,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20722,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20722,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20722,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20722,mobilizada,0,17353-26,Samuel Soares,ST
+645,20722,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20722,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20722,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20722,campoSemFuro,1,,Markys Vinicius,SM
+652,20722,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20722,mobilizada,0,17783-26,Natan Augusto,SP
+656,20722,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20722,mobilizada,0,17679-26,Samuel,PI
+660,20722,naoEquipe,0,,Luiz Lourenço,ST
+664,20722,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20722,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20722,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20723,mobilizada,0,17489-26,José I. Amaral,SM
+59,20723,naoEquipe,0,,Paulo S. Lima,SM
+121,20723,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20723,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20723,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20723,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+175,20723,mobilizada,0,17489-26,João dos. Filho,SM
+216,20723,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20723,mobilizada,0,17459-26,Francinaldo Junior,SP
+306,20723,mobilizada,0,17712-26,Jario Gomes,SM
+329,20723,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20723,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20723,mobilizada,0,17716-26,João Lenon,SM
+361,20723,mobilizada,0,16948-25,Mariano Alves,SP
+362,20723,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20723,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20723,mobilizada,0,17716-26,Maurício José,SM
+377,20723,mobilizada,0,17489-26,Allan Patrick,SM
+378,20723,mobilizada,0,17936-26,José Robson Paz,SM
+403,20723,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20723,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20723,mobilizada,0,17353-26,Deyvisson,ST
+420,20723,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20723,mobilizada,0,17353-26,Jonas Santos,ST
+463,20723,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20723,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20723,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20723,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+519,20723,mobilizada,0,16948-25,Micael Santos,SP
+520,20723,fora,0,,José Nauéliton,SM
+523,20723,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20723,mobilizada,0,17716-26,José Henrique,SM
+536,20723,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20723,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20723,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20723,mobilizada,0,17656-26,Lucas Santana,SP
+561,20723,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+575,20723,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20723,fora,0,,Anderson de Almeida,SP
+586,20723,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20723,mobilizada,0,17716-26,Júlio Silva,SM
+594,20723,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20723,mobilizada,0,17122-25,Benedito Simith,PI
+602,20723,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20723,fora,0,,Francisco José,SP
+604,20723,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20723,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20723,mobilizada,0,17783-26,Daniel Viana,SP
+611,20723,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20723,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20723,mobilizada,0,17712-26,Tiago Mateus,SM
+626,20723,mobilizada,0,17810-26,Antony Samuel,SM
+627,20723,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20723,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20723,mobilizada,0,17783-26,Flávio Silva,SP
+636,20723,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20723,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20723,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20723,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20723,mobilizada,0,17353-26,Samuel Soares,ST
+645,20723,mobilizada,0,17810-26,Leonardo de Sousa,SP
+647,20723,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20723,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20723,campoSemFuro,1,,Markys Vinicius,SM
+652,20723,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20723,mobilizada,0,17783-26,Natan Augusto,SP
+656,20723,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20723,mobilizada,0,17679-26,Samuel,PI
+660,20723,naoEquipe,0,,Luiz Lourenço,ST
+664,20723,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20723,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20723,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20724,mobilizada,0,17489-26,José I. Amaral,SM
+59,20724,naoEquipe,0,,Paulo S. Lima,SM
+121,20724,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20724,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20724,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20724,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+175,20724,mobilizada,0,17489-26,João dos. Filho,SM
+216,20724,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20724,mobilizada,0,17459-26,Francinaldo Junior,SP
+306,20724,mobilizada,0,17712-26,Jario Gomes,SM
+329,20724,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20724,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20724,mobilizada,0,17716-26,João Lenon,SM
+361,20724,mobilizada,0,16948-25,Mariano Alves,SP
+362,20724,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20724,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20724,mobilizada,0,17716-26,Maurício José,SM
+377,20724,mobilizada,0,17489-26,Allan Patrick,SM
+378,20724,mobilizada,0,17936-26,José Robson Paz,SM
+403,20724,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20724,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20724,mobilizada,0,17353-26,Deyvisson,ST
+420,20724,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20724,mobilizada,0,17353-26,Jonas Santos,ST
+463,20724,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20724,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20724,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20724,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+519,20724,mobilizada,0,16948-25,Micael Santos,SP
+520,20724,fora,0,,José Nauéliton,SM
+523,20724,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20724,mobilizada,0,17716-26,José Henrique,SM
+536,20724,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20724,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20724,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20724,mobilizada,0,17656-26,Lucas Santana,SP
+561,20724,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+575,20724,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20724,fora,0,,Anderson de Almeida,SP
+586,20724,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20724,mobilizada,0,17716-26,Júlio Silva,SM
+594,20724,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
+600,20724,mobilizada,0,17122-25,Benedito Simith,PI
+602,20724,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20724,fora,0,,Francisco José,SP
+604,20724,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20724,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+607,20724,mobilizada,0,17783-26,Daniel Viana,SP
+611,20724,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20724,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20724,mobilizada,0,17712-26,Tiago Mateus,SM
+627,20724,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20724,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20724,mobilizada,0,17783-26,Flávio Silva,SP
+636,20724,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20724,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20724,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20724,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20724,mobilizada,0,17353-26,Samuel Soares,ST
+647,20724,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20724,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20724,campoSemFuro,1,,Markys Vinicius,SM
+652,20724,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20724,mobilizada,0,17783-26,Natan Augusto,SP
+656,20724,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20724,mobilizada,0,17679-26,Samuel,PI
+660,20724,naoEquipe,0,,Luiz Lourenço,ST
+664,20724,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20724,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20724,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20725,mobilizada,0,17489-26,José I. Amaral,SM
+59,20725,naoEquipe,0,,Paulo S. Lima,SM
+121,20725,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20725,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20725,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20725,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+175,20725,mobilizada,0,17489-26,João dos. Filho,SM
+216,20725,mobilizada,0,17712-26,Alex A. SIlva,SM
+276,20725,fora,0,,Francinaldo Junior,SP
+306,20725,mobilizada,0,17712-26,Jario Gomes,SM
+329,20725,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20725,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20725,mobilizada,0,17716-26,João Lenon,SM
+361,20725,mobilizada,0,16948-25,Mariano Alves,SP
+362,20725,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20725,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20725,mobilizada,0,17716-26,Maurício José,SM
+377,20725,mobilizada,0,17489-26,Allan Patrick,SM
+378,20725,mobilizada,0,17936-26,José Robson Paz,SM
+403,20725,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20725,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20725,mobilizada,0,17353-26,Deyvisson,ST
+420,20725,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20725,mobilizada,0,17353-26,Jonas Santos,ST
+463,20725,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20725,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20725,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20725,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+519,20725,mobilizada,0,16948-25,Micael Santos,SP
+520,20725,fora,0,,José Nauéliton,SM
+523,20725,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20725,mobilizada,0,17716-26,José Henrique,SM
+536,20725,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20725,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20725,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20725,mobilizada,0,17656-26,Lucas Santana,SP
+561,20725,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+575,20725,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20725,fora,0,,Anderson de Almeida,SP
+586,20725,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20725,mobilizada,0,17716-26,Júlio Silva,SM
+594,20725,fora,0,,Rilher Gutemberg Luiz,SP
+600,20725,mobilizada,0,17122-25,Benedito Simith,PI
+602,20725,mobilizada,0,17712-26,Francisco Nilton,SM
+603,20725,fora,0,,Francisco José,SP
+604,20725,mobilizada,0,17716-26,Mailson Barbosa,SM
+605,20725,fora,0,,Antonio Jose Araujo,SP
+607,20725,mobilizada,0,17783-26,Daniel Viana,SP
+611,20725,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20725,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20725,mobilizada,0,17712-26,Tiago Mateus,SM
+627,20725,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20725,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20725,mobilizada,0,17783-26,Flávio Silva,SP
+636,20725,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20725,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20725,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20725,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20725,mobilizada,0,17353-26,Samuel Soares,ST
+647,20725,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20725,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20725,campoSemFuro,1,,Markys Vinicius,SM
+652,20725,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20725,mobilizada,0,17783-26,Natan Augusto,SP
+656,20725,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20725,mobilizada,0,17679-26,Samuel,PI
+660,20725,naoEquipe,0,,Luiz Lourenço,ST
+664,20725,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20725,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20725,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
+4,20726,mobilizada,0,17489-26,José I. Amaral,SM
+59,20726,naoEquipe,0,,Paulo S. Lima,SM
+121,20726,mobilizada,0,17489-26,Joaquim T. Lira,SM
+136,20726,mobilizada,0,17716-26,Marcos R. Sá,SM
+143,20726,mobilizada,0,16948-25,Gilmar M. Silva,SP
+154,20726,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+175,20726,mobilizada,0,17489-26,João dos. Filho,SM
+216,20726,mobilizada,0,17712-26,Alex A. SIlva,SM
+306,20726,mobilizada,0,17712-26,Jario Gomes,SM
+329,20726,mobilizada,0,17783-26,Everton dos Santos,SP
+337,20726,mobilizada,0,17716-26,Silvanio Silva,SM
+340,20726,mobilizada,0,17716-26,João Lenon,SM
+361,20726,mobilizada,0,16948-25,Mariano Alves,SP
+362,20726,mobilizada,0,17716-26,Rodolfo Augusto,SM
+364,20726,mobilizada,0,17489-26,Francieudo Alves,SM
+373,20726,mobilizada,0,17716-26,Maurício José,SM
+377,20726,mobilizada,0,17489-26,Allan Patrick,SM
+378,20726,mobilizada,0,17936-26,José Robson Paz,SM
+403,20726,mobilizada,0,17489-26,Francisco Teotônio,SM
+405,20726,mobilizada,0,17716-26,Edgar Pereira,SM
+409,20726,mobilizada,0,17353-26,Deyvisson,ST
+420,20726,naoEquipe,0,,Renato de Sousa Morais,SM
+434,20726,mobilizada,0,17353-26,Jonas Santos,ST
+463,20726,mobilizada,0,17198-26,Maycon Pereira,SP
+478,20726,mobilizada,0,17656-26,Alisson Ferreira,SP
+479,20726,mobilizada,0,17716-26,Jose Arlyson de Sousa,SM
+503,20726,mobilizada,0,17198-26,Gabriel Ribeiro,SP
+519,20726,mobilizada,0,16948-25,Micael Santos,SP
+520,20726,fora,0,,José Nauéliton,SM
+523,20726,mobilizada,0,17198-26,Inonaldo Filho,SP
+535,20726,mobilizada,0,17716-26,José Henrique,SM
+536,20726,mobilizada,0,16948-25,Fernando Ikaró,SP
+537,20726,mobilizada,0,17716-26,Jeferson Pereira,SM
+540,20726,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+559,20726,mobilizada,0,17656-26,Lucas Santana,SP
+561,20726,mobilizada,0,17712-26,Ronaldo Albuquerque dos Santos,SM
+575,20726,campoSemFuro,1,,Carlos Junior,CPTu | VT | SH
+577,20726,mobilizada,0,17703-26,Anderson de Almeida,SP
+586,20726,mobilizada,0,16948-25,Matheus Ramos,SP
+588,20726,mobilizada,0,17716-26,Júlio Silva,SM
+600,20726,mobilizada,0,17122-25,Benedito Simith,PI
+602,20726,mobilizada,0,17712-26,Francisco Nilton,SM
+604,20726,mobilizada,0,17716-26,Mailson Barbosa,SM
+607,20726,mobilizada,0,17783-26,Daniel Viana,SP
+611,20726,mobilizada,0,17489-26,Alisson Rodrigues,SM
+614,20726,mobilizada,0,17783-26,Bruno Monteiro,SP
+623,20726,mobilizada,0,17712-26,Tiago Mateus,SM
+627,20726,mobilizada,0,17716-26,Francisco Wellignton,SM
+631,20726,mobilizada,0,17881-26,Francisco Pereira,SM
+634,20726,mobilizada,0,17783-26,Flávio Silva,SP
+636,20726,mobilizada,0,17656-26,Artur José Nunes,SP
+638,20726,mobilizada,0,17716-26,André Luiz Morais,SM
+640,20726,mobilizada,0,17952-26,Evamar Fernandes,SP
+641,20726,mobilizada,0,17952-26,Filipe Cosme,SP
+644,20726,mobilizada,0,17353-26,Samuel Soares,ST
+647,20726,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+648,20726,mobilizada,0,17783-26,Jeferson Macedo,SP
+649,20726,campoSemFuro,1,,Markys Vinicius,SM
+652,20726,mobilizada,0,16948-25,Seza Evangelista,SP
+655,20726,mobilizada,0,17783-26,Natan Augusto,SP
+656,20726,mobilizada,0,17353-26,Joanderson Pinheiro,ST
+657,20726,mobilizada,0,17679-26,Samuel,PI
+660,20726,naoEquipe,0,,Luiz Lourenço,ST
+664,20726,mobilizada,0,17617-26,Emanuel Martins,SP
+668,20726,naoEquipe,0,,Pedro Henrique Souza,SP
+670,20726,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
