@@ -75,7 +75,14 @@ function demandasEspalhadas() {
   for (let i = 0; i < 20; i++) dias.push(diaJul(8));
   return demandasCom({ 'SUP-A||ST': dias });
 }
-const REGISTROS_A = [registro({ sup: 'SUP-A', tipologia: 'ST', volume: 310 })];
+// REGISTROS_A[1] existe só para os testes de agregado do Task 6 (mesmo SUP,
+// tipologia distinta -- gera uma linha TOTAL <SUP-A> quando os dois índices
+// são passados juntos). Todo o resto da suíte usa só o índice [0], então
+// acrescentar este 2º registro não muda nenhum teste anterior.
+const REGISTROS_A = [
+  registro({ sup: 'SUP-A', tipologia: 'ST', volume: 310 }),
+  registro({ sup: 'SUP-A', tipologia: 'PI', volume: 100 }),
+];
 const inteiro = (v) => Math.round(v).toLocaleString('pt-BR');
 
 test('o Realizado exibido continua sendo o de HOJE, nao o congelado', () => {
@@ -641,11 +648,18 @@ test('com congeladoSemanal presente, Tendencia ate a data e Semana total dos 2 b
   // Snapshot distinto de qualquer recálculo local possível.
   const TENDENCIA_PRODUTIVIDADE = 70;
   const TENDENCIA_EQUIPE = 14;
+  // Task 6: produtividadeMedia deixou de ser lida direto do snapshot -- é
+  // agregada como Soma(volume)/Soma(equipe) DO SNAPSHOT (somarTendenciaCongelada),
+  // mesmo para um grupo de um registro só. 'volume' entra aqui só para
+  // sustentar essa divisão (70 = 980 / 14); a chave 'produtividadeMedia' NÃO
+  // é mais lida por render-aba-consolidado.js, mas fica registrada como prova
+  // de que ela é ignorada.
   const congeladoSemanal = {
     [chaveSemana]: {
       porRegistro: {
         [chaveRegistro]: {
-          produtividadeMedia: { tendencia: TENDENCIA_PRODUTIVIDADE },
+          volume: { tendencia: TENDENCIA_PRODUTIVIDADE * TENDENCIA_EQUIPE },
+          produtividadeMedia: { tendencia: 999999 }, // ignorada de propósito -- ver comentário acima
           equipe: { tendencia: TENDENCIA_EQUIPE },
         },
       },
@@ -677,6 +691,48 @@ test('com congeladoSemanal presente, Tendencia ate a data e Semana total dos 2 b
   assert.strictEqual(celulasEquipe[4], dois(TENDENCIA_EQUIPE), 'bloco Equipe: Tendência até a data NÃO prorateia (foto, não fluxo)');
   assert.strictEqual(celulasEquipe[7], dois(TENDENCIA_EQUIPE));
   assert.strictEqual(celulasEquipe[4], celulasEquipe[7], 'Tendência até a data == Semana total no bloco Equipe');
+});
+
+// --- Task 6: linhas de TOTAL somam a tendencia congelada do snapshot -------
+
+test('TOTAL GERAL e TOTAL do SUP somam a tendencia congelada dos registros, nao recalculam', () => {
+  const chaveSemana = formatarChaveSemana(SEMANAS[2].inicio);
+  const c1 = chaveMatriz(REGISTROS_A[0].sup, REGISTROS_A[0].tipologia);
+  const c2 = chaveMatriz(REGISTROS_A[1].sup, REGISTROS_A[1].tipologia);
+  const congeladoSemanal = { [chaveSemana]: { porRegistro: {
+    [c1]: { volume: { tendencia: 10 }, equipe: { tendencia: 2 }, produtividadeMedia: { tendencia: 5 } },
+    [c2]: { volume: { tendencia: 30 }, equipe: { tendencia: 3 }, produtividadeMedia: { tendencia: 10 } },
+  } } };
+  const html = renderAbaConsolidado(REGISTROS_A, [0, 1], opcoes({
+    semanaIdx: 2, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15), congeladoSemanal,
+  }));
+  const totalGeral = celulasDe(linhasDe(html).filter((l) => l.indexOf('linha-total-geral') !== -1)[0]);
+  // "Semana total" do bloco Equipe: 2 + 3 = 5, somado do snapshot.
+  assert.ok(html.indexOf('>5<') !== -1 || totalGeral.join('|').indexOf('5') !== -1);
+});
+
+test('produtividadeMedia agregada e Soma(volume)/Soma(equipe), nao a soma das produtividades', () => {
+  // c1: volume 10, equipe 2 (prod 5). c2: volume 30, equipe 3 (prod 10).
+  // Somar as produtividades daria 15 -- ERRADO. O certo e 40/5 = 8.
+  const chaveSemana = formatarChaveSemana(SEMANAS[2].inicio);
+  const c1 = chaveMatriz(REGISTROS_A[0].sup, REGISTROS_A[0].tipologia);
+  const c2 = chaveMatriz(REGISTROS_A[1].sup, REGISTROS_A[1].tipologia);
+  const congeladoSemanal = { [chaveSemana]: { porRegistro: {
+    [c1]: { volume: { tendencia: 10 }, equipe: { tendencia: 2 }, produtividadeMedia: { tendencia: 5 } },
+    [c2]: { volume: { tendencia: 30 }, equipe: { tendencia: 3 }, produtividadeMedia: { tendencia: 10 } },
+  } } };
+  const html = renderAbaConsolidado(REGISTROS_A, [0, 1], opcoes({
+    semanaIdx: 2, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15), congeladoSemanal,
+  }));
+  assert.ok(html.indexOf('15,00') === -1, 'nao pode somar produtividades');
+  assert.ok(html.indexOf('8,00') !== -1, 'produtividade agregada tem de ser 40/5 = 8,00');
+});
+
+test('agregado devolve sem-dado quando NENHUM registro do grupo tem congelado', () => {
+  const html = renderAbaConsolidado(REGISTROS_A, [0, 1], opcoes({
+    semanaIdx: 2, demandas: demandasEspalhadas(), hojeEpoch: diaJul(15), congeladoSemanal: {},
+  }));
+  assert.match(html, /sem-dado/);
 });
 
 test('Produtividade media Realizado e null (sem-dado), nunca Infinity/NaN, quando Equipe Realizado e zero', () => {

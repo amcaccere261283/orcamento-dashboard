@@ -52,16 +52,20 @@ function serieDaSemana(registros, indices, dimensao, alvo, ctx) {
     registros, indices, dimensao, alvo.mesIdx, semanas, semanas.length,
     ctx.temSemanasReais, indiceAtualReal, ctx.demandas, ctx.hojeEpoch, ctx.mesAtualReal
   );
-  // ctx.tendenciaExterna: função opcional (chaveRegistro) => number|null. Só faz
-  // sentido para GRUPOS de um registro só (indices.length === 1) -- um total
-  // agregado (SUP/tipologia/geral) não tem UMA chave, então cai sempre no
-  // recálculo local mesmo com tendenciaExterna presente. Quem quiser um total
-  // vindo do snapshot soma os registros individuais fora daqui (ver Consolidado,
-  // que já faz essa soma para as outras colunas).
+  // ctx.tendenciaExterna: função opcional (chaveRegistro) => number|null.
+  // Antes só era consultada para GRUPOS de um registro só (indices.length
+  // === 1) -- um total agregado (SUP/tipologia/geral) caía sempre no
+  // recálculo local, mesmo com tendenciaExterna presente, e por isso ficava
+  // permanentemente em branco nos blocos que só existem congelados. A
+  // decisão de agregar (somar vários registros do snapshot) passou a ser do
+  // CHAMADOR (Task 6, ver tendenciaExternaDoCtx em render-aba-consolidado.js):
+  // quando ele já somou o grupo, chega aqui como uma função CONSTANTE, e
+  // 'chave' não importa mais para esse caso -- só continua relevante para
+  // quem ainda consulta por chave individual.
   var tendenciaCongelada;
-  if (typeof ctx.tendenciaExterna === 'function' && indices.length === 1) {
-    var registro = registros[indices[0]];
-    var chave = ctx.chaveDoRegistro ? ctx.chaveDoRegistro(registro) : null;
+  if (typeof ctx.tendenciaExterna === 'function') {
+    var chave = ctx.chaveDoRegistro && indices.length === 1
+      ? ctx.chaveDoRegistro(registros[indices[0]]) : null;
     var externa = ctx.tendenciaExterna(chave);
     if (externa !== undefined && externa !== null) tendenciaCongelada = externa;
   }

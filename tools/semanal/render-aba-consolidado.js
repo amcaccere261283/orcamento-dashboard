@@ -235,19 +235,48 @@ function renderCabecalho(dimensao, semana, congelada) {
     + '</tr></thead>';
 }
 
+// Soma a tendência congelada dos registros de um grupo. O spec pede que os
+// totais sejam SOMADOS do snapshot por registro, não recalculados -- senão a
+// linha de TOTAL sai de uma âncora diferente das linhas acima dela e não fecha
+// na soma delas.
+//
+// produtividadeMedia NÃO se soma: ela é uma razão. Agrega como
+// Soma(volume)/Soma(equipe), do mesmo snapshot.
+//
+// Devolve null quando NENHUM registro do grupo tem entrada -- distinto de zero.
+function somarTendenciaCongelada(registros, indices, porRegistro, dimensao) {
+  if (!porRegistro) return null;
+  if (dimensao === 'produtividadeMedia') {
+    var somaVolume = somarTendenciaCongelada(registros, indices, porRegistro, 'volume');
+    var somaEquipe = somarTendenciaCongelada(registros, indices, porRegistro, 'equipe');
+    if (somaVolume === null || !somaEquipe) return null;
+    return somaVolume / somaEquipe;
+  }
+  var soma = null;
+  indices.forEach(function (idx) {
+    var registro = registros[idx];
+    if (!registro) return;
+    var entrada = porRegistro[chaveMatriz(registro.sup, registro.tipologia)];
+    if (!entrada || !entrada[dimensao]) return;
+    var v = entrada[dimensao].tendencia;
+    if (v === null || v === undefined) return;
+    soma = (soma === null ? 0 : soma) + v;
+  });
+  return soma;
+}
+
 // congeladoPorSemana: a fatia de opcoes.congeladoSemanal já resolvida para a
 // chave da semana em tela (congeladoSemanal[formatarChaveSemana(semana.inicio)]
 // || null), resolvida uma vez em renderAbaConsolidado e passada via ctx --
-// evita recalcular a chave a cada linha.
-function tendenciaExternaDoCtx(ctx) {
+// evita recalcular a chave a cada linha. Soma a tendência congelada de TODOS
+// os registros do grupo (registros/indices) ANTES de devolver a função
+// constante que serieDaSemana consome -- é o que faz a linha de TOTAL bater
+// com a soma das linhas acima dela, em vez de recalcular do zero.
+function tendenciaExternaDoCtx(ctx, registros, indices) {
   if (!ctx.congeladoPorSemana || !ctx.congeladoPorSemana.porRegistro) return undefined;
-  var porRegistro = ctx.congeladoPorSemana.porRegistro;
-  return function (chave) {
-    var entrada = porRegistro[chave];
-    if (!entrada || !entrada[ctx.dimensaoSnapshot]) return undefined;
-    var v = entrada[ctx.dimensaoSnapshot].tendencia;
-    return v === undefined ? undefined : v;
-  };
+  var valor = somarTendenciaCongelada(registros, indices, ctx.congeladoPorSemana.porRegistro, ctx.dimensaoSnapshot);
+  if (valor === null) return undefined; // sem congelado -> serieDaSemana recalcula
+  return function () { return valor; };
 }
 
 // Fração de dias já decorridos da semana escolhida, em relação ao hoje real --
@@ -269,7 +298,7 @@ function renderLinhaResumo(celulas, classe, registros, indices, ctx) {
   var alvo = { semana: ctx.semanaEscolhida, mesIdx: ctx.mesIdx, semanasDoMesAlvo: ctx.semanas, indiceNoMes: ctx.semanaIdx };
   var serieCtx = {
     hojeEpoch: ctx.hojeEpoch, temSemanasReais: ctx.temSemanasReais, demandas: ctx.demandas,
-    tendenciaExterna: tendenciaExternaDoCtx(ctx),
+    tendenciaExterna: tendenciaExternaDoCtx(ctx, registros, indices),
     chaveDoRegistro: function (r) { return chaveMatriz(r.sup, r.tipologia); },
   };
   var janela = serieDaSemana(registros, indices, ctx.dimensaoSnapshot, alvo, serieCtx);
@@ -336,17 +365,13 @@ function renderLinhaResumo(celulas, classe, registros, indices, ctx) {
 // realizadoEquipe abaixo.
 function renderLinhaResumoGenerica(celulas, classe, registros, indices, ctx, chaveDimensaoSnapshot, realizadoDoBloco, proratear) {
   var congeladoPorSemana = ctx.congeladoPorSemana;
-  var tendenciaExterna;
-  if (congeladoPorSemana && congeladoPorSemana.porRegistro && indices.length === 1) {
-    var chave = chaveMatriz(registros[indices[0]].sup, registros[indices[0]].tipologia);
-    var entrada = congeladoPorSemana.porRegistro[chave];
-    if (entrada && entrada[chaveDimensaoSnapshot] && entrada[chaveDimensaoSnapshot].tendencia !== undefined) {
-      tendenciaExterna = entrada[chaveDimensaoSnapshot].tendencia;
-    }
-  }
-  // "Semana total": a Tendência congelada CHEIA, sem proratear -- é o valor
-  // bruto do snapshot, ou sem dado se ele não existir para a semana em tela.
-  var tendenciaCheia = tendenciaExterna !== undefined ? tendenciaExterna : null;
+  // "Semana total": a Tendência congelada CHEIA, SOMADA através dos registros
+  // do grupo (Task 6) -- sem proratear, e sem cair no recálculo local: só o
+  // snapshot alimenta este bloco. null (sem dado) quando NENHUM registro do
+  // grupo tem entrada no snapshot para a semana em tela.
+  var tendenciaCheia = congeladoPorSemana && congeladoPorSemana.porRegistro
+    ? somarTendenciaCongelada(registros, indices, congeladoPorSemana.porRegistro, chaveDimensaoSnapshot)
+    : null;
   // "Tendência até a data": mesma fração de dias decorridos que a tabela
   // principal já usa em previstoAteAData (calcularFracaoDecorrida) -- só
   // proratea quando há um valor cheio pra proratear E o bloco pediu proração
@@ -609,4 +634,5 @@ module.exports = {
   produtividadeEsperada, ticketMedioPrevisto, somarPrevistoMes,
   blocosPorSup, tipologiasPresentes, tipologiaColor,
   renderLinhaResumoGenerica, realizadoProdutividadeMedia, realizadoEquipe,
+  somarTendenciaCongelada,
 };
