@@ -1752,6 +1752,69 @@ async function congelarProximaSemana() {
   }
 }
 
+// Mostra/esconde btn-desfazer-congelamento com base no que
+// carregarCongeladoDaSemana JÁ buscou pra semana em tela -- nenhuma chamada
+// nova ao Apps Script, é a mesma resposta que decide "(congelada)"/
+// "(recalculada)" lida de outro ângulo.
+function atualizarBotaoDesfazer(chaveSemanaEmTela) {
+  var botao = document.getElementById('btn-desfazer-congelamento');
+  var status = document.getElementById('status-desfazer');
+  if (!botao) return;
+  var temCongelado = ESTADO_CONGELAMENTO.chave === chaveSemanaEmTela && !!ESTADO_CONGELAMENTO.congelado;
+  if (!temCongelado) {
+    botao.style.display = 'none';
+    status.textContent = '';
+    return;
+  }
+  botao.style.display = '';
+  botao.disabled = false;
+  botao.textContent = 'Desfazer congelamento da semana de ' + formatarDiaCurto(chaveSemanaEmTela);
+}
+
+async function desfazerCongelamentoDaSemana() {
+  var chaveSemanaEmTela = ESTADO_CONGELAMENTO.chave;
+  if (!chaveSemanaEmTela) return;
+  var confirmado = window.confirm(
+    'Desfazer o congelamento da semana de ' + formatarDiaCurto(chaveSemanaEmTela)
+    + '? Esta ação não pode ser desfeita.'
+  );
+  if (!confirmado) return;
+
+  var botao = document.getElementById('btn-desfazer-congelamento');
+  var status = document.getElementById('status-desfazer');
+  botao.disabled = true;
+  status.textContent = 'Desfazendo…';
+  try {
+    // A semana EM TELA pode ela mesma ser um fragmento truncado (cruza
+    // virada de mês) -- segundaDaSemana acha a segunda-feira de verdade
+    // antes de recalcular os fragmentos, senão só o próprio fragmento seria
+    // apagado, deixando o outro lado órfão na planilha.
+    var partesChave = chaveSemanaEmTela.split('-').map(Number);
+    var epochChave = Date.UTC(partesChave[0], partesChave[1] - 1, partesChave[2]) / 86400000;
+    var segunda = CongelarTendenciaSemanal.segundaDaSemana(epochChave);
+    var fragmentos = CongelarTendenciaSemanal.fragmentosDaSemanaAlvo(segunda);
+    var chaves = fragmentos.map(function (f) { return f.chave; });
+
+    var r = await clienteCongelamento().desfazer(chaves);
+    if (r.ok) {
+      ESTADO_CONGELAMENTO.congelado = null;
+      ESTADO_CONGELAMENTO.erro = null;
+      status.textContent = '';
+      // Redesenha a aba pra refletir o estado novo -- rótulo volta a
+      // "(recalculada)", totais recalculam, este botão some.
+      if (typeof window.__REDESENHAR_CONSOLIDADO__ === 'function') window.__REDESENHAR_CONSOLIDADO__();
+      return;
+    }
+    status.textContent = r.motivo === 'token'
+      ? 'Acesso recusado pela planilha (token). Confira o token nas Script Properties.'
+      : 'Não foi possível desfazer (rede ou planilha fora do ar). Tente de novo.';
+    botao.disabled = false;
+  } catch (err) {
+    status.textContent = 'Erro ao desfazer: ' + err.message;
+    botao.disabled = false;
+  }
+}
+
 // Índice da semana a exibir: o escolhido, ou o automático quando não há
 // escolha válida. "A semana em curso" é a última que já começou -- mesmo
 // critério de semanasElapsadas na aba Alertas, e não indiceSemanaAtual, que
@@ -1817,15 +1880,7 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
     // a semana em tela -- renderAbaConsolidado resolve a chave sozinho e cai
     // no recalculo de sempre quando a semana nao esta no snapshot.
     congeladoSemanal: congeladoSemanalCarregado,
-  })
-    + '<div class="controles-consolidado">'
-    + '<button id="btn-congelar-semana" class="btn-secundario" disabled>Verificando…</button>'
-    + '<span id="status-congelamento" class="nota-inline"></span>'
-    // Span PROPRIO para o aviso de leitura: #status-congelamento e escrito de
-    // forma assincrona por atualizarBotaoCongelar (que fala da semana-ALVO do
-    // botao, nao da semana EM TELA), e os dois se sobrescreveriam.
-    + '<span id="status-congelamento-leitura" class="nota-inline"></span>'
-    + '</div>';
+  });
   var statusLeitura = document.getElementById('status-congelamento-leitura');
   if (statusLeitura) statusLeitura.textContent = textoErroLeituraCongelamento(ESTADO_CONGELAMENTO.erro);
   var seletorSemana = document.getElementById('consolidado-semana');
@@ -1842,6 +1897,10 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
   if (botaoCongelar) botaoCongelar.addEventListener('click', congelarProximaSemana);
   atualizarBotaoCongelar();
 
+  var botaoDesfazer = document.getElementById('btn-desfazer-congelamento');
+  if (botaoDesfazer) botaoDesfazer.addEventListener('click', desfazerCongelamentoDaSemana);
+  atualizarBotaoDesfazer(chaveSemanaEscolhida);
+
   // So dispara o carregamento assincrono quando a URL ja esta configurada E
   // esta chave ainda nao foi buscada -- com a URL pendente carregarCongeladoDaSemana
   // devolve na hora (sem fetch) e nao ha motivo pra redesenhar de novo.
@@ -1850,6 +1909,8 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
       montarAbaConsolidado(registros, indices, dimensoes);
     });
   }
+
+  window.__REDESENHAR_CONSOLIDADO__ = function () { montarAbaConsolidado(registros, indices, dimensoes); };
 }
 
 // Redesenha cabeçalho + corpo da aba Alertas inteiros a cada mudança (de

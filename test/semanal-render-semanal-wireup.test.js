@@ -100,6 +100,10 @@ function montarSandbox(html, fetchMock) {
     document: documentoFalso, atob, btoa, crypto, TextEncoder, TextDecoder, console,
     fetch: fetchMock || (() => Promise.reject(new Error('fetch não mockado neste teste'))),
     localStorage: localStorageFalso(),
+    // Default: confirma sempre -- só os testes do botão "Desfazer congelamento"
+    // (que testam o caminho de cancelar) sobrescrevem via sandbox.confirm = ...
+    // depois de montarSandbox.
+    confirm: () => true,
   };
   sandbox.window = sandbox; // window É o global object, como no navegador
   vm.createContext(sandbox);
@@ -2104,4 +2108,138 @@ test('leitura que falha por rede avisa dizendo REDE, nao token', async () => {
   assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.erro, 'rede');
   const aviso = documentoFalso.getElementById('status-congelamento-leitura');
   assert.match(aviso.textContent, /rede ou planilha fora do ar/);
+});
+
+// Botão "Desfazer congelamento" (Task 5, 2026-09-01) -- liga
+// desfazerCongelamentoDaSemana ao clique de #btn-desfazer-congelamento e a
+// visibilidade do botão ao que carregarCongeladoDaSemana já buscou para a
+// semana EM TELA (não a semana-alvo de "Congelar", que é sempre a próxima
+// segunda).
+
+test('com a semana em tela JA congelada, btn-desfazer-congelamento aparece visivel e habilitado', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const fetchMock = async (url, opcoes) => {
+    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao === 'ler') {
+      return { ok: true, json: async () => ({ linhas: [
+        { chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 10, equipe: 1, produtividadeMedia: 10, autor: 'ana', congeladoEm: '2026-08-28T22:00:00Z' },
+      ] }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  const btnDesfazer = documentoFalso.getElementById('btn-desfazer-congelamento');
+  assert.notEqual(btnDesfazer.style.display, 'none');
+  assert.equal(btnDesfazer.disabled, false);
+});
+
+test('sem congelado na semana em tela, btn-desfazer-congelamento fica escondido', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const fetchMock = async () => ({ ok: true, json: async () => ({ linhas: [] }) });
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  const btnDesfazer = documentoFalso.getElementById('btn-desfazer-congelamento');
+  assert.equal(btnDesfazer.style.display, 'none');
+});
+
+test('clique em desfazer com confirm cancelado NAO manda requisicao', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  let chamadasDesfazer = 0;
+  const fetchMock = async (url, opcoes) => {
+    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao === 'ler') return { ok: true, json: async () => ({ linhas: [
+      { chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 10, equipe: 1, produtividadeMedia: 10, autor: 'ana', congeladoEm: '2026-08-28T22:00:00Z' },
+    ] }) };
+    if (corpo.acao === 'desfazer') chamadasDesfazer++;
+    return { ok: true, json: async () => ({ ok: true, apagadas: 1 }) };
+  };
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.confirm = () => false; // usuário cancela
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  await sandbox.desfazerCongelamentoDaSemana();
+  assert.equal(chamadasDesfazer, 0, 'confirm cancelado nao pode chegar a mandar a requisicao de desfazer');
+});
+
+test('desfazer com sucesso redesenha a aba: rotulo volta a recalculada e o botao some', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  let jaDesfeito = false;
+  const fetchMock = async (url, opcoes) => {
+    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao === 'ler') {
+      return { ok: true, json: async () => (jaDesfeito ? { linhas: [] } : { linhas: [
+        { chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 10, equipe: 1, produtividadeMedia: 10, autor: 'ana', congeladoEm: '2026-08-28T22:00:00Z' },
+      ] }) };
+    }
+    if (corpo.acao === 'desfazer') { jaDesfeito = true; return { ok: true, json: async () => ({ ok: true, apagadas: 1 }) }; }
+    return { ok: true, json: async () => ({}) };
+  };
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.confirm = () => true; // usuário confirma
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  await sandbox.desfazerCongelamentoDaSemana();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  const btnDesfazer = documentoFalso.getElementById('btn-desfazer-congelamento');
+  assert.equal(btnDesfazer.style.display, 'none', 'sem congelado, o botao de desfazer some de novo');
+});
+
+test('desfazerCongelamentoDaSemana calcula as chaves com segundaDaSemana + fragmentosDaSemanaAlvo da semana EM TELA', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  let chavesRecebidas = null;
+  const fetchMock = async (url, opcoes) => {
+    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao === 'ler') return { ok: true, json: async () => ({ linhas: [
+      { chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 10, equipe: 1, produtividadeMedia: 10, autor: 'ana', congeladoEm: '2026-08-28T22:00:00Z' },
+    ] }) };
+    if (corpo.acao === 'desfazer') chavesRecebidas = corpo.chaves;
+    return { ok: true, json: async () => ({ ok: true, apagadas: 1 }) };
+  };
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.confirm = () => true;
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  await sandbox.desfazerCongelamentoDaSemana();
+  assert.ok(Array.isArray(chavesRecebidas) && chavesRecebidas.length >= 1,
+    'as chaves mandadas pro Apps Script precisam vir de fragmentosDaSemanaAlvo(segundaDaSemana(semana em tela))');
 });
