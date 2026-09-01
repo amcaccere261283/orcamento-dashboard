@@ -57,23 +57,6 @@ function formatarDiaIso(diaEpoch) {
   return ano + '-' + mes + '-' + dia;
 }
 
-// Acha o mesIdx (0-11) e o índice da semana-alvo dentro do mês dela, a
-// partir da chave 'YYYY-MM-DD' já calculada -- reconstrói via semanasDoMes
-// porque é a MESMA função que o resto do projeto usa pra cortar semanas
-// reais (segunda a domingo, nunca cruzando mês), evitando uma segunda
-// implementação de calendário que poderia divergir da primeira.
-function localizarSemanaAlvo(chaveSemanaAlvo) {
-  var partes = chaveSemanaAlvo.split('-').map(Number);
-  var ano = partes[0], mes0 = partes[1] - 1;
-  var semanasDoMesAlvo = semanasDoMes(ano, mes0);
-  var epochAlvo = Date.UTC(ano, mes0, partes[2]) / 86400000;
-  var indiceNoMes = semanasDoMesAlvo.findIndex(function (s) { return s.inicio === epochAlvo; });
-  if (indiceNoMes === -1) {
-    throw new Error('Semana-alvo ' + chaveSemanaAlvo + ' não bate com nenhuma semana de semanasDoMes(' + ano + ',' + mes0 + ') -- calendário divergente.');
-  }
-  return { ano: ano, mesIdx: mes0, semanas: semanasDoMesAlvo, indiceNoMes: indiceNoMes };
-}
-
 // chaveSegunda ('YYYY-MM-DD', sempre uma segunda) -> um descritor por FRAGMENTO
 // de calendário que essa semana ocupa.
 //
@@ -114,36 +97,40 @@ function fragmentosDaSemanaAlvo(chaveSegunda) {
   return fragmentos;
 }
 
-function tendenciaDaSemanaAlvo(registros, indices, dimensao, alvo, demandas, hojeEpoch) {
-  var indiceAtual = indiceSemanaAtual(alvo.semanas, hojeEpoch);
+function tendenciaDoFragmento(registros, indices, dimensao, fragmento, demandas, hojeEpoch) {
+  var indiceAtual = indiceSemanaAtual(fragmento.semanas, hojeEpoch);
   var series = calcularSeriesSemanaisDimensao(
-    registros, indices, dimensao, alvo.mesIdx, alvo.semanas, alvo.semanas.length,
+    registros, indices, dimensao, fragmento.mesIdx, fragmento.semanas, fragmento.semanas.length,
     !!(demandas && demandas.porRegistroEventos), indiceAtual, demandas, hojeEpoch
   );
-  var v = series.semanasTendenciaCompleta[alvo.indiceNoMes];
+  var v = series.semanasTendenciaCompleta[fragmento.indiceNoMes];
   return (v === null || v === undefined) ? null : v;
 }
 
 // registros: array cru da MATRIZ (mesmo formato de window.__REGISTROS__).
 // demandas: { porRegistroEventos } (mesmo formato de window.__DEMANDAS__).
-// hojeEpoch: dia-epoch (UTC) do instante em que o job roda -- normalmente
-// uma sexta 22h, mas ver chaveSemanaSeguinteDeSexta pra tolerância de atraso.
-function calcularSnapshotSemanaAlvo(registros, demandas, hojeEpoch) {
-  var chaveSemanaAlvo = chaveSemanaSeguinteDeSexta(hojeEpoch);
-  var alvo = localizarSemanaAlvo(chaveSemanaAlvo);
-  var porRegistro = {};
-  (registros || []).forEach(function (registro, idx) {
-    var chave = chaveMatriz(registro.sup, registro.tipologia);
-    var volume = tendenciaDaSemanaAlvo(registros, [idx], 'volume', alvo, demandas, hojeEpoch);
-    var financeiro = tendenciaDaSemanaAlvo(registros, [idx], 'financeiro', alvo, demandas, hojeEpoch);
-    var equipe = tendenciaDaSemanaAlvo(registros, [idx], 'equipes', alvo, demandas, hojeEpoch);
-    var produtividadeMedia = (volume === null || !equipe) ? null : volume / equipe;
-    porRegistro[chave] = {
-      volume: { tendencia: volume }, financeiro: { tendencia: financeiro },
-      equipe: { tendencia: equipe }, produtividadeMedia: { tendencia: produtividadeMedia },
-    };
+// hojeEpoch: dia-epoch (UTC) do dia do clique.
+// chaveSegundaAlvo: 'YYYY-MM-DD' da segunda da semana a congelar -- vem de
+//   proximaSegunda(hojeEpoch). É parâmetro em vez de calculado aqui dentro pra
+//   que o chamador possa mostrar na tela QUAL semana vai congelar antes de
+//   confirmar, sem recalcular a regra em dois lugares.
+function calcularSnapshotSemanaAlvo(registros, demandas, hojeEpoch, chaveSegundaAlvo) {
+  var fragmentos = fragmentosDaSemanaAlvo(chaveSegundaAlvo);
+  var linhas = [];
+  fragmentos.forEach(function (fragmento) {
+    (registros || []).forEach(function (registro, idx) {
+      var volume = tendenciaDoFragmento(registros, [idx], 'volume', fragmento, demandas, hojeEpoch);
+      var financeiro = tendenciaDoFragmento(registros, [idx], 'financeiro', fragmento, demandas, hojeEpoch);
+      var equipe = tendenciaDoFragmento(registros, [idx], 'equipes', fragmento, demandas, hojeEpoch);
+      linhas.push({
+        chave: fragmento.chave,
+        chaveMatriz: chaveMatriz(registro.sup, registro.tipologia),
+        volume: volume, financeiro: financeiro, equipe: equipe,
+        produtividadeMedia: (volume === null || !equipe) ? null : volume / equipe,
+      });
+    });
   });
-  return { chaveSemanaAlvo: chaveSemanaAlvo, geradoEmIso: new Date().toISOString(), porRegistro: porRegistro };
+  return { chaveSegunda: chaveSegundaAlvo, geradoEmIso: new Date().toISOString(), linhas: linhas };
 }
 
 function gravarSnapshotNoArquivo(caminhoArquivo, snapshot) {

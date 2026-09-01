@@ -31,40 +31,35 @@ test('proximaSegunda devolve sempre a segunda ESTRITAMENTE depois de hoje', () =
   assert.equal(proximaSegunda(dia(2026, 9, 3)), '2026-09-07');  // quinta
 });
 
-test('calcularSnapshotSemanaAlvo grava tendencia de volume/financeiro/equipe/produtividade por registro', () => {
+test('calcularSnapshotSemanaAlvo emite uma linha por (fragmento x registro), com as 4 tendencias', () => {
   const registros = [
-    {
-      sup: 'SUP-1', tipologia: 'SP', tomador: 'X',
-      previsto: { volume: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100] },
-      total: { equipes: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2] },
-    },
+    { sup: 'SUP-1', tipologia: 'SP', tomador: 'X',
+      previsto: { volume: Array(12).fill(100) }, total: { equipes: Array(12).fill(2) } },
   ];
   const demandas = { porRegistroEventos: {} };
-  // 2026-09-04 (sexta) em epoch de dias -- mesma conta do Task 1, Step 1.
-  const hojeEpoch = Date.UTC(2026, 8, 4) / 86400000;
-  const snapshot = calcularSnapshotSemanaAlvo(registros, demandas, hojeEpoch);
+  const hojeEpoch = Date.UTC(2026, 7, 28) / 86400000; // sexta 28/08
+  const snapshot = calcularSnapshotSemanaAlvo(registros, demandas, hojeEpoch, '2026-08-31');
 
-  assert.equal(snapshot.chaveSemanaAlvo, '2026-09-07');
-  const entrada = snapshot.porRegistro['SUP-1||SP'];
-  assert.ok(entrada, 'registro SUP-1||SP presente no snapshot');
-  assert.equal(typeof entrada.volume.tendencia, 'number');
-  assert.equal(typeof entrada.equipe.tendencia, 'number');
-  // produtividadeMedia = tendencia.volume / tendencia.equipe quando os dois existem.
-  assert.equal(entrada.produtividadeMedia.tendencia, entrada.volume.tendencia / entrada.equipe.tendencia);
+  assert.equal(snapshot.chaveSegunda, '2026-08-31');
+  // 1 registro x 2 fragmentos (31/08 e 01/09) = 2 linhas.
+  assert.equal(snapshot.linhas.length, 2);
+  assert.deepEqual(snapshot.linhas.map((l) => l.chave).sort(), ['2026-08-31', '2026-09-01']);
+  snapshot.linhas.forEach((linha) => {
+    assert.equal(linha.chaveMatriz, 'SUP-1||SP');
+    assert.equal(typeof linha.volume, 'number');
+    assert.equal(typeof linha.equipe, 'number');
+    assert.equal(linha.produtividadeMedia, linha.volume / linha.equipe);
+  });
 });
 
-test('calcularSnapshotSemanaAlvo devolve produtividadeMedia null quando equipe é 0/nula', () => {
+test('calcularSnapshotSemanaAlvo devolve produtividadeMedia null quando equipe e 0', () => {
   const registros = [
-    {
-      sup: 'SUP-2', tipologia: 'ST', tomador: 'Y',
-      previsto: { volume: [50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50] },
-      total: { equipes: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
-    },
+    { sup: 'SUP-2', tipologia: 'ST', tomador: 'Y',
+      previsto: { volume: Array(12).fill(50) }, total: { equipes: Array(12).fill(0) } },
   ];
-  const demandas = { porRegistroEventos: {} };
-  const hojeEpoch = Date.UTC(2026, 8, 4) / 86400000;
-  const snapshot = calcularSnapshotSemanaAlvo(registros, demandas, hojeEpoch);
-  assert.equal(snapshot.porRegistro['SUP-2||ST'].produtividadeMedia.tendencia, null);
+  const hojeEpoch = Date.UTC(2026, 8, 4) / 86400000; // sexta 04/09
+  const snapshot = calcularSnapshotSemanaAlvo(registros, { porRegistroEventos: {} }, hojeEpoch, '2026-09-07');
+  assert.equal(snapshot.linhas[0].produtividadeMedia, null);
 });
 
 test('gravarSnapshotNoArquivo cria o arquivo na 1a chamada e mescla na 2a, sem apagar semanas antigas', () => {
