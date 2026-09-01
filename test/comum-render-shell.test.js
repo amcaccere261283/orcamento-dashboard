@@ -2,7 +2,38 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('node:crypto');
+const vm = require('node:vm');
 const { cssBase, markupCabecalho, markupFiltros, markupAbas, scriptDesbloqueio, scriptFiltros } = require('../tools/comum/render-shell.js');
+
+// DOM mínimo o bastante pra SCRIPT_CLIENTE_GATE rodar de ponta a ponta dentro
+// de um vm.createContext -- ele termina com duas chamadas síncronas em
+// document.getElementById(...).addEventListener/.focus() (ligar o gate), que
+// precisam de algo pra não lançar ao carregar o script. Mesmo padrão de
+// criarSandboxDom em test/comum-filtros-wireup.test.js, reduzido ao mínimo
+// que este arquivo exercita.
+function elementoFalso() {
+  return { addEventListener() {}, focus() {}, style: {} };
+}
+
+// Executa scriptDesbloqueio() de verdade num realm vm, com crypto.subtle e
+// TextEncoder reais (Node >= 19 expõe os dois via node:crypto/globalThis) --
+// é o que prova que derivarTokenSheet funciona no MESMO runtime que o
+// navegador usa, em vez de só conferir por regex que a string existe no
+// código-fonte (o que deixaria passar um bug de padding hex sem ninguém
+// perceber até o token divergir do calculado por linha de comando).
+function montarSandboxGate() {
+  const sandbox = {
+    document: { getElementById: elementoFalso },
+    crypto: crypto.webcrypto,
+    TextEncoder,
+    Uint8Array,
+    Array,
+    console,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(scriptDesbloqueio(), sandbox, { filename: 'gate-cliente.js' });
+  return sandbox;
+}
 
 test('cssBase traz os tokens e os componentes compartilhados', () => {
   const css = cssBase();
@@ -157,13 +188,19 @@ test('montarFiltroMulti recebe estado e aoMudar como parâmetros explícitos -- 
 // usuário calcula o mesmo valor por linha de comando pra colar nas Script
 // Properties do Apps Script. Se a derivação mudar, o botão para de
 // funcionar com "token recusado".
-test('o token e SHA-256 de SAL_TOKEN + senha, em hex minusculo', async () => {
+test('derivarTokenSheet(senha), RODADA de verdade num sandbox vm, bate com SHA-256(SAL_TOKEN + senha) calculado pelo Node', async () => {
   const fonte = scriptDesbloqueio();
   const m = fonte.match(/var SAL_TOKEN = '([^']+)'/);
   assert.ok(m, 'SAL_TOKEN precisa existir como constante literal no script do cliente');
   const sal = m[1];
+
+  const sandbox = montarSandboxGate();
+  assert.strictEqual(typeof sandbox.derivarTokenSheet, 'function');
+  const tokenDoSandbox = await sandbox.derivarTokenSheet('senha-de-teste');
+
   const esperado = crypto.createHash('sha256').update(sal + 'senha-de-teste').digest('hex');
   assert.match(esperado, /^[0-9a-f]{64}$/);
+  assert.strictEqual(tokenDoSandbox, esperado, 'o token calculado pelo crypto.subtle do navegador tem de bater byte a byte com SHA-256(SAL_TOKEN + senha) do Node -- é o cálculo que o usuário reproduz por linha de comando');
   assert.match(fonte, /window\.__TOKEN_SHEET__ = await derivarTokenSheet\(senha\)/);
 });
 
