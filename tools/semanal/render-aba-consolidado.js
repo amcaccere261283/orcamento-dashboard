@@ -510,6 +510,18 @@ function renderControles(estado) {
     + '<label class="controle-consolidado">Semana<select id="consolidado-semana">' + opcoesSemana + '</select></label>'
     + '<button id="gerar-relatorio-excel" type="button">Gerar relatório Excel</button>'
     + '<span id="status-relatorio-excel" class="status-atualizacao"></span>'
+    // Congelamento (Task 8 do plano anterior) e Desfazer (este plano) --
+    // markup ESTÁTICO só; render-semanal.js religa comportamento por id, não
+    // por posição no DOM, então mover pra cá não muda nenhuma lógica de
+    // habilitar/desabilitar/clique.
+    + '<button id="btn-congelar-semana" class="btn-secundario" disabled>Verificando…</button>'
+    + '<span id="status-congelamento" class="nota-inline"></span>'
+    + '<span id="status-congelamento-leitura" class="nota-inline"></span>'
+    // display:none no nascimento -- só o client script decide quando mostrar
+    // (semana em tela tem congelado), então sem JavaScript o botão de exclusão
+    // permanente nunca aparece sem função.
+    + '<button id="btn-desfazer-congelamento" class="btn-secundario" style="display:none">Desfazer congelamento</button>'
+    + '<span id="status-desfazer" class="nota-inline"></span>'
     + '</div>';
 }
 

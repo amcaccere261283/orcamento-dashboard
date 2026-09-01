@@ -562,6 +562,25 @@ test('renderControles inclui o botão "Gerar relatório Excel" e o span de statu
   assert.match(html, /<span id="status-relatorio-excel" class="status-atualizacao"><\/span>/);
 });
 
+test('renderControles inclui os botoes de congelamento e desfazer no MESMO bloco do seletor de semana', () => {
+  const html = renderControles({ semanas: SEMANAS, semanaIdx: 0 });
+  // Um SÓ <div class="controles-consolidado"> -- prova que não sobrou um
+  // segundo bloco em outro lugar (o que render-semanal.js concatenava antes).
+  const blocos = html.match(/<div class="controles-consolidado">/g) || [];
+  assert.equal(blocos.length, 1);
+  assert.match(html, /<select id="consolidado-semana">/);
+  assert.match(html, /<button id="btn-congelar-semana"/);
+  assert.match(html, /<span id="status-congelamento"/);
+  assert.match(html, /<span id="status-congelamento-leitura"/);
+  assert.match(html, /<button id="btn-desfazer-congelamento"[^>]*style="display:none"/);
+  assert.match(html, /<span id="status-desfazer"/);
+});
+
+test('btn-congelar-semana nasce desabilitado e com o texto Verificando, igual antes', () => {
+  const html = renderControles({ semanas: SEMANAS, semanaIdx: 0 });
+  assert.match(html, /<button id="btn-congelar-semana" class="btn-secundario" disabled>Verificando…<\/button>/);
+});
+
 // --- Task 5: blocos Produtividade média e Equipe ----------------------------
 // Cada um traz Tendência congelada (só do snapshot, sem fallback de recálculo
 // local) + Realizado, percorrendo a MESMA hierarquia SUP/tipologia da tabela
