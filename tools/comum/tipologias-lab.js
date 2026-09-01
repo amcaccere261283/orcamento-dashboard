@@ -22,6 +22,10 @@ const MAPA_TIPO_ENSAIO_LAB = {
   'CBR.1': 'LAB.C', 'CBR.3': 'LAB.C', 'CBR.5': 'LAB.C',
   'CD.IN': 'LAB.E', 'CD.NAT': 'LAB.E', 'CD3.IN': 'LAB.E', 'CD3.NAT': 'LAB.E',
   'CD4.IN': 'LAB.E', 'CD4.NAT': 'LAB.E', 'CD5.IN': 'LAB.E', 'CD5.NAT': 'LAB.E', 'CDA.IN': 'LAB.E',
+  // Achado ao vivo em 2026-09-01 (Demandas de LAB.C/LAB.E, backlog). Ausente
+  // da tabela do Frcst. Classificado como LAB.E pelo dono do projeto, mesmo
+  // padrão dos outros COMP.* incomuns (só COMP.EI/EM/EN são Convencional).
+  'COMP.A': 'LAB.E',
   'COMP.D': 'LAB.E', 'COMP.D.14D': 'LAB.E', 'COMP.D.28D': 'LAB.E', 'COMP.D.28D.2': 'LAB.E',
   'COMP.D.28D.3': 'LAB.E', 'COMP.D.3': 'LAB.E', 'COMP.D.7D': 'LAB.E', 'COMP.D.7D.2': 'LAB.E',
   'COMP.D.7D.3': 'LAB.E', 'COMP.DIA': 'LAB.E',
