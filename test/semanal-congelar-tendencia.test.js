@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { calcularSnapshotSemanaAlvo, chaveSemanaSeguinteDeSexta, gravarSnapshotNoArquivo, descartarEscritaNaoCommitada } = require('../tools/semanal/congelar-tendencia-semanal.js');
+const { calcularSnapshotSemanaAlvo, chaveSemanaSeguinteDeSexta, gravarSnapshotNoArquivo, descartarEscritaNaoCommitada, proximaSegunda, fragmentosDaSemanaAlvo } = require('../tools/semanal/congelar-tendencia-semanal.js');
 
 // Sexta 2026-09-04 -> a semana seguinte começa segunda 2026-09-07.
 test('chaveSemanaSeguinteDeSexta acha a segunda seguinte à sexta em epoch de dias', () => {
@@ -16,6 +16,19 @@ test('chaveSemanaSeguinteDeSexta acha a segunda seguinte à sexta em epoch de di
 test('chaveSemanaSeguinteDeSexta funciona também rodado num sábado/domingo (job atrasado)', () => {
   const sabado = Date.UTC(2026, 8, 5) / 86400000; // 2026-09-05
   assert.equal(chaveSemanaSeguinteDeSexta(sabado), '2026-09-07');
+});
+
+// 2026-08-28 é uma SEXTA. A semana seguinte começa em 2026-08-31.
+// 2026-08-31 é uma SEGUNDA. A semana seguinte a ela começa em 2026-09-07.
+test('proximaSegunda devolve sempre a segunda ESTRITAMENTE depois de hoje', () => {
+  const dia = (ano, mes1, d) => Date.UTC(ano, mes1 - 1, d) / 86400000;
+  assert.equal(proximaSegunda(dia(2026, 8, 28)), '2026-08-31'); // sexta
+  assert.equal(proximaSegunda(dia(2026, 8, 29)), '2026-08-31'); // sábado
+  assert.equal(proximaSegunda(dia(2026, 8, 30)), '2026-08-31'); // domingo
+  assert.equal(proximaSegunda(dia(2026, 8, 31)), '2026-09-07'); // SEGUNDA -> a seguinte
+  assert.equal(proximaSegunda(dia(2026, 9, 1)), '2026-09-07');  // terça
+  assert.equal(proximaSegunda(dia(2026, 9, 2)), '2026-09-07');  // quarta
+  assert.equal(proximaSegunda(dia(2026, 9, 3)), '2026-09-07');  // quinta
 });
 
 test('calcularSnapshotSemanaAlvo grava tendencia de volume/financeiro/equipe/produtividade por registro', () => {
@@ -113,4 +126,23 @@ test('descartarEscritaNaoCommitada chama "git checkout -- <arquivo>" quando ele 
 
   assert.equal(chamadas.length, 1);
   assert.deepEqual(chamadas[0], ['checkout', '--', '/caminho/qualquer/tendencia-congelada-semanal.json']);
+});
+
+// A semana de 31/08 a 06/09 CRUZA a virada do mês. semanasDoMes corta semanas
+// dentro do mês, então ela existe como DOIS fragmentos: o toco [31/08, 31/08]
+// em agosto e [01/09, 06/09] em setembro. O leitor do Consolidado procura pelo
+// INÍCIO do fragmento -- 2026-09-01, uma terça -- então gravar só sob a segunda
+// deixaria essa semana sem congelado.
+test('fragmentosDaSemanaAlvo devolve os DOIS fragmentos de uma semana que cruza a virada do mês', () => {
+  const frags = fragmentosDaSemanaAlvo('2026-08-31');
+  assert.equal(frags.length, 2);
+  assert.deepEqual(frags.map((f) => f.chave), ['2026-08-31', '2026-09-01']);
+  assert.equal(frags[0].mesIdx, 7); // agosto
+  assert.equal(frags[1].mesIdx, 8); // setembro
+});
+
+test('fragmentosDaSemanaAlvo devolve UM fragmento para semana inteira dentro do mês', () => {
+  const frags = fragmentosDaSemanaAlvo('2026-09-07'); // 07/09 a 13/09, tudo em setembro
+  assert.equal(frags.length, 1);
+  assert.equal(frags[0].chave, '2026-09-07');
 });

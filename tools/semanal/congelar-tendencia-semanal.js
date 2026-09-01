@@ -30,6 +30,33 @@ function chaveSemanaSeguinteDeSexta(agoraEpoch) {
   return ano + '-' + mes + '-' + dia;
 }
 
+// dia-epoch (dias desde a época Unix, UTC) -> 'YYYY-MM-DD' da próxima SEGUNDA
+// estritamente depois de hoje. Clicar numa segunda congela a semana SEGUINTE,
+// não a que acabou de começar.
+//
+// NÃO confundir com chaveSemanaSeguinteDeSexta, que mapeia segunda-quinta de
+// VOLTA pra sexta anterior (regra do cron, tolerante a atraso) e devolveria a
+// semana CORRENTE numa terça. O botão aceita clique em qualquer dia, então
+// aquela regra congelaria a semana errada em silêncio.
+function proximaSegunda(hojeEpoch) {
+  var data = new Date(hojeEpoch * 86400000);
+  var diaSemana = data.getUTCDay(); // 0=domingo .. 6=sábado
+  // Dias até a próxima segunda: domingo->1, segunda->7, terça->6, ... sábado->2.
+  var faltam = (8 - diaSemana) % 7;
+  if (faltam === 0) faltam = 7;
+  return formatarDiaIso(hojeEpoch + faltam);
+}
+
+// dia-epoch -> 'YYYY-MM-DD'. Extraído porque proximaSegunda e
+// fragmentosDaSemanaAlvo precisam do mesmo formato.
+function formatarDiaIso(diaEpoch) {
+  var d = new Date(diaEpoch * 86400000);
+  var ano = d.getUTCFullYear();
+  var mes = String(d.getUTCMonth() + 1).padStart(2, '0');
+  var dia = String(d.getUTCDate()).padStart(2, '0');
+  return ano + '-' + mes + '-' + dia;
+}
+
 // Acha o mesIdx (0-11) e o índice da semana-alvo dentro do mês dela, a
 // partir da chave 'YYYY-MM-DD' já calculada -- reconstrói via semanasDoMes
 // porque é a MESMA função que o resto do projeto usa pra cortar semanas
@@ -45,6 +72,46 @@ function localizarSemanaAlvo(chaveSemanaAlvo) {
     throw new Error('Semana-alvo ' + chaveSemanaAlvo + ' não bate com nenhuma semana de semanasDoMes(' + ano + ',' + mes0 + ') -- calendário divergente.');
   }
   return { ano: ano, mesIdx: mes0, semanas: semanasDoMesAlvo, indiceNoMes: indiceNoMes };
+}
+
+// chaveSegunda ('YYYY-MM-DD', sempre uma segunda) -> um descritor por FRAGMENTO
+// de calendário que essa semana ocupa.
+//
+// semanasDoMes corta semanas na virada do mês, então a semana 31/08-06/09 vira
+// [31/08,31/08] em agosto MAIS [01/09,06/09] em setembro. O Consolidado chaveia
+// pelo início do fragmento que está em tela, então o congelamento precisa gravar
+// sob TODAS as chaves que ele pode procurar -- senão ~1 mês em 4 tem uma semana
+// que nunca acha o próprio snapshot.
+//
+// Substitui localizarSemanaAlvo, que devolvia UM alvo e LANÇAVA quando a chave
+// não era início de semana no mês dela.
+function fragmentosDaSemanaAlvo(chaveSegunda) {
+  var partes = chaveSegunda.split('-').map(Number);
+  var epochSegunda = Date.UTC(partes[0], partes[1] - 1, partes[2]) / 86400000;
+  var epochDomingo = epochSegunda + 6;
+  var fragmentos = [];
+
+  // A semana toca no máximo dois meses: o da segunda e o do domingo.
+  var mesesTocados = [{ ano: partes[0], mes0: partes[1] - 1 }];
+  var dataDomingo = new Date(epochDomingo * 86400000);
+  var anoD = dataDomingo.getUTCFullYear(), mesD = dataDomingo.getUTCMonth();
+  if (anoD !== mesesTocados[0].ano || mesD !== mesesTocados[0].mes0) {
+    mesesTocados.push({ ano: anoD, mes0: mesD });
+  }
+
+  mesesTocados.forEach(function (m) {
+    var semanas = semanasDoMes(m.ano, m.mes0);
+    semanas.forEach(function (s, indice) {
+      // O fragmento pertence a esta semana-alvo se ele cai DENTRO do intervalo
+      // segunda..domingo dela.
+      if (s.inicio < epochSegunda || s.inicio > epochDomingo) return;
+      fragmentos.push({
+        chave: formatarDiaIso(s.inicio), ano: m.ano, mesIdx: m.mes0,
+        semanas: semanas, indiceNoMes: indice,
+      });
+    });
+  });
+  return fragmentos;
 }
 
 function tendenciaDaSemanaAlvo(registros, indices, dimensao, alvo, demandas, hojeEpoch) {
@@ -207,6 +274,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  chaveSemanaSeguinteDeSexta, calcularSnapshotSemanaAlvo, gravarSnapshotNoArquivo,
+  chaveSemanaSeguinteDeSexta, proximaSegunda, formatarDiaIso, fragmentosDaSemanaAlvo,
+  calcularSnapshotSemanaAlvo, gravarSnapshotNoArquivo,
   descartarEscritaNaoCommitada, main,
 };
