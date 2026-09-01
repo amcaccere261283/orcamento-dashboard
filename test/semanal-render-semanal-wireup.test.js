@@ -7,6 +7,7 @@ const { renderAbaSemanal } = require('../tools/semanal/render-aba-semanal.js');
 const { criarDocumentoFalso } = require('./helpers/dom-falso-semanal.js');
 const { diaEpoch } = require('../tools/comum/datas.js');
 const { semanasDoMes } = require('../tools/semanal/compute-semanal.js');
+const { proximaSegunda } = require('../tools/semanal/congelar-tendencia-semanal.js');
 
 // Task 8 originalmente deixou o módulo pronto no bundle mas NUNCA chamado --
 // a aba Semanal abria vazia no navegador (achado do coordenador). Este
@@ -1773,5 +1774,238 @@ test('o blob da página semanal NÃO carrega equipesCsv/osParaSup/equipesRosterP
 
   assert.doesNotMatch(html, /id="secao-alocacao"/, 'a 7ª aba foi extraída para alocacao-equipes.html -- não pode reaparecer aqui');
   assert.doesNotMatch(html, /id="aba-alocacao"/);
+});
+
+// --- Task 8 (2026-09-01): botão "Congelar próxima semana" na aba Consolidado,
+// com estados (verificando/pronto/congelando/congelada/erro) e a carga
+// assíncrona do congelado ao trocar de semana. URL_CONGELAMENTO começa como
+// 'PENDENTE-congelamento' até a Task 10 (ainda não feita) trocar pela URL real
+// do Apps Script -- mesmo caminho degradado que RE_URL_ALOCACAO_PENDENTE já
+// cobre pra Alocação Equipes (alocacao-sheet.js). Todos os testes abaixo, exceto
+// os que mutam sandbox.URL_CONGELAMENTO explicitamente, exercitam esse caminho
+// degradado por default.
+
+// 'YYYY-MM-DD' -> 'DD/MM' -- mesma leitura de formatarDiaCurto (render-semanal.js).
+function diaCurtoDeChave(chaveIso) {
+  const partes = chaveIso.split('-');
+  return partes[2] + '/' + partes[1];
+}
+
+// A chaveAlvo depende do relógio real de quem roda o teste (proximaSegunda lê
+// hojeEpochDoNavegador() dentro do sandbox) -- reproduz a MESMA conta aqui,
+// mesmo padrão dos testes de "semana em curso" mais acima neste arquivo.
+function chaveAlvoDoTeste() {
+  const agora = new Date();
+  const hoje = diaEpoch(new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate())));
+  return proximaSegunda(hoje);
+}
+
+function esperarMicrotasks() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+test('o botao de congelar diz QUAL semana vai congelar e nasce desabilitado ate a Sheet responder', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // O HTML injetado em secao-consolidado carrega o botão com o texto
+  // "Verificando…" -- o dom-falso não reflete de volta as mutações feitas
+  // depois via getElementById('btn-congelar-semana') no innerHTML do pai
+  // (são objetos memoizados independentes, ver o comentário grande no topo de
+  // dom-falso-semanal.js), então essa string prova o MARKUP inicial que
+  // montarAbaConsolidado escreveu, distinto do estado ao vivo checado abaixo.
+  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.match(secao, /id="btn-congelar-semana"/);
+  assert.match(secao, /Verificando…/); // estado inicial, no markup
+
+  // Estado AO VIVO depois de atualizarBotaoCongelar() rodar (síncrono até a
+  // URL pendente, que devolve antes de qualquer fetch -- ver
+  // urlCongelamentoPendente em render-semanal.js): já diz QUAL semana, e já
+  // nasce desabilitado.
+  const botao = documentoFalso.getElementById('btn-congelar-semana');
+  assert.strictEqual(botao.textContent, 'Congelar semana de ' + diaCurtoDeChave(chaveAlvoDoTeste()));
+  assert.strictEqual(botao.disabled, true);
+});
+
+test('com URL PENDENTE o botao aparece desabilitado e explica, sem quebrar a aba', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  assert.match(sandbox.URL_CONGELAMENTO, /^PENDENTE-/, 'pré-condição: a URL ainda não foi configurada (Task 10)');
+
+  const status = documentoFalso.getElementById('status-congelamento');
+  assert.strictEqual(status.textContent, 'Congelamento ainda não configurado nesta planilha.');
+  assert.strictEqual(documentoFalso.getElementById('btn-congelar-semana').disabled, true);
+
+  // A URL pendente não pode quebrar o resto da aba -- a tabela Consolidado
+  // continua sendo montada normalmente ao redor do botão.
+  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.match(secao, /TOTAL GERAL/);
+});
+
+test('com a URL configurada e sem congelado existente para a semana-alvo, o botao fica HABILITADO', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const fetchMock = (url) => Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  // Simula o Apps Script já implantado (Task 10) -- mesmo mecanismo que os
+  // testes de live-refresh usam para mutar URLS_PADRAO: URL_CONGELAMENTO é um
+  // 'var' de topo dentro de SCRIPT_CLIENTE_SEMANAL, então vira propriedade
+  // do global object do sandbox.
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  await sandbox.atualizarBotaoCongelar();
+
+  const botao = documentoFalso.getElementById('btn-congelar-semana');
+  const status = documentoFalso.getElementById('status-congelamento');
+  assert.strictEqual(botao.disabled, false, 'sem congelado existente para a semana-alvo, o botao tem que ficar clicavel');
+  assert.strictEqual(status.textContent, '');
+});
+
+test('com a URL configurada e a semana-alvo JA congelada, o botao fica desabilitado explicando quem e quando', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const linhaCongelada = {
+    chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 100, equipe: 2, produtividadeMedia: 5,
+    autor: 'Fulano', congeladoEm: '2026-08-31T22:00:00.000Z',
+  };
+  const fetchMock = (url) => Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [linhaCongelada] }) });
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  await sandbox.atualizarBotaoCongelar();
+
+  const botao = documentoFalso.getElementById('btn-congelar-semana');
+  const status = documentoFalso.getElementById('status-congelamento');
+  assert.strictEqual(botao.disabled, true);
+  assert.match(status.textContent, /congelada em 31\/08\/2026 22:00, por Fulano\.$/);
+});
+
+test('clicar em congelarProximaSemana envia o snapshot da semana-alvo pro Apps Script e mostra "congelada agora"', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const chamadasPost = [];
+  const fetchMock = (url, opcoes) => {
+    if (opcoes && opcoes.method === 'POST') {
+      chamadasPost.push(JSON.parse(opcoes.body));
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  };
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  sandbox.window.__DASHBOARD_AUTOR__ = 'Autor Sintetico';
+  await sandbox.congelarProximaSemana();
+
+  assert.strictEqual(chamadasPost.length, 1, 'esperava exatamente uma chamada POST (congelar)');
+  const chaveAlvo = chaveAlvoDoTeste();
+  assert.strictEqual(chamadasPost[0].chaveSegunda, chaveAlvo);
+  assert.strictEqual(chamadasPost[0].autor, 'Autor Sintetico');
+  assert.ok(Array.isArray(chamadasPost[0].linhas) && chamadasPost[0].linhas.length > 0, 'o snapshot enviado precisa ter linhas -- calcularSnapshotSemanaAlvo rodou de verdade sobre window.__REGISTROS__');
+
+  const status = documentoFalso.getElementById('status-congelamento');
+  assert.match(status.textContent, /^Semana de \d{2}\/\d{2} congelada agora\.$/);
+  assert.strictEqual(documentoFalso.getElementById('btn-congelar-semana').disabled, true);
+});
+
+test('clicar em congelarProximaSemana quando a Sheet recusa por "ja-congelada" explica quem e quando, sem travar a pagina', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const fetchMock = (url, opcoes) => {
+    if (opcoes && opcoes.method === 'POST') {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ ok: false, erro: 'ja-congelada', autor: 'Ciclana', congeladoEm: '2026-08-31T10:00:00.000Z' }),
+      });
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  };
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  await sandbox.congelarProximaSemana();
+
+  const status = documentoFalso.getElementById('status-congelamento');
+  assert.match(status.textContent, /^Esta semana já foi congelada em 31\/08\/2026 10:00, por Ciclana\. Para refazer, apague as linhas na planilha\.$/);
+  // ja-congelada não reabilita o botão -- não faz sentido tentar de novo.
+  assert.strictEqual(documentoFalso.getElementById('btn-congelar-semana').disabled, true);
+});
+
+test('o congelado carregado da Sheet para a semana em tela chega a montarAbaConsolidado (cabecalho vira "congelada")', async () => {
+  // Um único registro/tipologia -- fecha exatamente com a chave de
+  // chaveMatriz('SUP-0001-24', 'ST') que registroSintetico usa.
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const geradoEm = new Date('2026-07-15T00:00:00Z'); // mesma data usada pelos testes de "semana em curso" acima
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm,
+  });
+
+  // A semana em TELA (não a semana-alvo do botão, que é sempre a PRÓXIMA
+  // segunda) é a que semanaConsolidadoIdx escolhe automaticamente -- a última
+  // já começada do mês selecionado. Calcula a mesma chave que o teste "a aba
+  // Consolidado abre na semana EM CURSO" (mais acima neste arquivo) usa.
+  const semanas = semanasDoMes(2026, 6); // julho
+  const agora = new Date();
+  const hoje = diaEpoch(new Date(Date.UTC(agora.getFullYear(), agora.getMonth(), agora.getDate())));
+  let elapsadas = 0;
+  semanas.forEach((s) => { if (s.inicio <= hoje) elapsadas++; });
+  const idxSemanaEmTela = elapsadas > 0 ? elapsadas - 1 : 0;
+  const semanaEmTela = semanas[idxSemanaEmTela];
+  // formatarDiaIso (congelar-tendencia-semanal.js) e formatarChaveSemana
+  // (render-aba-consolidado.js) fazem a MESMA conta -- ver o comentário de
+  // congelar-tendencia-semanal.js sobre não reinventar o formato.
+  const { formatarDiaIso } = require('../tools/semanal/congelar-tendencia-semanal.js');
+  const chave = formatarDiaIso(semanaEmTela.inicio);
+
+  const linhaCongelada = { chaveMatriz: 'SUP-0001-24||ST', volume: null, financeiro: 999, equipe: null, produtividadeMedia: null };
+  const fetchMock = (url) => {
+    if (url.indexOf('semana=' + encodeURIComponent(chave)) !== -1) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [linhaCongelada] }) });
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  };
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
+  assert.match(secao, /\(congelada\)/, 'com o congelado carregado da Sheet cobrindo o registro visivel, o cabecalho tem que acender "(congelada)"');
 });
 

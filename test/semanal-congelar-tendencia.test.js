@@ -1,22 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { calcularSnapshotSemanaAlvo, chaveSemanaSeguinteDeSexta, gravarSnapshotNoArquivo, descartarEscritaNaoCommitada, proximaSegunda, fragmentosDaSemanaAlvo } = require('../tools/semanal/congelar-tendencia-semanal.js');
-
-// Sexta 2026-09-04 -> a semana seguinte começa segunda 2026-09-07.
-test('chaveSemanaSeguinteDeSexta acha a segunda seguinte à sexta em epoch de dias', () => {
-  const sexta = Date.UTC(2026, 8, 4) / 86400000; // 2026-09-04, epoch de DIAS (UTC)
-  const chave = chaveSemanaSeguinteDeSexta(sexta);
-  assert.equal(chave, '2026-09-07');
-});
-
-test('chaveSemanaSeguinteDeSexta funciona também rodado num sábado/domingo (job atrasado)', () => {
-  const sabado = Date.UTC(2026, 8, 5) / 86400000; // 2026-09-05
-  assert.equal(chaveSemanaSeguinteDeSexta(sabado), '2026-09-07');
-});
+const { calcularSnapshotSemanaAlvo, proximaSegunda, fragmentosDaSemanaAlvo } = require('../tools/semanal/congelar-tendencia-semanal.js');
 
 // 2026-08-28 é uma SEXTA. A semana seguinte começa em 2026-08-31.
 // 2026-08-31 é uma SEGUNDA. A semana seguinte a ela começa em 2026-09-07.
@@ -60,67 +45,6 @@ test('calcularSnapshotSemanaAlvo devolve produtividadeMedia null quando equipe e
   const hojeEpoch = Date.UTC(2026, 8, 4) / 86400000; // sexta 04/09
   const snapshot = calcularSnapshotSemanaAlvo(registros, { porRegistroEventos: {} }, hojeEpoch, '2026-09-07');
   assert.equal(snapshot.linhas[0].produtividadeMedia, null);
-});
-
-test('gravarSnapshotNoArquivo cria o arquivo na 1a chamada e mescla na 2a, sem apagar semanas antigas', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tendencia-congelada-'));
-  const caminho = path.join(dir, 'tendencia-congelada-semanal.json');
-
-  gravarSnapshotNoArquivo(caminho, {
-    chaveSemanaAlvo: '2026-08-31', geradoEmIso: '2026-08-28T22:00:00.000Z',
-    porRegistro: { 'SUP-1|SP': { volume: { tendencia: 10 } } },
-  });
-  gravarSnapshotNoArquivo(caminho, {
-    chaveSemanaAlvo: '2026-09-07', geradoEmIso: '2026-09-04T22:00:00.000Z',
-    porRegistro: { 'SUP-1|SP': { volume: { tendencia: 20 } } },
-  });
-
-  const conteudo = JSON.parse(fs.readFileSync(caminho, 'utf8'));
-  assert.ok(conteudo['2026-08-31'], 'semana anterior preservada');
-  assert.ok(conteudo['2026-09-07'], 'semana nova presente');
-  assert.equal(conteudo['2026-09-07'].porRegistro['SUP-1|SP'].volume.tendencia, 20);
-
-  fs.rmSync(dir, { recursive: true, force: true });
-});
-
-test('gravarSnapshotNoArquivo SOBRESCREVE a mesma semana-alvo (job rodou 2x no mesmo dia)', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tendencia-congelada-'));
-  const caminho = path.join(dir, 'tendencia-congelada-semanal.json');
-  gravarSnapshotNoArquivo(caminho, { chaveSemanaAlvo: '2026-09-07', geradoEmIso: 'a', porRegistro: { X: { volume: { tendencia: 1 } } } });
-  gravarSnapshotNoArquivo(caminho, { chaveSemanaAlvo: '2026-09-07', geradoEmIso: 'b', porRegistro: { X: { volume: { tendencia: 2 } } } });
-  const conteudo = JSON.parse(fs.readFileSync(caminho, 'utf8'));
-  assert.equal(Object.keys(conteudo).length, 1);
-  assert.equal(conteudo['2026-09-07'].porRegistro.X.volume.tendencia, 2);
-  fs.rmSync(dir, { recursive: true, force: true });
-});
-
-// Cobre a corrida perdida: precisaRodarHoje() dá true na 1a checagem
-// (então o job escreve snapshot+heartbeat), mas false na 2a (outra máquina
-// venceu enquanto isso). O achado da revisão foi que essa escrita não
-// committed ficava suja no working tree para o 'stash pop' do finally
-// rodar por cima. Aqui isolamos a função de limpeza (não o main() inteiro,
-// que precisaria mockar git fetch/stash/commit/push de ponta a ponta) --
-// prova que ela restaura CADA um dos dois arquivos ao estado anterior.
-test('descartarEscritaNaoCommitada remove o arquivo quando ele NÃO existia antes (fs.rmSync)', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tendencia-congelada-'));
-  const caminho = path.join(dir, 'novo.json');
-  fs.writeFileSync(caminho, '{"escrito-nesta-rodada":true}');
-  assert.ok(fs.existsSync(caminho));
-
-  descartarEscritaNaoCommitada(caminho, false);
-
-  assert.equal(fs.existsSync(caminho), false, 'arquivo criado nesta rodada perdida deve ser removido');
-  fs.rmSync(dir, { recursive: true, force: true });
-});
-
-test('descartarEscritaNaoCommitada chama "git checkout -- <arquivo>" quando ele JÁ existia antes (committed)', () => {
-  const chamadas = [];
-  const execGitFalso = (args) => { chamadas.push(args); };
-
-  descartarEscritaNaoCommitada('/caminho/qualquer/tendencia-congelada-semanal.json', true, execGitFalso);
-
-  assert.equal(chamadas.length, 1);
-  assert.deepEqual(chamadas[0], ['checkout', '--', '/caminho/qualquer/tendencia-congelada-semanal.json']);
 });
 
 // A semana de 31/08 a 06/09 CRUZA a virada do mês. semanasDoMes corta semanas

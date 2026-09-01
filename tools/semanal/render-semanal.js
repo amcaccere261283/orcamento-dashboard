@@ -906,6 +906,14 @@ const BUNDLE_ARQUIVOS = [
   // (senão a IIFE do bundle lança TypeError ao desestruturar MODULOS
   // ['coordenadas-sup.js'] ainda undefined).
   'coordenadas-sup.js',
+  // Congelamento da semana (Task 8, 2026-09-01): congelamento-sheet.js nao
+  // tem require nenhum (cliente puro do Apps Script). congelar-tendencia-
+  // semanal.js consome linha-base.js (require('../comum/...'), removido pelo
+  // bundler -- chaveMatriz ja chega como global via fonteParaCliente()),
+  // compute-semanal.js e render-aba-semanal.js (calcularSeriesSemanaisDimensao),
+  // ambos ja registrados acima -- por isso entra so depois dos dois. Os dois
+  // precisam vir ANTES de live-refresh.js, mas nao dependem dele.
+  'congelamento-sheet.js', 'congelar-tendencia-semanal.js',
   // live-refresh.js (Task 3, 2026-08-25) substitui a cópia local de
   // atualizarDadosAoVivoSemanal -- consome parse-matriz-cliente/parse-avancos/
   // parse-lab/compute-demandas/compute-equipes-ativas, todos já registrados
@@ -1039,6 +1047,10 @@ var ComputeEquipesRealizadoAlocado = MODULOS['compute-equipes-realizado-alocado.
 var FiltroAtivos = MODULOS['filtro-ativos.js'];
 var RenderRelatorioSemanalXlsx = MODULOS['render-relatorio-semanal-xlsx.js'];
 var HistoricoRelatorioSheet = MODULOS['historico-relatorio-sheet.js'];
+// Congelamento da semana (Task 8, 2026-09-01) -- ver ESTADO_CONGELAMENTO e
+// montarAbaConsolidado, mais abaixo.
+var CongelamentoSheet = MODULOS['congelamento-sheet.js'];
+var CongelarTendenciaSemanal = MODULOS['congelar-tendencia-semanal.js'];
 
 var MODO_DEMANDAS = 'mensal';
 
@@ -1570,6 +1582,125 @@ function montarAbaDemandas() {
 // de premissa que aparecem de saída são as de Financeiro (Ticket médio).
 var ESTADO_CONSOLIDADO = { semana: null };
 
+// Congelamento da semana (Task 8, 2026-09-01) -- botao #btn-congelar-semana
+// e o carregamento assincrono do snapshot gravado na Sheet, ambos dentro da
+// aba Consolidado. URL_CONGELAMENTO comeca como 'PENDENTE-congelamento' ate
+// o Apps Script ser implantado (Task 10, ainda nao feita) -- ate la o botao
+// nasce desabilitado, explicando que o congelamento nao esta configurado.
+// Mesmo padrao que RE_URL_ALOCACAO_PENDENTE ja cobre pra Alocacao Equipes.
+var URL_CONGELAMENTO = 'PENDENTE-congelamento';
+// 'chave' guarda a chave da semana para a qual 'congelado' foi carregado --
+// evita buscar de novo quando montarAbaConsolidado redesenha a aba por outro
+// motivo (troca de filtro, por exemplo) sem a semana em tela ter mudado.
+var ESTADO_CONGELAMENTO = { congelado: null, chave: null, carregando: false };
+
+function clienteCongelamento() {
+  return CongelamentoSheet.criarClienteCongelamento({
+    url: URL_CONGELAMENTO, fetch: window.fetch.bind(window),
+    token: window.__TOKEN_SHEET__ || '',
+  });
+}
+
+function urlCongelamentoPendente() { return /^PENDENTE-/.test(URL_CONGELAMENTO); }
+
+// 'YYYY-MM-DD' -> 'DD/MM' -- mesma leitura de dataCurta (render-aba-
+// consolidado.js, nao exportada), sem depender de Date: so reparte a string,
+// evitando qualquer conversao de fuso sobre uma chave que ja e um dia civil.
+function formatarDiaCurto(chaveIso) {
+  var partes = chaveIso.split('-');
+  return partes[2] + '/' + partes[1];
+}
+
+// ISO completo (congeladoEm, gravado pelo Apps Script) -> 'DD/MM/AAAA HH:MM',
+// em UTC -- mesmo raciocinio de "nada que vem dos links e transformado": o
+// instante gravado e exibido tal como veio da Sheet, sem reinterpretar fuso.
+function formatarDataHora(iso) {
+  if (!iso) return 'data desconhecida';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return 'data desconhecida';
+  var dia = String(d.getUTCDate()).padStart(2, '0');
+  var mes = String(d.getUTCMonth() + 1).padStart(2, '0');
+  var ano = d.getUTCFullYear();
+  var hora = String(d.getUTCHours()).padStart(2, '0');
+  var min = String(d.getUTCMinutes()).padStart(2, '0');
+  return dia + '/' + mes + '/' + ano + ' ' + hora + ':' + min;
+}
+
+// Busca o congelado da semana EM TELA e guarda em ESTADO_CONGELAMENTO. Chamada
+// por montarAbaConsolidado ao montar a aba e a cada troca de semana. Falha vira
+// null -> a aba cai no recalculo, com rotulo "recalculada". Nunca quebra a
+// pagina. 'chave' e marcada ANTES do fetch (mesmo com URL pendente) para que
+// montarAbaConsolidado saiba que esta chave ja foi resolvida e nao dispare
+// outro carregamento a cada redesenho.
+async function carregarCongeladoDaSemana(chaveSemana) {
+  ESTADO_CONGELAMENTO.chave = chaveSemana;
+  if (urlCongelamentoPendente()) { ESTADO_CONGELAMENTO.congelado = null; return null; }
+  var congelado = await clienteCongelamento().carregar(chaveSemana);
+  ESTADO_CONGELAMENTO.congelado = congelado;
+  return congelado;
+}
+
+async function atualizarBotaoCongelar() {
+  var botao = document.getElementById('btn-congelar-semana');
+  var status = document.getElementById('status-congelamento');
+  if (!botao) return;
+  // diaEpochDeHoje (tools/comum/datas.js) NÃO chega ao bundle -- só o trecho
+  // marcado <<< INICIO CLIENTE >>> daquele arquivo entra em fonteParaCliente()
+  // (excelSerialParaData), e diaEpochDeHoje não faz parte dele. A página já
+  // tem o equivalente client-side (hojeEpochDoNavegador, logo acima), que
+  // todo o resto da aba usa para "hoje" -- mesma convenção UTC-3.
+  var hoje = hojeEpochDoNavegador();
+  var chaveAlvo = CongelarTendenciaSemanal.proximaSegunda(hoje);
+  botao.textContent = 'Congelar semana de ' + formatarDiaCurto(chaveAlvo);
+  if (urlCongelamentoPendente()) {
+    botao.disabled = true;
+    status.textContent = 'Congelamento ainda não configurado nesta planilha.';
+    return;
+  }
+  botao.disabled = true;
+  status.textContent = 'Verificando…';
+  var existente = await clienteCongelamento().carregar(chaveAlvo);
+  if (existente) {
+    botao.disabled = true;
+    status.textContent = 'Semana de ' + formatarDiaCurto(chaveAlvo) + ' congelada em '
+      + formatarDataHora(existente.congeladoEm) + ', por ' + (existente.autor || 'desconhecido') + '.';
+  } else {
+    botao.disabled = false;
+    status.textContent = '';
+  }
+}
+
+async function congelarProximaSemana() {
+  var botao = document.getElementById('btn-congelar-semana');
+  var status = document.getElementById('status-congelamento');
+  botao.disabled = true;
+  status.textContent = 'Congelando…';
+  try {
+    // diaEpochDeHoje não chega ao bundle -- ver o mesmo comentário em
+    // atualizarBotaoCongelar, acima.
+    var hoje = hojeEpochDoNavegador();
+    var chaveAlvo = CongelarTendenciaSemanal.proximaSegunda(hoje);
+    var snapshot = CongelarTendenciaSemanal.calcularSnapshotSemanaAlvo(window.__REGISTROS__, window.__DEMANDAS__, hoje, chaveAlvo);
+    var r = await clienteCongelamento().congelar(snapshot, window.__DASHBOARD_AUTOR__ || 'dashboard');
+    if (r.ok) {
+      status.textContent = 'Semana de ' + formatarDiaCurto(chaveAlvo) + ' congelada agora.';
+      return;
+    }
+    if (r.motivo === 'ja-congelada') {
+      status.textContent = 'Esta semana já foi congelada em ' + formatarDataHora(r.congeladoEm)
+        + ', por ' + (r.autor || 'desconhecido') + '. Para refazer, apague as linhas na planilha.';
+      return;
+    }
+    status.textContent = r.motivo === 'token'
+      ? 'Acesso recusado pela planilha (token). Confira o token nas Script Properties.'
+      : 'Não foi possível congelar (rede ou planilha fora do ar). Tente de novo.';
+    botao.disabled = false;
+  } catch (err) {
+    status.textContent = 'Erro ao congelar: ' + err.message;
+    botao.disabled = false;
+  }
+}
+
 // Índice da semana a exibir: o escolhido, ou o automático quando não há
 // escolha válida. "A semana em curso" é a última que já começou -- mesmo
 // critério de semanasElapsadas na aba Alertas, e não indiceSemanaAtual, que
@@ -1612,6 +1743,17 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
   if (typeof ESTADO_CONSOLIDADO.semana === 'number' && ESTADO_CONSOLIDADO.semana >= semanas.length) {
     ESTADO_CONSOLIDADO.semana = null;
   }
+  var semanaEscolhida = semanas[semanaConsolidadoIdx(semanas, hojeEpoch)];
+  var chaveSemanaEscolhida = semanaEscolhida ? RenderAbaConsolidado.formatarChaveSemana(semanaEscolhida.inicio) : null;
+  // Congelado carregado da Sheet (Task 8): so entra no objeto quando ja foi
+  // buscado PARA ESTA semana especificamente -- ESTADO_CONGELAMENTO guarda a
+  // chave junto com o valor (ver carregarCongeladoDaSemana) exatamente pra
+  // evitar aplicar o congelado de uma semana antiga a esta, na janela entre
+  // trocar de semana e o fetch novo resolver.
+  var congeladoSemanalCarregado = {};
+  if (chaveSemanaEscolhida && ESTADO_CONGELAMENTO.chave === chaveSemanaEscolhida && ESTADO_CONGELAMENTO.congelado) {
+    congeladoSemanalCarregado[chaveSemanaEscolhida] = ESTADO_CONGELAMENTO.congelado;
+  }
   document.getElementById('secao-consolidado').innerHTML = RenderAbaConsolidado.renderAbaConsolidado(registros, indicesAba, {
     semanaIdx: semanaConsolidadoIdx(semanas, hojeEpoch),
     dimensao: dimensao,
@@ -1619,11 +1761,16 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
     semanas: semanas,
     demandas: window.__DEMANDAS__,
     hojeEpoch: hojeEpoch,
-    // Tendencia congelada de verdade (snapshot da sexta), quando existe para
+    // Tendencia congelada de verdade (snapshot gravado na Sheet pelo botao
+    // "Congelar semana", carregado de forma assincrona), quando existe para
     // a semana em tela -- renderAbaConsolidado resolve a chave sozinho e cai
     // no recalculo de sempre quando a semana nao esta no snapshot.
-    congeladoSemanal: window.__CONGELADO_SEMANAL__,
-  });
+    congeladoSemanal: congeladoSemanalCarregado,
+  })
+    + '<div class="controles-consolidado">'
+    + '<button id="btn-congelar-semana" class="btn-secundario" disabled>Verificando…</button>'
+    + '<span id="status-congelamento" class="nota-inline"></span>'
+    + '</div>';
   var seletorSemana = document.getElementById('consolidado-semana');
   if (seletorSemana) {
     seletorSemana.addEventListener('change', function (e) {
@@ -1633,6 +1780,19 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
   }
   var botaoRelatorio = document.getElementById('gerar-relatorio-excel');
   if (botaoRelatorio) botaoRelatorio.addEventListener('click', gerarRelatorioExcel);
+
+  var botaoCongelar = document.getElementById('btn-congelar-semana');
+  if (botaoCongelar) botaoCongelar.addEventListener('click', congelarProximaSemana);
+  atualizarBotaoCongelar();
+
+  // So dispara o carregamento assincrono quando a URL ja esta configurada E
+  // esta chave ainda nao foi buscada -- com a URL pendente carregarCongeladoDaSemana
+  // devolve na hora (sem fetch) e nao ha motivo pra redesenhar de novo.
+  if (!urlCongelamentoPendente() && chaveSemanaEscolhida && ESTADO_CONGELAMENTO.chave !== chaveSemanaEscolhida) {
+    carregarCongeladoDaSemana(chaveSemanaEscolhida).then(function () {
+      montarAbaConsolidado(registros, indices, dimensoes);
+    });
+  }
 }
 
 // Redesenha cabeçalho + corpo da aba Alertas inteiros a cada mudança (de
