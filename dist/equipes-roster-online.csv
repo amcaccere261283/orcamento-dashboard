@@ -25497,6 +25497,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 677,20697,naoEquipe,0,,Franquiosmar (ID 659),SM
 678,20697,naoEquipe,0,,José Lourenço dos Santos Neto,SP
 679,20697,naoEquipe,0,,Danilo Rodrigues,SP
+682,20697,campoSemFuro,0,,Breno Schumacker,SP
 4,20698,naoEquipe,0,,José I. Amaral,SM
 59,20698,naoEquipe,0,,Paulo S. Lima,SM
 79,20698,mobilizada,0,,Leonardo D. Marques,SM
@@ -25607,6 +25608,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20698,naoEquipe,0,,Danilo Rodrigues,SP
 680,20698,naoEquipe,0,,João Paulo,ST
 681,20698,naoEquipe,0,,Danilo,ST
+682,20698,campoSemFuro,0,,Breno Schumacker,SP
 4,20699,naoEquipe,0,,José I. Amaral,SM
 59,20699,naoEquipe,0,,Paulo S. Lima,SM
 79,20699,mobilizada,0,,Leonardo D. Marques,SM
@@ -25717,20 +25719,23 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20699,naoEquipe,0,,Danilo Rodrigues,SP
 680,20699,naoEquipe,0,,João Paulo,ST
 681,20699,naoEquipe,0,,Danilo,ST
+682,20699,naoEquipe,0,,Breno Schumacker,SP
+683,20699,naoEquipe,0,,Icaro Ramos,ST
+684,20699,naoEquipe,0,,Magno,ST
 4,20700,fora,0,,José I. Amaral,SM
 59,20700,naoEquipe,0,,Paulo S. Lima,SM
 79,20700,fora,0,,Leonardo D. Marques,SM
 121,20700,fora,0,,Joaquim T. Lira,SM
 136,20700,mobilizada,0,17716-26,Marcos R. Sá,SM
 143,20700,mobilizada,0,16948-25,Gilmar M. Silva,SP
-154,20700,mobilizada,0,17282-26,Rudrigo Gadelha,SP
+154,20700,mobilizada,0,,Rudrigo Gadelha,SP
 164,20700,mobilizada,0,17930-26,Jucevan,SM
 171,20700,fora,0,,Francinaldo G. Souza,SP
 175,20700,fora,0,,João dos. Filho,SM
-175,20700,mobilizada,0,17714-26,João dos Santos Gomes Filho,CPTu | VT | SH
+175,20700,mobilizada,0,,João dos Santos Gomes Filho,CPTu | VT | SH
 216,20700,fora,0,,Alex A. SIlva,SM
-223,20700,mobilizada,0,17930-26,Cícero J.,SM
-257,20700,campoSemFuro,1,,Edy Itallo,CPTu | VT | SH
+223,20700,mobilizada,0,,Cícero J.,SM
+257,20700,mobilizada,0,,Edy Itallo,CPTu | VT | SH
 276,20700,mobilizada,0,17459-26,Francinaldo Junior,SP
 286,20700,campoSemFuro,1,,Francisco Basílio,SM
 297,20700,mobilizada,0,17714-26,Marinaldo A. Oliveira,CPTu | VT | SH
@@ -25738,48 +25743,48 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 306,20700,fora,0,,Jario Gomes,SM
 321,20700,fora,0,,Deivid Moura,SP
 325,20700,campoSemFuro,1,,Kaique Oliveira da Silva,SM
-329,20700,mobilizada,0,17783-26,Everton dos Santos,SP
-337,20700,mobilizada,0,17716-26,Silvanio Silva,SM
+329,20700,mobilizada,0,,Everton dos Santos,SP
+337,20700,mobilizada,0,,Silvanio Silva,SM
 340,20700,mobilizada,0,17716-26,João Lenon,SM
 341,20700,mobilizada,0,17828-26,Sivanildo da Silva,SM
-353,20700,mobilizada,0,17902-26,Lucas Oliveira,ST | PI | BL
-361,20700,mobilizada,0,16948-25,Mariano Alves,SP
+353,20700,mobilizada,0,,Lucas Oliveira,ST | PI | BL
+361,20700,mobilizada,0,,Mariano Alves,SP
 362,20700,fora,0,,Rodolfo Augusto,SM
-364,20700,fora,0,,Francieudo Alves,SM
-373,20700,mobilizada,0,17716-26,Maurício José,SM
+364,20700,mobilizada,0,,Francieudo Alves,SM
+373,20700,mobilizada,0,,Maurício José,SM
 377,20700,fora,0,,Allan Patrick,SM
 378,20700,mobilizada,0,17936-26,José Robson Paz,SM
 389,20700,mobilizada,0,17902-26,Ronielho Wallison,ST | PI | BL
 395,20700,mobilizada,0,17746-26,Aucélio Formiga,SM
-403,20700,fora,0,,Francisco Teotônio,SM
+403,20700,mobilizada,0,,Francisco Teotônio,SM
 405,20700,fora,0,,Edgar Pereira,SM
 409,20700,naoEquipe,0,,Deyvisson,ST
 420,20700,naoEquipe,0,,Renato de Sousa Morais,SM
 428,20700,campoSemFuro,1,,Leandro Cabral,SM
 434,20700,mobilizada,0,17353-26,Jonas Santos,ST
-463,20700,mobilizada,0,17197-26,Maycon Pereira,SP
+463,20700,mobilizada,0,,Maycon Pereira,SP
 468,20700,fora,0,,Francinildo Jose da Silva Lima,SM
 478,20700,mobilizada,0,17656-26,Alisson Ferreira,SP
 503,20700,mobilizada,0,17197-26,Gabriel Ribeiro,SP
 512,20700,mobilizada,0,17746-26,Felipe Lima,SM
 513,20700,naoEquipe,0,,Leomar Bezerra,ST
-519,20700,mobilizada,0,16948-25,Micael Santos,SP
-520,20700,mobilizada,0,17936-26,José Nauéliton,SM
+519,20700,mobilizada,0,,Micael Santos,SP
+520,20700,campoSemFuro,0,,José Nauéliton,SM
 523,20700,mobilizada,0,17197-26,Inonaldo Filho,SP
 535,20700,mobilizada,0,17716-26,José Henrique,SM
 536,20700,mobilizada,0,16948-25,Fernando Ikaró,SP
-537,20700,mobilizada,0,17716-26,Jeferson Pereira,SM
-540,20700,mobilizada,0,17716-26,Filipe R. Ribeiro,SM
+537,20700,mobilizada,0,,Jeferson Pereira,SM
+540,20700,mobilizada,0,,Filipe R. Ribeiro,SM
 552,20700,fora,0,,Alison Pires,SP
 559,20700,mobilizada,0,17656-26,Lucas Santana,SP
 561,20700,fora,0,,Ronaldo Albuquerque dos Santos,SM
 564,20700,campoSemFuro,1,,Gustavo da Silva,CPTu | VT | SH
 568,20700,fora,0,,Bruno de Oliveira,SP
 571,20700,fora,0,,Adonias da Silva,SP
-575,20700,campoSemFuro,1,,Carlos Junior,ST | PI | BL
-577,20700,mobilizada,0,18000-26,Anderson de Almeida,SP
+575,20700,mobilizada,0,,Carlos Junior,ST | PI | BL
+577,20700,mobilizada,0,,Anderson de Almeida,SP
 585,20700,mobilizada,0,17746-26,Fábio Bandeira Júnior,SM
-586,20700,mobilizada,0,16948-25,Matheus Ramos,SP
+586,20700,mobilizada,0,,Matheus Ramos,SP
 588,20700,mobilizada,0,17716-26,Júlio Silva,SM
 594,20700,mobilizada,0,17459-26,Rilher Gutemberg Luiz,SP
 595,20700,mobilizada,0,17902-26,Gabriel de Pereira,ST | PI | BL
@@ -25787,36 +25792,36 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 602,20700,fora,0,,Francisco Nilton,SM
 603,20700,mobilizada,0,18006-26,Francisco José,SP
 604,20700,mobilizada,0,17716-26,Mailson Barbosa,SM
-605,20700,mobilizada,0,17459-26,Antonio Jose Araujo,SP
+605,20700,mobilizada,0,,Antonio Jose Araujo,SP
 606,20700,fora,0,,Wesley Andrade,ST
-607,20700,mobilizada,0,17783-26,Daniel Viana,SP
+607,20700,mobilizada,0,,Daniel Viana,SP
 611,20700,fora,0,,Alisson Rodrigues,SM
-614,20700,mobilizada,0,17783-26,Bruno Monteiro,SP
+614,20700,mobilizada,0,,Bruno Monteiro,SP
 623,20700,fora,0,,Tiago Mateus,SM
-626,20700,mobilizada,0,17930-26,Antony Samuel,SM
+626,20700,mobilizada,0,,Antony Samuel,SM
 627,20700,mobilizada,0,17716-26,Francisco Wellignton,SM
 631,20700,mobilizada,0,17881-26,Francisco Pereira,SM
-634,20700,mobilizada,0,17783-26,Flávio Silva,SP
+634,20700,mobilizada,0,,Flávio Silva,SP
 636,20700,mobilizada,0,17656-26,Artur José Nunes,SP
-638,20700,mobilizada,0,17716-26,André Luiz Morais,SM
-640,20700,mobilizada,0,17952-26,Evamar Fernandes,SP
+638,20700,mobilizada,0,,André Luiz Morais,SM
+640,20700,mobilizada,0,,Evamar Fernandes,SP
 641,20700,mobilizada,0,17952-26,Filipe Cosme,SP
-644,20700,mobilizada,0,17353-26,Samuel Soares,ST
+644,20700,mobilizada,0,,Samuel Soares,ST
 645,20700,mobilizada,0,17930-26,Leonardo de Sousa,SP
-647,20700,mobilizada,0,17716-26,Carlos Alberto da Silva,SM
+647,20700,mobilizada,0,,Carlos Alberto da Silva,SM
 648,20700,fora,0,,Jeferson Macedo,SP
 649,20700,campoSemFuro,1,,Markys Vinicius,SM
 652,20700,mobilizada,0,16948-25,Seza Evangelista,SP
 655,20700,mobilizada,0,17783-26,Natan Augusto,SP
 656,20700,mobilizada,0,17353-26,Joanderson Pinheiro,ST
-657,20700,mobilizada,0,17679-26,Samuel Silva,PI
+657,20700,mobilizada,0,,Samuel Silva,PI
 659,20700,mobilizada,0,17746-26,Franquiosmar Gadelha,SM
 660,20700,naoEquipe,0,,Luiz Lourenço,ST
 663,20700,campoSemFuro,0,,Jefferson Hudson,SP
-664,20700,mobilizada,0,17617-26,Emanuel Martins,SP
+664,20700,mobilizada,0,,Emanuel Martins,SP
 665,20700,naoEquipe,0,,Raphael Vicente Almeida (Líder Intermitente),SP
 668,20700,naoEquipe,0,,Pedro Henrique Souza,SP
-669,20700,mobilizada,0,17643-26,Breno Brenner de Oliveira,SP
+669,20700,mobilizada,0,,Breno Brenner de Oliveira,SP
 670,20700,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
 671,20700,naoEquipe,0,,Marcos Rossi,PI
 672,20700,mobilizada,0,17207-26,Fellipe Genovez,ST
@@ -25826,6 +25831,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20700,naoEquipe,0,,Danilo Rodrigues,SP
 680,20700,naoEquipe,0,,João Paulo,ST
 681,20700,naoEquipe,0,,Danilo,ST
+682,20700,mobilizada,0,17783-26,Breno Schumacker,SP
+683,20700,naoEquipe,0,,Icaro Ramos,ST
+684,20700,naoEquipe,0,,Magno,ST
 4,20701,fora,0,,José I. Amaral,SM
 59,20701,naoEquipe,0,,Paulo S. Lima,SM
 79,20701,fora,0,,Leonardo D. Marques,SM
@@ -25873,7 +25881,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 512,20701,mobilizada,0,17746-26,Felipe Lima,SM
 513,20701,naoEquipe,0,,Leomar Bezerra,ST
 519,20701,mobilizada,0,16948-25,Micael Santos,SP
-520,20701,mobilizada,0,17936-26,José Nauéliton,SM
+520,20701,campoSemFuro,0,,José Nauéliton,SM
 523,20701,mobilizada,0,17197-26,Inonaldo Filho,SP
 535,20701,mobilizada,0,17716-26,José Henrique,SM
 536,20701,mobilizada,0,16948-25,Fernando Ikaró,SP
@@ -25935,6 +25943,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20701,naoEquipe,0,,Danilo Rodrigues,SP
 680,20701,naoEquipe,0,,João Paulo,ST
 681,20701,naoEquipe,0,,Danilo,ST
+682,20701,mobilizada,0,17783-26,Breno Schumacker,SP
+683,20701,naoEquipe,0,,Icaro Ramos,ST
+684,20701,naoEquipe,0,,Magno,ST
 4,20702,fora,0,,José I. Amaral,SM
 59,20702,naoEquipe,0,,Paulo S. Lima,SM
 79,20702,fora,0,,Leonardo D. Marques,SM
@@ -26049,6 +26060,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20702,naoEquipe,0,,Danilo Rodrigues,SP
 680,20702,naoEquipe,0,,João Paulo,ST
 681,20702,naoEquipe,0,,Danilo,ST
+682,20702,fora,0,,Breno Schumacker,SP
+683,20702,naoEquipe,0,,Icaro Ramos,ST
+684,20702,naoEquipe,0,,Magno,ST
 4,20703,fora,0,,José I. Amaral,SM
 59,20703,naoEquipe,0,,Paulo S. Lima,SM
 79,20703,fora,0,,Leonardo D. Marques,SM
@@ -26096,7 +26110,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 512,20703,mobilizada,0,17746-26,Felipe Lima,SM
 513,20703,campoSemFuro,1,,Leomar Bezerra,ST
 519,20703,mobilizada,0,16948-25,Micael Santos,SP
-520,20703,mobilizada,0,17936-26,José Nauéliton,SM
+520,20703,fora,0,,José Nauéliton,SM
 523,20703,mobilizada,0,17197-26,Inonaldo Filho,SP
 535,20703,mobilizada,0,17716-26,José Henrique,SM
 536,20703,mobilizada,0,16948-25,Fernando Ikaró,SP
@@ -26158,6 +26172,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20703,naoEquipe,0,,Danilo Rodrigues,SP
 680,20703,naoEquipe,0,,João Paulo,ST
 681,20703,naoEquipe,0,,Danilo,ST
+682,20703,mobilizada,0,17783-26,Breno Schumacker,SP
+683,20703,naoEquipe,0,,Icaro Ramos,ST
+684,20703,naoEquipe,0,,Magno,ST
 4,20704,fora,0,,José I. Amaral,SM
 59,20704,naoEquipe,0,,Paulo S. Lima,SM
 79,20704,fora,0,,Leonardo D. Marques,SM
@@ -26267,6 +26284,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20704,naoEquipe,0,,Danilo Rodrigues,SP
 680,20704,naoEquipe,0,,João Paulo,ST
 681,20704,naoEquipe,0,,Danilo,ST
+682,20704,mobilizada,0,17783-26,Breno Schumacker,SP
+683,20704,naoEquipe,0,,Icaro Ramos,ST
+684,20704,naoEquipe,0,,Magno,ST
 4,20705,campoSemFuro,0,,José I. Amaral,SM
 59,20705,naoEquipe,0,,Paulo S. Lima,SM
 79,20705,fora,0,,Leonardo D. Marques,SM
@@ -26376,6 +26396,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20705,naoEquipe,0,,Danilo Rodrigues,SP
 680,20705,naoEquipe,0,,João Paulo,ST
 681,20705,naoEquipe,0,,Danilo,ST
+682,20705,mobilizada,0,17783-26,Breno Schumacker,SP
+683,20705,naoEquipe,0,,Icaro Ramos,ST
+684,20705,naoEquipe,0,,Magno,ST
 4,20706,mobilizada,0,17489-26,José I. Amaral,SM
 59,20706,naoEquipe,0,,Paulo S. Lima,SM
 79,20706,campoSemFuro,1,,Leonardo D. Marques,SM
@@ -26484,6 +26507,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20706,naoEquipe,0,,Danilo Rodrigues,SP
 680,20706,naoEquipe,0,,João Paulo,ST
 681,20706,naoEquipe,0,,Danilo,ST
+682,20706,mobilizada,0,17783-26,Breno Schumacker,SP
+683,20706,naoEquipe,0,,Icaro Ramos,ST
+684,20706,naoEquipe,0,,Magno,ST
 4,20707,mobilizada,0,17489-26,José I. Amaral,SM
 59,20707,naoEquipe,0,,Paulo S. Lima,SM
 121,20707,mobilizada,0,17489-26,Joaquim T. Lira,SM
@@ -26585,6 +26611,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20707,naoEquipe,0,,Danilo Rodrigues,SP
 680,20707,naoEquipe,0,,João Paulo,ST
 681,20707,naoEquipe,0,,Danilo,ST
+682,20707,mobilizada,0,17783-26,Breno Schumacker,SP
+683,20707,naoEquipe,0,,Icaro Ramos,ST
+684,20707,naoEquipe,0,,Magno,ST
 4,20708,mobilizada,0,17489-26,José I. Amaral,SM
 59,20708,naoEquipe,0,,Paulo S. Lima,SM
 121,20708,mobilizada,0,17489-26,Joaquim T. Lira,SM
@@ -26685,6 +26714,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20708,naoEquipe,0,,Danilo Rodrigues,SP
 680,20708,naoEquipe,0,,João Paulo,ST
 681,20708,naoEquipe,0,,Danilo,ST
+682,20708,mobilizada,0,17783-26,Breno Schumacker,SP
+683,20708,naoEquipe,0,,Icaro Ramos,ST
+684,20708,naoEquipe,0,,Magno,ST
 4,20709,mobilizada,0,17489-26,José I. Amaral,SM
 59,20709,naoEquipe,0,,Paulo S. Lima,SM
 121,20709,mobilizada,0,17489-26,Joaquim T. Lira,SM
@@ -26785,6 +26817,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20709,naoEquipe,0,,Danilo Rodrigues,SP
 680,20709,naoEquipe,0,,João Paulo,ST
 681,20709,naoEquipe,0,,Danilo,ST
+682,20709,mobilizada,0,17783-26,Breno Schumacker,SP
+683,20709,naoEquipe,0,,Icaro Ramos,ST
+684,20709,naoEquipe,0,,Magno,ST
 4,20710,mobilizada,0,17489-26,José I. Amaral,SM
 59,20710,naoEquipe,0,,Paulo S. Lima,SM
 121,20710,mobilizada,0,17489-26,Joaquim T. Lira,SM
@@ -26883,6 +26918,9 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 679,20710,naoEquipe,0,,Danilo Rodrigues,SP
 680,20710,naoEquipe,0,,João Paulo,ST
 681,20710,naoEquipe,0,,Danilo,ST
+682,20710,mobilizada,0,17783-26,Breno Schumacker,SP
+683,20710,campoSemFuro,0,,Icaro Ramos,ST
+684,20710,campoSemFuro,0,,Magno,ST
 4,20711,mobilizada,0,17489-26,José I. Amaral,SM
 59,20711,naoEquipe,0,,Paulo S. Lima,SM
 121,20711,mobilizada,0,17489-26,Joaquim T. Lira,SM
@@ -26973,6 +27011,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 672,20711,mobilizada,0,17207-26,Fellipe Genovez,ST
 678,20711,naoEquipe,0,,José Lourenço dos Santos Neto,SP
 679,20711,naoEquipe,0,,Danilo Rodrigues,SP
+682,20711,mobilizada,0,17783-26,Breno Schumacker,SP
 4,20712,mobilizada,0,17489-26,José I. Amaral,SM
 59,20712,naoEquipe,0,,Paulo S. Lima,SM
 121,20712,mobilizada,0,17489-26,Joaquim T. Lira,SM
@@ -27063,6 +27102,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 672,20712,mobilizada,0,17207-26,Fellipe Genovez,ST
 678,20712,naoEquipe,0,,José Lourenço dos Santos Neto,SP
 679,20712,naoEquipe,0,,Danilo Rodrigues,SP
+682,20712,mobilizada,0,17783-26,Breno Schumacker,SP
 4,20713,mobilizada,0,17489-26,José I. Amaral,SM
 59,20713,naoEquipe,0,,Paulo S. Lima,SM
 121,20713,mobilizada,0,17489-26,Joaquim T. Lira,SM
@@ -27150,6 +27190,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 668,20713,naoEquipe,0,,Pedro Henrique Souza,SP
 670,20713,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
 672,20713,mobilizada,0,17207-26,Fellipe Genovez,ST
+682,20713,mobilizada,0,17783-26,Breno Schumacker,SP
 4,20714,mobilizada,0,17489-26,José I. Amaral,SM
 59,20714,naoEquipe,0,,Paulo S. Lima,SM
 121,20714,mobilizada,0,17489-26,Joaquim T. Lira,SM
@@ -27234,6 +27275,7 @@ IdEquipe,DiaEpoch,Estado,NoDefault,Os,Nome,Servicos
 668,20714,naoEquipe,0,,Pedro Henrique Souza,SP
 670,20714,naoEquipe,0,,Alan Manoel da Silva,CPTu | VT | SH
 672,20714,mobilizada,0,17207-26,Fellipe Genovez,ST
+682,20714,mobilizada,0,17783-26,Breno Schumacker,SP
 4,20715,mobilizada,0,17489-26,José I. Amaral,SM
 59,20715,naoEquipe,0,,Paulo S. Lima,SM
 121,20715,mobilizada,0,17489-26,Joaquim T. Lira,SM
