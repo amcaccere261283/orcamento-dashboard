@@ -245,11 +245,9 @@ function doPost(e) {
     if (linhasPayload.length) {
       // Upsert: apaga as linhas EXISTENTES das chaves-alvo (se houver) e
       // grava as novas no lugar. Usa a leitura única feita acima.
-      var chavesAlvo2 = {};
-      linhasPayload.forEach(function (l) { chavesAlvo2[String(l.chave)] = true; });
       var linhasParaSubstituir = [];
-      for (var i2 = 1; i2 < dadosPontos.length; i2++) {
-        if (chavesAlvo2[normalizarDia(dadosPontos[i2][COL_SEMANA_INICIO - 1])]) linhasParaSubstituir.push(i2 + 1);
+      for (var i = 1; i < dadosPontos.length; i++) {
+        if (chavesAlvo[normalizarDia(dadosPontos[i][COL_SEMANA_INICIO - 1])]) linhasParaSubstituir.push(i + 1);
       }
       linhasParaSubstituir.sort(function (a, b) { return b - a; })
         .forEach(function (linha) { abaPontos.deleteRow(linha); });
@@ -262,6 +260,11 @@ function doPost(e) {
       var primeira = Math.max(abaPontos.getLastRow() + 1, 2);
       formatarColunasDeDataComoTexto(abaPontos, primeira, novasLinhas.length);
       abaPontos.getRange(primeira, 1, novasLinhas.length, CABECALHO.length).setValues(novasLinhas);
+    }
+
+    if (corpo.acao === 'congelar' && linhasPayload.length) {
+      // Grava estado explícito travada=false após upsert, evita fallback no próximo congelar
+      gravarEstado(corpo.chaveSegunda, false, corpo.autor, corpo.congeladoEm);
     }
 
     if (corpo.acao === 'travar') {

@@ -150,22 +150,17 @@ test('doPost grava e a leitura por POST traz de volta a MESMA chave de semana (s
 test('congelar faz UPSERT quando a semana esta aberta -- sobrescreve o valor anterior', () => {
   const duble = criarSheetsDuble();
   const ctx = carregarScript(duble);
-  // Primeiro congelamento: grava valor 10
+  // Primeiro congelamento: grava valor 10 e cria estado travada=false
   ctx.doPost({ postData: { contents: JSON.stringify({
     acao: 'congelar', token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'primeiro', congeladoEm: 'x',
     linhas: [{ chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 10, financeiro: 0, equipe: 1, produtividadeMedia: 10 }],
   }) } });
-  // Destravar para permitir segundo congelamento (sem criar linha de estado,
-  // apenas testando upsert de pontos)
-  ctx.doPost({ postData: { contents: JSON.stringify({
-    acao: 'destravar', token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'segundo', destravadoEm: 'y',
-  }) } });
-  // Segundo congelamento: sobrescreve com valor 999
+  // Segundo congelamento: sobrescreve com valor 999 (sem destravar)
   const segunda = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
     acao: 'congelar', token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'segundo', congeladoEm: 'z',
     linhas: [{ chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 999, financeiro: 0, equipe: 1, produtividadeMedia: 999 }],
   }) } }));
-  assert.equal(segunda.ok, true, 'sem trava, o segundo congelar tem de suceder');
+  assert.equal(segunda.ok, true, 'upsert tem de suceder mesmo sem destravar (congelar grava estado)');
   assert.equal(segunda.gravadas, 1);
 
   const lido = ler(ctx, '2026-08-31', TOKEN_BOM);
@@ -410,12 +405,10 @@ test('compatibilidade: semana com pontos gravados mas SEM linha em CongelamentoE
   const ctx = carregarScript(duble);
   // Simula uma gravacao feita pelo mecanismo write-once antigo: pontos
   // existem, CongelamentoEstado nunca foi escrita (aba nova, criada vazia
-  // neste deploy). O primeiro "Atualizar dados" depois do deploy nao pode
-  // sobrescrever isso em silencio.
-  ctx.doPost({ postData: { contents: JSON.stringify({
-    acao: 'congelar', token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'antigo', congeladoEm: 'x',
-    linhas: [{ chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1 }],
-  }) } });
+  // neste deploy). Insere diretamente na aba sem passar por congelar
+  // (que agora grava estado automaticamente).
+  const aba = duble.SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Congelamento');
+  aba.linhas.push(['2026', '2026-08-31', 'SUP-1||SP', 1, 1, 1, 1, 'antigo', 'x']);
   const lido = ler(ctx, '2026-08-31', TOKEN_BOM);
   assert.equal(lido.estado.travada, true, 'sem linha de estado, pontos existentes têm de ser tratados como travados');
 });
@@ -423,13 +416,11 @@ test('compatibilidade: semana com pontos gravados mas SEM linha em CongelamentoE
 test('congelar RECUSA semana legada (com pontos mas SEM linha em CongelamentoEstado) no caminho de ESCRITA', () => {
   const duble = criarSheetsDuble();
   const ctx = carregarScript(duble);
-  // Primeira gravacao: simula o mecanismo write-once antigo (grava pontos
-  // sem criar linha em CongelamentoEstado). Depois tenta um SEGUNDO congelar
-  // na mesma semana, que deve ser recusado pelo fallback de compatibilidade.
-  ctx.doPost({ postData: { contents: JSON.stringify({
-    acao: 'congelar', token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'primeiro', congeladoEm: 'x',
-    linhas: [{ chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 10, financeiro: 1, equipe: 1, produtividadeMedia: 10 }],
-  }) } });
+  // Simula o mecanismo write-once antigo: insere pontos SEM criar linha em
+  // CongelamentoEstado (para isso, insere direto na aba, nao passa por congelar).
+  const aba = duble.SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Congelamento');
+  aba.linhas.push(['2026', '2026-08-31', 'SUP-1||SP', 10, 1, 1, 10, 'primeiro', 'x']);
+
   // Segundo congelar tentando sobrescrever: deve ser recusado porque o
   // fallback de compatibilidade viu pontos e tratou como travada
   const resultado = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
@@ -446,10 +437,10 @@ test('congelar RECUSA semana legada (com pontos mas SEM linha em CongelamentoEst
 test('ler com chavesFragmentos verifica pontos nos DOIS fragmentos de uma semana que cruza mes', () => {
   const duble = criarSheetsDuble();
   const ctx = carregarScript(duble);
-  ctx.doPost({ postData: { contents: JSON.stringify({
-    acao: 'congelar', token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'antigo', congeladoEm: 'x',
-    linhas: [{ chave: '2026-09-01', chaveMatriz: 'SUP-1||SP', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1 }],
-  }) } });
+  // Insere ponto legado (sem estado) no SEGUNDO fragmento, direto na aba
+  const aba = duble.SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Congelamento');
+  aba.linhas.push(['2026', '2026-09-01', 'SUP-1||SP', 1, 1, 1, 1, 'antigo', 'x']);
+
   // A leitura em tela e do PRIMEIRO fragmento (sem ponto nenhum ali), mas
   // chavesFragmentos avisa que o SEGUNDO tem ponto -- tem de achar mesmo assim.
   const resultado = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
