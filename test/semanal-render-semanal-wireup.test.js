@@ -1557,6 +1557,13 @@ const CSV_MATRIZ_PRIORIDADE = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERM
   + Array(12).fill('0').join(',') + ',0,0,0,'
   + Array(12).fill('0').join(',') + ',0,0,\n';
 
+// CSVs vazios (só cabeçalho) de avancos/lab -- reaproveitados pelos testes de
+// congelamento/refresh (Task 5) que precisam mockar URLS_PADRAO.avancos/.lab
+// (URLs reais desde 2026-08, não mais PENDENTE-) sem se importar com o
+// conteúdo em si.
+const CSV_AVANCOS_VAZIO = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n';
+const CSV_LAB_VAZIO = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
+
 // 46091 = 2026-03-10 (Criação da OS), 46093 = 2026-03-12 (Executado Dia -- o
 // dia que compute-equipes-mobilizadas.js passa a ocupar desde 2026-08-10).
 const CSV_AVANCOS_PRIORIDADE = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
@@ -1779,16 +1786,15 @@ test('o blob da página semanal NÃO carrega equipesCsv/osParaSup/equipesRosterP
   assert.doesNotMatch(html, /id="aba-alocacao"/);
 });
 
-// --- Task 8 (2026-09-01): botão "Congelar próxima semana" na aba Consolidado,
-// com estados (verificando/pronto/congelando/congelada/erro) e a carga
-// assíncrona do congelado ao trocar de semana. URL_CONGELAMENTO começa como
-// 'PENDENTE-congelamento' até a Task 10 (ainda não feita) trocar pela URL real
-// do Apps Script -- mesmo caminho degradado que RE_URL_ALOCACAO_PENDENTE já
-// cobre pra Alocação Equipes (alocacao-sheet.js). Todos os testes abaixo, exceto
-// os que mutam sandbox.URL_CONGELAMENTO explicitamente, exercitam esse caminho
-// degradado por default.
+// --- Toggle de congelamento (2026-09-08): substitui os botões "Congelar
+// próxima semana"/"Desfazer congelamento" por um switch por semana. Todos
+// os testes abaixo, exceto os que mutam sandbox.URL_CONGELAMENTO
+// explicitamente, exercitam o caminho degradado (URL PENDENTE) por default.
 
 // 'YYYY-MM-DD' -> 'DD/MM' -- mesma leitura de formatarDiaCurto (render-semanal.js).
+// Mantida mesmo sem chamador nos testes abaixo (nenhum deles depende mais da
+// semana-ALVO do botão antigo, só da semana EM TELA) -- reaproveitável para
+// quem escrever o próximo teste que precise formatar uma chave assim.
 function diaCurtoDeChave(chaveIso) {
   const partes = chaveIso.split('-');
   return partes[2] + '/' + partes[1];
@@ -1807,171 +1813,172 @@ function esperarMicrotasks() {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-test('o botao de congelar diz QUAL semana vai congelar e nasce desabilitado ate a Sheet responder', async () => {
+test('toggle nasce desabilitado ate a Sheet responder, e reflete travada=false', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const html = renderSemanal({
     registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
     senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
   });
-  const { sandbox, documentoFalso } = montarSandbox(html);
-  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
-  await sandbox.tentarDesbloquear();
-
-  // O HTML injetado em secao-consolidado carrega o botão com o texto
-  // "Verificando…" -- o dom-falso não reflete de volta as mutações feitas
-  // depois via getElementById('btn-congelar-semana') no innerHTML do pai
-  // (são objetos memoizados independentes, ver o comentário grande no topo de
-  // dom-falso-semanal.js), então essa string prova o MARKUP inicial que
-  // montarAbaConsolidado escreveu, distinto do estado ao vivo checado abaixo.
-  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
-  assert.match(secao, /id="btn-congelar-semana"/);
-  assert.match(secao, /Verificando…/); // estado inicial, no markup
-
-  // Estado AO VIVO depois de atualizarBotaoCongelar() rodar (síncrono até a
-  // URL pendente, que devolve antes de qualquer fetch -- ver
-  // urlCongelamentoPendente em render-semanal.js): já diz QUAL semana, e já
-  // nasce desabilitado.
-  const botao = documentoFalso.getElementById('btn-congelar-semana');
-  assert.strictEqual(botao.textContent, 'Congelar semana de ' + diaCurtoDeChave(chaveAlvoDoTeste()));
-  assert.strictEqual(botao.disabled, true);
-});
-
-test('com URL PENDENTE o botao aparece desabilitado e explica, sem quebrar a aba', async () => {
-  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  const html = renderSemanal({
-    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
-    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
-  });
-  const { sandbox, documentoFalso } = montarSandbox(html);
-  // O Apps Script já foi implantado (Task 10, 2026-09-01) e URL_CONGELAMENTO
-  // no build real não é mais 'PENDENTE-...' -- este teste continua cobrindo
-  // o estado degradado (para uma futura reimplantação do zero, ver o
-  // comentário de RE_URL_ALOCACAO_PENDENTE em alocacao-sheet.js) forçando a
-  // URL pendente no sandbox, em vez de depender do literal do código-fonte.
-  sandbox.URL_CONGELAMENTO = 'PENDENTE-congelamento';
-  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
-  await sandbox.tentarDesbloquear();
-
-  const status = documentoFalso.getElementById('status-congelamento');
-  assert.strictEqual(status.textContent, 'Congelamento ainda não configurado nesta planilha.');
-  assert.strictEqual(documentoFalso.getElementById('btn-congelar-semana').disabled, true);
-
-  // A URL pendente não pode quebrar o resto da aba -- a tabela Consolidado
-  // continua sendo montada normalmente ao redor do botão.
-  const secao = documentoFalso.getElementById('secao-consolidado').innerHTML;
-  assert.match(secao, /TOTAL GERAL/);
-});
-
-test('com a URL configurada e sem congelado existente para a semana-alvo, o botao fica HABILITADO', async () => {
-  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  const html = renderSemanal({
-    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
-    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
-  });
-  const fetchMock = (url) => Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
-  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
-  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
-  await sandbox.tentarDesbloquear();
-
-  // Simula o Apps Script já implantado (Task 10) -- mesmo mecanismo que os
-  // testes de live-refresh usam para mutar URLS_PADRAO: URL_CONGELAMENTO é um
-  // 'var' de topo dentro de SCRIPT_CLIENTE_SEMANAL, então vira propriedade
-  // do global object do sandbox.
-  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
-  await sandbox.atualizarBotaoCongelar();
-
-  const botao = documentoFalso.getElementById('btn-congelar-semana');
-  const status = documentoFalso.getElementById('status-congelamento');
-  assert.strictEqual(botao.disabled, false, 'sem congelado existente para a semana-alvo, o botao tem que ficar clicavel');
-  assert.strictEqual(status.textContent, '');
-});
-
-test('com a URL configurada e a semana-alvo JA congelada, o botao fica desabilitado explicando quem e quando', async () => {
-  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  const html = renderSemanal({
-    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
-    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
-  });
-  const linhaCongelada = {
-    chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 100, equipe: 2, produtividadeMedia: 5,
-    autor: 'Fulano', congeladoEm: '2026-08-31T22:00:00.000Z',
+  const fetchMock = async (url, opcoes) => {
+    const corpo = JSON.parse(opcoes.body);
+    if (corpo.acao === 'ler') return { ok: true, json: async () => ({ linhas: [], estado: { travada: false, autor: '', atualizadoEm: '' } }) };
+    throw new Error('URL inesperada: ' + url);
   };
-  const fetchMock = (url) => Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [linhaCongelada] }) });
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
 
-  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
-  await sandbox.atualizarBotaoCongelar();
-
-  const botao = documentoFalso.getElementById('btn-congelar-semana');
-  const status = documentoFalso.getElementById('status-congelamento');
-  assert.strictEqual(botao.disabled, true);
-  assert.match(status.textContent, /congelada em 31\/08\/2026 22:00, por Fulano\.$/);
+  const toggle = documentoFalso.getElementById('toggle-congelamento');
+  assert.strictEqual(toggle.checked, false);
+  assert.strictEqual(toggle.disabled, false, 'semana aberta e sem erro de leitura -- o switch tem de ficar clicavel');
 });
 
-test('clicar em congelarProximaSemana envia o snapshot da semana-alvo pro Apps Script e mostra "congelada agora"', async () => {
+test('toggle aparece marcado e mostra autor/data quando a semana em tela esta travada', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const fetchMock = async (url, opcoes) => {
+    const corpo = JSON.parse(opcoes.body);
+    if (corpo.acao === 'ler') {
+      return { ok: true, json: async () => ({
+        linhas: [{ chaveMatriz: 'SUP-0001-24||BL', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1, autor: 'Fulano', congeladoEm: '2026-08-31T22:00:00Z' }],
+        estado: { travada: true, autor: 'Fulano', atualizadoEm: '2026-08-31T22:00:00Z' },
+      }) };
+    }
+    throw new Error('URL inesperada: ' + url);
+  };
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  const toggle = documentoFalso.getElementById('toggle-congelamento');
+  assert.strictEqual(toggle.checked, true);
+  const status = documentoFalso.getElementById('status-congelamento');
+  assert.match(status.textContent, /Fulano/);
+});
+
+test('ligar o toggle chama travar com um snapshot calculado na hora, para a semana EM TELA', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const html = renderSemanal({
     registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
     senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
   });
   const chamadasPost = [];
-  // A leitura tambem e POST agora -- o que distingue as duas e o campo 'acao'.
-  const fetchMock = (url, opcoes) => {
-    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
-    if (corpo.acao === 'congelar') {
-      chamadasPost.push(corpo);
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
-    }
-    return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  const fetchMock = async (url, opcoes) => {
+    const corpo = JSON.parse(opcoes.body);
+    chamadasPost.push(corpo);
+    if (corpo.acao === 'ler') return { ok: true, json: async () => ({ linhas: [], estado: { travada: false, autor: '', atualizadoEm: '' } }) };
+    if (corpo.acao === 'travar') return { ok: true, json: async () => ({ ok: true, gravadas: corpo.linhas.length }) };
+    throw new Error('URL inesperada: ' + url);
   };
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
-  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
-  await sandbox.tentarDesbloquear();
-
   sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
   sandbox.window.__DASHBOARD_AUTOR__ = 'Autor Sintetico';
-  await sandbox.congelarProximaSemana();
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
 
-  assert.strictEqual(chamadasPost.length, 1, 'esperava exatamente uma chamada POST (congelar)');
-  const chaveAlvo = chaveAlvoDoTeste();
-  assert.strictEqual(chamadasPost[0].chaveSegunda, chaveAlvo);
-  assert.strictEqual(chamadasPost[0].autor, 'Autor Sintetico');
-  assert.ok(Array.isArray(chamadasPost[0].linhas) && chamadasPost[0].linhas.length > 0, 'o snapshot enviado precisa ter linhas -- calcularSnapshotSemanaAlvo rodou de verdade sobre window.__REGISTROS__');
+  await sandbox.alternarCongelamento();
+  await esperarMicrotasks();
 
-  const status = documentoFalso.getElementById('status-congelamento');
-  assert.match(status.textContent, /^Semana de \d{2}\/\d{2} congelada agora\.$/);
-  assert.strictEqual(documentoFalso.getElementById('btn-congelar-semana').disabled, true);
+  const chamadaTravar = chamadasPost.find((c) => c.acao === 'travar');
+  assert.ok(chamadaTravar, 'tem de ter chamado travar');
+  assert.strictEqual(chamadaTravar.autor, 'Autor Sintetico');
+  assert.ok(Array.isArray(chamadaTravar.linhas) && chamadaTravar.linhas.length > 0, 'o snapshot enviado precisa ter linhas calculadas na hora');
+
+  const toggle = documentoFalso.getElementById('toggle-congelamento');
+  assert.strictEqual(toggle.checked, true);
 });
 
-test('clicar em congelarProximaSemana quando a Sheet recusa por "ja-congelada" explica quem e quando, sem travar a pagina', async () => {
+test('desligar o toggle chama destravar, sem mandar nenhuma linha', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
   const html = renderSemanal({
     registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
     senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
   });
-  const fetchMock = (url, opcoes) => {
-    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
-    if (corpo.acao === 'congelar') {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ ok: false, erro: 'ja-congelada', autor: 'Ciclana', congeladoEm: '2026-08-31T10:00:00.000Z' }),
-      });
+  const chamadasPost = [];
+  const fetchMock = async (url, opcoes) => {
+    const corpo = JSON.parse(opcoes.body);
+    chamadasPost.push(corpo);
+    if (corpo.acao === 'ler') {
+      return { ok: true, json: async () => ({
+        linhas: [{ chaveMatriz: 'SUP-0001-24||BL', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1, autor: 'Fulano', congeladoEm: 'x' }],
+        estado: { travada: true, autor: 'Fulano', atualizadoEm: 'x' },
+      }) };
     }
-    return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+    if (corpo.acao === 'destravar') return { ok: true, json: async () => ({ ok: true }) };
+    throw new Error('URL inesperada: ' + url);
   };
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  await sandbox.alternarCongelamento();
+  await esperarMicrotasks();
+
+  const chamadaDestravar = chamadasPost.find((c) => c.acao === 'destravar');
+  assert.ok(chamadaDestravar, 'tem de ter chamado destravar');
+  assert.strictEqual(chamadaDestravar.linhas, undefined);
+
+  const toggle = documentoFalso.getElementById('toggle-congelamento');
+  assert.strictEqual(toggle.checked, false);
+});
+
+test('falha de rede ao travar mantem o toggle no estado anterior e mostra aviso', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const fetchMock = async (url, opcoes) => {
+    const corpo = JSON.parse(opcoes.body);
+    if (corpo.acao === 'ler') return { ok: true, json: async () => ({ linhas: [], estado: { travada: false, autor: '', atualizadoEm: '' } }) };
+    if (corpo.acao === 'travar') throw new Error('offline');
+    throw new Error('URL inesperada: ' + url);
+  };
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  await sandbox.alternarCongelamento();
+  await esperarMicrotasks();
+
+  const toggle = documentoFalso.getElementById('toggle-congelamento');
+  assert.strictEqual(toggle.checked, false, 'falha de rede nao pode deixar o toggle marcado como travado');
+  const status = documentoFalso.getElementById('status-congelamento');
+  assert.match(status.textContent, /rede ou planilha fora do ar/);
+});
+
+test('URL_CONGELAMENTO pendente deixa o toggle desabilitado e explica na tela', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  const { sandbox, documentoFalso } = montarSandbox(html);
+  sandbox.URL_CONGELAMENTO = 'PENDENTE-congelamento';
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
 
-  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
-  await sandbox.congelarProximaSemana();
-
+  const toggle = documentoFalso.getElementById('toggle-congelamento');
+  assert.strictEqual(toggle.disabled, true);
   const status = documentoFalso.getElementById('status-congelamento');
-  assert.match(status.textContent, /^Esta semana já foi congelada em 31\/08\/2026 10:00, por Ciclana\. Para refazer, apague as linhas na planilha\.$/);
-  // ja-congelada não reabilita o botão -- não faz sentido tentar de novo.
-  assert.strictEqual(documentoFalso.getElementById('btn-congelar-semana').disabled, true);
+  assert.strictEqual(status.textContent, 'Congelamento ainda não configurado nesta planilha.');
 });
 
 test('o congelado carregado da Sheet para a semana em tela chega a montarAbaConsolidado (cabecalho vira "congelada")', async () => {
@@ -2063,6 +2070,64 @@ test('resposta atrasada da semana ANTERIOR nao sobrescreve o congelado da semana
     'a resposta atrasada da semana anterior nao pode sobrescrever o congelado da semana em tela');
 });
 
+// Achado Important da revisão da Task 4: ESTADO_CONGELAMENTO.carregando era
+// zerado LOGO depois do await, ANTES do guard de corrida (chave !==
+// chaveSemana) -- diferente de congelado/estado/erro, que só sao escritos
+// DEPOIS do guard. Uma resposta atrasada da semana ANTIGA (perdedora da
+// corrida) zerava 'carregando' mesmo com a busca da semana NOVA ainda em
+// voo: atualizarToggleCongelamento lia carregando=false, chave batendo (e' a
+// nova mesmo) e estado=null, e desenhava o toggle como se a leitura real ja
+// tivesse voltado com "nunca travada" -- um clique nessa janela dispararia
+// alternarCongelamento contra um estado fabricado.
+test('resposta atrasada da semana ANTERIOR nao zera carregando da semana NOVA ainda em voo', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  // Uma promise por semana, resolvida à mão -- mesmo padrão do teste acima
+  // ("resposta atrasada da semana ANTERIOR nao sobrescreve..."), só que aqui
+  // a resposta atrasada é a da semana ANTIGA (A), que chega DEPOIS de B já
+  // estar em voo, mas ANTES de B terminar.
+  const pendentes = {};
+  const fetchMock = (url, opcoes) => {
+    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao !== 'ler') return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+    return new Promise((resolve) => { pendentes[corpo.semana] = resolve; });
+  };
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+
+  // Dispara a busca da semana A, mas não espera -- fica pendurada.
+  const buscaA = sandbox.carregarCongeladoDaSemana('2026-07-06');
+  await esperarMicrotasks();
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.carregando, true, 'busca de A em voo -- carregando tem de estar true');
+
+  // Usuário troca pra semana B ANTES de A terminar: nova chamada reseta
+  // chave/carregando/estado pra B.
+  const buscaB = sandbox.carregarCongeladoDaSemana('2026-07-13');
+  await esperarMicrotasks();
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.chave, '2026-07-13');
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.carregando, true, 'busca de B em voo -- carregando continua true');
+
+  // A resposta ATRASADA de A (a perdedora da corrida) chega primeiro -- B
+  // continua em voo.
+  pendentes['2026-07-06']({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  await buscaA;
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.chave, '2026-07-13', 'a chave continua sendo a de B');
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.carregando, true,
+    'a resposta atrasada de A (que perdeu a corrida) nao pode zerar carregando da busca de B, ainda em voo');
+
+  // Só quando B efetivamente resolve é que carregando pode virar false.
+  pendentes['2026-07-13']({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  await buscaB;
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.carregando, false, 'com a busca de B resolvida, carregando tem de virar false');
+});
+
 // Achado 5 (Important): "sem congelado", "token recusado" e "rede fora" eram o
 // mesmo null, e a aba caía em "(recalculada)" sem dizer que existe um
 // congelamento inacessível -- o cenário da senha rotacionada sem atualizar a
@@ -2110,193 +2175,239 @@ test('leitura que falha por rede avisa dizendo REDE, nao token', async () => {
   assert.match(aviso.textContent, /rede ou planilha fora do ar/);
 });
 
-// Botão "Desfazer congelamento" (Task 5, 2026-09-01) -- liga
-// desfazerCongelamentoDaSemana ao clique de #btn-desfazer-congelamento e a
-// visibilidade do botão ao que carregarCongeladoDaSemana já buscou para a
-// semana EM TELA (não a semana-alvo de "Congelar", que é sempre a próxima
-// segunda).
-
-test('com a semana em tela JA congelada, btn-desfazer-congelamento aparece visivel e habilitado', async () => {
+// Achado Important da revisao final: com erro==='rede' o toggle ficava
+// HABILITADO (so 'token' desabilitava antes deste fix), e como
+// ESTADO_CONGELAMENTO.estado continua null quando a leitura falha, um clique
+// disparava alternarCongelamento() contra um estado FABRICADO
+// (travada:false por padrao) -- e travar() nao consulta lerEstado antes de
+// gravar. Se a semana JA estivesse travada de verdade (so nao deu pra ler
+// por falha de rede), o clique sobrescreveria em silencio o snapshot que a
+// trava deveria proteger.
+test('erro de leitura "rede" deixa o toggle DESABILITADO e desmarcado -- nao so "token"', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  const fetchMock = async (url, opcoes) => {
-    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
-    if (corpo.acao === 'ler') {
-      return { ok: true, json: async () => ({ linhas: [
-        { chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 10, equipe: 1, produtividadeMedia: 10, autor: 'ana', congeladoEm: '2026-08-28T22:00:00Z' },
-      ] }) };
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const fetchMock = () => Promise.reject(new Error('offline'));
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.erro, 'rede');
+  const toggle = documentoFalso.getElementById('toggle-congelamento');
+  assert.strictEqual(toggle.disabled, true,
+    'com erro de rede o estado real e desconhecido -- o toggle nao pode ficar clicavel');
+  assert.strictEqual(toggle.checked, false, 'estado desconhecido nao pode afirmar travada nem destravada');
+});
+
+// --- Task 5 (2026-09-08): "Atualizar dados" grava a linha de base da semana
+// EM TELA no Consolidado quando ela está DESTRAVADA (upsert via 'congelar'),
+// e NÃO mexe nela quando está TRAVADA.
+
+test('atualizarDadosAoVivoSemanal: com a semana do Consolidado ABERTA, "Atualizar dados" chama congelar (upsert da linha de base)', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-03-15T00:00:00Z'),
+  });
+  const chamadasPost = [];
+  const fetchMock = (url, opcoes) => {
+    if (opcoes && opcoes.body) {
+      const corpo = JSON.parse(opcoes.body);
+      chamadasPost.push(corpo);
+      if (corpo.acao === 'ler') return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [], estado: { travada: false, autor: '', atualizadoEm: '' } }) });
+      if (corpo.acao === 'congelar') return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, gravadas: corpo.linhas.length }) });
     }
-    return { ok: true, json: async () => ({}) };
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
+    // avancos/lab-online.csv (URLS_PADRAO reais, não PENDENTE- nesta base):
+    // sem mockar, o refresh inteiro falha com 404 antes de chegar em
+    // aoAtualizarLinhaBase -- CSVs vazios bastam pra este teste, que só
+    // observa se 'congelar' foi chamado.
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_VAZIO) });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_VAZIO) });
+    return Promise.resolve({ ok: false, status: 404 });
   };
-  const html = renderSemanal({
-    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
-    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
-  });
+
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  sandbox.window.__DASHBOARD_AUTOR__ = 'Autor Sintetico';
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
   await esperarMicrotasks();
   await esperarMicrotasks();
 
-  const btnDesfazer = documentoFalso.getElementById('btn-desfazer-congelamento');
-  assert.notEqual(btnDesfazer.style.display, 'none');
-  assert.equal(btnDesfazer.disabled, false);
+  await chamarEsperarAtualizacao(sandbox);
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  const chamadaCongelar = chamadasPost.find((c) => c.acao === 'congelar');
+  assert.ok(chamadaCongelar, 'a semana aberta em tela tem de disparar um congelar (upsert) apos o refresh');
 });
 
-test('sem congelado na semana em tela, btn-desfazer-congelamento fica escondido', async () => {
+test('atualizarDadosAoVivoSemanal: com a semana do Consolidado TRAVADA, "Atualizar dados" NAO chama congelar', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  const fetchMock = async () => ({ ok: true, json: async () => ({ linhas: [] }) });
   const html = renderSemanal({
     registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
-    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+    senha: SENHA_FAKE, geradoEm: new Date('2026-03-15T00:00:00Z'),
   });
-  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
-  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
-  await sandbox.tentarDesbloquear();
-  await esperarMicrotasks();
-  await esperarMicrotasks();
-
-  const btnDesfazer = documentoFalso.getElementById('btn-desfazer-congelamento');
-  assert.equal(btnDesfazer.style.display, 'none');
-});
-
-test('clique em desfazer com confirm cancelado NAO manda requisicao', async () => {
-  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  let chamadasDesfazer = 0;
-  const fetchMock = async (url, opcoes) => {
-    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
-    if (corpo.acao === 'ler') return { ok: true, json: async () => ({ linhas: [
-      { chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 10, equipe: 1, produtividadeMedia: 10, autor: 'ana', congeladoEm: '2026-08-28T22:00:00Z' },
-    ] }) };
-    if (corpo.acao === 'desfazer') chamadasDesfazer++;
-    return { ok: true, json: async () => ({ ok: true, apagadas: 1 }) };
-  };
-  const html = renderSemanal({
-    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
-    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
-  });
-  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
-  sandbox.confirm = () => false; // usuário cancela
-  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
-  await sandbox.tentarDesbloquear();
-  await esperarMicrotasks();
-  await esperarMicrotasks();
-
-  await sandbox.desfazerCongelamentoDaSemana();
-  assert.equal(chamadasDesfazer, 0, 'confirm cancelado nao pode chegar a mandar a requisicao de desfazer');
-});
-
-test('desfazer com sucesso redesenha a aba: rotulo volta a recalculada e o botao some', async () => {
-  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  let jaDesfeito = false;
-  const fetchMock = async (url, opcoes) => {
-    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
-    if (corpo.acao === 'ler') {
-      return { ok: true, json: async () => (jaDesfeito ? { linhas: [] } : { linhas: [
-        { chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 10, equipe: 1, produtividadeMedia: 10, autor: 'ana', congeladoEm: '2026-08-28T22:00:00Z' },
-      ] }) };
+  const chamadasPost = [];
+  const fetchMock = (url, opcoes) => {
+    if (opcoes && opcoes.body) {
+      const corpo = JSON.parse(opcoes.body);
+      chamadasPost.push(corpo);
+      if (corpo.acao === 'ler') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
+          linhas: [{ chaveMatriz: 'SUP-0001-24||BL', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1, autor: 'Fulano', congeladoEm: 'x' }],
+          estado: { travada: true, autor: 'Fulano', atualizadoEm: 'x' },
+        }) });
+      }
     }
-    if (corpo.acao === 'desfazer') { jaDesfeito = true; return { ok: true, json: async () => ({ ok: true, apagadas: 1 }) }; }
-    return { ok: true, json: async () => ({}) };
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_VAZIO) });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_VAZIO) });
+    return Promise.resolve({ ok: false, status: 404 });
   };
-  const html = renderSemanal({
-    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
-    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
-  });
+
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
-  sandbox.confirm = () => true; // usuário confirma
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
   await esperarMicrotasks();
   await esperarMicrotasks();
 
-  await sandbox.desfazerCongelamentoDaSemana();
+  await chamarEsperarAtualizacao(sandbox);
   await esperarMicrotasks();
   await esperarMicrotasks();
 
-  const btnDesfazer = documentoFalso.getElementById('btn-desfazer-congelamento');
-  assert.equal(btnDesfazer.style.display, 'none', 'sem congelado, o botao de desfazer some de novo');
+  assert.ok(!chamadasPost.some((c) => c.acao === 'congelar'), 'semana travada nao pode ser sobrescrita pelo refresh');
 });
 
-test('desfazerCongelamentoDaSemana calcula as chaves com segundaDaSemana + fragmentosDaSemanaAlvo da semana EM TELA', async () => {
+// Achado Important da revisão da Task 5: aoAtualizarLinhaBase escrevia
+// ESTADO_CONGELAMENTO.estado sem conferir, DEPOIS do await de congelar(...),
+// se a semana em tela ainda era a que a chamada tinha calculado o snapshot
+// -- mesma classe de bug que carregarCongeladoDaSemana e alternarCongelamento
+// (Task 4) já corrigiram nos seus respectivos awaits. Uma resposta atrasada
+// do congelar da semana ANTIGA (perdedora da corrida contra uma troca de
+// semana no seletor do Consolidado, no meio do refresh) não pode sobrescrever
+// o estado da semana NOVA, em tela agora.
+test('aoAtualizarLinhaBase: resposta atrasada de congelar da semana ANTIGA nao sobrescreve o estado da semana NOVA (trocada durante o refresh)', async () => {
   const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  let chavesRecebidas = null;
-  const fetchMock = async (url, opcoes) => {
-    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
-    if (corpo.acao === 'ler') return { ok: true, json: async () => ({ linhas: [
-      { chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 10, equipe: 1, produtividadeMedia: 10, autor: 'ana', congeladoEm: '2026-08-28T22:00:00Z' },
-    ] }) };
-    if (corpo.acao === 'desfazer') chavesRecebidas = corpo.chaves;
-    return { ok: true, json: async () => ({ ok: true, apagadas: 1 }) };
-  };
   const html = renderSemanal({
     registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
-    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+    senha: SENHA_FAKE, geradoEm: new Date('2026-03-15T00:00:00Z'),
   });
-  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
-  sandbox.confirm = () => true;
-  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
-  await sandbox.tentarDesbloquear();
-  await esperarMicrotasks();
-  await esperarMicrotasks();
-
-  await sandbox.desfazerCongelamentoDaSemana();
-  assert.ok(Array.isArray(chavesRecebidas) && chavesRecebidas.length >= 1,
-    'as chaves mandadas pro Apps Script precisam vir de fragmentosDaSemanaAlvo(segundaDaSemana(semana em tela))');
-});
-
-// Achado Important da revisão da Task 5: desfazerCongelamentoDaSemana lia
-// ESTADO_CONGELAMENTO.chave no início, mas aplicava o sucesso (zerar
-// congelado/erro + redesenhar) sem reconferir se essa ainda era a semana em
-// tela depois do await -- mesma classe do bug já coberto acima para
-// carregarCongeladoDaSemana ("resposta atrasada da semana ANTERIOR nao
-// sobrescreve..."), só que do lado do desfazer: a resposta atrasada do
-// desfazer de uma semana ANTIGA apagaria o congelado de uma semana NOVA que
-// o usuário tivesse trocado para enquanto o POST estava em voo -- mesmo que
-// essa semana nova continuasse genuinamente congelada na planilha.
-test('resposta atrasada do desfazer da semana ANTERIOR nao apaga o congelado da semana NOVA em tela', async () => {
-  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
-  let resolverDesfazer;
-  const fetchMock = async (url, opcoes) => {
-    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
-    if (corpo.acao === 'ler') return { ok: true, json: async () => ({ linhas: [
-      { chaveMatriz: 'SUP-0001-24||ST', volume: 10, financeiro: 10, equipe: 1, produtividadeMedia: 10, autor: 'ana', congeladoEm: '2026-08-28T22:00:00Z' },
-    ] }) };
-    if (corpo.acao === 'desfazer') {
-      // Fica pendurado até o teste resolver à mão -- é o que deixa o
-      // usuário "trocar de semana" enquanto este POST ainda está no ar.
-      return new Promise((resolve) => { resolverDesfazer = resolve; });
+  let resolverCongelar;
+  const fetchMock = (url, opcoes) => {
+    if (opcoes && opcoes.body) {
+      const corpo = JSON.parse(opcoes.body);
+      if (corpo.acao === 'ler') return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [], estado: { travada: false, autor: '', atualizadoEm: '' } }) });
+      if (corpo.acao === 'congelar') {
+        // Fica pendurado -- resolve só quando o teste chamar resolverCongelar,
+        // depois da semana em tela já ter sido trocada.
+        return new Promise((resolve) => { resolverCongelar = resolve; });
+      }
     }
-    return { ok: true, json: async () => ({}) };
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_VAZIO) });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_VAZIO) });
+    return Promise.resolve({ ok: false, status: 404 });
   };
-  const html = renderSemanal({
-    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
-    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
-  });
+
   const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
-  sandbox.confirm = () => true;
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  sandbox.window.__DASHBOARD_AUTOR__ = 'Autor Sintetico';
   documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
   await sandbox.tentarDesbloquear();
   await esperarMicrotasks();
   await esperarMicrotasks();
 
-  // Dispara o desfazer da semana original, mas não espera -- o fetch fica
-  // pendurado em resolverDesfazer.
-  const promessaDesfazer = sandbox.desfazerCongelamentoDaSemana();
+  const chaveOriginal = sandbox.ESTADO_CONGELAMENTO.chave;
+  assert.ok(chaveOriginal, 'pre-condicao: a semana em tela precisa ter sido resolvida antes do refresh');
+
+  // Dispara o refresh -- o congelar da semana ORIGINAL fica pendurado no
+  // fetchMock (resolverCongelar capturado, mas não chamado ainda).
+  sandbox.atualizarDadosAoVivoSemanal();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+  assert.ok(typeof resolverCongelar === 'function', 'pre-condicao: o congelar da semana original precisa estar em voo');
+
+  // Usuário troca a semana em tela ENQUANTO o congelar está no ar -- mutação
+  // direta de ESTADO_CONGELAMENTO, mesmo atalho que os testes de corrida da
+  // Task 4 já usam (ver "resposta atrasada da semana ANTERIOR..." acima).
+  const chaveNova = '2099-01-05';
+  const estadoNovo = { travada: false, autor: 'Outra Sessao', atualizadoEm: '2099-01-05T00:00:00.000Z' };
+  sandbox.ESTADO_CONGELAMENTO.chave = chaveNova;
+  sandbox.ESTADO_CONGELAMENTO.estado = estadoNovo;
+
+  // Agora a resposta atrasada do congelar da semana ORIGINAL (perdedora da
+  // corrida) chega.
+  resolverCongelar({ ok: true, json: () => Promise.resolve({ ok: true, gravadas: 1 }) });
   await esperarMicrotasks();
   await esperarMicrotasks();
 
-  // Usuário troca de semana enquanto o POST está em voo: simula a semana
-  // NOVA já com seu próprio congelado carregado (o guard olha só
-  // ESTADO_CONGELAMENTO.chave/.congelado -- não precisa navegar pela UI de
-  // verdade pra exercitar a corrida).
-  sandbox.ESTADO_CONGELAMENTO.chave = '2026-07-06';
-  sandbox.ESTADO_CONGELAMENTO.congelado = { porRegistro: { 'SUP-0001-24||ST': { financeiro: { tendencia: 999 } } } };
-
-  // Só agora a resposta atrasada do desfazer (da semana ANTIGA) chega.
-  resolverDesfazer({ ok: true, json: async () => ({ ok: true, apagadas: 1 }) });
-  await promessaDesfazer;
-
-  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.chave, '2026-07-06');
-  assert.notEqual(sandbox.ESTADO_CONGELAMENTO.congelado, null,
-    'a resposta atrasada do desfazer da semana antiga nao pode apagar o congelado da semana NOVA em tela');
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.chave, chaveNova, 'a chave continua sendo a da semana NOVA');
+  assert.deepStrictEqual(sandbox.ESTADO_CONGELAMENTO.estado, estadoNovo,
+    'a resposta atrasada do congelar da semana antiga nao pode sobrescrever o estado da semana em tela agora');
 });
+
+// Achado Important da revisao final: apos o upsert bem-sucedido do congelar,
+// aoAtualizarLinhaBase setava so ESTADO_CONGELAMENTO.estado a mao, mas nunca
+// ESTADO_CONGELAMENTO.congelado (o snapshot em si, que montarAbaConsolidado
+// usa pra montar congeladoSemanalCarregado e mostrar os numeros na tabela) --
+// a Sheet ja tinha o numero novo, mas a tabela continuava mostrando o numero
+// ANTIGO ate o usuario trocar de semana ou recarregar a pagina. O fix chama
+// carregarCongeladoDaSemana (que ja re-busca e ja popula estado+congelado
+// corretamente) em vez de so setar estado manualmente.
+test('aoAtualizarLinhaBase: apos "Atualizar dados" gravar um snapshot novo, ESTADO_CONGELAMENTO.congelado reflete o snapshot NOVO, nao o antigo', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-03-15T00:00:00Z'),
+  });
+  let chamadasLer = 0;
+  const fetchMock = (url, opcoes) => {
+    if (opcoes && opcoes.body) {
+      const corpo = JSON.parse(opcoes.body);
+      if (corpo.acao === 'ler') {
+        chamadasLer++;
+        // Primeira leitura (carregamento inicial da pagina): snapshot ANTIGO.
+        // Qualquer leitura seguinte (disparada pelo carregarCongeladoDaSemana
+        // que o fix chama depois do congelar): snapshot NOVO.
+        const financeiro = chamadasLer === 1 ? 111 : 222;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
+          linhas: [{ chaveMatriz: 'SUP-0001-24||ST', volume: null, financeiro, equipe: null, produtividadeMedia: null, autor: 'a', congeladoEm: 'x' }],
+          estado: { travada: false, autor: 'a', atualizadoEm: 'x' },
+        }) });
+      }
+      if (corpo.acao === 'congelar') return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, gravadas: corpo.linhas.length }) });
+    }
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_VAZIO) });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_VAZIO) });
+    return Promise.resolve({ ok: false, status: 404 });
+  };
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  sandbox.window.__DASHBOARD_AUTOR__ = 'Autor Sintetico';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.congelado.porRegistro['SUP-0001-24||ST'].financeiro.tendencia, 111,
+    'pre-condicao: o carregamento inicial tem de ter trazido o snapshot ANTIGO');
+
+  await chamarEsperarAtualizacao(sandbox);
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.congelado.porRegistro['SUP-0001-24||ST'].financeiro.tendencia, 222,
+    'apos "Atualizar dados" gravar um snapshot novo, ESTADO_CONGELAMENTO.congelado tem de refletir o NOVO, nao ficar preso no antigo');
+});
+

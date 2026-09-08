@@ -1,26 +1,47 @@
 // Web App que guarda a Tendência CONGELADA por semana, gravada pelo botão
 // "Congelar próxima semana" do Consolidado.
 //
-// Duas regras que não podem ser afrouxadas:
-//  1. A semana só pode ser congelada UMA vez. doPost recusa se já existir
-//     QUALQUER linha da semana -- inclusive de uma gravação interrompida no
-//     meio. Refazer exige apagar as linhas na planilha à mão. É a promessa do
-//     recurso: o número nunca muda depois.
-//  2. Datas são gravadas como TEXTO. O Sheets coage '2026-08-31' pra Date, e
+// O mecanismo de congelamento foi redefinido de "write-once" para "toggle":
+//  - travar: marca uma semana como travada (não permite mais congelar)
+//  - destravar: desbloqueia uma semana travada (permite congelar de novo)
+//  - congelar: grava um snapshot, só se a semana estiver aberta (não travada)
+//  - desfazer: apaga linhas de pontos E a linha de estado correspondente
+//    (mecanismo manual, mantido sem UI)
+//
+// Duas regras permanentes:
+//  1. Datas são gravadas como TEXTO. O Sheets coage '2026-08-31' pra Date, e
 //     String(Date) nunca casa com a string ISO na releitura -- o script
 //     gravaria e descartaria a própria linha, em silêncio.
+//  2. O estado (travada/não travada) é persistido na aba CongelamentoEstado.
+//     Compatibilidade: se uma semana tem pontos gravados mas sem linha de
+//     estado (aba nova em um deploy), ela é tratada como travada, protegendo
+//     trabalho anterior feito sob a regra old "write-once".
 //
-// O formato de texto vale SÓ para as duas colunas de data (SemanaInicio e
-// CongeladoEm). Aplicá-lo à faixa inteira colocava as 4 colunas NUMÉRICAS em
-// texto também, e aí o Sheets pode guardar o número na representação textual
-// do locale da planilha ('3,5' em vez de '3.5'): na releitura Number('3,5')
-// vira NaN, que não é null e passa direto pelos `=== null` abaixo, contaminando
-// qualquer soma em silêncio.
+// Na aba Congelamento (pontos), o formato de texto vale SÓ para as duas
+// colunas de data (SemanaInicio e CongeladoEm). Aplicá-lo à faixa inteira
+// colocava as 4 colunas NUMÉRICAS em texto também, e aí o Sheets pode guardar
+// o número na representação textual do locale da planilha ('3,5' em vez de
+// '3.5'): na releitura Number('3,5') vira NaN, que não é null e passa direto
+// pelos `=== null` abaixo, contaminando qualquer soma em silêncio.
+//
+// A aba CongelamentoEstado (abaixo) é diferente: NENHUMA das 4 colunas é
+// numérica (SemanaInicio, Travada, Autor, AtualizadoEm são todas texto/data),
+// então lá o cinto cobre a FAIXA INTEIRA -- inclusive a coluna Travada, que
+// guarda a string 'TRUE'/'FALSE'. Sem esse formato, o Sheets coage 'TRUE' pra
+// BOOLEANO na gravação (mesma classe de armadilha da coerção de Date, uma
+// terceira vez, agora num tipo novo): na releitura String(true) é 'true'
+// minúsculo, nunca 'TRUE', e toda semana travada voltava a ler como
+// destravada. `lerEstado` abaixo também aceita o boolean diretamente, cinto e
+// suspensório.
 var ABA = 'Congelamento';
 var CABECALHO = ['Ano', 'SemanaInicio', 'Chave', 'Volume', 'Financeiro', 'Equipe',
   'ProdutividadeMedia', 'Autor', 'CongeladoEm'];
 var COL_SEMANA_INICIO = 2;
 var COL_CONGELADO_EM = 9;
+
+var ABA_ESTADO = 'CongelamentoEstado';
+var CABECALHO_ESTADO = ['SemanaInicio', 'Travada', 'Autor', 'AtualizadoEm'];
+var COL_ESTADO_SEMANA = 1;
 
 // Formata como TEXTO PURO só as duas colunas de data da faixa que começa em
 // 'primeiraLinha' e tem 'numLinhas' linhas. Duas chamadas em faixas separadas:
@@ -29,6 +50,70 @@ var COL_CONGELADO_EM = 9;
 function formatarColunasDeDataComoTexto(aba, primeiraLinha, numLinhas) {
   aba.getRange(primeiraLinha, COL_SEMANA_INICIO, numLinhas, 1).setNumberFormat('@');
   aba.getRange(primeiraLinha, COL_CONGELADO_EM, numLinhas, 1).setNumberFormat('@');
+}
+
+function abaCongelamentoEstado() {
+  var planilha = SpreadsheetApp.getActiveSpreadsheet();
+  var aba = planilha.getSheetByName(ABA_ESTADO);
+  if (!aba) {
+    aba = planilha.insertSheet(ABA_ESTADO);
+    // Faixa INTEIRA (4 colunas) como texto -- ver o comentário no topo do
+    // arquivo. Diferente de abaCongelamento(), aqui não há coluna numérica a
+    // proteger da coerção contrária.
+    aba.getRange(1, 1, aba.getMaxRows(), CABECALHO_ESTADO.length).setNumberFormat('@');
+    aba.getRange(1, 1, 1, CABECALHO_ESTADO.length).setValues([CABECALHO_ESTADO]);
+  }
+  return aba;
+}
+
+// {travada, autor, atualizadoEm} para chaveSegunda. Sem linha em
+// CongelamentoEstado (aba nova, ou semana nunca travada/destravada por
+// aqui), cai no fallback de compatibilidade com o mecanismo write-once
+// antigo: travada = temPontosExistentes. Sem isso, o primeiro "Atualizar
+// dados" rodado depois deste deploy sobrescreveria em silêncio uma semana
+// que alguém já tratava como definitiva sob a regra antiga.
+function lerEstado(chaveSegunda, temPontosExistentes) {
+  var dados = abaCongelamentoEstado().getDataRange().getValues();
+  var alvo = String(chaveSegunda || '');
+  for (var i = 1; i < dados.length; i++) {
+    if (normalizarDia(dados[i][0]) === alvo) {
+      // Cinto e suspensório: o formato de texto da coluna 2 é o que evita a
+      // coerção pra boolean na gravação (ver o comentário no topo do
+      // arquivo), mas a leitura aceita o boolean direto também -- se algum
+      // dia esse formato for perdido (edição manual, reimplantação sem essa
+      // correção), a leitura ainda reconhece a trava em vez de silenciosamente
+      // devolver destravada.
+      var v = dados[i][1];
+      return {
+        travada: v === true || String(v).toUpperCase() === 'TRUE',
+        autor: String(dados[i][2] || ''),
+        atualizadoEm: String(dados[i][3] || ''),
+      };
+    }
+  }
+  return { travada: !!temPontosExistentes, autor: '', atualizadoEm: '' };
+}
+
+function gravarEstado(chaveSegunda, travada, autor, quando) {
+  var aba = abaCongelamentoEstado();
+  var dados = aba.getDataRange().getValues();
+  var alvo = String(chaveSegunda || '');
+  var valores = [alvo, travada ? 'TRUE' : 'FALSE', autor || '', quando || ''];
+  for (var i = 1; i < dados.length; i++) {
+    if (normalizarDia(dados[i][0]) === alvo) {
+      // Formata a faixa ANTES de escrever -- mesmo padrão de
+      // formatarColunasDeDataComoTexto/abaCongelamento. Sem isso, uma linha
+      // já existente que nunca tinha sido formatada (aba herdada de antes
+      // desta correção) continuaria vulnerável à coerção mesmo depois do
+      // update.
+      aba.getRange(i + 1, 1, 1, CABECALHO_ESTADO.length).setNumberFormat('@');
+      aba.getRange(i + 1, 1, 1, CABECALHO_ESTADO.length).setValues([valores]);
+      return;
+    }
+  }
+  var linha = aba.getLastRow() + 1;
+  aba.getRange(linha, 1, 1, CABECALHO_ESTADO.length).setNumberFormat('@');
+  aba.getRange(linha, 1, 1, CABECALHO_ESTADO.length).setValues([valores]);
 }
 
 function tokenEsperado() {
@@ -114,7 +199,15 @@ function doGet() {
 function doPost(e) {
   var corpo = JSON.parse(e.postData.contents);
   if (!tokenValido(corpo.token)) return resposta({ erro: 'token' });
-  if (corpo.acao === 'ler') return resposta({ linhas: linhasDaSemana(corpo.semana) });
+
+  if (corpo.acao === 'ler') {
+    var linhas = linhasDaSemana(corpo.semana);
+    var chaveEstado = corpo.chaveSegunda || corpo.semana;
+    var fragmentosParaChecagem = (corpo.chavesFragmentos && corpo.chavesFragmentos.length)
+      ? corpo.chavesFragmentos : [corpo.semana];
+    var temPontosExistentes = fragmentosParaChecagem.some(function (c) { return linhasDaSemana(c).length > 0; });
+    return resposta({ linhas: linhas, estado: lerEstado(chaveEstado, temPontosExistentes) });
+  }
 
   if (corpo.acao === 'desfazer') {
     var travaDesfazer = LockService.getScriptLock();
@@ -128,62 +221,110 @@ function doPost(e) {
       for (var j = 1; j < dadosDesfazer.length; j++) {
         if (chavesApagar[normalizarDia(dadosDesfazer[j][COL_SEMANA_INICIO - 1])]) linhasParaApagar.push(j + 1);
       }
-      // De trás pra frente: apagar de cima pra baixo desloca o índice das
-      // linhas seguintes, e o próximo deleteRow erraria a linha.
       linhasParaApagar.sort(function (a, b) { return b - a; })
         .forEach(function (linha) { abaDesfazer.deleteRow(linha); });
+
+      // Achado Important da revisão final: desfazer apagava só as linhas de
+      // PONTOS (Congelamento), nunca a linha de CongelamentoEstado -- uma
+      // semana travada que tivesse os pontos apagados por aqui continuava
+      // lendo travada:true (estado.travada não mexe sozinho), com `ler`
+      // devolvendo linhas:[] e o toggle mostrando travado sem nenhum
+      // snapshot pra sustentar, e "Atualizar dados" recusando gravar porque
+      // a semana ainda estava "travada" -- um meio-estado sem rota de saída
+      // pela UI a não ser destravar manualmente.
+      //
+      // As chaves de desfazer são chaves de FRAGMENTO (até 2 por semana,
+      // quando cruza mês), enquanto CongelamentoEstado é chaveada pela
+      // segunda-feira REAL -- os dois espaços de chave nem sempre coincidem.
+      // Em vez de calcular a segunda a partir do fragmento, apaga qualquer
+      // linha de CongelamentoEstado cuja chave apareça entre as `chaves`
+      // recebidas: mais simples e suficiente, porque o cliente sempre manda
+      // as chaves de fragmento OU a chaveSegunda, dependendo de quem chama.
+      var abaEstadoDesfazer = abaCongelamentoEstado();
+      var dadosEstadoDesfazer = abaEstadoDesfazer.getDataRange().getValues();
+      var linhasEstadoParaApagar = [];
+      for (var k = 1; k < dadosEstadoDesfazer.length; k++) {
+        if (chavesApagar[normalizarDia(dadosEstadoDesfazer[k][COL_ESTADO_SEMANA - 1])]) linhasEstadoParaApagar.push(k + 1);
+      }
+      linhasEstadoParaApagar.sort(function (a, b) { return b - a; })
+        .forEach(function (linha) { abaEstadoDesfazer.deleteRow(linha); });
+
       return resposta({ ok: true, apagadas: linhasParaApagar.length });
     } finally {
       travaDesfazer.releaseLock();
     }
   }
 
+  // congelar (upsert condicionado ao estado) / travar (upsert + trava) /
+  // destravar (só destrava, nunca apaga ponto). As três compartilham a
+  // trava de concorrência porque as três podem escrever em Congelamento
+  // e/ou CongelamentoEstado.
   var trava = LockService.getScriptLock();
   trava.waitLock(30000);
   try {
-    // A checagem olha a semana INTEIRA (todos os fragmentos gravados sob a
-    // mesma chaveSegunda entram como linhas com chaves diferentes, então a
-    // varredura é por qualquer linha cuja SemanaInicio pertença a esta
-    // gravação). Basta uma linha existir pra recusar.
-    //
-    // UMA leitura da planilha, não uma por linha do payload: o payload tem
-    // ~340 linhas e no máximo 2 chaves distintas de semana, e linhasDaSemana
-    // faz getDataRange().getValues() (a planilha INTEIRA) a cada chamada --
-    // varrer por linha custava até 340 leituras completas por clique, com o
-    // custo crescendo com o QUADRADO das semanas já congeladas até estourar o
-    // limite de 6 min do Apps Script. Extrai as chaves DISTINTAS primeiro e
-    // varre os dados uma vez só. Regra observável idêntica: recusa quando
-    // qualquer linha de qualquer chave-alvo já existe, com autor/congeladoEm
-    // do primeiro achado.
-    var chaves = {};
-    (corpo.linhas || []).forEach(function (l) { chaves[String(l.chave)] = true; });
-    var dados = abaCongelamento().getDataRange().getValues();
-    var existentes = [];
-    for (var i = 1; i < dados.length && !existentes.length; i++) {
-      // normalizarDia: mesma proteção contra a coerção de Date que
-      // linhasDaSemana usa na releitura.
-      if (chaves[normalizarDia(dados[i][COL_SEMANA_INICIO - 1])]) {
-        existentes = [{ autor: String(dados[i][7] || ''), congeladoEm: String(dados[i][8] || '') }];
-      }
-    }
-    if (existentes.length) {
-      return resposta({ erro: 'ja-congelada', autor: existentes[0].autor, congeladoEm: existentes[0].congeladoEm });
+    if (corpo.acao === 'destravar') {
+      gravarEstado(corpo.chaveSegunda, false, corpo.autor, corpo.destravadoEm);
+      return resposta({ ok: true });
     }
 
-    var aba = abaCongelamento();
-    var linhasParaGravar = (corpo.linhas || []).map(function (linha) {
-      return [String(corpo.chaveSegunda).slice(0, 4), linha.chave, linha.chaveMatriz,
-        linha.volume, linha.financeiro, linha.equipe, linha.produtividadeMedia,
-        corpo.autor || '', corpo.congeladoEm || ''];
-    });
-    if (linhasParaGravar.length) {
-      var primeira = Math.max(aba.getLastRow() + 1, 2);
-      // ANTES de escrever -- é o que impede a coerção de data. Só as duas
-      // colunas de data: ver o comentário no topo do arquivo.
-      formatarColunasDeDataComoTexto(aba, primeira, linhasParaGravar.length);
-      aba.getRange(primeira, 1, linhasParaGravar.length, CABECALHO.length).setValues(linhasParaGravar);
+    var linhasPayload = corpo.linhas || [];
+    var temPontosExistentes = false;
+    var abaPontos = abaCongelamento();
+    var dadosPontos = null;
+
+    // UMA leitura única da planilha para: (1) fallback de compatibilidade,
+    // (2) upsert. Mesmo padrão de custo constante já usado em desfazer.
+    if (corpo.acao === 'congelar' || linhasPayload.length) {
+      var chavesAlvo = {};
+      linhasPayload.forEach(function (l) { chavesAlvo[String(l.chave)] = true; });
+      dadosPontos = abaPontos.getDataRange().getValues();
+
+      // Verifica se há pontos existentes (para fallback de compatibilidade)
+      for (var i = 1; i < dadosPontos.length; i++) {
+        if (chavesAlvo[normalizarDia(dadosPontos[i][COL_SEMANA_INICIO - 1])]) {
+          temPontosExistentes = true;
+          break;
+        }
+      }
     }
-    return resposta({ ok: true, gravadas: linhasParaGravar.length });
+
+    if (corpo.acao === 'congelar') {
+      var estadoAtual = lerEstado(corpo.chaveSegunda, temPontosExistentes);
+      if (estadoAtual.travada) {
+        return resposta({ erro: 'travada', autor: estadoAtual.autor, atualizadoEm: estadoAtual.atualizadoEm });
+      }
+    }
+
+    if (linhasPayload.length) {
+      // Upsert: apaga as linhas EXISTENTES das chaves-alvo (se houver) e
+      // grava as novas no lugar. Usa a leitura única feita acima.
+      var linhasParaSubstituir = [];
+      for (var i = 1; i < dadosPontos.length; i++) {
+        if (chavesAlvo[normalizarDia(dadosPontos[i][COL_SEMANA_INICIO - 1])]) linhasParaSubstituir.push(i + 1);
+      }
+      linhasParaSubstituir.sort(function (a, b) { return b - a; })
+        .forEach(function (linha) { abaPontos.deleteRow(linha); });
+
+      var novasLinhas = linhasPayload.map(function (linha) {
+        return [String(corpo.chaveSegunda).slice(0, 4), linha.chave, linha.chaveMatriz,
+          linha.volume, linha.financeiro, linha.equipe, linha.produtividadeMedia,
+          corpo.autor || '', corpo.congeladoEm || corpo.travadoEm || ''];
+      });
+      var primeira = Math.max(abaPontos.getLastRow() + 1, 2);
+      formatarColunasDeDataComoTexto(abaPontos, primeira, novasLinhas.length);
+      abaPontos.getRange(primeira, 1, novasLinhas.length, CABECALHO.length).setValues(novasLinhas);
+    }
+
+    if (corpo.acao === 'congelar' && linhasPayload.length) {
+      // Grava estado explícito travada=false após upsert, evita fallback no próximo congelar
+      gravarEstado(corpo.chaveSegunda, false, corpo.autor, corpo.congeladoEm);
+    }
+
+    if (corpo.acao === 'travar') {
+      gravarEstado(corpo.chaveSegunda, true, corpo.autor, corpo.travadoEm);
+    }
+
+    return resposta({ ok: true, gravadas: linhasPayload.length });
   } finally {
     trava.releaseLock();
   }

@@ -37,25 +37,70 @@ function criarClienteCongelamento(opcoes) {
   }
 
   return {
-    carregar: async function (chaveSemana) {
+    carregar: async function (chaveSemana, chaveSegunda, chavesFragmentos) {
       if (!url || !buscar) return null;
       try {
         var resposta = await buscar(url, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ acao: 'ler', token: token, semana: chaveSemana }),
+          body: JSON.stringify({
+            acao: 'ler', token: token, semana: chaveSemana,
+            chaveSegunda: chaveSegunda || chaveSemana,
+            chavesFragmentos: chavesFragmentos || [chaveSemana],
+          }),
         });
         var corpo = await resposta.json();
         if (!corpo) return { motivo: 'rede' };
         if (corpo.erro) return { motivo: corpo.erro === 'token' ? 'token' : 'rede' };
-        if (!corpo.linhas || !corpo.linhas.length) return null;
+        var estado = corpo.estado || { travada: false, autor: '', atualizadoEm: '' };
+        if (!corpo.linhas || !corpo.linhas.length) return { porRegistro: null, autor: '', congeladoEm: '', estado: estado, semAlgumaLinha: true };
         return {
           porRegistro: porRegistroDasLinhas(corpo.linhas),
           autor: corpo.linhas[0].autor || '',
           congeladoEm: corpo.linhas[0].congeladoEm || '',
+          estado: estado,
         };
       } catch (err) {
         return { motivo: 'rede' };
+      }
+    },
+
+    travar: async function (chaveSegunda, snapshot, autor) {
+      if (!url || !buscar) return { ok: false, motivo: 'rede' };
+      try {
+        var resposta = await buscar(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            acao: 'travar', token: token, chaveSegunda: chaveSegunda,
+            autor: autor || 'dashboard', travadoEm: new Date().toISOString(),
+            linhas: (snapshot && snapshot.linhas) || [],
+          }),
+        });
+        var corpo = await resposta.json();
+        if (corpo && corpo.ok) return { ok: true };
+        return { ok: false, motivo: (corpo && corpo.erro) || 'rede' };
+      } catch (err) {
+        return { ok: false, motivo: 'rede' };
+      }
+    },
+
+    destravar: async function (chaveSegunda, autor) {
+      if (!url || !buscar) return { ok: false, motivo: 'rede' };
+      try {
+        var resposta = await buscar(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            acao: 'destravar', token: token, chaveSegunda: chaveSegunda,
+            autor: autor || 'dashboard', destravadoEm: new Date().toISOString(),
+          }),
+        });
+        var corpo = await resposta.json();
+        if (corpo && corpo.ok) return { ok: true };
+        return { ok: false, motivo: (corpo && corpo.erro) || 'rede' };
+      } catch (err) {
+        return { ok: false, motivo: 'rede' };
       }
     },
 

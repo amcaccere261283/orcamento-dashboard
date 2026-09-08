@@ -158,6 +158,32 @@ const CSS_ABAS_SEMANAL = `
   .controle-balanco select:hover, .controle-consolidado select:hover { border-color: rgba(246,181,63,0.5); }
   .controle-balanco select:focus-visible, .controle-consolidado select:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
 
+  /* Toggle de congelamento (2026-09-08) */
+  .toggle-congelamento-wrap { flex-direction: row; align-items: center; gap: 8px; }
+  .toggle-congelamento-rotulo { font-size: 12px; color: var(--text-secondary); }
+  .toggle-congelamento-switch { position: relative; display: inline-block; width: 38px; height: 22px; }
+  .toggle-congelamento-switch input {
+    position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer;
+  }
+  .toggle-congelamento-switch input:disabled { cursor: not-allowed; }
+  .toggle-congelamento-trilho {
+    position: absolute; inset: 0; border-radius: 11px;
+    background: var(--surface-1); border: 1px solid var(--border);
+    transition: background 0.15s ease;
+  }
+  .toggle-congelamento-trilho::before {
+    content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    border-radius: 50%; background: var(--text-secondary); transition: transform 0.15s ease;
+  }
+  .toggle-congelamento-switch input:checked + .toggle-congelamento-trilho {
+    background: rgba(246,181,63,0.35); border-color: #f6b53f;
+  }
+  .toggle-congelamento-switch input:checked + .toggle-congelamento-trilho::before {
+    transform: translateX(16px); background: #f6b53f;
+  }
+  .toggle-congelamento-switch input:disabled + .toggle-congelamento-trilho { opacity: 0.5; }
+  .toggle-congelamento-switch input:focus-visible + .toggle-congelamento-trilho { outline: 2px solid #f6b53f; outline-offset: 2px; }
+
   /* Aba CONSOLIDADO. As colunas de premissa (equipes previstas/produtividade/
      ticket) são do MÊS, não da semana -- a faixa de fundo mais clara agrupa as
      duas coisas como blocos distintos, a divisória marca a fronteira, e o
@@ -1582,9 +1608,10 @@ function montarAbaDemandas() {
 // de premissa que aparecem de saída são as de Financeiro (Ticket médio).
 var ESTADO_CONSOLIDADO = { semana: null };
 
-// Congelamento da semana (Task 8, 2026-09-01) -- botao #btn-congelar-semana
-// e o carregamento assincrono do snapshot gravado na Sheet, ambos dentro da
-// aba Consolidado. Apps Script implantado em 2026-09-01
+// Congelamento da semana (Task 8, 2026-09-01; virou toggle on/off por
+// semana em 2026-09-08) -- switch #toggle-congelamento e o carregamento
+// assincrono do estado/snapshot gravado na Sheet, ambos dentro da aba
+// Consolidado. Apps Script implantado em 2026-09-01
 // (docs/implantar-apps-script-congelamento.md) -- verificado end-to-end via
 // fetch() de um navegador real, sem login Google, a partir da propria origem
 // publicada: {"linhas":[]} para uma semana sem congelamento ainda.
@@ -1597,7 +1624,7 @@ var URL_CONGELAMENTO = 'https://script.google.com/macros/s/AKfycbyOgmRHQa47Jiodw
 // Sem essa distincao, uma senha rotacionada sem atualizar a Script Property
 // TOKEN_DASHBOARD fazia a aba mostrar "(recalculada)" em silencio, escondendo
 // que existe um congelamento inacessivel.
-var ESTADO_CONGELAMENTO = { congelado: null, chave: null, erro: null, carregando: false };
+var ESTADO_CONGELAMENTO = { congelado: null, estado: null, chave: null, erro: null, carregando: false };
 
 // Frase de tela para cada motivo de falha de LEITURA. Em nenhum dos dois casos
 // a pagina para: o Consolidado cai no recalculo de sempre, so avisa que o
@@ -1651,16 +1678,17 @@ function formatarDataHora(iso) {
 // montarAbaConsolidado saiba que esta chave ja foi resolvida e nao dispare
 // outro carregamento a cada redesenho.
 async function carregarCongeladoDaSemana(chaveSemana) {
-  // 'congelado' e zerado JUNTO com a troca de chave: o par tem de ser
-  // consistente o tempo todo. Marcando so a chave, o snapshot da semana
-  // ANTERIOR ficaria casado com a chave da semana NOVA durante a busca, e um
-  // redesenho nessa janela (troca de filtro, de dimensao) aplicaria o congelado
-  // errado -- o mesmo dano da corrida tratada logo abaixo, por outro caminho.
   ESTADO_CONGELAMENTO.chave = chaveSemana;
   ESTADO_CONGELAMENTO.congelado = null;
+  ESTADO_CONGELAMENTO.estado = null;
   ESTADO_CONGELAMENTO.erro = null;
   if (urlCongelamentoPendente()) return null;
-  var congelado = await clienteCongelamento().carregar(chaveSemana);
+  ESTADO_CONGELAMENTO.carregando = true;
+  var partes = chaveSemana.split('-').map(Number);
+  var epoch = Date.UTC(partes[0], partes[1] - 1, partes[2]) / 86400000;
+  var segunda = CongelarTendenciaSemanal.segundaDaSemana(epoch);
+  var chavesFragmentos = CongelarTendenciaSemanal.fragmentosDaSemanaAlvo(segunda).map(function (f) { return f.chave; });
+  var congelado = await clienteCongelamento().carregar(chaveSemana, segunda, chavesFragmentos);
   // Perdeu a corrida: enquanto esta busca estava no ar, o usuario trocou de
   // semana e outra chamada ja escreveu (ou vai escrever) o congelado da semana
   // certa. Escrever aqui poria o snapshot de OUTRA semana em
@@ -1668,159 +1696,130 @@ async function carregarCongeladoDaSemana(chaveSemana) {
   // redesenho seguinte mostraria numeros historicos errados rotulados
   // "(congelada)". Mesma classe do bug de ESTADO_ALOCACAO.alocacao (atribuicao
   // sem conferir se a corrida foi perdida), mas aqui o dano e o proprio numero
-  // que o recurso existe pra proteger.
+  // que o recurso existe pra proteger. 'carregando' segue o MESMO guard: a
+  // chamada que perdeu a corrida nao mexe nele -- a chamada vencedora (a mais
+  // nova, que ja re-setou 'carregando=true' pra SI mesma) e quem zera o dela
+  // quando terminar. Zerar aqui incondicionalmente faria uma resposta atrasada
+  // da semana ANTIGA marcar 'carregando=false' pra busca da semana NOVA ainda
+  // em voo -- atualizarToggleCongelamento leria 'carregando' falso, 'chave'
+  // batendo (e' a semana nova mesmo) e 'estado' null, e cairia no render normal
+  // com {travada:false} fabricado, como se a leitura real ja tivesse voltado.
   if (ESTADO_CONGELAMENTO.chave !== chaveSemana) return null;
+  ESTADO_CONGELAMENTO.carregando = false;
   // Falha de leitura ('token'/'rede') NAO e um snapshot -- nunca pode entrar em
   // 'congelado', ou o objeto de erro viraria a Tendencia da tela.
   if (congelado && congelado.motivo) {
     ESTADO_CONGELAMENTO.erro = congelado.motivo;
     return null;
   }
-  ESTADO_CONGELAMENTO.congelado = congelado;
+  ESTADO_CONGELAMENTO.estado = (congelado && congelado.estado) || { travada: false, autor: '', atualizadoEm: '' };
+  ESTADO_CONGELAMENTO.congelado = (congelado && !congelado.semAlgumaLinha) ? congelado : null;
   return congelado;
 }
 
-async function atualizarBotaoCongelar() {
-  var botao = document.getElementById('btn-congelar-semana');
+// Estado do toggle da semana EM TELA (qualquer uma do seletor, não só a
+// próxima segunda -- 2026-09-08, substitui o botão write-once). Guarda
+// também 'estado' ({travada, autor, atualizadoEm}), que agora vem junto na
+// resposta de carregar().
+function atualizarToggleCongelamento(chaveSemanaEmTela) {
+  var toggle = document.getElementById('toggle-congelamento');
   var status = document.getElementById('status-congelamento');
-  if (!botao) return;
-  // diaEpochDeHoje (tools/comum/datas.js) NÃO chega ao bundle -- só o trecho
-  // marcado <<< INICIO CLIENTE >>> daquele arquivo entra em fonteParaCliente()
-  // (excelSerialParaData), e diaEpochDeHoje não faz parte dele. A página já
-  // tem o equivalente client-side (hojeEpochDoNavegador, logo acima), que
-  // todo o resto da aba usa para "hoje" -- mesma convenção UTC-3.
-  var hoje = hojeEpochDoNavegador();
-  var chaveAlvo = CongelarTendenciaSemanal.proximaSegunda(hoje);
-  botao.textContent = 'Congelar semana de ' + formatarDiaCurto(chaveAlvo);
+  if (!toggle) return;
   if (urlCongelamentoPendente()) {
-    botao.disabled = true;
+    toggle.checked = false;
+    toggle.disabled = true;
     status.textContent = 'Congelamento ainda não configurado nesta planilha.';
     return;
   }
-  botao.disabled = true;
-  status.textContent = 'Verificando…';
-  var existente = await clienteCongelamento().carregar(chaveAlvo);
-  // Leitura que falhou nao e "ja congelada" -- dizer que esta congelada seria
-  // uma afirmacao que nao foi verificada. 'token' vai falhar na gravacao
-  // tambem, entao o botao fica travado com a causa na tela; 'rede' pode ser um
-  // soluco, entao vale tentar (a recusa de reclique mora no servidor).
-  if (existente && existente.motivo) {
-    botao.disabled = existente.motivo === 'token';
-    status.textContent = existente.motivo === 'token'
-      ? 'Não foi possível verificar esta semana: acesso recusado pela planilha (token). Confira o token nas Script Properties.'
-      : 'Não foi possível verificar esta semana (rede ou planilha fora do ar). Tente de novo.';
+  if (!chaveSemanaEmTela) {
+    toggle.disabled = true;
+    status.textContent = '';
     return;
   }
-  if (existente) {
-    botao.disabled = true;
-    status.textContent = 'Semana de ' + formatarDiaCurto(chaveAlvo) + ' congelada em '
-      + formatarDataHora(existente.congeladoEm) + ', por ' + (existente.autor || 'desconhecido') + '.';
+  if (ESTADO_CONGELAMENTO.chave !== chaveSemanaEmTela || ESTADO_CONGELAMENTO.carregando) {
+    toggle.disabled = true;
+    status.textContent = 'Verificando…';
+    return;
+  }
+  if (ESTADO_CONGELAMENTO.erro) {
+    // Achado Important da revisao final: com erro==='rede' o toggle ficava
+    // HABILITADO (só 'token' desabilitava) e ESTADO_CONGELAMENTO.estado
+    // continua null nesse caso -- um clique disparava alternarCongelamento()
+    // contra um estado FABRICADO (travada:false por padrao), e travar() nao
+    // consulta lerEstado antes de gravar (e a propria acao de travar, seria
+    // auto-referente). Se a semana JA estivesse travada de verdade e so nao
+    // desse pra ler por falha de rede, o clique sobrescreveria em silencio o
+    // snapshot que a trava deveria proteger. Com qualquer erro de leitura o
+    // estado real e desconhecido -- desabilita nos DOIS casos, e nao afirma
+    // nada no checked.
+    toggle.checked = false;
+    toggle.disabled = true;
+    status.textContent = textoErroLeituraCongelamento(ESTADO_CONGELAMENTO.erro);
+    return;
+  }
+  var estado = ESTADO_CONGELAMENTO.estado || { travada: false, autor: '', atualizadoEm: '' };
+  toggle.disabled = false;
+  toggle.checked = !!estado.travada;
+  if (!estado.autor) {
+    status.textContent = '';
+  } else if (estado.travada) {
+    status.textContent = 'Semana de ' + formatarDiaCurto(chaveSemanaEmTela) + ' travada em '
+      + formatarDataHora(estado.atualizadoEm) + ', por ' + estado.autor + '.';
   } else {
-    botao.disabled = false;
-    status.textContent = '';
+    status.textContent = 'Linha de base atualizada pela última vez em '
+      + formatarDataHora(estado.atualizadoEm) + ', por ' + estado.autor + '.';
   }
 }
 
-async function congelarProximaSemana() {
-  var botao = document.getElementById('btn-congelar-semana');
+// Clique/troca no switch: liga -> trava (com snapshot calculado na hora,
+// pra garantir que toda trava deixa pelo menos um ponto gravado); desliga
+// -> destrava (não recalcula nada -- o próximo "Atualizar dados" faz isso).
+// Sem confirm(): deixou de ser destrutivo/irreversível.
+async function alternarCongelamento() {
+  var toggle = document.getElementById('toggle-congelamento');
   var status = document.getElementById('status-congelamento');
-  botao.disabled = true;
-  status.textContent = 'Congelando…';
-  try {
-    // diaEpochDeHoje não chega ao bundle -- ver o mesmo comentário em
-    // atualizarBotaoCongelar, acima.
-    var hoje = hojeEpochDoNavegador();
-    var chaveAlvo = CongelarTendenciaSemanal.proximaSegunda(hoje);
-    var snapshot = CongelarTendenciaSemanal.calcularSnapshotSemanaAlvo(window.__REGISTROS__, window.__DEMANDAS__, hoje, chaveAlvo);
-    var r = await clienteCongelamento().congelar(snapshot, window.__DASHBOARD_AUTOR__ || 'dashboard');
-    if (r.ok) {
-      status.textContent = 'Semana de ' + formatarDiaCurto(chaveAlvo) + ' congelada agora.';
-      return;
-    }
-    if (r.motivo === 'ja-congelada') {
-      status.textContent = 'Esta semana já foi congelada em ' + formatarDataHora(r.congeladoEm)
-        + ', por ' + (r.autor || 'desconhecido') + '. Para refazer, apague as linhas na planilha.';
-      return;
-    }
-    status.textContent = r.motivo === 'token'
-      ? 'Acesso recusado pela planilha (token). Confira o token nas Script Properties.'
-      : 'Não foi possível congelar (rede ou planilha fora do ar). Tente de novo.';
-    botao.disabled = false;
-  } catch (err) {
-    status.textContent = 'Erro ao congelar: ' + err.message;
-    botao.disabled = false;
-  }
-}
-
-// Mostra/esconde btn-desfazer-congelamento com base no que
-// carregarCongeladoDaSemana JÁ buscou pra semana em tela -- nenhuma chamada
-// nova ao Apps Script, é a mesma resposta que decide "(congelada)"/
-// "(recalculada)" lida de outro ângulo.
-function atualizarBotaoDesfazer(chaveSemanaEmTela) {
-  var botao = document.getElementById('btn-desfazer-congelamento');
-  var status = document.getElementById('status-desfazer');
-  if (!botao) return;
-  var temCongelado = ESTADO_CONGELAMENTO.chave === chaveSemanaEmTela && !!ESTADO_CONGELAMENTO.congelado;
-  if (!temCongelado) {
-    botao.style.display = 'none';
-    status.textContent = '';
-    return;
-  }
-  botao.style.display = '';
-  botao.disabled = false;
-  botao.textContent = 'Desfazer congelamento da semana de ' + formatarDiaCurto(chaveSemanaEmTela);
-}
-
-async function desfazerCongelamentoDaSemana() {
   var chaveSemanaEmTela = ESTADO_CONGELAMENTO.chave;
   if (!chaveSemanaEmTela) return;
-  var confirmado = window.confirm(
-    'Desfazer o congelamento da semana de ' + formatarDiaCurto(chaveSemanaEmTela)
-    + '? Esta ação não pode ser desfeita.'
-  );
-  if (!confirmado) return;
+  var estadoAntes = ESTADO_CONGELAMENTO.estado || { travada: false };
+  var vaiTravar = !estadoAntes.travada;
 
-  var botao = document.getElementById('btn-desfazer-congelamento');
-  var status = document.getElementById('status-desfazer');
-  botao.disabled = true;
-  status.textContent = 'Desfazendo…';
+  var partes = chaveSemanaEmTela.split('-').map(Number);
+  var epoch = Date.UTC(partes[0], partes[1] - 1, partes[2]) / 86400000;
+  var segunda = CongelarTendenciaSemanal.segundaDaSemana(epoch);
+
+  toggle.disabled = true;
+  status.textContent = vaiTravar ? 'Travando…' : 'Destravando…';
   try {
-    // A semana EM TELA pode ela mesma ser um fragmento truncado (cruza
-    // virada de mês) -- segundaDaSemana acha a segunda-feira de verdade
-    // antes de recalcular os fragmentos, senão só o próprio fragmento seria
-    // apagado, deixando o outro lado órfão na planilha.
-    var partesChave = chaveSemanaEmTela.split('-').map(Number);
-    var epochChave = Date.UTC(partesChave[0], partesChave[1] - 1, partesChave[2]) / 86400000;
-    var segunda = CongelarTendenciaSemanal.segundaDaSemana(epochChave);
-    var fragmentos = CongelarTendenciaSemanal.fragmentosDaSemanaAlvo(segunda);
-    var chaves = fragmentos.map(function (f) { return f.chave; });
-
-    var r = await clienteCongelamento().desfazer(chaves);
-    if (r.ok) {
-      // Perdeu a corrida: enquanto o POST estava no ar, o usuario trocou de
-      // semana (ESTADO_CONGELAMENTO.chave mudou). Aplicar o sucesso aqui
-      // apagaria o congelado da semana NOVA -- que continua congelada na
-      // planilha -- e a tela mentiria "(recalculada)" ate o proximo reload ou
-      // troca de semana. Mesmo guard que carregarCongeladoDaSemana ja faz
-      // (mesma classe do bug de ESTADO_ALOCACAO.alocacao); aqui a resposta em
-      // si nao e descartavel (o desfazer aconteceu de verdade na Sheet), so o
-      // efeito colateral na tela precisa esperar a semana certa voltar.
-      if (ESTADO_CONGELAMENTO.chave !== chaveSemanaEmTela) return;
-      ESTADO_CONGELAMENTO.congelado = null;
-      ESTADO_CONGELAMENTO.erro = null;
-      status.textContent = '';
-      // Redesenha a aba pra refletir o estado novo -- rótulo volta a
-      // "(recalculada)", totais recalculam, este botão some.
-      if (typeof window.__REDESENHAR_CONSOLIDADO__ === 'function') window.__REDESENHAR_CONSOLIDADO__();
+    var autor = window.__DASHBOARD_AUTOR__ || 'dashboard';
+    var r;
+    if (vaiTravar) {
+      var hoje = hojeEpochDoNavegador();
+      var snapshot = CongelarTendenciaSemanal.calcularSnapshotSemanaAlvo(window.__REGISTROS__, window.__DEMANDAS__, hoje, segunda);
+      r = await clienteCongelamento().travar(segunda, snapshot, autor);
+    } else {
+      r = await clienteCongelamento().destravar(segunda, autor);
+    }
+    // Perdeu a corrida: a semana em tela mudou enquanto o POST estava no
+    // ar -- mesma classe de guard que carregarCongeladoDaSemana já usa.
+    // Aplicar aqui mudaria o estado exibido de OUTRA semana.
+    if (ESTADO_CONGELAMENTO.chave !== chaveSemanaEmTela) return;
+    if (!r.ok) {
+      toggle.checked = estadoAntes.travada;
+      toggle.disabled = false;
+      status.textContent = r.motivo === 'token'
+        ? 'Acesso recusado pela planilha (token). Confira o token nas Script Properties.'
+        : 'Não foi possível ' + (vaiTravar ? 'travar' : 'destravar') + ' (rede ou planilha fora do ar). Tente de novo.';
       return;
     }
-    status.textContent = r.motivo === 'token'
-      ? 'Acesso recusado pela planilha (token). Confira o token nas Script Properties.'
-      : 'Não foi possível desfazer (rede ou planilha fora do ar). Tente de novo.';
-    botao.disabled = false;
+    ESTADO_CONGELAMENTO.estado = { travada: vaiTravar, autor: autor, atualizadoEm: new Date().toISOString() };
+    // Redesenha a aba inteira: a tabela precisa refletir o snapshot novo
+    // (se travou) ou voltar a poder ser sobrescrita (se destravou).
+    if (typeof window.__REDESENHAR_CONSOLIDADO__ === 'function') window.__REDESENHAR_CONSOLIDADO__();
   } catch (err) {
-    status.textContent = 'Erro ao desfazer: ' + err.message;
-    botao.disabled = false;
+    if (ESTADO_CONGELAMENTO.chave !== chaveSemanaEmTela) return;
+    toggle.checked = estadoAntes.travada;
+    toggle.disabled = false;
+    status.textContent = 'Erro: ' + err.message;
   }
 }
 
@@ -1902,13 +1901,9 @@ function montarAbaConsolidado(registros, indices, dimensoes) {
   var botaoRelatorio = document.getElementById('gerar-relatorio-excel');
   if (botaoRelatorio) botaoRelatorio.addEventListener('click', gerarRelatorioExcel);
 
-  var botaoCongelar = document.getElementById('btn-congelar-semana');
-  if (botaoCongelar) botaoCongelar.addEventListener('click', congelarProximaSemana);
-  atualizarBotaoCongelar();
-
-  var botaoDesfazer = document.getElementById('btn-desfazer-congelamento');
-  if (botaoDesfazer) botaoDesfazer.addEventListener('click', desfazerCongelamentoDaSemana);
-  atualizarBotaoDesfazer(chaveSemanaEscolhida);
+  var toggleCongelamento = document.getElementById('toggle-congelamento');
+  if (toggleCongelamento) toggleCongelamento.addEventListener('change', alternarCongelamento);
+  atualizarToggleCongelamento(chaveSemanaEscolhida);
 
   // So dispara o carregamento assincrono quando a URL ja esta configurada E
   // esta chave ainda nao foi buscada -- com a URL pendente carregarCongeladoDaSemana
@@ -2227,6 +2222,43 @@ function atualizarDadosAoVivoSemanal() {
       montarTodosFiltrosMultiSemanal(window.__REGISTROS__);
       recalcularSemanal();
       montarAbaDemandas();
+    },
+    aoAtualizarLinhaBase: async function (registrosNovos, demandasNovas) {
+      // Só a semana em tela no Consolidado -- outras semanas não estão
+      // sendo olhadas agora, e recalcular todas a cada refresh custaria
+      // uma chamada de rede por semana sem necessidade.
+      var chaveSemanaEmTela = ESTADO_CONGELAMENTO.chave;
+      var estado = ESTADO_CONGELAMENTO.estado;
+      if (!chaveSemanaEmTela || !estado || estado.travada) return;
+      var partes = chaveSemanaEmTela.split('-').map(Number);
+      var epoch = Date.UTC(partes[0], partes[1] - 1, partes[2]) / 86400000;
+      var segunda = CongelarTendenciaSemanal.segundaDaSemana(epoch);
+      var hoje = hojeEpochDoNavegador();
+      var snapshot = CongelarTendenciaSemanal.calcularSnapshotSemanaAlvo(registrosNovos, demandasNovas, hoje, segunda);
+      var r = await clienteCongelamento().congelar(snapshot, window.__DASHBOARD_AUTOR__ || 'dashboard');
+      // Perdeu a corrida: o usuário trocou a semana em tela do Consolidado
+      // enquanto este congelar (ida-e-volta de rede de verdade) estava no
+      // ar. Aplicar aqui sobrescreveria ESTADO_CONGELAMENTO.estado da semana
+      // NOVA com o resultado da semana ANTIGA -- mesmo guard que
+      // alternarCongelamento e carregarCongeladoDaSemana já usam depois do
+      // await deles.
+      if (ESTADO_CONGELAMENTO.chave !== chaveSemanaEmTela) return;
+      if (r.ok) {
+        // Achado Important da revisao final: setar so ESTADO_CONGELAMENTO.estado
+        // aqui deixava ESTADO_CONGELAMENTO.congelado (o snapshot em si, usado por
+        // montarAbaConsolidado pra montar congeladoSemanalCarregado) com o valor
+        // ANTIGO -- a Sheet ja tinha o numero novo, mas a tabela continuava
+        // mostrando o velho ate o usuario trocar de semana ou recarregar.
+        // carregarCongeladoDaSemana ja tem seu proprio guard de corrida (mesma
+        // classe do guard logo acima) e ja popula estado+congelado corretamente
+        // -- reusar em vez de reimplementar so a metade aqui.
+        await carregarCongeladoDaSemana(chaveSemanaEmTela);
+        if (typeof window.__REDESENHAR_CONSOLIDADO__ === 'function') window.__REDESENHAR_CONSOLIDADO__();
+      }
+      // r.motivo === 'travada': perdeu a corrida contra um toggle ligado no
+      // meio do refresh -- nada a fazer, a próxima leitura mostra o estado
+      // certo. Falha de rede/token: degrada em silêncio, mesma filosofia
+      // do resto do congelamento (best-effort, não pode derrubar o refresh).
     },
     definirStatus: definirStatusAtualizacaoSemanal,
   });
