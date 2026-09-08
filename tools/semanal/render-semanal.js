@@ -2233,7 +2233,15 @@ function atualizarDadosAoVivoSemanal() {
       // await deles.
       if (ESTADO_CONGELAMENTO.chave !== chaveSemanaEmTela) return;
       if (r.ok) {
-        ESTADO_CONGELAMENTO.estado = { travada: false, autor: window.__DASHBOARD_AUTOR__ || 'dashboard', atualizadoEm: new Date().toISOString() };
+        // Achado Important da revisao final: setar so ESTADO_CONGELAMENTO.estado
+        // aqui deixava ESTADO_CONGELAMENTO.congelado (o snapshot em si, usado por
+        // montarAbaConsolidado pra montar congeladoSemanalCarregado) com o valor
+        // ANTIGO -- a Sheet ja tinha o numero novo, mas a tabela continuava
+        // mostrando o velho ate o usuario trocar de semana ou recarregar.
+        // carregarCongeladoDaSemana ja tem seu proprio guard de corrida (mesma
+        // classe do guard logo acima) e ja popula estado+congelado corretamente
+        // -- reusar em vez de reimplementar so a metade aqui.
+        await carregarCongeladoDaSemana(chaveSemanaEmTela);
         if (typeof window.__REDESENHAR_CONSOLIDADO__ === 'function') window.__REDESENHAR_CONSOLIDADO__();
       }
       // r.motivo === 'travada': perdeu a corrida contra um toggle ligado no

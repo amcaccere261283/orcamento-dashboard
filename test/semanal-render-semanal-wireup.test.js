@@ -2325,3 +2325,60 @@ test('aoAtualizarLinhaBase: resposta atrasada de congelar da semana ANTIGA nao s
     'a resposta atrasada do congelar da semana antiga nao pode sobrescrever o estado da semana em tela agora');
 });
 
+// Achado Important da revisao final: apos o upsert bem-sucedido do congelar,
+// aoAtualizarLinhaBase setava so ESTADO_CONGELAMENTO.estado a mao, mas nunca
+// ESTADO_CONGELAMENTO.congelado (o snapshot em si, que montarAbaConsolidado
+// usa pra montar congeladoSemanalCarregado e mostrar os numeros na tabela) --
+// a Sheet ja tinha o numero novo, mas a tabela continuava mostrando o numero
+// ANTIGO ate o usuario trocar de semana ou recarregar a pagina. O fix chama
+// carregarCongeladoDaSemana (que ja re-busca e ja popula estado+congelado
+// corretamente) em vez de so setar estado manualmente.
+test('aoAtualizarLinhaBase: apos "Atualizar dados" gravar um snapshot novo, ESTADO_CONGELAMENTO.congelado reflete o snapshot NOVO, nao o antigo', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-03-15T00:00:00Z'),
+  });
+  let chamadasLer = 0;
+  const fetchMock = (url, opcoes) => {
+    if (opcoes && opcoes.body) {
+      const corpo = JSON.parse(opcoes.body);
+      if (corpo.acao === 'ler') {
+        chamadasLer++;
+        // Primeira leitura (carregamento inicial da pagina): snapshot ANTIGO.
+        // Qualquer leitura seguinte (disparada pelo carregarCongeladoDaSemana
+        // que o fix chama depois do congelar): snapshot NOVO.
+        const financeiro = chamadasLer === 1 ? 111 : 222;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
+          linhas: [{ chaveMatriz: 'SUP-0001-24||ST', volume: null, financeiro, equipe: null, produtividadeMedia: null, autor: 'a', congeladoEm: 'x' }],
+          estado: { travada: false, autor: 'a', atualizadoEm: 'x' },
+        }) });
+      }
+      if (corpo.acao === 'congelar') return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, gravadas: corpo.linhas.length }) });
+    }
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_VAZIO) });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_VAZIO) });
+    return Promise.resolve({ ok: false, status: 404 });
+  };
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  sandbox.window.__DASHBOARD_AUTOR__ = 'Autor Sintetico';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.congelado.porRegistro['SUP-0001-24||ST'].financeiro.tendencia, 111,
+    'pre-condicao: o carregamento inicial tem de ter trazido o snapshot ANTIGO');
+
+  await chamarEsperarAtualizacao(sandbox);
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.congelado.porRegistro['SUP-0001-24||ST'].financeiro.tendencia, 222,
+    'apos "Atualizar dados" gravar um snapshot novo, ESTADO_CONGELAMENTO.congelado tem de refletir o NOVO, nao ficar preso no antigo');
+});
+
