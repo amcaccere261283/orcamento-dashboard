@@ -2225,6 +2225,13 @@ function atualizarDadosAoVivoSemanal() {
       var hoje = hojeEpochDoNavegador();
       var snapshot = CongelarTendenciaSemanal.calcularSnapshotSemanaAlvo(registrosNovos, demandasNovas, hoje, segunda);
       var r = await clienteCongelamento().congelar(snapshot, window.__DASHBOARD_AUTOR__ || 'dashboard');
+      // Perdeu a corrida: o usuário trocou a semana em tela do Consolidado
+      // enquanto este congelar (ida-e-volta de rede de verdade) estava no
+      // ar. Aplicar aqui sobrescreveria ESTADO_CONGELAMENTO.estado da semana
+      // NOVA com o resultado da semana ANTIGA -- mesmo guard que
+      // alternarCongelamento e carregarCongeladoDaSemana já usam depois do
+      // await deles.
+      if (ESTADO_CONGELAMENTO.chave !== chaveSemanaEmTela) return;
       if (r.ok) {
         ESTADO_CONGELAMENTO.estado = { travada: false, autor: window.__DASHBOARD_AUTOR__ || 'dashboard', atualizadoEm: new Date().toISOString() };
         if (typeof window.__REDESENHAR_CONSOLIDADO__ === 'function') window.__REDESENHAR_CONSOLIDADO__();

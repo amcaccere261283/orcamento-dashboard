@@ -2257,3 +2257,71 @@ test('atualizarDadosAoVivoSemanal: com a semana do Consolidado TRAVADA, "Atualiz
   assert.ok(!chamadasPost.some((c) => c.acao === 'congelar'), 'semana travada nao pode ser sobrescrita pelo refresh');
 });
 
+// Achado Important da revisão da Task 5: aoAtualizarLinhaBase escrevia
+// ESTADO_CONGELAMENTO.estado sem conferir, DEPOIS do await de congelar(...),
+// se a semana em tela ainda era a que a chamada tinha calculado o snapshot
+// -- mesma classe de bug que carregarCongeladoDaSemana e alternarCongelamento
+// (Task 4) já corrigiram nos seus respectivos awaits. Uma resposta atrasada
+// do congelar da semana ANTIGA (perdedora da corrida contra uma troca de
+// semana no seletor do Consolidado, no meio do refresh) não pode sobrescrever
+// o estado da semana NOVA, em tela agora.
+test('aoAtualizarLinhaBase: resposta atrasada de congelar da semana ANTIGA nao sobrescreve o estado da semana NOVA (trocada durante o refresh)', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-03-15T00:00:00Z'),
+  });
+  let resolverCongelar;
+  const fetchMock = (url, opcoes) => {
+    if (opcoes && opcoes.body) {
+      const corpo = JSON.parse(opcoes.body);
+      if (corpo.acao === 'ler') return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [], estado: { travada: false, autor: '', atualizadoEm: '' } }) });
+      if (corpo.acao === 'congelar') {
+        // Fica pendurado -- resolve só quando o teste chamar resolverCongelar,
+        // depois da semana em tela já ter sido trocada.
+        return new Promise((resolve) => { resolverCongelar = resolve; });
+      }
+    }
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_VAZIO) });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_VAZIO) });
+    return Promise.resolve({ ok: false, status: 404 });
+  };
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  sandbox.window.__DASHBOARD_AUTOR__ = 'Autor Sintetico';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  const chaveOriginal = sandbox.ESTADO_CONGELAMENTO.chave;
+  assert.ok(chaveOriginal, 'pre-condicao: a semana em tela precisa ter sido resolvida antes do refresh');
+
+  // Dispara o refresh -- o congelar da semana ORIGINAL fica pendurado no
+  // fetchMock (resolverCongelar capturado, mas não chamado ainda).
+  sandbox.atualizarDadosAoVivoSemanal();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+  assert.ok(typeof resolverCongelar === 'function', 'pre-condicao: o congelar da semana original precisa estar em voo');
+
+  // Usuário troca a semana em tela ENQUANTO o congelar está no ar -- mutação
+  // direta de ESTADO_CONGELAMENTO, mesmo atalho que os testes de corrida da
+  // Task 4 já usam (ver "resposta atrasada da semana ANTERIOR..." acima).
+  const chaveNova = '2099-01-05';
+  const estadoNovo = { travada: false, autor: 'Outra Sessao', atualizadoEm: '2099-01-05T00:00:00.000Z' };
+  sandbox.ESTADO_CONGELAMENTO.chave = chaveNova;
+  sandbox.ESTADO_CONGELAMENTO.estado = estadoNovo;
+
+  // Agora a resposta atrasada do congelar da semana ORIGINAL (perdedora da
+  // corrida) chega.
+  resolverCongelar({ ok: true, json: () => Promise.resolve({ ok: true, gravadas: 1 }) });
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.chave, chaveNova, 'a chave continua sendo a da semana NOVA');
+  assert.deepStrictEqual(sandbox.ESTADO_CONGELAMENTO.estado, estadoNovo,
+    'a resposta atrasada do congelar da semana antiga nao pode sobrescrever o estado da semana em tela agora');
+});
+
