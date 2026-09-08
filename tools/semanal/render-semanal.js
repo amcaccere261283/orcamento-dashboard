@@ -158,6 +158,32 @@ const CSS_ABAS_SEMANAL = `
   .controle-balanco select:hover, .controle-consolidado select:hover { border-color: rgba(246,181,63,0.5); }
   .controle-balanco select:focus-visible, .controle-consolidado select:focus-visible { outline: 2px solid #f6b53f; outline-offset: 2px; }
 
+  /* Toggle de congelamento (2026-09-08) */
+  .toggle-congelamento-wrap { flex-direction: row; align-items: center; gap: 8px; }
+  .toggle-congelamento-rotulo { font-size: 12px; color: var(--text-secondary); }
+  .toggle-congelamento-switch { position: relative; display: inline-block; width: 38px; height: 22px; }
+  .toggle-congelamento-switch input {
+    position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer;
+  }
+  .toggle-congelamento-switch input:disabled { cursor: not-allowed; }
+  .toggle-congelamento-trilho {
+    position: absolute; inset: 0; border-radius: 11px;
+    background: var(--surface-1); border: 1px solid var(--border);
+    transition: background 0.15s ease;
+  }
+  .toggle-congelamento-trilho::before {
+    content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    border-radius: 50%; background: var(--text-secondary); transition: transform 0.15s ease;
+  }
+  .toggle-congelamento-switch input:checked + .toggle-congelamento-trilho {
+    background: rgba(246,181,63,0.35); border-color: #f6b53f;
+  }
+  .toggle-congelamento-switch input:checked + .toggle-congelamento-trilho::before {
+    transform: translateX(16px); background: #f6b53f;
+  }
+  .toggle-congelamento-switch input:disabled + .toggle-congelamento-trilho { opacity: 0.5; }
+  .toggle-congelamento-switch input:focus-visible + .toggle-congelamento-trilho { outline: 2px solid #f6b53f; outline-offset: 2px; }
+
   /* Aba CONSOLIDADO. As colunas de premissa (equipes previstas/produtividade/
      ticket) são do MÊS, não da semana -- a faixa de fundo mais clara agrupa as
      duas coisas como blocos distintos, a divisória marca a fronteira, e o
