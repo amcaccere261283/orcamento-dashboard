@@ -16,12 +16,22 @@
 //     estado (aba nova em um deploy), ela é tratada como travada, protegendo
 //     trabalho anterior feito sob a regra old "write-once".
 //
-// O formato de texto vale SÓ para as duas colunas de data (SemanaInicio e
-// CongeladoEm). Aplicá-lo à faixa inteira colocava as 4 colunas NUMÉRICAS em
-// texto também, e aí o Sheets pode guardar o número na representação textual
-// do locale da planilha ('3,5' em vez de '3.5'): na releitura Number('3,5')
-// vira NaN, que não é null e passa direto pelos `=== null` abaixo, contaminando
-// qualquer soma em silêncio.
+// Na aba Congelamento (pontos), o formato de texto vale SÓ para as duas
+// colunas de data (SemanaInicio e CongeladoEm). Aplicá-lo à faixa inteira
+// colocava as 4 colunas NUMÉRICAS em texto também, e aí o Sheets pode guardar
+// o número na representação textual do locale da planilha ('3,5' em vez de
+// '3.5'): na releitura Number('3,5') vira NaN, que não é null e passa direto
+// pelos `=== null` abaixo, contaminando qualquer soma em silêncio.
+//
+// A aba CongelamentoEstado (abaixo) é diferente: NENHUMA das 4 colunas é
+// numérica (SemanaInicio, Travada, Autor, AtualizadoEm são todas texto/data),
+// então lá o cinto cobre a FAIXA INTEIRA -- inclusive a coluna Travada, que
+// guarda a string 'TRUE'/'FALSE'. Sem esse formato, o Sheets coage 'TRUE' pra
+// BOOLEANO na gravação (mesma classe de armadilha da coerção de Date, uma
+// terceira vez, agora num tipo novo): na releitura String(true) é 'true'
+// minúsculo, nunca 'TRUE', e toda semana travada voltava a ler como
+// destravada. `lerEstado` abaixo também aceita o boolean diretamente, cinto e
+// suspensório.
 var ABA = 'Congelamento';
 var CABECALHO = ['Ano', 'SemanaInicio', 'Chave', 'Volume', 'Financeiro', 'Equipe',
   'ProdutividadeMedia', 'Autor', 'CongeladoEm'];
@@ -46,8 +56,11 @@ function abaCongelamentoEstado() {
   var aba = planilha.getSheetByName(ABA_ESTADO);
   if (!aba) {
     aba = planilha.insertSheet(ABA_ESTADO);
+    // Faixa INTEIRA (4 colunas) como texto -- ver o comentário no topo do
+    // arquivo. Diferente de abaCongelamento(), aqui não há coluna numérica a
+    // proteger da coerção contrária.
+    aba.getRange(1, 1, aba.getMaxRows(), CABECALHO_ESTADO.length).setNumberFormat('@');
     aba.getRange(1, 1, 1, CABECALHO_ESTADO.length).setValues([CABECALHO_ESTADO]);
-    aba.getRange(1, COL_ESTADO_SEMANA, aba.getMaxRows(), 1).setNumberFormat('@');
   }
   return aba;
 }
@@ -63,8 +76,15 @@ function lerEstado(chaveSegunda, temPontosExistentes) {
   var alvo = String(chaveSegunda || '');
   for (var i = 1; i < dados.length; i++) {
     if (normalizarDia(dados[i][0]) === alvo) {
+      // Cinto e suspensório: o formato de texto da coluna 2 é o que evita a
+      // coerção pra boolean na gravação (ver o comentário no topo do
+      // arquivo), mas a leitura aceita o boolean direto também -- se algum
+      // dia esse formato for perdido (edição manual, reimplantação sem essa
+      // correção), a leitura ainda reconhece a trava em vez de silenciosamente
+      // devolver destravada.
+      var v = dados[i][1];
       return {
-        travada: String(dados[i][1]) === 'TRUE',
+        travada: v === true || String(v).toUpperCase() === 'TRUE',
         autor: String(dados[i][2] || ''),
         atualizadoEm: String(dados[i][3] || ''),
       };
@@ -80,12 +100,18 @@ function gravarEstado(chaveSegunda, travada, autor, quando) {
   var valores = [alvo, travada ? 'TRUE' : 'FALSE', autor || '', quando || ''];
   for (var i = 1; i < dados.length; i++) {
     if (normalizarDia(dados[i][0]) === alvo) {
+      // Formata a faixa ANTES de escrever -- mesmo padrão de
+      // formatarColunasDeDataComoTexto/abaCongelamento. Sem isso, uma linha
+      // já existente que nunca tinha sido formatada (aba herdada de antes
+      // desta correção) continuaria vulnerável à coerção mesmo depois do
+      // update.
+      aba.getRange(i + 1, 1, 1, CABECALHO_ESTADO.length).setNumberFormat('@');
       aba.getRange(i + 1, 1, 1, CABECALHO_ESTADO.length).setValues([valores]);
       return;
     }
   }
   var linha = aba.getLastRow() + 1;
-  aba.getRange(linha, COL_ESTADO_SEMANA, 1, 1).setNumberFormat('@');
+  aba.getRange(linha, 1, 1, CABECALHO_ESTADO.length).setNumberFormat('@');
   aba.getRange(linha, 1, 1, CABECALHO_ESTADO.length).setValues([valores]);
 }
 

@@ -53,6 +53,13 @@ function criarSheetsDuble() {
                 return new Date(ano, mes - 1, dia);
               }
               if (texto && typeof v === 'number') return String(v).replace('.', ',');
+              // Achado Critical da revisão final: uma célula NÃO formatada
+              // como texto que recebe exatamente 'TRUE'/'FALSE' é coagida
+              // pelo Sheets real pra BOOLEANO -- mesma classe de coerção que
+              // já modelamos pra Date e pro número em célula de texto, agora
+              // num terceiro tipo. Sem isso o dublê deixaria passar um .gs
+              // que removesse o setNumberFormat('@') da coluna Travada.
+              if (!texto && (v === 'TRUE' || v === 'FALSE')) return v === 'TRUE';
               return v;
             });
           });
@@ -293,6 +300,43 @@ test('valor fracionario volta como NUMERO na releitura, nunca string nem NaN', (
   assert.equal(lido.linhas[0].financeiro, 20.25);
   assert.equal(lido.linhas[0].equipe, 1.5);
   assert.equal(lido.linhas[0].produtividadeMedia, 2.75);
+});
+
+// Achado Critical da revisão final: a coluna Travada (2) da aba
+// CongelamentoEstado nunca era formatada como texto -- só a coluna 1
+// (SemanaInicio) recebia setNumberFormat('@') em abaCongelamentoEstado() e em
+// gravarEstado(). O Sheets real coage a string 'TRUE' gravada numa célula SEM
+// esse formato pra BOOLEANO; na releitura String(true) é 'true' minúsculo,
+// nunca 'TRUE', e toda semana travada, depois de um ciclo real de
+// gravação/releitura, voltava a ler como destravada -- silenciosamente. O
+// dublê acima foi estendido pra modelar essa coerção; este teste só passa se
+// o .gs de fato protege a coluna 2 com texto (se alguém remover o
+// setNumberFormat('@') dela no futuro, o dublê coage 'TRUE' pra boolean e
+// lerEstado()/String(dados[i][1])==='TRUE' voltaria a falhar -- o cinto e
+// suspensório de aceitar o boolean direto em lerEstado ainda salva a leitura,
+// mas o objetivo deste teste é provar que o formato de texto é o que evita a
+// coerção acontecer, não só que o fallback disfarça o sintoma).
+test('semana travada, gravada e relida, continua travada=true mesmo com o dublê coagindo TRUE/FALSE pra boolean fora do formato de texto', () => {
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  ctx.doPost({ postData: { contents: JSON.stringify({
+    acao: 'travar', token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'ana', travadoEm: '2026-08-28T22:00:00Z',
+    linhas: [{ chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 7, financeiro: 1, equipe: 1, produtividadeMedia: 7 }],
+  }) } });
+
+  // Confere DIRETO no array interno do dublê que a célula Travada foi
+  // gravada como STRING 'TRUE', nunca coagida a boolean -- é o sinal de que
+  // setNumberFormat('@') protegeu a coluna 2 antes do setValues.
+  const abaEstado = duble.SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CongelamentoEstado');
+  const linhaGravada = abaEstado.linhas[abaEstado.linhas.length - 1];
+  assert.equal(typeof linhaGravada[1], 'string', 'a coluna Travada tem de ser gravada como string, nunca coagida a boolean');
+  assert.equal(linhaGravada[1], 'TRUE');
+
+  // E a releitura (nova chamada, nova leitura de getDataRange) continua
+  // vendo travada=true.
+  const lido = ler(ctx, '2026-08-31', TOKEN_BOM);
+  assert.equal(lido.estado.travada, true,
+    'uma semana travada, apos gravar e reler, tem de continuar travada -- nao pode reverter pra destravada em silencio');
 });
 
 // Achado 1 da revisão final: doPost varria a Sheet INTEIRA uma vez por LINHA do
