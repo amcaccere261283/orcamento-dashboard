@@ -2175,6 +2175,35 @@ test('leitura que falha por rede avisa dizendo REDE, nao token', async () => {
   assert.match(aviso.textContent, /rede ou planilha fora do ar/);
 });
 
+// Achado Important da revisao final: com erro==='rede' o toggle ficava
+// HABILITADO (so 'token' desabilitava antes deste fix), e como
+// ESTADO_CONGELAMENTO.estado continua null quando a leitura falha, um clique
+// disparava alternarCongelamento() contra um estado FABRICADO
+// (travada:false por padrao) -- e travar() nao consulta lerEstado antes de
+// gravar. Se a semana JA estivesse travada de verdade (so nao deu pra ler
+// por falha de rede), o clique sobrescreveria em silencio o snapshot que a
+// trava deveria proteger.
+test('erro de leitura "rede" deixa o toggle DESABILITADO e desmarcado -- nao so "token"', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-15T00:00:00Z'),
+  });
+  const fetchMock = () => Promise.reject(new Error('offline'));
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.erro, 'rede');
+  const toggle = documentoFalso.getElementById('toggle-congelamento');
+  assert.strictEqual(toggle.disabled, true,
+    'com erro de rede o estado real e desconhecido -- o toggle nao pode ficar clicavel');
+  assert.strictEqual(toggle.checked, false, 'estado desconhecido nao pode afirmar travada nem destravada');
+});
+
 // --- Task 5 (2026-09-08): "Atualizar dados" grava a linha de base da semana
 // EM TELA no Consolidado quando ela está DESTRAVADA (upsert via 'congelar'),
 // e NÃO mexe nela quando está TRAVADA.

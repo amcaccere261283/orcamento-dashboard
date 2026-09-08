@@ -1742,7 +1742,18 @@ function atualizarToggleCongelamento(chaveSemanaEmTela) {
     return;
   }
   if (ESTADO_CONGELAMENTO.erro) {
-    toggle.disabled = ESTADO_CONGELAMENTO.erro === 'token';
+    // Achado Important da revisao final: com erro==='rede' o toggle ficava
+    // HABILITADO (só 'token' desabilitava) e ESTADO_CONGELAMENTO.estado
+    // continua null nesse caso -- um clique disparava alternarCongelamento()
+    // contra um estado FABRICADO (travada:false por padrao), e travar() nao
+    // consulta lerEstado antes de gravar (e a propria acao de travar, seria
+    // auto-referente). Se a semana JA estivesse travada de verdade e so nao
+    // desse pra ler por falha de rede, o clique sobrescreveria em silencio o
+    // snapshot que a trava deveria proteger. Com qualquer erro de leitura o
+    // estado real e desconhecido -- desabilita nos DOIS casos, e nao afirma
+    // nada no checked.
+    toggle.checked = false;
+    toggle.disabled = true;
     status.textContent = textoErroLeituraCongelamento(ESTADO_CONGELAMENTO.erro);
     return;
   }
