@@ -14,9 +14,12 @@ test('todo destino do mapa é LAB.C ou LAB.E, nunca outra coisa', () => {
 // 2026-08-08. Em 2026-08-10 subiu para 109: RES.CT e T.PULV apareceram quando
 // o Realizado de Lab passou a cobrir desde 2025-01 em vez de só o mês
 // corrente -- são 18 e 13 ensaios, todos de 2025, e por isso nunca tinham
-// chegado ao build. Classificados como LAB.E pelo dono do projeto.
-test('mapa consolidado tem 109 tipos de ensaio', () => {
-  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 109);
+// chegado ao build. Classificados como LAB.E pelo dono do projeto. Em
+// 2026-09-08 subiu para 111: ASF.TB (mesma família ASF.* já mapeada como
+// LAB.E) e D.PAR (decisão explícita do dono do projeto), ambos achados ao
+// vivo na busca de Demandas de LAB.C/LAB.E.
+test('mapa consolidado tem 114 tipos de ensaio', () => {
+  assert.strictEqual(Object.keys(MAPA_TIPO_ENSAIO_LAB).length, 114);
 });
 
 test('COMP.EN.3 (achado na primeira busca online de Lab Realizado) classifica como Convencional, mesmo padrão da variante ".3" já mapeada em COMP.EM.3 (após consolidação 2026-08-08)', () => {

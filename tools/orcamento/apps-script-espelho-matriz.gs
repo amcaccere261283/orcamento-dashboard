@@ -24,12 +24,34 @@ var NOME_ABA = 'MATRIZ';
 // (só assim dá pra ler os valores calculados via SpreadsheetApp -- um .xlsx
 // puro no Drive não é legível linha a linha sem abrir como Sheets antes),
 // copia a aba MATRIZ pra dentro desta Sheet, e apaga a cópia temporária.
+// Repete uma chamada de API sujeita a quota (Drive, Sheets) com backoff
+// exponencial + jitter. "User rate limit exceeded" é quase sempre transitório
+// -- a conta tem vários gatilhos (.gs) diferentes chamando Drive/Sheets API,
+// e às vezes duas execuções caem na mesma janela de 100s. Sem retry, o
+// gatilho falha e dispara o e-mail de erro do Apps Script por nada.
+function comRetry_(fn, tentativas) {
+  tentativas = tentativas || 5;
+  for (var i = 0; i < tentativas; i++) {
+    try {
+      return fn();
+    } catch (e) {
+      var mensagem = String(e && e.message || e);
+      var éRateLimit = /rate limit|quota|user-rate-limit-exceeded/i.test(mensagem);
+      if (!éRateLimit || i === tentativas - 1) throw e;
+      var esperaMs = Math.pow(2, i) * 1000 + Math.floor(Math.random() * 1000);
+      Utilities.sleep(esperaMs);
+    }
+  }
+}
+
 function atualizarEspelhoMatriz() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var tempFile = Drive.Files.copy(
-    { title: '__temp_matriz_sync__', mimeType: MimeType.GOOGLE_SHEETS },
-    ORIGEM_FILE_ID
-  );
+  var tempFile = comRetry_(function () {
+    return Drive.Files.copy(
+      { title: '__temp_matriz_sync__', mimeType: MimeType.GOOGLE_SHEETS },
+      ORIGEM_FILE_ID
+    );
+  });
   try {
     var tempSs = SpreadsheetApp.openById(tempFile.id);
     var abaOrigem = tempSs.getSheetByName(NOME_ABA);
@@ -44,7 +66,9 @@ function atualizarEspelhoMatriz() {
     }
     abaEspelho.getRange(1, 1).setNote('Espelho automático -- atualizado em ' + new Date().toISOString());
   } finally {
-    Drive.Files.remove(tempFile.id);
+    comRetry_(function () {
+      Drive.Files.remove(tempFile.id);
+    });
   }
 }
 

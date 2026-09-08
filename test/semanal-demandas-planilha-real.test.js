@@ -68,9 +68,15 @@ const PULAR = TEM_CSV ? false : `${CAMINHO_AVANCOS} não encontrado -- rode "nod
 // mudança silenciosa de layout que este arquivo existe para pegar. Foi uma
 // troca de fonte não refletida aqui que deixou o arquivo vermelho por um dia
 // inteiro sem ninguém notar.
+//
+// Em 2026-09-08 o Link 1 ganhou 'Latitude'/'Longitude' no fim -- confirmado
+// inofensivo: locateColunasAvancos busca coluna por NOME (não por posição),
+// então as 2 colunas novas ficam sem uso no parser até alguém decidir
+// consumi-las (ex.: um mapa de furos executados).
 const COLUNAS_LINK1 = [
   'Contrato', 'Criação da OS', 'Tipo', 'Status', 'Executado Dia',
   'Deslocamento', 'Total (m)', 'Observações de Campo', 'OS', 'Sondador',
+  'Latitude', 'Longitude',
 ];
 
 function lerGrid({ comPendentes }) {
