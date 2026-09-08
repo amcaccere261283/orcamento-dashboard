@@ -1689,7 +1689,6 @@ async function carregarCongeladoDaSemana(chaveSemana) {
   var segunda = CongelarTendenciaSemanal.segundaDaSemana(epoch);
   var chavesFragmentos = CongelarTendenciaSemanal.fragmentosDaSemanaAlvo(segunda).map(function (f) { return f.chave; });
   var congelado = await clienteCongelamento().carregar(chaveSemana, segunda, chavesFragmentos);
-  ESTADO_CONGELAMENTO.carregando = false;
   // Perdeu a corrida: enquanto esta busca estava no ar, o usuario trocou de
   // semana e outra chamada ja escreveu (ou vai escrever) o congelado da semana
   // certa. Escrever aqui poria o snapshot de OUTRA semana em
@@ -1697,8 +1696,16 @@ async function carregarCongeladoDaSemana(chaveSemana) {
   // redesenho seguinte mostraria numeros historicos errados rotulados
   // "(congelada)". Mesma classe do bug de ESTADO_ALOCACAO.alocacao (atribuicao
   // sem conferir se a corrida foi perdida), mas aqui o dano e o proprio numero
-  // que o recurso existe pra proteger.
+  // que o recurso existe pra proteger. 'carregando' segue o MESMO guard: a
+  // chamada que perdeu a corrida nao mexe nele -- a chamada vencedora (a mais
+  // nova, que ja re-setou 'carregando=true' pra SI mesma) e quem zera o dela
+  // quando terminar. Zerar aqui incondicionalmente faria uma resposta atrasada
+  // da semana ANTIGA marcar 'carregando=false' pra busca da semana NOVA ainda
+  // em voo -- atualizarToggleCongelamento leria 'carregando' falso, 'chave'
+  // batendo (e' a semana nova mesmo) e 'estado' null, e cairia no render normal
+  // com {travada:false} fabricado, como se a leitura real ja tivesse voltado.
   if (ESTADO_CONGELAMENTO.chave !== chaveSemana) return null;
+  ESTADO_CONGELAMENTO.carregando = false;
   // Falha de leitura ('token'/'rede') NAO e um snapshot -- nunca pode entrar em
   // 'congelado', ou o objeto de erro viraria a Tendencia da tela.
   if (congelado && congelado.motivo) {

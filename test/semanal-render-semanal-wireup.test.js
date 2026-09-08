@@ -2063,6 +2063,64 @@ test('resposta atrasada da semana ANTERIOR nao sobrescreve o congelado da semana
     'a resposta atrasada da semana anterior nao pode sobrescrever o congelado da semana em tela');
 });
 
+// Achado Important da revisão da Task 4: ESTADO_CONGELAMENTO.carregando era
+// zerado LOGO depois do await, ANTES do guard de corrida (chave !==
+// chaveSemana) -- diferente de congelado/estado/erro, que só sao escritos
+// DEPOIS do guard. Uma resposta atrasada da semana ANTIGA (perdedora da
+// corrida) zerava 'carregando' mesmo com a busca da semana NOVA ainda em
+// voo: atualizarToggleCongelamento lia carregando=false, chave batendo (e' a
+// nova mesmo) e estado=null, e desenhava o toggle como se a leitura real ja
+// tivesse voltado com "nunca travada" -- um clique nessa janela dispararia
+// alternarCongelamento contra um estado fabricado.
+test('resposta atrasada da semana ANTERIOR nao zera carregando da semana NOVA ainda em voo', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-07-01T00:00:00Z'),
+  });
+  // Uma promise por semana, resolvida à mão -- mesmo padrão do teste acima
+  // ("resposta atrasada da semana ANTERIOR nao sobrescreve..."), só que aqui
+  // a resposta atrasada é a da semana ANTIGA (A), que chega DEPOIS de B já
+  // estar em voo, mas ANTES de B terminar.
+  const pendentes = {};
+  const fetchMock = (url, opcoes) => {
+    const corpo = opcoes && opcoes.body ? JSON.parse(opcoes.body) : {};
+    if (corpo.acao !== 'ler') return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+    return new Promise((resolve) => { pendentes[corpo.semana] = resolve; });
+  };
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+
+  // Dispara a busca da semana A, mas não espera -- fica pendurada.
+  const buscaA = sandbox.carregarCongeladoDaSemana('2026-07-06');
+  await esperarMicrotasks();
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.carregando, true, 'busca de A em voo -- carregando tem de estar true');
+
+  // Usuário troca pra semana B ANTES de A terminar: nova chamada reseta
+  // chave/carregando/estado pra B.
+  const buscaB = sandbox.carregarCongeladoDaSemana('2026-07-13');
+  await esperarMicrotasks();
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.chave, '2026-07-13');
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.carregando, true, 'busca de B em voo -- carregando continua true');
+
+  // A resposta ATRASADA de A (a perdedora da corrida) chega primeiro -- B
+  // continua em voo.
+  pendentes['2026-07-06']({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  await buscaA;
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.chave, '2026-07-13', 'a chave continua sendo a de B');
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.carregando, true,
+    'a resposta atrasada de A (que perdeu a corrida) nao pode zerar carregando da busca de B, ainda em voo');
+
+  // Só quando B efetivamente resolve é que carregando pode virar false.
+  pendentes['2026-07-13']({ ok: true, json: () => Promise.resolve({ linhas: [] }) });
+  await buscaB;
+
+  assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.carregando, false, 'com a busca de B resolvida, carregando tem de virar false');
+});
+
 // Achado 5 (Important): "sem congelado", "token recusado" e "rede fora" eram o
 // mesmo null, e a aba caía em "(recalculada)" sem dizer que existe um
 // congelamento inacessível -- o cenário da senha rotacionada sem atualizar a
