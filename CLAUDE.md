@@ -1310,6 +1310,18 @@ inteiro, **pool inclusive**, e a única exceção é a equipe indisponível, que
 
 ## Congelamento da semana por botão (2026-09-01)
 
+**Virou toggle on/off por semana em 2026-09-08** — o botão write-once
+descrito abaixo foi substituído por um switch por semana (qualquer uma do
+seletor do Consolidado, não só a próxima segunda): travada = "Atualizar
+dados" não mexe; aberta = "Atualizar dados" recalcula e grava a linha de
+base daquela semana (upsert, não mais recusa por reclique). Nova aba na
+Sheet, `CongelamentoEstado` (uma linha por semana, chaveada pela
+segunda-feira real), guarda esse estado — ver
+`docs/superpowers/specs/2026-09-08-congelamento-toggle-design.md`. O texto
+abaixo descreve o mecanismo de PONTOS (aba `Congelamento`, upsert,
+formato de data em texto, fragmentos de semana que cruza mês), que
+continua valendo sem mudança; só a regra de "uma vez só" mudou.
+
 O "Consolidado congelado" (ver seção acima, 2026-08-04) recalculava a Tendência
 congelada em TEMPO DE LEITURA, toda vez que a aba redesenhava — reproduzível, não
 persistido de verdade. Isso virou um botão explícito, "Congelar próxima semana", na aba
@@ -1362,7 +1374,9 @@ histórica de S1 nas linhas de S2, com o cabeçalho dizendo "(congelada)". Mesma
 bug de `ESTADO_ALOCACAO.alocacao` documentado na Alocação Equipes, com o dano no próprio
 número que o recurso existe para proteger.
 
-**Reclique é recusado, de propósito.** `doPost` no `.gs` varre a Sheet antes de gravar:
+**Reclique só é recusado quando a semana está travada.** Antes desta seção
+mudar (2026-09-08, parágrafo do topo), reclique era sempre recusado — o
+texto abaixo descreve como `doPost` no `.gs` varre a Sheet antes de gravar:
 se QUALQUER linha da semana-alvo já existir — inclusive de uma gravação interrompida no
 meio — a gravação inteira é recusada (`{ erro: 'ja-congelada', autor, congeladoEm }`). É
 a promessa do recurso: o número, uma vez congelado, nunca muda. Refazer exige apagar as
