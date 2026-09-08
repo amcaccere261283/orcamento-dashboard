@@ -214,26 +214,42 @@ function doPost(e) {
       return resposta({ ok: true });
     }
 
+    var linhasPayload = corpo.linhas || [];
+    var temPontosExistentes = false;
+    var abaPontos = abaCongelamento();
+    var dadosPontos = null;
+
+    // UMA leitura única da planilha para: (1) fallback de compatibilidade,
+    // (2) upsert. Mesmo padrão de custo constante já usado em desfazer.
+    if (corpo.acao === 'congelar' || linhasPayload.length) {
+      var chavesAlvo = {};
+      linhasPayload.forEach(function (l) { chavesAlvo[String(l.chave)] = true; });
+      dadosPontos = abaPontos.getDataRange().getValues();
+
+      // Verifica se há pontos existentes (para fallback de compatibilidade)
+      for (var i = 1; i < dadosPontos.length; i++) {
+        if (chavesAlvo[normalizarDia(dadosPontos[i][COL_SEMANA_INICIO - 1])]) {
+          temPontosExistentes = true;
+          break;
+        }
+      }
+    }
+
     if (corpo.acao === 'congelar') {
-      var estadoAtual = lerEstado(corpo.chaveSegunda, false);
+      var estadoAtual = lerEstado(corpo.chaveSegunda, temPontosExistentes);
       if (estadoAtual.travada) {
         return resposta({ erro: 'travada', autor: estadoAtual.autor, atualizadoEm: estadoAtual.atualizadoEm });
       }
     }
 
-    var linhasPayload = corpo.linhas || [];
     if (linhasPayload.length) {
       // Upsert: apaga as linhas EXISTENTES das chaves-alvo (se houver) e
-      // grava as novas no lugar. Mesma leitura única da planilha que a
-      // checagem "já congelada" original fazia -- ver o comentário
-      // histórico sobre custo quadrático, ainda válido aqui.
-      var chavesAlvo = {};
-      linhasPayload.forEach(function (l) { chavesAlvo[String(l.chave)] = true; });
-      var abaPontos = abaCongelamento();
-      var dadosPontos = abaPontos.getDataRange().getValues();
+      // grava as novas no lugar. Usa a leitura única feita acima.
+      var chavesAlvo2 = {};
+      linhasPayload.forEach(function (l) { chavesAlvo2[String(l.chave)] = true; });
       var linhasParaSubstituir = [];
-      for (var i = 1; i < dadosPontos.length; i++) {
-        if (chavesAlvo[normalizarDia(dadosPontos[i][COL_SEMANA_INICIO - 1])]) linhasParaSubstituir.push(i + 1);
+      for (var i2 = 1; i2 < dadosPontos.length; i2++) {
+        if (chavesAlvo2[normalizarDia(dadosPontos[i2][COL_SEMANA_INICIO - 1])]) linhasParaSubstituir.push(i2 + 1);
       }
       linhasParaSubstituir.sort(function (a, b) { return b - a; })
         .forEach(function (linha) { abaPontos.deleteRow(linha); });
