@@ -1,9 +1,23 @@
 # Implantar o Apps Script de congelamento da semana
 
 Este guia cobre a implantação do Web App que grava a Tendência CONGELADA de cada
-semana (botão "Congelar próxima semana" na aba Consolidado da página semanal). O
-código já está pronto em `tools/semanal/apps-script-congelamento.gs` — o que falta é
-publicá-lo como Web App e apontar o dashboard para a URL publicada.
+semana, hoje controlado por um **switch on/off por semana** na aba Consolidado da
+página semanal (2026-09-08 -- substituiu o botão write-once "Congelar próxima
+semana": qualquer semana do seletor pode ser travada/destravada, não só a próxima
+segunda). O código já está pronto em `tools/semanal/apps-script-congelamento.gs` —
+o que falta é publicá-lo como Web App e apontar o dashboard para a URL publicada.
+
+**Ordem de deploy obrigatória, sempre nesta ordem:** reimplante o `.gs` primeiro
+(passo 7 abaixo, se já existir uma implantação; passo 5, se for a primeira vez) e
+confirme com o teste do fim deste guia que `ler` devolve um campo `estado` na
+resposta — só DEPOIS publique o HTML (`planejamento-semanal.html`). Inverter a
+ordem é degradado, não destrutivo: um Web App antigo (de antes do toggle) não
+reconhece `travar`/`destravar`, nem devolve `estado` em `ler` -- o cliente novo cai
+no valor default (`{ travada: false }`) para toda semana, o toggle aparece
+destravado mesmo quando não está, e as ações de travar/destravar falham em
+silêncio ou não fazem nada. O toggle parece funcionar (o switch responde ao
+clique) mas não trava nada de verdade -- ver o parágrafo equivalente no
+`CLAUDE.md`, seção "Congelamento da semana por botão".
 
 Sem este passo o botão fica desabilitado: `URL_CONGELAMENTO`
 (`tools/semanal/render-semanal.js:1591`) começa como o literal `'PENDENTE-congelamento'`,
@@ -14,9 +28,12 @@ que o congelamento ainda não foi configurado.
 
 ### 1. Criar (ou reaproveitar) uma Google Sheet
 
-Pode ser uma planilha nova em branco, ou uma já existente — **não é preciso criar a
-aba `Congelamento` à mão**. `abaCongelamento()` (dentro do próprio `.gs`) cria a aba na
-primeira chamada, com o cabeçalho e a formatação de texto puro já configurados.
+Pode ser uma planilha nova em branco, ou uma já existente — **não é preciso criar as
+abas à mão**. O `.gs` cria as DUAS abas que usa na primeira chamada, cada uma já com
+cabeçalho e formatação de texto configurados: `abaCongelamento()` cria `Congelamento`
+(os pontos/snapshots, uma linha por chave×registro) e `abaCongelamentoEstado()` cria
+`CongelamentoEstado` (uma linha por semana, com `Travada`/`Autor`/`AtualizadoEm` --
+é o que o toggle lê para saber se a semana está travada).
 
 ### 2. Colar o script
 
@@ -77,8 +94,23 @@ exigir uma conta Google associada. Sem o token certo, `doPost` recusa com
 `{ erro: 'use-post' }` para quem abrir a URL no navegador. O token viajava na query
 string do GET, onde aparece nos logs de execução do Apps Script e em qualquer registro
 de requisição pelo caminho; no corpo do POST, não. A ação é escolhida pelo campo `acao`
-do corpo: `'ler'` (com `semana`) ou `'congelar'` (com `chaveSegunda`, `autor`,
-`congeladoEm` e `linhas`).
+do corpo, cinco no total:
+
+- `'ler'` (com `semana`, `chaveSegunda`, `chavesFragmentos`) -- devolve `{ linhas,
+  estado }`, onde `estado` é `{ travada, autor, atualizadoEm }` da semana (chaveada
+  pela segunda-feira real).
+- `'travar'` (com `chaveSegunda`, `autor`, `travadoEm`, `linhas`) -- faz upsert do
+  snapshot enviado E marca a semana como travada.
+- `'destravar'` (com `chaveSegunda`, `autor`, `destravadoEm`) -- só desliga a trava,
+  nunca apaga pontos já gravados.
+- `'congelar'` (com `chaveSegunda`, `autor`, `congeladoEm`, `linhas`) -- upsert
+  condicionado ao estado: grava (sobrescrevendo o snapshot anterior) só se a semana
+  estiver ABERTA; recusa com `{ erro: 'travada' }` se estiver travada. É o que
+  "Atualizar dados" chama quando a semana em tela no Consolidado não está travada.
+- `'desfazer'` (com `chaves`, lista de chaves de fragmento) -- mecanismo manual de
+  recuperação, sem UI no dashboard: apaga as linhas de pontos das chaves pedidas E a
+  linha de `CongelamentoEstado` correspondente (senão a semana ficaria "travada" sem
+  nenhum ponto pra sustentar isso).
 
 ### 6. Copiar a URL de implantação
 
@@ -129,8 +161,12 @@ fetch('<url-de-implantação>/exec', {
 ```
 
 - Resposta esperada, com a Sheet ainda sem nenhuma linha para essa semana:
-  `{"linhas":[]}` — confirma que o token foi aceito e a aba `Congelamento` foi
-  criada/lida sem erro.
+  `{"linhas":[],"estado":{"travada":false,"autor":"","atualizadoEm":""}}` — confirma
+  que o token foi aceito e as duas abas (`Congelamento`, `CongelamentoEstado`) foram
+  criadas/lidas sem erro. **O campo `estado` é o que prova que a implantação já é a
+  versão com o toggle** — uma implantação antiga (de antes de 2026-09-08) devolveria
+  só `{"linhas":[]}`, sem `estado`, e o dashboard cairia no default `{ travada: false
+  }` para toda semana em silêncio (ver o aviso de ordem de deploy no topo deste guia).
 - Se o token estiver errado ou a Script Property não tiver sido salva:
   `{"erro":"token"}`.
 - Abrir a URL direto no navegador, logado na conta dona do script (um GET) devolve

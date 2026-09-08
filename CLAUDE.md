@@ -1322,6 +1322,21 @@ abaixo descreve o mecanismo de PONTOS (aba `Congelamento`, upsert,
 formato de data em texto, fragmentos de semana que cruza mês), que
 continua valendo sem mudança; só a regra de "uma vez só" mudou.
 
+**Ordem de deploy obrigatória: sempre o `.gs` primeiro, depois o HTML.**
+Reimplante `tools/semanal/apps-script-congelamento.gs` (mesma URL, "Nova
+versão" — ver `docs/implantar-apps-script-congelamento.md`), confirme com o
+teste de `fetch()` daquele runbook que a resposta de `ler` já traz o campo
+`estado`, e só DEPOIS publique `planejamento-semanal.html`. Nunca ao
+contrário. **O modo de falha da ordem invertida é degradado, não
+destrutivo:** um Web App antigo (publicado antes do toggle) não reconhece
+`travar`/`destravar` nem devolve `estado` em `ler` — o cliente novo cai no
+default `{ travada: false }` para toda semana, o toggle aparece destravado
+mesmo quando a Sheet já tem uma trava de verdade, e um clique em "travar"
+ou "destravar" contra esse Web App antigo falha em silêncio ou não faz
+nada (a ação `acao` que ele não reconhece não bate com nenhum `if` do
+`.gs` velho). O toggle parece funcionar — o switch responde ao clique — mas
+não trava nada de verdade até o `.gs` ser reimplantado.
+
 O "Consolidado congelado" (ver seção acima, 2026-08-04) recalculava a Tendência
 congelada em TEMPO DE LEITURA, toda vez que a aba redesenhava — reproduzível, não
 persistido de verdade. Isso virou um botão explícito, "Congelar próxima semana", na aba
