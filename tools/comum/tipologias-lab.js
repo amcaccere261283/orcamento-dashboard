@@ -17,6 +17,10 @@ const MAPA_TIPO_ENSAIO_LAB = {
   // Frcst. Classificados como LAB.E pelo dono do projeto (ensaios de mistura
   // asfáltica, mesma família dos COMP.* incomuns já mapeados como Especial).
   'ASF.CD': 'LAB.E', 'ASF.DAP': 'LAB.E',
+  // Achado ao vivo em 2026-09-08 (Demandas de LAB.C/LAB.E, backlog). Mesma
+  // família ASF.* acima -- classificado LAB.E por analogia, sem confirmação
+  // explícita do dono do projeto (confirmar se ele questionar o número).
+  'ASF.TB': 'LAB.E',
   'ADENS.I.9': 'LAB.E', 'ADENS.N.9': 'LAB.E', 'ADENS.PE': 'LAB.E', 'ADES.A': 'LAB.E',
   'APR.P': 'LAB.E', 'AV.DURAB': 'LAB.E',
   'CBR.1': 'LAB.C', 'CBR.3': 'LAB.C', 'CBR.5': 'LAB.C',
@@ -36,6 +40,9 @@ const MAPA_TIPO_ENSAIO_LAB = {
   'COMP.S.3D.2': 'LAB.E', 'COMP.S.3D.3': 'LAB.E', 'COMP.S.7D': 'LAB.E', 'COMP.S.7D.2': 'LAB.E',
   'COMP.S.7D.3': 'LAB.E',
   'D.HILF': 'LAB.C', 'D.NAT.L': 'LAB.E', DISSIP: 'LAB.E', 'DOSAG.': 'LAB.E', DP: 'LAB.E',
+  // Achado ao vivo em 2026-09-08 (Demandas de LAB.C/LAB.E, backlog).
+  // Classificado como LAB.E, decisão explícita do dono do projeto.
+  'D.PAR': 'LAB.E',
   DRX: 'LAB.E', DSS: 'LAB.E', DUR: 'LAB.E', DURAB: 'LAB.E',
   'E.CAN': 'LAB.E', 'EQ.A': 'LAB.E',
   'IND.F.P': 'LAB.E', 'IND.VAZ': 'LAB.E',
