@@ -478,6 +478,58 @@ test('congelar RECUSA semana legada (com pontos mas SEM linha em CongelamentoEst
   assert.equal(lido.linhas[0].volume, 10, 'o valor original nao pode ter sido sobrescrito');
 });
 
+// Achado Important da revisão final: desfazer apagava só as linhas de
+// pontos (Congelamento), nunca a linha de CongelamentoEstado -- uma semana
+// travada que tivesse os pontos apagados por desfazer continuava lendo
+// estado.travada:true (com linhas:[] -- meio-estado sem rota de saída pela
+// UI a não ser destravar manualmente).
+test('desfazer apaga tambem a linha de CongelamentoEstado -- semana travada volta a ler travada=false apos desfazer', () => {
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  // Trava a semana (grava pontos + estado travada=true).
+  ctx.doPost({ postData: { contents: JSON.stringify({
+    acao: 'travar', token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'ana', travadoEm: 'x',
+    linhas: [{ chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 7, financeiro: 1, equipe: 1, produtividadeMedia: 7 }],
+  }) } });
+  const antesDesfazer = ler(ctx, '2026-08-31', TOKEN_BOM);
+  assert.equal(antesDesfazer.estado.travada, true, 'pre-condicao: a semana tem de estar travada antes do desfazer');
+
+  const resultado = corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, acao: 'desfazer', chaves: ['2026-08-31'],
+  }) } }));
+  assert.equal(resultado.ok, true);
+  assert.equal(resultado.apagadas, 1, 'apaga a linha de pontos');
+
+  const depoisDesfazer = ler(ctx, '2026-08-31', TOKEN_BOM);
+  assert.equal(depoisDesfazer.linhas.length, 0, 'os pontos foram apagados');
+  assert.equal(depoisDesfazer.estado.travada, false,
+    'sem a linha de CongelamentoEstado (apagada junto) e sem pontos existentes, o fallback de compatibilidade tambem da travada=false -- o resultado final tem de ser destravada, nao importa por qual caminho');
+});
+
+test('desfazer apaga a linha de CongelamentoEstado usando qualquer chave de FRAGMENTO recebida (semana que cruza mes)', () => {
+  const duble = criarSheetsDuble();
+  const ctx = carregarScript(duble);
+  // Semana que cruza mes: dois fragmentos, mas UMA linha de estado (chaveada
+  // pela segunda-feira real, aqui '2026-08-31').
+  ctx.doPost({ postData: { contents: JSON.stringify({
+    acao: 'travar', token: TOKEN_BOM, chaveSegunda: '2026-08-31', autor: 'ana', travadoEm: 'x',
+    linhas: [
+      { chave: '2026-08-31', chaveMatriz: 'SUP-1||SP', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1 },
+      { chave: '2026-09-01', chaveMatriz: 'SUP-1||SP', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1 },
+    ],
+  }) } });
+
+  corpoDe(ctx.doPost({ postData: { contents: JSON.stringify({
+    token: TOKEN_BOM, acao: 'desfazer', chaves: ['2026-08-31', '2026-09-01'],
+  }) } }));
+
+  const abaEstado = duble.SpreadsheetApp.getActiveSpreadsheet().getSheetByName('CongelamentoEstado');
+  assert.equal(abaEstado.linhas.length, 1, 'a linha de estado (so o cabecalho sobra) tem de ter sido apagada junto');
+
+  const depois = ler(ctx, '2026-08-31', TOKEN_BOM);
+  assert.equal(depois.estado.travada, false);
+});
+
 test('ler com chavesFragmentos verifica pontos nos DOIS fragmentos de uma semana que cruza mes', () => {
   const duble = criarSheetsDuble();
   const ctx = carregarScript(duble);

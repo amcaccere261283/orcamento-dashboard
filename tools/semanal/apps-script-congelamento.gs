@@ -5,7 +5,8 @@
 //  - travar: marca uma semana como travada (não permite mais congelar)
 //  - destravar: desbloqueia uma semana travada (permite congelar de novo)
 //  - congelar: grava um snapshot, só se a semana estiver aberta (não travada)
-//  - desfazer: apaga linhas (mecanismo manual, mantido sem UI)
+//  - desfazer: apaga linhas de pontos E a linha de estado correspondente
+//    (mecanismo manual, mantido sem UI)
 //
 // Duas regras permanentes:
 //  1. Datas são gravadas como TEXTO. O Sheets coage '2026-08-31' pra Date, e
@@ -222,6 +223,32 @@ function doPost(e) {
       }
       linhasParaApagar.sort(function (a, b) { return b - a; })
         .forEach(function (linha) { abaDesfazer.deleteRow(linha); });
+
+      // Achado Important da revisão final: desfazer apagava só as linhas de
+      // PONTOS (Congelamento), nunca a linha de CongelamentoEstado -- uma
+      // semana travada que tivesse os pontos apagados por aqui continuava
+      // lendo travada:true (estado.travada não mexe sozinho), com `ler`
+      // devolvendo linhas:[] e o toggle mostrando travado sem nenhum
+      // snapshot pra sustentar, e "Atualizar dados" recusando gravar porque
+      // a semana ainda estava "travada" -- um meio-estado sem rota de saída
+      // pela UI a não ser destravar manualmente.
+      //
+      // As chaves de desfazer são chaves de FRAGMENTO (até 2 por semana,
+      // quando cruza mês), enquanto CongelamentoEstado é chaveada pela
+      // segunda-feira REAL -- os dois espaços de chave nem sempre coincidem.
+      // Em vez de calcular a segunda a partir do fragmento, apaga qualquer
+      // linha de CongelamentoEstado cuja chave apareça entre as `chaves`
+      // recebidas: mais simples e suficiente, porque o cliente sempre manda
+      // as chaves de fragmento OU a chaveSegunda, dependendo de quem chama.
+      var abaEstadoDesfazer = abaCongelamentoEstado();
+      var dadosEstadoDesfazer = abaEstadoDesfazer.getDataRange().getValues();
+      var linhasEstadoParaApagar = [];
+      for (var k = 1; k < dadosEstadoDesfazer.length; k++) {
+        if (chavesApagar[normalizarDia(dadosEstadoDesfazer[k][COL_ESTADO_SEMANA - 1])]) linhasEstadoParaApagar.push(k + 1);
+      }
+      linhasEstadoParaApagar.sort(function (a, b) { return b - a; })
+        .forEach(function (linha) { abaEstadoDesfazer.deleteRow(linha); });
+
       return resposta({ ok: true, apagadas: linhasParaApagar.length });
     } finally {
       travaDesfazer.releaseLock();
