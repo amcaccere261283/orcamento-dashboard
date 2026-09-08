@@ -1557,6 +1557,13 @@ const CSV_MATRIZ_PRIORIDADE = 'ORIGEM,GRUPO,TOMADOR,SUP,ESCOPO,APOIO,INICIO,TERM
   + Array(12).fill('0').join(',') + ',0,0,0,'
   + Array(12).fill('0').join(',') + ',0,0,\n';
 
+// CSVs vazios (só cabeçalho) de avancos/lab -- reaproveitados pelos testes de
+// congelamento/refresh (Task 5) que precisam mockar URLS_PADRAO.avancos/.lab
+// (URLs reais desde 2026-08, não mais PENDENTE-) sem se importar com o
+// conteúdo em si.
+const CSV_AVANCOS_VAZIO = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n';
+const CSV_LAB_VAZIO = 'ID Contrato,Ensaiado Dia,Tipo de Ensaio,Data Programada\n';
+
 // 46091 = 2026-03-10 (Criação da OS), 46093 = 2026-03-12 (Executado Dia -- o
 // dia que compute-equipes-mobilizadas.js passa a ocupar desde 2026-08-10).
 const CSV_AVANCOS_PRIORIDADE = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador\n'
@@ -2166,5 +2173,87 @@ test('leitura que falha por rede avisa dizendo REDE, nao token', async () => {
   assert.strictEqual(sandbox.ESTADO_CONGELAMENTO.erro, 'rede');
   const aviso = documentoFalso.getElementById('status-congelamento-leitura');
   assert.match(aviso.textContent, /rede ou planilha fora do ar/);
+});
+
+// --- Task 5 (2026-09-08): "Atualizar dados" grava a linha de base da semana
+// EM TELA no Consolidado quando ela está DESTRAVADA (upsert via 'congelar'),
+// e NÃO mexe nela quando está TRAVADA.
+
+test('atualizarDadosAoVivoSemanal: com a semana do Consolidado ABERTA, "Atualizar dados" chama congelar (upsert da linha de base)', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-03-15T00:00:00Z'),
+  });
+  const chamadasPost = [];
+  const fetchMock = (url, opcoes) => {
+    if (opcoes && opcoes.body) {
+      const corpo = JSON.parse(opcoes.body);
+      chamadasPost.push(corpo);
+      if (corpo.acao === 'ler') return Promise.resolve({ ok: true, json: () => Promise.resolve({ linhas: [], estado: { travada: false, autor: '', atualizadoEm: '' } }) });
+      if (corpo.acao === 'congelar') return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, gravadas: corpo.linhas.length }) });
+    }
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
+    // avancos/lab-online.csv (URLS_PADRAO reais, não PENDENTE- nesta base):
+    // sem mockar, o refresh inteiro falha com 404 antes de chegar em
+    // aoAtualizarLinhaBase -- CSVs vazios bastam pra este teste, que só
+    // observa se 'congelar' foi chamado.
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_VAZIO) });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_VAZIO) });
+    return Promise.resolve({ ok: false, status: 404 });
+  };
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  sandbox.window.__DASHBOARD_AUTOR__ = 'Autor Sintetico';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  await chamarEsperarAtualizacao(sandbox);
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  const chamadaCongelar = chamadasPost.find((c) => c.acao === 'congelar');
+  assert.ok(chamadaCongelar, 'a semana aberta em tela tem de disparar um congelar (upsert) apos o refresh');
+});
+
+test('atualizarDadosAoVivoSemanal: com a semana do Consolidado TRAVADA, "Atualizar dados" NAO chama congelar', async () => {
+  const registros = [registroSintetico('SUP-0001-24', 'Tomador-Sintetico-Alfa', 4000)];
+  const html = renderSemanal({
+    registros, baseline: [], demandas: DEMANDAS_VAZIAS, periodos: PERIODOS_2026,
+    senha: SENHA_FAKE, geradoEm: new Date('2026-03-15T00:00:00Z'),
+  });
+  const chamadasPost = [];
+  const fetchMock = (url, opcoes) => {
+    if (opcoes && opcoes.body) {
+      const corpo = JSON.parse(opcoes.body);
+      chamadasPost.push(corpo);
+      if (corpo.acao === 'ler') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
+          linhas: [{ chaveMatriz: 'SUP-0001-24||BL', volume: 1, financeiro: 1, equipe: 1, produtividadeMedia: 1, autor: 'Fulano', congeladoEm: 'x' }],
+          estado: { travada: true, autor: 'Fulano', atualizadoEm: 'x' },
+        }) });
+      }
+    }
+    if (url.indexOf('pub?gid=609773455') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_MATRIZ_PRIORIDADE) });
+    if (url.indexOf('avancos-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_AVANCOS_VAZIO) });
+    if (url.indexOf('lab-online.csv') !== -1) return Promise.resolve({ ok: true, text: () => Promise.resolve(CSV_LAB_VAZIO) });
+    return Promise.resolve({ ok: false, status: 404 });
+  };
+
+  const { sandbox, documentoFalso } = montarSandbox(html, fetchMock);
+  sandbox.URL_CONGELAMENTO = 'https://exemplo.com/congelamento-configurado';
+  documentoFalso.getElementById('campo-senha').value = SENHA_FAKE;
+  await sandbox.tentarDesbloquear();
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  await chamarEsperarAtualizacao(sandbox);
+  await esperarMicrotasks();
+  await esperarMicrotasks();
+
+  assert.ok(!chamadasPost.some((c) => c.acao === 'congelar'), 'semana travada nao pode ser sobrescrita pelo refresh');
 });
 

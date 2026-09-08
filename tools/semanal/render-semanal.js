@@ -2212,6 +2212,28 @@ function atualizarDadosAoVivoSemanal() {
       recalcularSemanal();
       montarAbaDemandas();
     },
+    aoAtualizarLinhaBase: async function (registrosNovos, demandasNovas) {
+      // Só a semana em tela no Consolidado -- outras semanas não estão
+      // sendo olhadas agora, e recalcular todas a cada refresh custaria
+      // uma chamada de rede por semana sem necessidade.
+      var chaveSemanaEmTela = ESTADO_CONGELAMENTO.chave;
+      var estado = ESTADO_CONGELAMENTO.estado;
+      if (!chaveSemanaEmTela || !estado || estado.travada) return;
+      var partes = chaveSemanaEmTela.split('-').map(Number);
+      var epoch = Date.UTC(partes[0], partes[1] - 1, partes[2]) / 86400000;
+      var segunda = CongelarTendenciaSemanal.segundaDaSemana(epoch);
+      var hoje = hojeEpochDoNavegador();
+      var snapshot = CongelarTendenciaSemanal.calcularSnapshotSemanaAlvo(registrosNovos, demandasNovas, hoje, segunda);
+      var r = await clienteCongelamento().congelar(snapshot, window.__DASHBOARD_AUTOR__ || 'dashboard');
+      if (r.ok) {
+        ESTADO_CONGELAMENTO.estado = { travada: false, autor: window.__DASHBOARD_AUTOR__ || 'dashboard', atualizadoEm: new Date().toISOString() };
+        if (typeof window.__REDESENHAR_CONSOLIDADO__ === 'function') window.__REDESENHAR_CONSOLIDADO__();
+      }
+      // r.motivo === 'travada': perdeu a corrida contra um toggle ligado no
+      // meio do refresh -- nada a fazer, a próxima leitura mostra o estado
+      // certo. Falha de rede/token: degrada em silêncio, mesma filosofia
+      // do resto do congelamento (best-effort, não pode derrubar o refresh).
+    },
     definirStatus: definirStatusAtualizacaoSemanal,
   });
 }

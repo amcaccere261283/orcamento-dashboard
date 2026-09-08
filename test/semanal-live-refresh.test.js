@@ -588,6 +588,54 @@ test('demandasLab é buscado como JSON, sem cache-busting, e sem ele nenhum erro
 // as 10 de sempre + Latitude/Longitude opcionais) que
 // build-dashboard.js usa.
 
+// --- Cenário 10 (Task 5, 2026-09-08): hook opcional de linha de base -------
+// "Atualizar dados" grava (upsert) a linha de base da semana em tela quando
+// ela está DESTRAVADA -- via um campo opcional config.aoAtualizarLinhaBase,
+// chamado logo depois de cfg.aplicar(...), sem bloquear nem atrasar o
+// status final. Só a página Semanal (Consolidado) fornece este callback; a
+// Alocação Equipes não passa esse campo (ver configDublada acima, que nunca
+// o inclui por padrão).
+
+test('atualizarDadosAoVivo chama config.aoAtualizarLinhaBase depois de aplicar, sem bloquear o status final', async () => {
+  const { cfg, espiao } = configDublada({ fontes: { matriz: URL_MATRIZ } });
+  const chamadas = [];
+  const aplicarOriginal = cfg.aplicar;
+  cfg.aplicar = function (registrosNovos, demandasNovas) {
+    chamadas.push('aplicar');
+    aplicarOriginal(registrosNovos, demandasNovas);
+  };
+  cfg.aoAtualizarLinhaBase = function (registrosNovos, demandasNovas) {
+    chamadas.push('aoAtualizarLinhaBase');
+  };
+  const fetchDouble = criarFetchDouble({ [URL_MATRIZ]: respostaCsvOk(csvMatrizComSup('SUP-0001-24')) });
+
+  await comFetch(fetchDouble, () => atualizarDadosAoVivo(cfg));
+
+  assert.deepStrictEqual(chamadas, ['aplicar', 'aoAtualizarLinhaBase']);
+  assert.strictEqual(espiao.aplicarChamado, true);
+  const ultimoStatus = espiao.statusChamadas[espiao.statusChamadas.length - 1];
+  assert.match(ultimoStatus.texto, /^Atualizado/);
+});
+
+test('atualizarDadosAoVivo sem aoAtualizarLinhaBase continua funcionando normalmente (campo opcional)', async () => {
+  const { cfg, espiao } = configDublada({ fontes: { matriz: URL_MATRIZ } });
+  // cfg.aoAtualizarLinhaBase NÃO é definido -- mesmo caso da Alocação Equipes.
+  const fetchDouble = criarFetchDouble({ [URL_MATRIZ]: respostaCsvOk(csvMatrizComSup('SUP-0001-24')) });
+
+  await comFetch(fetchDouble, () => atualizarDadosAoVivo(cfg));
+
+  assert.strictEqual(espiao.aplicarChamado, true);
+  const ultimoStatus = espiao.statusChamadas[espiao.statusChamadas.length - 1];
+  assert.match(ultimoStatus.texto, /^Atualizado/);
+});
+
+// --- Cenário 9 (Task 6, 2026-08-26): coordenadas por SUP recalculadas ------
+// "Atualizar dados" não pode apagar/deixar velho demandas.coordenadasPorSup
+// que o build já tinha calculado (Task 5) -- tem que recalcular a partir do
+// CSV FRESCO de avanços, mesma leitura (HEADER_SAIDA de 12 colunas, Task 4:
+// as 10 de sempre + Latitude/Longitude opcionais) que
+// build-dashboard.js usa.
+
 test('atualizarDadosAoVivo recalcula demandas.coordenadasPorSup a partir do CSV fresco de avancos', async () => {
   const CSV_AVANCOS_COM_COORDENADA = 'Contrato,Criação da OS,Tipo,Status,Executado Dia,Deslocamento,Total (m),Observações de Campo,OS,Sondador,Latitude,Longitude\n'
     + 'SUP-0001-24,01/08/2026,ST,CONCLUIDO,01/08/2026,Não,10,,12345,Fulano,-23.55,-46.63\n';

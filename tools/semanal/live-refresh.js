@@ -203,6 +203,13 @@ var RE_URL_PENDENTE = /^PENDENTE-/;
 //             nunca antes (atomicidade tudo-ou-nada).
 //   definirStatus: (texto, ehErro) => void -- era
 //             definirStatusAtualizacaoSemanal (document.getElementById).
+//   aoAtualizarLinhaBase?: (registrosNovos, demandasNovas) => void|Promise
+//             -- opcional (2026-09-08). Chamado logo depois de cfg.aplicar,
+//             best-effort: uma rejeição/exceção aqui nunca derruba o resto
+//             do refresh nem atrasa cfg.definirStatus('Atualizado...'). Só a
+//             página Semanal passa este campo (upsert da linha de base da
+//             semana em tela no Consolidado, quando ela está destravada); a
+//             Alocação Equipes não tem Consolidado e não o passa.
 //
 // Tudo-ou-nada, mas só ENTRE as fontes que este refresh de fato tentou
 // buscar: nenhuma escrita acontece (config.aplicar não é chamado) antes de
@@ -506,6 +513,17 @@ function atualizarDadosAoVivo(config) {
       }
 
       cfg.aplicar(registrosNovos, demandasNovas);
+
+      // Linha de base da semana (2026-09-08): best-effort, nunca bloqueia
+      // nem derruba o resto do refresh -- uma falha aqui é a MESMA classe
+      // de degradação que o resto do congelamento já segue (avisa, não
+      // quebra a página). Só a página Semanal (Consolidado) fornece este
+      // callback; a Alocação Equipes não tem Consolidado.
+      if (typeof cfg.aoAtualizarLinhaBase === 'function') {
+        try {
+          Promise.resolve(cfg.aoAtualizarLinhaBase(registrosNovos, demandasNovas)).catch(function () {});
+        } catch (erroLinhaBase) { /* nunca deixa o refresh cair por causa disto */ }
+      }
 
       var agora = new Date();
       var horario = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
