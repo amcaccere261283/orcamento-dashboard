@@ -37,10 +37,13 @@ test('carregar transforma as linhas da Sheet no formato porRegistro que o Consol
   assert.equal(corpo.semana, '2026-08-31');
 });
 
-test('carregar devolve null quando a semana nao tem congelado', async () => {
-  const d = fetchDuble([{ linhas: [] }]);
+test('carregar devolve estado sem congelado quando a semana nao tem nenhum ponto', async () => {
+  const d = fetchDuble([{ linhas: [], estado: { travada: false, autor: '', atualizadoEm: '' } }]);
   const cliente = criarClienteCongelamento({ url: 'https://exemplo/exec', fetch: d.fetch, token: 'tok' });
-  assert.equal(await cliente.carregar('2026-08-31'), null);
+  const r = await cliente.carregar('2026-08-31', '2026-08-31', ['2026-08-31']);
+  assert.equal(r.porRegistro, null);
+  assert.equal(r.semAlgumaLinha, true);
+  assert.deepEqual(r.estado, { travada: false, autor: '', atualizadoEm: '' });
 });
 
 // "Nunca foi congelada" e "existe congelamento que nao consegui ler" nao podem
@@ -104,4 +107,54 @@ test('desfazer degrada pra {ok:false, motivo:"rede"} quando o fetch lanca, sem l
   const r = await cliente.desfazer(['2026-08-31']);
   assert.equal(r.ok, false);
   assert.equal(r.motivo, 'rede');
+});
+
+test('carregar inclui o campo estado (travada/autor/atualizadoEm) vindo da Sheet', async () => {
+  const d = fetchDuble([{ linhas: [], estado: { travada: true, autor: 'ana', atualizadoEm: '2026-08-28T22:00:00Z' } }]);
+  const cliente = criarClienteCongelamento({ url: 'https://exemplo/exec', fetch: d.fetch, token: 'tok' });
+  const congelado = await cliente.carregar('2026-08-31', '2026-08-31', ['2026-08-31']);
+  assert.deepEqual(congelado.estado, { travada: true, autor: 'ana', atualizadoEm: '2026-08-28T22:00:00Z' });
+  const corpo = JSON.parse(d.chamadas[0].opcoes.body);
+  assert.equal(corpo.chaveSegunda, '2026-08-31');
+  assert.deepEqual(corpo.chavesFragmentos, ['2026-08-31']);
+});
+
+test('travar manda acao, chaveSegunda, autor e as linhas (quando fornecidas) no corpo', async () => {
+  const d = fetchDuble([{ ok: true, gravadas: 1 }]);
+  const cliente = criarClienteCongelamento({ url: 'https://exemplo/exec', fetch: d.fetch, token: 'tok' });
+  const r = await cliente.travar('2026-08-31', { chaveSegunda: '2026-08-31', linhas: [{ chave: '2026-08-31' }] }, 'ana');
+  assert.equal(r.ok, true);
+  const corpo = JSON.parse(d.chamadas[0].opcoes.body);
+  assert.equal(corpo.acao, 'travar');
+  assert.equal(corpo.token, 'tok');
+  assert.equal(corpo.chaveSegunda, '2026-08-31');
+  assert.equal(corpo.autor, 'ana');
+  assert.equal(corpo.linhas.length, 1);
+});
+
+test('travar sem snapshot manda linhas vazio -- so trava, sem tocar nos pontos', async () => {
+  const d = fetchDuble([{ ok: true, gravadas: 0 }]);
+  const cliente = criarClienteCongelamento({ url: 'https://exemplo/exec', fetch: d.fetch, token: 'tok' });
+  await cliente.travar('2026-08-31', null, 'ana');
+  const corpo = JSON.parse(d.chamadas[0].opcoes.body);
+  assert.deepEqual(corpo.linhas, []);
+});
+
+test('destravar manda acao, chaveSegunda e autor, sem linhas', async () => {
+  const d = fetchDuble([{ ok: true }]);
+  const cliente = criarClienteCongelamento({ url: 'https://exemplo/exec', fetch: d.fetch, token: 'tok' });
+  const r = await cliente.destravar('2026-08-31', 'bruno');
+  assert.equal(r.ok, true);
+  const corpo = JSON.parse(d.chamadas[0].opcoes.body);
+  assert.equal(corpo.acao, 'destravar');
+  assert.equal(corpo.chaveSegunda, '2026-08-31');
+  assert.equal(corpo.autor, 'bruno');
+  assert.equal(corpo.linhas, undefined);
+});
+
+test('travar e destravar degradam para {ok:false, motivo} sem lancar (token e rede)', async () => {
+  const cliente1 = criarClienteCongelamento({ url: 'https://exemplo/exec', fetch: fetchDuble([{ erro: 'token' }]).fetch, token: 'ruim' });
+  assert.deepEqual(await cliente1.travar('2026-08-31', null, 'x'), { ok: false, motivo: 'token' });
+  const cliente2 = criarClienteCongelamento({ url: 'https://exemplo/exec', fetch: fetchDuble([new Error('offline')]).fetch, token: 'tok' });
+  assert.deepEqual(await cliente2.destravar('2026-08-31', 'x'), { ok: false, motivo: 'rede' });
 });
