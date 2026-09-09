@@ -133,6 +133,8 @@ function montarDemandasChegadasMensais({
 // SM.F, SR, ...) caem no mesmo bucket da MATRIZ (rotularTipologia), somando
 // prevista/executada/saldo entre elas. Sem o CSV, o build segue (aviso no
 // console); o funil de Demandas só fica sem a etapa "liberado na SOND".
+// Não recebe `registros` -- a agregação só depende do próprio CSV, o join
+// com a MATRIZ acontece depois, no consumidor do funil (fora desta task).
 function montarLiberadoSond({ caminhoLiberadoSondOnline }) {
   if (!fs.existsSync(caminhoLiberadoSondOnline)) {
     console.warn(`AVISO: ${caminhoLiberadoSondOnline} não encontrado -- funil de Demandas fica sem a etapa "liberado na SOND". Rode "node tools/orcamento/atualizar-liberado-sond.js".`);
@@ -211,7 +213,7 @@ function build({
     registros, periodos, caminhoAvancosOnline, caminhoDemandasSondagemOnline, caminhoLabOnline, caminhoDemandasLabOnline,
   });
 
-  const liberadoSond = montarLiberadoSond({ registros, caminhoLiberadoSondOnline });
+  const liberadoSond = montarLiberadoSond({ caminhoLiberadoSondOnline });
   const propostasGanhas = montarPropostasGanhas({ registros, liberadoSond, caminhoRadarDemandas: config.caminhoRadarDemandas });
 
   const html = renderDashboard({

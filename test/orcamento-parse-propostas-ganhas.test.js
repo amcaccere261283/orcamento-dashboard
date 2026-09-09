@@ -230,3 +230,19 @@ test('montarPropostasGanhas: ponta a ponta -- lê o workbook, acha a aba por pre
     fs.unlinkSync(radarPath);
   }
 });
+
+test('montarPropostasGanhas: Radar de Demandas ausente/inacessível é OPCIONAL -- avisa e devolve lista vazia, não quebra o build', () => {
+  const avisos = [];
+  const warnOriginal = console.warn;
+  console.warn = (msg) => avisos.push(msg);
+  try {
+    const resultado = montarPropostasGanhas({
+      registros: [], liberadoSond: {},
+      caminhoRadarDemandas: path.join(os.tmpdir(), 'radar-demandas-nunca-existiu.xlsx'),
+    });
+    assert.deepEqual(resultado, []);
+    assert.ok(avisos.some(m => /não encontrado/.test(m)), 'aviso deve citar que o arquivo não foi encontrado/está inacessível');
+  } finally {
+    console.warn = warnOriginal;
+  }
+});

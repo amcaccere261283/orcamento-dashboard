@@ -224,7 +224,20 @@ function extrairPropostasGanhas(grid, { registros, liberadoSond } = {}) {
 // Ponto de entrada: lê o Radar de Demandas do disco, acha a aba de
 // propostas por prefixo, e devolve as propostas GANHAS ainda não
 // formalizadas (dedupadas contra registros/liberadoSond).
+//
+// OPCIONAL, mesmo padrão dos outros `caminho*Online` de build-dashboard.js
+// (caminhoDemandasSondagemOnline, caminhoDemandasLabOnline,
+// caminhoLiberadoSondOnline): o arquivo mora num drive de rede (G:\) que
+// pode não estar montado numa máquina qualquer (CI, notebook de outro
+// colaborador) -- diferente da MATRIZ/linha de base, que são fundamentais
+// pro resto do dashboard, propostas GANHAS é um adicional. Sem o arquivo, o
+// build segue (aviso no console); só a etapa "propostas GANHAS ainda não
+// formalizadas" do funil de Demandas fica de fora.
 function montarPropostasGanhas({ registros, liberadoSond, caminhoRadarDemandas }) {
+  if (!fs.existsSync(caminhoRadarDemandas)) {
+    console.warn(`AVISO: ${caminhoRadarDemandas} não encontrado (ou inacessível -- confira se o drive de rede está montado) -- funil de Demandas fica sem a etapa "propostas GANHAS ainda não formalizadas".`);
+    return [];
+  }
   const buffer = fs.readFileSync(caminhoRadarDemandas);
   const nomeAba = acharAbaPropostas(buffer);
   const grid = readXlsxSheetFromBuffer(buffer, nomeAba);
