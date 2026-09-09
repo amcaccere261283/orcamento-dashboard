@@ -185,6 +185,15 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
       caminhoDemandasSondagemOnline: path.join(os.tmpdir(), 'inexistente-sondagem-e2e.csv'),
       caminhoLabOnline: labPath,
       caminhoDemandasLabOnline: path.join(os.tmpdir(), 'inexistente-lab-e2e.json'),
+      // Explícito, e não o default (dist/liberado-sond-online.csv) -- desde
+      // a Task 9 (verificação end-to-end) esse arquivo é commitado de
+      // verdade no repo (convenção documentada no CLAUDE.md), então o
+      // default deixou de ser "ausente" num checkout normal. Sem apontar
+      // pra um caminho garantidamente inexistente aqui, este teste passava
+      // a ler o CSV real do repo e a fixture sintética (2 registros) não
+      // batia mais com o número de linhas do funil (uma por combinação
+      // SUP+tipologia da SOND, não uma por registro da MATRIZ).
+      caminhoLiberadoSondOnline: path.join(os.tmpdir(), 'inexistente-liberado-sond-e2e.csv'),
     });
     const html = fs.readFileSync(outPath, 'utf8');
 
@@ -202,9 +211,10 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
     // -- prova que a ligação (Parte 1 da Task 6) está de fato acontecendo, não
     // só que a função existe isolada (já coberta em
     // test/orcamento-compute-demandas-funil.test.js). Sem liberadoSond real
-    // nesta fixture (caminhoLiberadoSondOnline não foi passado a build()),
-    // uma linha por registro da MATRIZ ainda aparece (contratado real,
-    // liberado/executado zerados por falta de entrada na SOND).
+    // nesta fixture (caminhoLiberadoSondOnline aponta pra um arquivo
+    // inexistente), uma linha por registro da MATRIZ ainda aparece
+    // (contratado real, liberado/executado zerados por falta de entrada na
+    // SOND).
     assert.ok(Array.isArray(dados.demandasFunilLinhas), 'o blob decifrado tem que trazer demandasFunilLinhas, mesmo vazio');
     assert.equal(dados.demandasFunilLinhas.length, registros.length, 'uma linha do funil por registro da MATRIZ, sem entradas extras da SOND (liberadoSond vazio nesta fixture)');
     const linhaFunilSP = dados.demandasFunilLinhas.find(l => l.tipologia === 'SP');
