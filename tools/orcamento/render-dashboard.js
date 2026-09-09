@@ -149,6 +149,10 @@ function fecharSerieMensal(totalMensal, realizadoMensal, vigenteIdx, fechar) {
 function fecharTendenciaVigente(dados, vigenteIdx) {
   if (dados && dados.demandasChegadasMensais) window.__DEMANDAS_MENSAIS__ = dados.demandasChegadasMensais;
   if (dados && dados.demandasSaldoAbertura) window.__DEMANDAS_SALDO_ABERTURA__ = dados.demandasSaldoAbertura;
+  if (dados && dados.liberadoSond) window.__LIBERADO_SOND__ = dados.liberadoSond;
+  if (dados && dados.propostasGanhas) window.__PROPOSTAS_GANHAS__ = dados.propostasGanhas;
+  if (dados && dados.demandasFunilLinhas) window.__DEMANDAS_FUNIL_LINHAS__ = dados.demandasFunilLinhas;
+  if (dados && dados.demandasFunilPropostas) window.__DEMANDAS_FUNIL_PROPOSTAS__ = dados.demandasFunilPropostas;
   var registros = (dados && dados.registros) ? dados.registros : dados;
   if (vigenteIdx < 0 || vigenteIdx > 11) return registros; // fora do ano coberto -- nada a fechar
   return registros.map(function (registro) {
@@ -1048,6 +1052,86 @@ function aplicarBuscaAlertas() {
   });
 }
 
+// ---- Aba Demandas -- funil contratado(MATRIZ) -> liberado(SOND) ->
+// executado, já pré-montado no BUILD por montarFunilDemandas (ver
+// tools/orcamento/compute-demandas-funil.js) e recebido pronto em
+// window.__DEMANDAS_FUNIL_LINHAS__ (ver fecharTendenciaVigente acima). Sem
+// dimensão/período -- é um retrato, não uma série mensal -- então, ao
+// contrário de Alertas, não há reconstrução de cabeçalho por seletor: só
+// busca + 1 filtro de tipologia recalculam o corpo inteiro (mesma filosofia
+// "reconstrói tudo, sem estado incremental" de recalcularAlertas). --------
+
+function linhaDemandasCombina(linha, termo, filtroTipologia) {
+  if (filtroTipologia && filtroTipologia.size > 0 && !filtroTipologia.has(linha.tipologia)) return false;
+  if (termo === '') return true;
+  var busca = normalizarBusca([linha.sup, linha.tomador, linha.tipologia].join(' '));
+  return busca.indexOf(termo) !== -1;
+}
+
+// tomador null (linhas sintéticas que só existem na SOND, sem contrato
+// casado na MATRIZ -- ver o comentário de cabeçalho de
+// compute-demandas-funil.js) mostra '—', não 'null'/vazio.
+function renderLinhaDemandas(linha) {
+  return '<tr>' +
+    '<td>' + (linha.tomador ? escapeHtml(linha.tomador) : '—') + '</td>' +
+    '<td>' + escapeHtml(linha.sup) + '</td>' +
+    '<td>' + escapeHtml(linha.tipologia) + '</td>' +
+    '<td class="num">' + formatarNumero(linha.contratado, 0) + '</td>' +
+    '<td class="num">' + formatarNumero(linha.liberado, 0) + '</td>' +
+    '<td class="num">' + formatarNumero(linha.executado, 0) + '</td>' +
+    '<td class="num">' + formatarNumero(linha.saldoLiberadoNaoExecutado, 0) + '</td>' +
+    '<td class="num">' + formatarNumero(linha.saldoAliberar, 0) + '</td>' +
+    '</tr>';
+}
+
+// Reaproveita a mesma classe (linha-total linha-total-geral) da tabela
+// principal (ver cssBase() em tools/comum/render-shell.js) -- fundo âmbar e
+// borda de destaque idênticos, sem precisar de CSS novo. Soma as linhas JÁ
+// filtradas (busca + tipologia), não o total geral fixo -- muda junto com o
+// recorte, mesma convenção de indicesSubtotal em recalcularTabela.
+function renderLinhaTotalDemandas(linhas) {
+  return '<tr class="linha-total linha-total-geral">' +
+    '<td></td><td></td><td>TOTAL</td>' +
+    '<td class="num">' + formatarNumero(somar(linhas.map(function (l) { return l.contratado; })), 0) + '</td>' +
+    '<td class="num">' + formatarNumero(somar(linhas.map(function (l) { return l.liberado; })), 0) + '</td>' +
+    '<td class="num">' + formatarNumero(somar(linhas.map(function (l) { return l.executado; })), 0) + '</td>' +
+    '<td class="num">' + formatarNumero(somar(linhas.map(function (l) { return l.saldoLiberadoNaoExecutado; })), 0) + '</td>' +
+    '<td class="num">' + formatarNumero(somar(linhas.map(function (l) { return l.saldoAliberar; })), 0) + '</td>' +
+    '</tr>';
+}
+
+function renderCorpoDemandas(linhas) {
+  return linhas.map(renderLinhaDemandas).join('') + renderLinhaTotalDemandas(linhas);
+}
+
+function renderLinhaPropostaGanha(p) {
+  return '<tr>' +
+    '<td>' + escapeHtml(p.cliente) + '</td>' +
+    '<td>' + escapeHtml(p.clienteFinal) + '</td>' +
+    '<td>' + escapeHtml(p.sup) + '</td>' +
+    '<td>' + escapeHtml(p.tipologia) + '</td>' +
+    '<td class="num">' + formatarNumero(p.quantidade, 0) + '</td>' +
+    '<td>' + escapeHtml(p.origem) + '</td>' +
+    '</tr>';
+}
+
+function renderCorpoPropostasGanhas(propostas) {
+  return propostas.map(renderLinhaPropostaGanha).join('');
+}
+
+// __DEMANDAS_FUNIL_LINHAS__/__DEMANDAS_FUNIL_PROPOSTAS__ só existem quando
+// fecharTendenciaVigente rodou com o campo presente no blob (mesma guarda
+// condicional de __DEMANDAS_MENSAIS__/__LIBERADO_SOND__ acima) -- "|| []"
+// cobre tanto o build antigo (campo ausente) quanto o live-refresh (que
+// nunca recalcula esse funil, ver o cabeçalho de compute-demandas-funil.js).
+function recalcularDemandas() {
+  var linhas = window.__DEMANDAS_FUNIL_LINHAS__ || [];
+  var termo = normalizarBusca(document.getElementById('busca-demandas').value);
+  var linhasFiltradas = linhas.filter(function (l) { return linhaDemandasCombina(l, termo, filtrosDemandas.tipologia); });
+  document.getElementById('corpo-demandas').innerHTML = renderCorpoDemandas(linhasFiltradas);
+  document.getElementById('corpo-demandas-propostas').innerHTML = renderCorpoPropostasGanhas(window.__DEMANDAS_FUNIL_PROPOSTAS__ || []);
+}
+
 // Tooltip único, delegado (os SVGs são recriados via innerHTML a cada
 // recalcularTabela, então um listener por elemento seria descartado toda
 // hora) -- qualquer elemento com [data-tooltip] dentro da seção de
@@ -1072,9 +1156,11 @@ function alternarAba(aba) {
   document.getElementById('secao-tabela').style.display = aba === 'tabela' ? '' : 'none';
   document.getElementById('secao-grafico').style.display = aba === 'grafico' ? '' : 'none';
   document.getElementById('secao-alertas').style.display = aba === 'alertas' ? '' : 'none';
+  document.getElementById('secao-demandas').style.display = aba === 'demandas' ? '' : 'none';
   document.getElementById('aba-tabela').classList.toggle('aba-ativa', aba === 'tabela');
   document.getElementById('aba-grafico').classList.toggle('aba-ativa', aba === 'grafico');
   document.getElementById('aba-alertas').classList.toggle('aba-ativa', aba === 'alertas');
+  document.getElementById('aba-demandas').classList.toggle('aba-ativa', aba === 'demandas');
 }
 
 function preencherLinha(linha, valoresLista, serie, dimensao, valoresListaRealizado) {
@@ -1523,6 +1609,18 @@ var FILTROS_ALERTAS_CONFIG = [
   ] },
 ];
 
+// Filtro-multi próprio da aba Demandas -- 'campo: tipologia' sem
+// opcoesFixas cai no fallback genérico de opcoesFiltro (tools/comum/
+// render-shell.js): linhasDistintas(registros, cfg.campo), que aqui recebe
+// window.__DEMANDAS_FUNIL_LINHAS__ (não window.__REGISTROS__) no lugar de
+// 'registros' -- funciona porque cada linha do funil também tem um campo
+// 'tipologia'. estado.categoria nunca existe em filtrosDemandas, então o
+// desvio de cascata categoria->tipologia (mesma função, usado por
+// FILTROS_CONFIG) nunca dispara aqui.
+var FILTRO_DEMANDAS_TIPOLOGIA_CONFIG = { id: 'filtro-demandas-tipologia', chave: 'tipologia', campo: 'tipologia', rotuloPadrao: 'Tipologia' };
+var filtrosDemandas = { tipologia: new Set() };
+function aoMudarFiltroDemandas(cfg) { recalcularDemandas(); }
+
 var filtrosAlertas = {};
 FILTROS_ALERTAS_CONFIG.forEach(function (cfg) { filtrosAlertas[cfg.chave] = new Set(); });
 filtrosAlertas.agruparPor.add('sup');
@@ -1654,10 +1752,14 @@ function montarDashboard(registros) {
   document.getElementById('aba-tabela').addEventListener('click', function () { alternarAba('tabela'); });
   document.getElementById('aba-grafico').addEventListener('click', function () { alternarAba('grafico'); });
   document.getElementById('aba-alertas').addEventListener('click', function () { alternarAba('alertas'); });
+  document.getElementById('aba-demandas').addEventListener('click', function () { alternarAba('demandas'); });
   document.getElementById('busca-alertas').addEventListener('input', aplicarBuscaAlertas);
+  document.getElementById('busca-demandas').addEventListener('input', recalcularDemandas);
+  montarFiltroMulti(FILTRO_DEMANDAS_TIPOLOGIA_CONFIG, window.__DEMANDAS_FUNIL_LINHAS__ || [], filtrosDemandas, aoMudarFiltroDemandas);
   inicializarTooltipGrafico();
   recalcularTabela();
   recalcularAlertas();
+  recalcularDemandas();
 }
 
 // ---- Atualização ao vivo (busca a Sheet espelho publicada, sem tocar no
@@ -2048,7 +2150,15 @@ const FILTROS_ALERTAS = [
   { id: 'filtro-alertas-status', rotulo: 'Status' },
 ];
 
-// As três abas de visualização, na ordem em que aparecem; Tabela abre
+// Único filtro próprio da aba Demandas -- mesmo componente filtro-multi
+// (markupFiltroMulti, via markupFiltros) dos demais, servidor só emite o
+// gatilho vazio, o JS de cliente preenche as opções (ver
+// FILTRO_DEMANDAS_TIPOLOGIA_CONFIG em SCRIPT_CLIENTE_TABELA).
+const FILTROS_DEMANDAS = [
+  { id: 'filtro-demandas-tipologia', rotulo: 'Tipologia' },
+];
+
+// As quatro abas de visualização, na ordem em que aparecem; Tabela abre
 // selecionada.
 const ABAS_VISUALIZACAO = [
   { id: 'aba-tabela', rotulo: 'Tabela', ativa: true,
@@ -2057,6 +2167,8 @@ const ABAS_VISUALIZACAO = [
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>' },
   { id: 'aba-alertas', rotulo: 'Alertas', ativa: false,
     svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14.18A2 2 0 0 0 3.9 21h16.2a2 2 0 0 0 1.79-2.96L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' },
+  { id: 'aba-demandas', rotulo: 'Demandas', ativa: false,
+    svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16l-6 8v6l-4 2v-8L4 4z"/></svg>' },
 ];
 
 // A faixa de ações da barra principal e a nota de premissa: markup pronto,
@@ -2071,7 +2183,7 @@ ${markupAbas(ABAS_VISUALIZACAO, '        ')}
 
 const MARKUP_NOTA_PREMISSA = `      <div id="nota-premissa-produtividade" class="nota-premissa" style="display:none">Premissa: Produtividade = Volume ÷ (Equipes × dias do mês) — dias = 15 em Janeiro e Dezembro, 30 nos demais meses.</div>`;
 
-function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha, demandasChegadasMensais = {}, demandasSaldoAbertura = {} }) {
+function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha, demandasChegadasMensais = {}, demandasSaldoAbertura = {}, liberadoSond = {}, propostasGanhas = [], demandasFunilLinhas = [], demandasFunilPropostas = [] }) {
   if (!senha) {
     throw new Error('renderDashboard requer "senha" -- o conteúdo (SUP/Grupo/Tomador/Tipologia/valores) é cifrado com ela antes de ir pro HTML.');
   }
@@ -2083,6 +2195,10 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     })),
     demandasChegadasMensais,
     demandasSaldoAbertura,
+    liberadoSond,
+    propostasGanhas,
+    demandasFunilLinhas,
+    demandasFunilPropostas,
   });
   const dadosCifrados = cifrarComSenha(registrosJson, senha);
   const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');
@@ -2147,6 +2263,28 @@ ${markupFiltros(FILTROS_ALERTAS, { recuo: '      ', classes: 'filtros-alertas' }
       <table id="tabela-alertas">
         <thead id="cabecalho-alertas"></thead>
         <tbody id="corpo-alertas"></tbody>
+      </table>
+      </div>
+    </div>
+    <div id="secao-demandas" style="display:none">
+${markupFiltros(FILTROS_DEMANDAS, { recuo: '      ', classes: 'filtros-alertas' })}
+      <input id="busca-demandas" type="text" class="busca-alertas" placeholder="Buscar..." autocomplete="off">
+      <div class="table-scroll">
+      <table id="tabela-demandas">
+        <!-- Sem ordenação por clique de propósito (deviação documentada do
+             plano original): nenhuma outra tabela deste dashboard (Tabela,
+             Alertas) é ordenável, então acrescentar só aqui seria UX
+             inconsistente -- decisão do dono do projeto na revisão final. -->
+        <thead id="cabecalho-demandas"><tr><th>Cliente</th><th>Contrato</th><th>Tipologia</th><th>Contratado</th><th>Liberado (SOND)</th><th>Executado</th><th>Saldo liberado não executado</th><th>Saldo a liberar</th></tr></thead>
+        <tbody id="corpo-demandas"></tbody>
+      </table>
+      </div>
+      <h3 class="demandas-proposta-ganha">Propostas ganhas ainda não cadastradas</h3>
+      <div class="nota-premissa">Aparecem aqui só até o contrato ser cadastrado na SOND/MATRIZ -- a partir daí a linha some sozinha desta lista.</div>
+      <div class="table-scroll">
+      <table id="tabela-demandas-propostas">
+        <thead><tr><th>Cliente</th><th>Cliente Final</th><th>Contrato</th><th>Tipologia</th><th>Quantidade</th><th>Origem</th></tr></thead>
+        <tbody id="corpo-demandas-propostas"></tbody>
       </table>
       </div>
     </div>

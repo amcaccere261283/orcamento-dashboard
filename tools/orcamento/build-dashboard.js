@@ -13,11 +13,14 @@ const { excelSerialParaData } = require('../comum/datas.js');
 // tools/comum/linha-base.js, consumidos pelas duas páginas -- ver o
 // comentário de cabeçalho de lá.
 const { reconciliarLinhaBase, chaveMatriz } = require('../comum/linha-base.js');
+const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const config = require('./config.js');
 const { parseCsvGrid } = require('../semanal/parse-matriz-cliente.js');
 const { parseAvancos } = require('../semanal/parse-avancos.js');
 const { parseLab } = require('../semanal/parse-lab.js');
 const { redirecionarSupsDesconhecidos, chegadasMensaisPorRegistro, saldoAberturaPorRegistro } = require('../semanal/compute-demandas.js');
+const { montarPropostasGanhas } = require('./parse-propostas-ganhas.js');
+const { montarFunilDemandas } = require('./compute-demandas-funil.js');
 
 const RESUMO_ZERO = { pico: 0, media: 0, prod: 0, dias: 0 };
 
@@ -191,6 +194,49 @@ function calibrarSaldoAberturaLab({ registros, periodos, chegadasMensais, saldoA
   return saldoCalibrado;
 }
 
+// Lê dist/liberado-sond-online.csv (OPCIONAL -- gerado por
+// atualizar-liberado-sond.js, que precisa de chave de API e rede, então não
+// roda em todo build local): uma linha por (contrato, sigla), com o volume
+// PREVISTO/EXECUTADO/SALDO já cadastrado pra execução na SOND. Agrega por
+// chaveMatriz(contrato, tipologia canônica) -- várias siglas cruas (SM,
+// SM.F, SR, ...) caem no mesmo bucket da MATRIZ (rotularTipologia), somando
+// prevista/executada/saldo entre elas. Sem o CSV, o build segue (aviso no
+// console); o funil de Demandas só fica sem a etapa "liberado na SOND".
+// Não recebe `registros` -- a agregação só depende do próprio CSV, o join
+// com a MATRIZ acontece depois, no consumidor do funil (fora desta task).
+function montarLiberadoSond({ caminhoLiberadoSondOnline }) {
+  if (!fs.existsSync(caminhoLiberadoSondOnline)) {
+    console.warn(`AVISO: ${caminhoLiberadoSondOnline} não encontrado -- funil de Demandas fica sem a etapa "liberado na SOND". Rode "node tools/orcamento/atualizar-liberado-sond.js".`);
+    return {};
+  }
+
+  const grid = parseCsvGrid(fs.readFileSync(caminhoLiberadoSondOnline, 'utf8'));
+  const headerRow = grid[0] || [];
+  const colContrato = headerRow.indexOf('Contrato');
+  const colSigla = headerRow.indexOf('Sigla');
+  const colPrevista = headerRow.indexOf('Prevista');
+  const colExecutada = headerRow.indexOf('Executada');
+  const colSaldo = headerRow.indexOf('Saldo');
+  const faltando = ['Contrato', 'Sigla', 'Prevista', 'Executada', 'Saldo'].filter(nome => headerRow.indexOf(nome) === -1);
+  if (faltando.length) {
+    throw new Error(`${caminhoLiberadoSondOnline}: coluna(s) obrigatória(s) não encontrada(s) no cabeçalho: ${faltando.join(', ')}.`);
+  }
+
+  const liberadoSond = {};
+  for (let i = 1; i < grid.length; i++) {
+    const row = grid[i];
+    if (!row || row.every(v => String(v || '').trim() === '')) continue;
+    const contrato = row[colContrato];
+    const tipologia = rotularTipologia(row[colSigla]);
+    const chave = chaveMatriz(contrato, tipologia);
+    if (!liberadoSond[chave]) liberadoSond[chave] = { prevista: 0, executada: 0, saldo: 0 };
+    liberadoSond[chave].prevista += Number(row[colPrevista]) || 0;
+    liberadoSond[chave].executada += Number(row[colExecutada]) || 0;
+    liberadoSond[chave].saldo += Number(row[colSaldo]) || 0;
+  }
+  return liberadoSond;
+}
+
 const LOGO_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-suporte-infra-negativo.png');
 const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-alvo.png');
 
@@ -211,6 +257,7 @@ function build({
   caminhoDemandasSondagemOnline = path.join(__dirname, '..', '..', 'dist', 'demandas-sondagem-online.csv'),
   caminhoLabOnline = path.join(__dirname, '..', '..', 'dist', 'lab-online.csv'),
   caminhoDemandasLabOnline = path.join(__dirname, '..', '..', 'dist', 'demandas-lab-online.json'),
+  caminhoLiberadoSondOnline = path.join(__dirname, '..', '..', 'dist', 'liberado-sond-online.csv'),
 } = {}) {
   if (!senha) {
     throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
@@ -238,8 +285,31 @@ function build({
     registros, periodos, chegadasMensais: demandasChegadasMensais, saldoAbertura: demandasSaldoAberturaBruto,
   });
 
+  const liberadoSond = montarLiberadoSond({ caminhoLiberadoSondOnline });
+  const propostasGanhas = montarPropostasGanhas({ registros, liberadoSond, caminhoRadarDemandas: config.caminhoRadarDemandas });
+  const { linhas: demandasFunilLinhas, propostasGanhas: demandasFunilPropostas } = montarFunilDemandas({ registros, liberadoSond, propostasGanhas });
+
+  // Linhas "órfãs": chave do liberadoSond sem registro correspondente na
+  // MATRIZ (montarFunilDemandas marca essas com tomador null -- ver o
+  // comentário lá). Sem esse aviso elas ficam invisíveis no console --
+  // 54 numa rodada real, quase sempre porque o `numero_contrato` do
+  // catálogo (extrato-gerencial-mensal/contratos.yaml) não bate
+  // caractere-a-caractere com o `sup` da MATRIZ (ex.: hífen faltando, tipo
+  // "SUP8224-25 (RS)" em vez de "SUP-8224-25 (RS)") -- não é bug de junção,
+  // é mismatch de dado; ver compute-demandas-funil.js. Listar os SUPs (até
+  // 20) é o que deixa um humano notar esse tipo específico de erro de
+  // digitação sem precisar decifrar o dashboard.
+  const orfasFunilDemandas = demandasFunilLinhas.filter(linha => linha.tomador === null);
+  if (orfasFunilDemandas.length > 0) {
+    const sups = orfasFunilDemandas.map(linha => linha.sup);
+    const detalhe = sups.length <= 20 ? `: ${sups.join(', ')}` : ' (lista grande demais para exibir, confira dist/liberado-sond-online.csv)';
+    console.warn(`AVISO: funil de Demandas tem ${orfasFunilDemandas.length} linha(s) órfã(s) do liberadoSond sem registro correspondente na MATRIZ${detalhe}`);
+  }
+
   const html = renderDashboard({
     registros, periodos, generatedAt: today, senha, demandasChegadasMensais, demandasSaldoAbertura,
+    liberadoSond, propostasGanhas,
+    demandasFunilLinhas, demandasFunilPropostas,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
   });
 
@@ -259,4 +329,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, anexarPrevistoInicial, montarDemandasChegadasMensais, calibrarSaldoAberturaLab };
+module.exports = { build, anexarPrevistoInicial, montarDemandasChegadasMensais, calibrarSaldoAberturaLab, montarLiberadoSond };

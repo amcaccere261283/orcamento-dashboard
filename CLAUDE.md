@@ -11,7 +11,7 @@ ORCAMENTO_SENHA='...' node tools/orcamento/build-dashboard.js   # gera dist/orca
 node --test test/*.test.js                                      # testes usam senha falsa
 ```
 
-Duas dependências de máquina, ambas fora do git:
+Cinco dependências de máquina, todas fora do git:
 
 - **`ORCAMENTO_SENHA`** — o blob de dados embutido no HTML é cifrado em AES-256-GCM com
   essa senha. Como o HTML gerado vai para um Pages público, a senha **nunca** pode ser
@@ -27,6 +27,24 @@ Duas dependências de máquina, ambas fora do git:
 - **As planilhas de origem**, em caminhos `G:\Meu Drive\PMO\...` (ver
   `tools/orcamento/config.js`): a MATRIZ viva e o estudo de linha de base. Exige o Google
   Drive montado em `G:` com acesso à pasta PMO.
+- **`SOND_API_KEY`** — `tools/orcamento/atualizar-liberado-sond.js` (fetcher da aba
+  Demandas, porte de `extrato-gerencial-mensal/saldo_contratos.py`) autentica na API
+  PMO/BI com header `X-API-Key`. Resolve por env var primeiro; se ausente, cai no MESMO
+  arquivo fixo que o script Python já usa, `extrato-gerencial-mensal/API/chave_api.txt`
+  (fora deste repo git, sem override por env var pro caminho em si). A chave em si
+  **nunca** vai em arquivo do repositório — só a env var ou o arquivo de fallback fora
+  do git.
+- **`tools/orcamento/config.js:caminhoContratosSond`** — catálogo de contratos SOND
+  (`extrato-gerencial-mensal/contratos.yaml`, sibling repo), fonte do fetcher acima.
+  Aceita override por `ORCAMENTO_CAMINHO_CONTRATOS_SOND`.
+- **`tools/orcamento/config.js:caminhoRadarDemandas`** — planilha "Radar de Demandas"
+  (`G:\Meu Drive\PMO\...\Modelo\Radar de Demandas - R02.xlsx`), fonte das propostas
+  GANHAS ainda não formalizadas (ver "Demandas: funil contratado → liberado →
+  executado" abaixo). Aceita override por `ORCAMENTO_CAMINHO_RADAR_DEMANDAS`. **O nome
+  do arquivo carrega a revisão ("R02") e precisa de bump MANUAL** neste caminho quando
+  o dono do projeto cortar uma revisão nova (R03, R04...) — sem o bump, o fetch aponta
+  pra um arquivo que já não existe mais e a etapa "propostas GANHAS" do funil some
+  silenciosamente (é opcional, ver abaixo: falta de arquivo vira aviso, não erro).
 
 ## O HTML é gerado — não edite o build
 
@@ -155,6 +173,82 @@ aba Gráficos da página semanal (duas atribuições de `usarMilhares`
 hardcoded pra `false`, por um pedido anterior do dono do projeto) -- aqui
 ficou parametrizado em vez de hardcoded porque só UMA dimensão (Volume)
 precisa da exceção, não o painel inteiro.
+
+## Demandas: funil contratado → liberado → executado (2026-09-08)
+
+Quarta aba do dashboard de orçamento (`{ id: 'aba-demandas', rotulo: 'Demandas' }` em
+`tools/orcamento/render-dashboard.js`), separada do painel "Demandas" que já existia
+dentro da aba Gráfico (dimensão Volume, ver seção acima — nomes iguais, conteúdos
+diferentes). Mostra, por (SUP, tipologia), três estágios do mesmo volume: **contratado**
+(Previsto da MATRIZ), **liberado na SOND** (cadastrado pra execução via API PMO/BI,
+pode ainda não ter sido executado) e **executado**, mais os saldos derivados (liberado
+não executado, a liberar). Uma segunda tabela na mesma aba lista as **propostas GANHAS**
+que ainda não viraram contrato formalizado nem liberação SOND — pipeline comercial
+futuro, não execução em curso.
+
+**É calculada no BUILD, não ao vivo.** `montarFunilDemandas`
+(`tools/orcamento/compute-demandas-funil.js`) roda em Node durante
+`build-dashboard.js` e o resultado pronto (`demandasFunilLinhas`/
+`demandasFunilPropostas`) vai dentro do blob cifrado, como
+`window.__DEMANDAS_FUNIL_LINHAS__`/`window.__DEMANDAS_FUNIL_PROPOSTAS__`. **O botão
+"Atualizar dados" NÃO recalcula esta aba** — mesma limitação já documentada para a
+série Demandas do Gráfico (`window.__DEMANDAS_MENSAIS__` acima): o live-refresh só
+busca a Sheet espelho da MATRIZ, nunca `liberado-sond-online.csv` nem o Radar de
+Demandas. Pra ver dado novo aqui é preciso rodar os fetchers e reconstruir, não só
+clicar no botão.
+
+**Uma linha de propostas GANHAS desaparece sozinha** assim que o SUP correspondente
+aparece formalizado na MATRIZ (`registros`) ou já liberado na SOND
+(`liberadoSond`) nesta mesma rodada de build — dedup por SUP-base em
+`extrairPropostasGanhas` (`tools/orcamento/parse-propostas-ganhas.js`). Não há
+intervenção manual pra tirar uma proposta da lista: ela some no build seguinte ao
+contrato virar realidade em qualquer uma das duas fontes.
+
+### Fontes novas desta aba
+
+- **`node tools/orcamento/atualizar-liberado-sond.js`** — porta de
+  `saldo_contratos.py` (`extrato-gerencial-mensal`, sibling repo). Consulta a API
+  PMO/BI (`GET /api/v1/pmo/extrato`, header `X-API-Key`) uma vez por contrato ATIVO do
+  catálogo (`tools/orcamento/parse-contratos-yaml.js`) e grava
+  `dist/liberado-sond-online.csv` (`Cliente,Contrato,Sigla,Prevista,Executada,Saldo`).
+  Precisa de `SOND_API_KEY` (ou do arquivo de fallback — ver "Duas dependências de
+  máquina" acima). Rate-limitado a ~1 chamada a cada 2,1s (30 req/min permitidas, com
+  folga) — com ~40+ contratos ativos, a rodada leva cerca de um a dois minutos, mais se
+  a API devolver 429 (retry com backoff, teto de 50 tentativas). Falha por contrato
+  individual não aborta o resto: loga aviso em stderr e segue pros demais. **Se você
+  pular esta busca, o build continua normal** — `montarLiberadoSond`
+  (`build-dashboard.js`) trata o CSV como opcional (aviso no console se faltar), e o
+  funil de Demandas só fica sem a etapa "liberado na SOND" (contratado/executado ainda
+  aparecem, liberado fica 0).
+- **A aba de propostas do Radar de Demandas é resolvida por PREFIXO, não por nome
+  fixo.** O nome real inclui a data de exportação (ex.: `"propostas-2026-09-08 (1)"`)
+  e muda a cada corte novo da planilha — `acharAbaPropostas`
+  (`tools/orcamento/parse-propostas-ganhas.js`) casa qualquer aba cujo nome comece com
+  `"propostas"` (case-insensitive). **Nomeie a próxima aba de propostas seguindo essa
+  convenção** (começar com "propostas", o resto livre) para o parser continuar achando
+  ela sem mudança de código. Zero abas batendo o prefixo, ou duas ou mais, **falha o
+  build alto** de propósito — a mensagem de erro lista todas as abas do workbook, pra
+  facilitar corrigir o nome ou remover a aba duplicada; adivinhar aqui arriscaria ler a
+  aba errada em silêncio.
+
+### `dist/liberado-sond-online.csv` não tem cópia em `docs/`, ao contrário dos outros CSVs "online"
+
+Os outros `*-online.csv`/`.json` do projeto (Avanços, Lab, Equipes, Demandas de
+Sondagem/Lab — ver "Avanços online" na seção Planejamento Semanal) entram no `PARES` de
+`test/publicacao-docs-sincronizado.test.js` e recebem `cp dist/X docs/X` a cada deploy
+porque o **botão "Atualizar dados" os busca ao vivo no navegador**, direto do domínio
+publicado (mesmo origin do GitHub Pages, sem CORS) — sem a cópia em `docs/`, o botão
+fica buscando uma versão velha mesmo depois de reconstruir. `liberado-sond-online.csv` é
+diferente: é lido **só por `build-dashboard.js`, em Node, no momento do build** —
+confirmado acima que o botão "Atualizar dados" não toca nesta aba, e não há nenhum
+`fetch`/URL pra este arquivo em `render-dashboard.js` (o funil pronto já viaja dentro do
+blob cifrado). Por isso **este arquivo não precisa de par em `PARES`, nem de `cp` pra
+`docs/`** — não é um esquecimento, é a mesma lógica que já isenta o Radar de Demandas
+(`.xlsx` em `G:\`) de qualquer publicação. Ele **ainda deve ser commitado em `dist/`**
+(mesma convenção dos outros 4 CSVs online: um clone novo builda sem precisar rodar o
+fetcher na hora), só não ganha `cp` pra `docs/`. **A "Regra permanente" de publicação no
+topo deste arquivo não precisa de passo novo por causa desta feature** — nenhum arquivo
+adicional entra na lista de cópias `dist/` → `docs/`.
 
 ## Pendência conhecida: aba Gerencial
 
