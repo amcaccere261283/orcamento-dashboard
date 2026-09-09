@@ -53,6 +53,10 @@ test('PZ.SM e INA entram em SM / SM.F / SR -- reclassificados a pedido do dono e
   assert.strictEqual(rotularTipologia('INA'), 'SM / SM.F / SR');
 });
 
+test('INCL.SM entra em SM / SM.F / SR -- encontrado em live API pull, mesma família de instrumentação', () => {
+  assert.strictEqual(rotularTipologia('INCL.SM'), 'SM / SM.F / SR');
+});
+
 test('SN é o único rótulo que sobra sem equivalente na MATRIZ -- vira Especiais', () => {
   assert.strictEqual(rotularTipologia('SN'), 'Especiais');
 });

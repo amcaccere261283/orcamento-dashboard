@@ -38,6 +38,10 @@ const fs = require('node:fs');
 // (que só rotula depois do join com o Link 3). Contaria em 'PI', decisão
 // confirmada com o dono do projeto -- acrescentado agora pra não travar o
 // build quando essa OS for indexada pelo Link 3.
+//
+// INCL.SM acrescentado (encontrado em Task 9 de live API pull): rótulo
+// novo retornado 14 vezes pela API SOND PMO/BI. Passa a contar em
+// 'SM / SM.F / SR' -- mesma família de instrumentação que SM.A, PZ.SM e INA.
 // <<< INICIO CLIENTE
 const MAPA_TIPOLOGIAS = {
   SP: 'SP',
@@ -54,6 +58,7 @@ const MAPA_TIPOLOGIAS = {
   'SM.A': 'SM / SM.F / SR',
   'PZ.SM': 'SM / SM.F / SR',
   INA: 'SM / SM.F / SR',
+  'INCL.SM': 'SM / SM.F / SR',
   'SP.F': 'SP',
   'PZ.SP': 'SP',
   'SEG.A': 'SEG.A',
