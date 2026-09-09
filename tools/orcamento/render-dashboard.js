@@ -149,6 +149,8 @@ function fecharSerieMensal(totalMensal, realizadoMensal, vigenteIdx, fechar) {
 function fecharTendenciaVigente(dados, vigenteIdx) {
   if (dados && dados.demandasChegadasMensais) window.__DEMANDAS_MENSAIS__ = dados.demandasChegadasMensais;
   if (dados && dados.demandasSaldoAbertura) window.__DEMANDAS_SALDO_ABERTURA__ = dados.demandasSaldoAbertura;
+  if (dados && dados.liberadoSond) window.__LIBERADO_SOND__ = dados.liberadoSond;
+  if (dados && dados.propostasGanhas) window.__PROPOSTAS_GANHAS__ = dados.propostasGanhas;
   var registros = (dados && dados.registros) ? dados.registros : dados;
   if (vigenteIdx < 0 || vigenteIdx > 11) return registros; // fora do ano coberto -- nada a fechar
   return registros.map(function (registro) {
@@ -2071,7 +2073,7 @@ ${markupAbas(ABAS_VISUALIZACAO, '        ')}
 
 const MARKUP_NOTA_PREMISSA = `      <div id="nota-premissa-produtividade" class="nota-premissa" style="display:none">Premissa: Produtividade = Volume ÷ (Equipes × dias do mês) — dias = 15 em Janeiro e Dezembro, 30 nos demais meses.</div>`;
 
-function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha, demandasChegadasMensais = {}, demandasSaldoAbertura = {} }) {
+function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDataUri, senha, demandasChegadasMensais = {}, demandasSaldoAbertura = {}, liberadoSond = {}, propostasGanhas = [] }) {
   if (!senha) {
     throw new Error('renderDashboard requer "senha" -- o conteúdo (SUP/Grupo/Tomador/Tipologia/valores) é cifrado com ela antes de ir pro HTML.');
   }
@@ -2083,6 +2085,8 @@ function renderDashboard({ registros, periodos, generatedAt, logoDataUri, iconDa
     })),
     demandasChegadasMensais,
     demandasSaldoAbertura,
+    liberadoSond,
+    propostasGanhas,
   });
   const dadosCifrados = cifrarComSenha(registrosJson, senha);
   const dadosCifradosJson = JSON.stringify(dadosCifrados).replace(/<\/script/gi, '<\\/script');

@@ -444,6 +444,24 @@ test('renderDashboard embeds demandasSaldoAbertura in the same encrypted blob as
   assert.deepStrictEqual(dadosSemSaldo.demandasSaldoAbertura, {}, 'sem o parâmetro, o blob ainda tem que trazer demandasSaldoAbertura vazio, não undefined');
 });
 
+test('renderDashboard embeds liberadoSond and propostasGanhas in the same encrypted blob, defaulting to {} / [] when omitted', () => {
+  const registro = registroExemplo();
+  const htmlComValores = renderComSenha([registro], {
+    liberadoSond: { 'SUP-7133-24||SM': { prevista: 10, executada: 6, saldo: 4 } },
+    propostasGanhas: [{ sup: 'SUP-7133-24', cliente: 'X', clienteFinal: 'Y', tipologia: 'SM', quantidade: 3, origem: 'Proposta' }],
+  });
+  const pacoteComValores = extrairPacoteCifrado(htmlComValores);
+  const dadosComValores = JSON.parse(decifrarComSenha(pacoteComValores, SENHA_TESTE));
+  assert.deepStrictEqual(dadosComValores.liberadoSond, { 'SUP-7133-24||SM': { prevista: 10, executada: 6, saldo: 4 } });
+  assert.deepStrictEqual(dadosComValores.propostasGanhas, [{ sup: 'SUP-7133-24', cliente: 'X', clienteFinal: 'Y', tipologia: 'SM', quantidade: 3, origem: 'Proposta' }]);
+
+  const htmlSemValores = renderComSenha([registro]);
+  const pacoteSemValores = extrairPacoteCifrado(htmlSemValores);
+  const dadosSemValores = JSON.parse(decifrarComSenha(pacoteSemValores, SENHA_TESTE));
+  assert.deepStrictEqual(dadosSemValores.liberadoSond, {}, 'sem o parâmetro, o blob ainda tem que trazer liberadoSond vazio, não undefined');
+  assert.deepStrictEqual(dadosSemValores.propostasGanhas, [], 'sem o parâmetro, o blob ainda tem que trazer propostasGanhas vazio, não undefined');
+});
+
 test('renderDashboard\'s encrypted blob fails to decrypt with the wrong senha (never silently returns garbage)', () => {
   const html = renderComSenha([registroExemplo()]);
   const pacote = extrairPacoteCifrado(html);
@@ -2144,6 +2162,27 @@ test('fecharTendenciaVigente: também desembrulha demandasSaldoAbertura em windo
   const registrosNovos = [{ sup: 'SUP-Y', tipologia: 'ST', total: null, realizado: null }];
   fecharTendenciaVigente(registrosNovos, 5);
   assert.deepStrictEqual(sandboxWindow.__DEMANDAS_SALDO_ABERTURA__, { 'SUP-X||SP': 7 }, 'live-refresh não deve apagar o saldo de abertura do build');
+});
+
+test('fecharTendenciaVigente: também desembrulha liberadoSond e propostasGanhas em window.__LIBERADO_SOND__/__PROPOSTAS_GANHAS__, mesma regra condicional de window.__DEMANDAS_MENSAIS__', () => {
+  const html = construirHtmlGolden();
+  const { fecharTendenciaVigente, window: sandboxWindow } = extrairFuncoesPuras(html);
+
+  const registro = { sup: 'SUP-X', tipologia: 'SP', total: null, realizado: null };
+  fecharTendenciaVigente({
+    registros: [registro],
+    liberadoSond: { 'SUP-X||SP': { prevista: 10, executada: 6, saldo: 4 } },
+    propostasGanhas: [{ sup: 'SUP-X', cliente: 'X', clienteFinal: 'Y', tipologia: 'SP', quantidade: 2, origem: 'Proposta' }],
+  }, 5);
+  assert.deepStrictEqual(sandboxWindow.__LIBERADO_SOND__, { 'SUP-X||SP': { prevista: 10, executada: 6, saldo: 4 } });
+  assert.deepStrictEqual(sandboxWindow.__PROPOSTAS_GANHAS__, [{ sup: 'SUP-X', cliente: 'X', clienteFinal: 'Y', tipologia: 'SP', quantidade: 2, origem: 'Proposta' }]);
+
+  // live-refresh: array puro, sem liberadoSond/propostasGanhas -- preserva o
+  // que já tinha sido setado no desbloqueio, mesma regra de __DEMANDAS_MENSAIS__.
+  const registrosNovos = [{ sup: 'SUP-Y', tipologia: 'ST', total: null, realizado: null }];
+  fecharTendenciaVigente(registrosNovos, 5);
+  assert.deepStrictEqual(sandboxWindow.__LIBERADO_SOND__, { 'SUP-X||SP': { prevista: 10, executada: 6, saldo: 4 } }, 'live-refresh não deve apagar o liberado SOND do build');
+  assert.deepStrictEqual(sandboxWindow.__PROPOSTAS_GANHAS__, [{ sup: 'SUP-X', cliente: 'X', clienteFinal: 'Y', tipologia: 'SP', quantidade: 2, origem: 'Proposta' }], 'live-refresh não deve apagar as propostas ganhas do build');
 });
 
 test('o gate de senha (tentarDesbloquear) fecha a Tendência com fecharTendenciaVigente logo após decifrar, antes de montarDashboard', () => {
