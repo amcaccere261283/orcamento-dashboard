@@ -64,19 +64,45 @@ test('contratado < liberado: saldoAliberar fica clampado em 0, não fica negativ
   assert.equal(linhas[0].saldoAliberar, 0);
 });
 
-// executado > liberado não deveria acontecer em dado real, mas se
-// liberadoSond[chave].saldo vier negativo num input malformado, este módulo
-// PASSA O VALOR ADIANTE tal como veio -- decisão consciente, não bug: saldo
-// já é calculado upstream (montarLiberadoSond) e é responsabilidade de quem
-// alimenta liberadoSond garantir que ele é coerente; recalcular/clampar aqui
-// esconderia um problema real na fonte em vez de deixá-lo visível.
-test('saldo negativo no liberadoSond (input malformado) passa adiante sem clamp', () => {
+// executado > liberado não deveria acontecer em dado real -- quando acontece,
+// saldoLiberadoNaoExecutado fica negativo (SEM clamp, de propósito: essa
+// coluna precisa fechar exatamente a subtração das duas colunas vizinhas).
+test('executado > liberado: saldoLiberadoNaoExecutado fica negativo, sem clamp', () => {
   const registros = [registro({ sup: 'SUP-0004-26', tipologia: 'VT', tomador: 'Cliente D', total: 100 })];
   const liberadoSond = {
     'SUP-0004-26||VT': { prevista: 50, executada: 80, saldo: -30 },
   };
   const { linhas } = montarFunilDemandas({ registros, liberadoSond, propostasGanhas: [] });
   assert.equal(linhas[0].saldoLiberadoNaoExecutado, -30);
+});
+
+// A revisão final de branch decifrou um build real e achou 66 de 404 linhas
+// em que o campo `saldo` da API SOND NÃO batia com prevista-executada
+// (algumas até negativas sem sentido, ex. liberado=5, executado=0,
+// "saldo"=-25). Este teste prova que o módulo não confia mais nesse campo:
+// mesmo com um `saldo` de entrada deliberadamente errado/inconsistente,
+// saldoLiberadoNaoExecutado é sempre recalculado como liberado - executado.
+test('saldo de entrada inconsistente com prevista/executada é ignorado -- sempre recalcula liberado - executado', () => {
+  const registros = [registro({ sup: 'SUP-0005-26', tipologia: 'BL', tomador: 'Cliente E', total: 100 })];
+  const liberadoSond = {
+    // saldo=-25 aqui não bate com prevista-executada (5-0=5) -- exatamente o
+    // tipo de inconsistência real encontrada na revisão (66/404 linhas).
+    'SUP-0005-26||BL': { prevista: 5, executada: 0, saldo: -25 },
+  };
+  const { linhas } = montarFunilDemandas({ registros, liberadoSond, propostasGanhas: [] });
+  assert.equal(linhas[0].saldoLiberadoNaoExecutado, 5, 'deve ser liberado - executado (5 - 0), não o `saldo` inconsistente da entrada (-25)');
+});
+
+// Mesma prova para a linha sintética (chave do liberadoSond sem registro
+// correspondente) -- o segundo laço de montarFunilDemandas também precisa
+// ignorar entradaLiberado.saldo.
+test('linha órfã (sem registro): saldo de entrada inconsistente também é ignorado', () => {
+  const liberadoSond = {
+    'SUP-9998-26||PI': { prevista: 20, executada: 5, saldo: 999 },
+  };
+  const { linhas } = montarFunilDemandas({ registros: [], liberadoSond, propostasGanhas: [] });
+  assert.equal(linhas.length, 1);
+  assert.equal(linhas[0].saldoLiberadoNaoExecutado, 15, 'deve ser liberado - executado (20 - 5), não o `saldo` inconsistente (999)');
 });
 
 test('propostasGanhas: passthrough com etapa adicionada, mesma contagem', () => {

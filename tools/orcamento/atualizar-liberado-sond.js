@@ -7,9 +7,13 @@
 // etapa posterior do build (Task 3) lê e junta na MATRIZ pelo campo `sup`
 // (== numeroContrato aqui, NÃO contratoId).
 //
-// `saldo = prevista - executada`, o quanto ainda resta do volume liberado por
-// tipo -- não confundir com `pendente` (saldo de OS/pins já solicitados e
-// ainda não executados), que este script não trata.
+// A API SOND devolve um campo `saldo` por (contrato, sigla) -- não confie
+// nele para o cálculo do funil (ver tools/orcamento/compute-demandas-funil.js):
+// a revisão final de branch achou 66 de 404 linhas reais em que `saldo` não
+// batia com `prevista - executada` (algumas até negativas sem sentido). O
+// funil recalcula `liberado - executado` na hora de montar a linha, ignorando
+// este campo. Não confundir também com `pendente` (saldo de OS/pins já
+// solicitados e ainda não executados), que este script não trata.
 
 const fs = require('node:fs');
 const path = require('node:path');

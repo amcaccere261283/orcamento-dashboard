@@ -218,6 +218,23 @@ function build({
   const propostasGanhas = montarPropostasGanhas({ registros, liberadoSond, caminhoRadarDemandas: config.caminhoRadarDemandas });
   const { linhas: demandasFunilLinhas, propostasGanhas: demandasFunilPropostas } = montarFunilDemandas({ registros, liberadoSond, propostasGanhas });
 
+  // Linhas "órfãs": chave do liberadoSond sem registro correspondente na
+  // MATRIZ (montarFunilDemandas marca essas com tomador null -- ver o
+  // comentário lá). Sem esse aviso elas ficam invisíveis no console --
+  // 54 numa rodada real, quase sempre porque o `numero_contrato` do
+  // catálogo (extrato-gerencial-mensal/contratos.yaml) não bate
+  // caractere-a-caractere com o `sup` da MATRIZ (ex.: hífen faltando, tipo
+  // "SUP8224-25 (RS)" em vez de "SUP-8224-25 (RS)") -- não é bug de junção,
+  // é mismatch de dado; ver compute-demandas-funil.js. Listar os SUPs (até
+  // 20) é o que deixa um humano notar esse tipo específico de erro de
+  // digitação sem precisar decifrar o dashboard.
+  const orfasFunilDemandas = demandasFunilLinhas.filter(linha => linha.tomador === null);
+  if (orfasFunilDemandas.length > 0) {
+    const sups = orfasFunilDemandas.map(linha => linha.sup);
+    const detalhe = sups.length <= 20 ? `: ${sups.join(', ')}` : ' (lista grande demais para exibir, confira dist/liberado-sond-online.csv)';
+    console.warn(`AVISO: funil de Demandas tem ${orfasFunilDemandas.length} linha(s) órfã(s) do liberadoSond sem registro correspondente na MATRIZ${detalhe}`);
+  }
+
   const html = renderDashboard({
     registros, periodos, generatedAt: today, senha, demandasChegadasMensais, demandasSaldoAbertura,
     liberadoSond, propostasGanhas,

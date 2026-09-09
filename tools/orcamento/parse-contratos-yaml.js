@@ -49,7 +49,7 @@ function parseContratosYaml(texto) {
         if (temCamposEssenciais(contratoAtual)) {
           contratos.push(normalizarContrato(contratoAtual));
         } else {
-          console.warn('Contrato incompleto descartado (faltam cliente ou contrato_id):', contratoAtual);
+          console.warn('Contrato incompleto descartado (faltam cliente, contrato_id ou numero_contrato):', contratoAtual);
         }
       }
       contratoAtual = {};
@@ -70,7 +70,7 @@ function parseContratosYaml(texto) {
     if (temCamposEssenciais(contratoAtual)) {
       contratos.push(normalizarContrato(contratoAtual));
     } else {
-      console.warn('Contrato incompleto descartado (faltam cliente ou contrato_id):', contratoAtual);
+      console.warn('Contrato incompleto descartado (faltam cliente, contrato_id ou numero_contrato):', contratoAtual);
     }
   }
 
@@ -136,10 +136,15 @@ function processarLinhaDeChaveValor(linha, obj) {
 
 /**
  * Verifica se um contrato tem os campos essenciais para incluir.
- * A partir do YAML real, os campos essenciais parecem ser cliente e contrato_id.
+ * `numero_contrato` é a chave de join usada por todo o funil (chaveMatriz
+ * casa registro.sup com numero_contrato) -- faltando, vira `undefined`,
+ * flui em silêncio pro CSV como célula vazia e produz uma linha do funil
+ * chaveada tipo "||SP" sem nenhum aviso. Exigir aqui, junto com cliente e
+ * contrato_id, faz o mesmo contrato incompleto ser descartado com o mesmo
+ * aviso já existente, em vez de vazar adiante.
  */
 function temCamposEssenciais(contrato) {
-  return contrato.cliente && contrato.contrato_id !== undefined;
+  return contrato.cliente && contrato.contrato_id !== undefined && contrato.numero_contrato;
 }
 
 /**

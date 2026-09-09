@@ -205,6 +205,20 @@ test('extrairPropostasGanhas: SUP sem match em registros nem liberadoSond contin
   assert.equal(resultado[0].origem, 'objeto');
 });
 
+test('extrairPropostasGanhas: duas siglas cruas da MESMA proposta que dobram pro mesmo bucket canônico são SOMADAS, não viram 2 linhas', () => {
+  const grid = [];
+  grid[1] = CABECALHO_PADRAO;
+  // SM e SR são siglas cruas diferentes (dicionário SINONIMOS), mas as duas
+  // caem no mesmo bucket canônico 'SM / SM.F / SR' via rotularTipologia --
+  // esperado: uma linha só, quantidade 50 + 30 = 80.
+  grid[2] = ['SUP-1234-26', 'GANHA', 'Cliente Z', 'Cliente Final Z', 'SM: 50 und / SR: 30 und'];
+  const resultado = extrairPropostasGanhas(grid, {});
+  const doSM = resultado.filter(r => r.tipologia === 'SM / SM.F / SR');
+  assert.equal(doSM.length, 1, 'SM e SR devem se fundir numa única linha do bucket canônico');
+  assert.equal(doSM[0].quantidade, 80);
+  assert.equal(resultado.length, 1, 'nenhuma outra tipologia no texto -- resultado deve ter só essa 1 linha somada');
+});
+
 test('montarPropostasGanhas: ponta a ponta -- lê o workbook, acha a aba por prefixo, filtra GANHA e dedupa', () => {
   const buffer = construirWorkbookPropostas([{
     nome: 'propostas-2026-09-08 (1)',
@@ -224,8 +238,14 @@ test('montarPropostasGanhas: ponta a ponta -- lê o workbook, acha a aba por pre
     assert.ok(sups.has('7777-26'));
     assert.ok(!sups.has('9999-26'), 'já formalizado na MATRIZ -- deve ter sido dedupado');
     assert.ok(!sups.has('8888-26'), 'status PERDIDA -- nunca deveria ter entrado');
+    // Fix 2 (revisão final de branch): o resultado sai no vocabulário
+    // CANÔNICO da MATRIZ (rotularTipologia), não nas siglas cruas do
+    // dicionário SINONIMOS -- CPTU vira CPTu, SM vira o bucket
+    // 'SM / SM.F / SR'. As 7 siglas do texto continuam em 7 buckets
+    // distintos aqui (nenhuma outra colide com SM neste caso), então ainda
+    // são 7 linhas -- só os RÓTULOS mudam.
     const tipologias7777 = resultado.filter(r => r.sup === '7777-26').map(r => r.tipologia).sort();
-    assert.deepEqual(tipologias7777, ['CPTU', 'PI', 'SH', 'SM', 'SP', 'ST', 'VT']);
+    assert.deepEqual(tipologias7777, ['CPTu', 'PI', 'SH', 'SM / SM.F / SR', 'SP', 'ST', 'VT']);
   } finally {
     fs.unlinkSync(radarPath);
   }

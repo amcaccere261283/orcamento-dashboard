@@ -29,13 +29,16 @@ function montarFunilDemandas({ registros, liberadoSond, propostasGanhas }) {
     const contratado = (registro.previsto && registro.previsto.volumeResumo && registro.previsto.volumeResumo.total) || 0;
     const liberadoValor = entradaLiberado ? entradaLiberado.prevista : 0;
     const executado = entradaLiberado ? entradaLiberado.executada : 0;
-    // saldoLiberadoNaoExecutado: usa o `saldo` já calculado no upstream
-    // (montarLiberadoSond) quando existe entrada -- é o valor correto,
-    // recalcular aqui arriscaria divergir se a fórmula de lá mudar. Sem
-    // entrada nenhuma pra essa chave, liberado/executado são ambos 0, então
-    // o fallback max(liberado - executado, 0) é só 0 -- escrito por extenso
-    // por clareza/robustez, não por depender do valor de fato.
-    const saldoLiberadoNaoExecutado = entradaLiberado ? entradaLiberado.saldo : Math.max(liberadoValor - executado, 0);
+    // saldoLiberadoNaoExecutado: SEMPRE liberado - executado, calculado
+    // aqui -- NUNCA lido de entradaLiberado.saldo. A revisão final de
+    // branch decifrou um build real e achou 66 de 404 linhas em que o
+    // `saldo` da API SOND não batia com prevista-executada (algumas até
+    // negativas sem sentido), o que desalinhava a linha de TOTAL da coluna
+    // ao lado. Sem clamp de propósito -- diferente de saldoAliberar, esta
+    // coluna precisa fechar a subtração exata das duas colunas vizinhas
+    // (Liberado - Executado), por construção, mesmo quando o resultado é
+    // negativo.
+    const saldoLiberadoNaoExecutado = liberadoValor - executado;
 
     linhas.push({
       sup: registro.sup,
@@ -56,7 +59,9 @@ function montarFunilDemandas({ registros, liberadoSond, propostasGanhas }) {
     const entradaLiberado = liberadoSeguro[chave];
     const liberadoValor = entradaLiberado.prevista;
     const executado = entradaLiberado.executada;
-    const saldoLiberadoNaoExecutado = entradaLiberado.saldo;
+    // Mesma regra do laço acima: sempre liberado - executado, nunca o
+    // `saldo` bruto da API SOND (ver comentário lá em cima).
+    const saldoLiberadoNaoExecutado = liberadoValor - executado;
 
     linhas.push({
       sup,

@@ -176,6 +176,12 @@ const CSS_BASE = `  :root {
     background: rgba(255,255,255,0.03);
     font-size: 12px; color: var(--text-secondary);
   }
+  /* Aba Demandas: título do bloco "Propostas ganhas ainda não cadastradas".
+     #1F7A1F (verde escuro do R02.xlsx original) tinha contraste 3.57:1 contra
+     --page (#0d0d0d), abaixo do mínimo 4.5:1 do WCAG AA -- #4ade80 dá ~9:1. */
+  .demandas-proposta-ganha {
+    color: #4ade80; font-size: 13px; font-weight: 600; margin: 24px 0 8px;
+  }
   .abas-visualizacao {
     display: flex; gap: 2px;
     background: rgba(0,0,0,0.3);

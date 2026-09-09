@@ -181,7 +181,7 @@ test('parseContratosYaml extracts only required fields, ignoring unknown ones', 
   assert.deepEqual(Object.keys(c).sort(), ['ativo', 'cliente', 'contratoId', 'numeroContrato']);
 });
 
-test('parseContratosYaml filters out entries with missing cliente or contrato_id', () => {
+test('parseContratosYaml filters out entries with missing cliente, contrato_id ou numero_contrato', () => {
   const yaml = `contratos:
   - slug: contract-ok
     cliente: "OK CLIENT"
@@ -198,11 +198,42 @@ test('parseContratosYaml filters out entries with missing cliente or contrato_id
     cliente: "NO ID CLIENT"
     numero_contrato: "SUP-0000-00"
     ativo: true
+
+  - slug: contract-no-numero-contrato
+    cliente: "NO NUMERO CLIENT"
+    contrato_id: 777
+    ativo: true
 `;
   const contratos = parseContratosYaml(yaml);
   assert.equal(contratos.length, 1);
   assert.equal(contratos[0].cliente, 'OK CLIENT');
   assert.equal(contratos[0].contratoId, 888);
+});
+
+// Fix 4 (revisão final de branch): numero_contrato é a chave de join usada
+// por todo o funil (chaveMatriz casa registro.sup com numero_contrato) --
+// faltando, virava undefined, fluía em silêncio pro CSV como célula vazia e
+// produzia uma linha do funil chaveada tipo "||SP" sem nenhum aviso. Este
+// teste isola esse caso (cliente e contrato_id presentes, só numero_contrato
+// faltando) pra provar que agora é rejeitado, com o mesmo aviso das outras
+// ausências.
+test('parseContratosYaml rejeita entrada com cliente e contrato_id mas SEM numero_contrato', () => {
+  const yaml = `contratos:
+  - slug: contract-sem-numero
+    cliente: "CLIENTE SEM NUMERO"
+    contrato_id: 4242
+    ativo: true
+`;
+  const avisos = [];
+  const warnOriginal = console.warn;
+  console.warn = (...args) => avisos.push(args.join(' '));
+  try {
+    const contratos = parseContratosYaml(yaml);
+    assert.deepEqual(contratos, [], 'entrada sem numero_contrato deve ser descartada, não passar undefined adiante');
+    assert.ok(avisos.some(m => /incompleto descartado/.test(m)), 'deve avisar sobre o contrato incompleto descartado');
+  } finally {
+    console.warn = warnOriginal;
+  }
 });
 
 test('lerContratos reads and parses a file from disk', () => {

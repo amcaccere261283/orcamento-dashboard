@@ -2271,11 +2271,15 @@ ${markupFiltros(FILTROS_DEMANDAS, { recuo: '      ', classes: 'filtros-alertas' 
       <input id="busca-demandas" type="text" class="busca-alertas" placeholder="Buscar..." autocomplete="off">
       <div class="table-scroll">
       <table id="tabela-demandas">
+        <!-- Sem ordenação por clique de propósito (deviação documentada do
+             plano original): nenhuma outra tabela deste dashboard (Tabela,
+             Alertas) é ordenável, então acrescentar só aqui seria UX
+             inconsistente -- decisão do dono do projeto na revisão final. -->
         <thead id="cabecalho-demandas"><tr><th>Cliente</th><th>Contrato</th><th>Tipologia</th><th>Contratado</th><th>Liberado (SOND)</th><th>Executado</th><th>Saldo liberado não executado</th><th>Saldo a liberar</th></tr></thead>
         <tbody id="corpo-demandas"></tbody>
       </table>
       </div>
-      <h3 style="color:#1F7A1F; font-size:13px; font-weight:600; margin:24px 0 8px;">Propostas ganhas ainda não cadastradas</h3>
+      <h3 class="demandas-proposta-ganha">Propostas ganhas ainda não cadastradas</h3>
       <div class="nota-premissa">Aparecem aqui só até o contrato ser cadastrado na SOND/MATRIZ -- a partir daí a linha some sozinha desta lista.</div>
       <div class="table-scroll">
       <table id="tabela-demandas-propostas">

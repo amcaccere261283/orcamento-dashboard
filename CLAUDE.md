@@ -11,7 +11,7 @@ ORCAMENTO_SENHA='...' node tools/orcamento/build-dashboard.js   # gera dist/orca
 node --test test/*.test.js                                      # testes usam senha falsa
 ```
 
-Duas dependências de máquina, ambas fora do git:
+Cinco dependências de máquina, todas fora do git:
 
 - **`ORCAMENTO_SENHA`** — o blob de dados embutido no HTML é cifrado em AES-256-GCM com
   essa senha. Como o HTML gerado vai para um Pages público, a senha **nunca** pode ser

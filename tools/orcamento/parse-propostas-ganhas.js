@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const { listZipEntries, readZipEntry } = require('../comum/zip-reader.js');
 const { parseWorkbookSheets, readXlsxSheetFromBuffer } = require('../comum/xlsx-reader.js');
+const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 
 // Porta de parse_texto/reconstruir_saldo_positivo.py (extrato-gerencial-
 // mensal, sibling repo, Python) -- já validada contra dado real nesta mesma
@@ -199,7 +200,20 @@ function extrairPropostasGanhas(grid, { registros, liberadoSond } = {}) {
 
     const cliente = celulaTexto(row[colunas.contratante]);
     const clienteFinal = celulaTexto(row[colunas.clienteFinal]);
+    // `valores` está chaveado pela sigla crua do dicionário SINONIMOS acima
+    // (BL, CPTU, DN, PI, SP, SM, SM.F, SH, SR, ST, VT) -- vocabulário próprio
+    // de como o time de propostas escreve à mão. O funil, porém, mostra tudo
+    // no vocabulário canônico da MATRIZ (rotularTipologia, mesmo tradutor
+    // usado pelo resto do projeto): DN dobra pra 'SH', e SM/SM.F/SR dobram
+    // juntas pro mesmo bucket 'SM / SM.F / SR'. Duas siglas cruas da MESMA
+    // proposta podem cair no mesmo bucket canônico -- soma em vez de duas
+    // linhas com sup+tipologia+etc. idênticos.
+    const porCanonico = new Map();
     for (const [tipologia, quantidade] of Object.entries(valores)) {
+      const canonico = rotularTipologia(tipologia);
+      porCanonico.set(canonico, (porCanonico.get(canonico) || 0) + quantidade);
+    }
+    for (const [tipologia, quantidade] of porCanonico) {
       resultado.push({ sup: supBase, cliente, clienteFinal, tipologia, quantidade, origem });
     }
   }
