@@ -123,6 +123,74 @@ function montarDemandasChegadasMensais({
   return { chegadasMensais, saldoAbertura };
 }
 
+// Calibração manual do saldo de abertura de LAB.C + LAB.E (2026-09-09):
+// saldoAberturaPorRegistro só enxerga o backlog que o histórico de
+// furos/ensaios sabe reconstruir -- o dono do projeto tem um número real,
+// medido fora deste pipeline, que o histórico não bate. Medido em 31/08/2026:
+// 12.800 pontos de saldo (Convencional + Especial), contra 116.258 de
+// Realizado acumulado -- ou seja, o Acumulado de Demandas em agosto/2026
+// deveria fechar em 129.058 (12.800 + 116.258), não no que o pipeline calcula
+// sozinho. calibrarSaldoAberturaLab mede a diferença entre esse alvo e o que
+// o pipeline fecha HOJE (chegadas mensais recalculam a cada atualização de
+// dado, então essa diferença também recalcula) e soma o que falta ao saldo de
+// abertura de 'Diversos' -- mesmo bucket que já recebe furo/ensaio de SUP sem
+// registro na MATRIZ -- proporcional ao saldo de abertura que LAB.C e LAB.E
+// já tinham cada um. Como saldo de abertura entra uma vez só, em janeiro, e
+// se soma em cada mês seguinte, esse ajuste desloca a curva INTEIRA (jan..dez)
+// pelo mesmo valor -- é o mesmo resultado que "retroagir o acumulado mês a
+// mês pelos valores mensais do gráfico" pediria à mão: os incrementos
+// mensais (chegadas) não mudam, só o ponto de partida.
+const ANO_ALVO_CALIBRACAO_LAB = 2026;
+const MES_ALVO_CALIBRACAO_LAB = 7; // agosto, 0-indexado
+const TIPOLOGIAS_CALIBRACAO_LAB = ['LAB.C', 'LAB.E'];
+const VALOR_ALVO_ACUMULADO_CALIBRACAO_LAB = 129058;
+
+function calibrarSaldoAberturaLab({ registros, periodos, chegadasMensais, saldoAbertura }) {
+  const idxAlvo = periodos.findIndex(p => p.getUTCFullYear() === ANO_ALVO_CALIBRACAO_LAB && p.getUTCMonth() === MES_ALVO_CALIBRACAO_LAB);
+  if (idxAlvo < 0) return saldoAbertura; // ano exibido não é o calibrado -- não se aplica
+
+  const chavesPorTipologia = {};
+  for (const tip of TIPOLOGIAS_CALIBRACAO_LAB) chavesPorTipologia[tip] = [];
+  for (const r of registros) {
+    if (chavesPorTipologia[r.tipologia]) chavesPorTipologia[r.tipologia].push(chaveMatriz(r.sup, r.tipologia));
+  }
+
+  let acumuladoAtual = 0;
+  const saldoAtualPorTipologia = {};
+  for (const tip of TIPOLOGIAS_CALIBRACAO_LAB) {
+    let saldoTip = 0;
+    let acumTip = 0;
+    for (const chave of chavesPorTipologia[tip]) {
+      saldoTip += saldoAbertura[chave] || 0;
+      const mensal = chegadasMensais[chave];
+      if (mensal) for (let i = 0; i <= idxAlvo; i++) acumTip += mensal[i];
+    }
+    saldoAtualPorTipologia[tip] = saldoTip;
+    acumuladoAtual += saldoTip + acumTip;
+  }
+
+  const diferenca = VALOR_ALVO_ACUMULADO_CALIBRACAO_LAB - acumuladoAtual;
+  if (diferenca === 0) return saldoAbertura;
+
+  const somaSaldoAtual = TIPOLOGIAS_CALIBRACAO_LAB.reduce((soma, tip) => soma + saldoAtualPorTipologia[tip], 0);
+  const saldoCalibrado = Object.assign({}, saldoAbertura);
+  let distribuido = 0;
+  TIPOLOGIAS_CALIBRACAO_LAB.forEach((tip, i) => {
+    const ultimoDaLista = i === TIPOLOGIAS_CALIBRACAO_LAB.length - 1;
+    const proporcao = somaSaldoAtual > 0 ? saldoAtualPorTipologia[tip] / somaSaldoAtual : 1 / TIPOLOGIAS_CALIBRACAO_LAB.length;
+    // O último da lista fica com o resto da divisão -- garante que a soma dos
+    // pedaços bate exatamente com 'diferenca', mesmo com arredondamento.
+    const parcela = ultimoDaLista ? (diferenca - distribuido) : Math.round(diferenca * proporcao);
+    distribuido += parcela;
+    const chaveDiversos = chaveMatriz('Diversos', tip);
+    saldoCalibrado[chaveDiversos] = (saldoCalibrado[chaveDiversos] || 0) + parcela;
+  });
+
+  console.log(`Calibração de saldo de abertura LAB.C+LAB.E: acumulado em agosto/2026 fechava em ${acumuladoAtual.toLocaleString('pt-BR')} sem ajuste, alvo é ${VALOR_ALVO_ACUMULADO_CALIBRACAO_LAB.toLocaleString('pt-BR')} -- ${diferenca >= 0 ? 'somado' : 'subtraído'} ${Math.abs(diferenca).toLocaleString('pt-BR')} ao saldo de abertura de 'Diversos' (LAB.C/LAB.E), proporcional ao saldo que cada um já tinha.`);
+
+  return saldoCalibrado;
+}
+
 const LOGO_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-suporte-infra-negativo.png');
 const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-alvo.png');
 
@@ -163,8 +231,11 @@ function build({
     console.log(`Linha de base: ${chavesSemMatch} combinações SUP+tipologia (R$ ${somaSemMatch.toLocaleString('pt-BR')}) não casaram com nenhum registro da MATRIZ atual -- SUP renomeado/renovado desde o estudo original, ou nome descritivo em vez de código. Não aparecem na coluna Previsto Inicial da tabela.`);
   }
 
-  const { chegadasMensais: demandasChegadasMensais, saldoAbertura: demandasSaldoAbertura } = montarDemandasChegadasMensais({
+  const { chegadasMensais: demandasChegadasMensais, saldoAbertura: demandasSaldoAberturaBruto } = montarDemandasChegadasMensais({
     registros, periodos, caminhoAvancosOnline, caminhoDemandasSondagemOnline, caminhoLabOnline, caminhoDemandasLabOnline,
+  });
+  const demandasSaldoAbertura = calibrarSaldoAberturaLab({
+    registros, periodos, chegadasMensais: demandasChegadasMensais, saldoAbertura: demandasSaldoAberturaBruto,
   });
 
   const html = renderDashboard({
@@ -188,4 +259,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, anexarPrevistoInicial, montarDemandasChegadasMensais };
+module.exports = { build, anexarPrevistoInicial, montarDemandasChegadasMensais, calibrarSaldoAberturaLab };

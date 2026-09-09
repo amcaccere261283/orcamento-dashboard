@@ -1491,6 +1491,35 @@ não reuse um pelo outro numa mudança futura sem reler este parágrafo.
 Ver o histórico de commits datados 2026-08-21 (mensagem cita "1 origem por dado") para o
 desenho completo e a investigação de onde vinha cada fonte antes desta rodada.
 
+## Calibração manual do saldo de abertura de LAB.C + LAB.E (2026-09-09)
+
+`saldoAberturaPorRegistro` (ver "Saldo de abertura no Acumulado de Demandas" acima) só
+reconstrói o backlog que o histórico de furos/ensaios sabe enxergar. O dono do projeto
+tem um número real de backlog, medido por fora deste pipeline: em 31/08/2026, o saldo de
+demandas em aberto de Laboratório (Convencional + Especial) era **12.800 pontos**, contra
+**116.258** de Realizado acumulado -- ou seja, o Acumulado de Demandas em agosto/2026
+deveria fechar em **129.058** (12.800 + 116.258), não no que o histórico reconstrói
+sozinho (fechava em ~118.610 quando medido em 2026-09-09, antes desta calibração).
+
+**`calibrarSaldoAberturaLab`** (`tools/orcamento/build-dashboard.js`, chamada dentro de
+`build()` logo depois de `montarDemandasChegadasMensais`) mede essa diferença TODA VEZ que
+o build roda (chegadas mensais mudam a cada atualização de `avancos-online.csv`/
+`lab-online.csv`, então a diferença também muda) e soma o que falta ao saldo de abertura
+de **`Diversos`** -- o mesmo bucket que já recebe furo/ensaio de SUP sem registro na
+MATRIZ -- separado por LAB.C e LAB.E, proporcional ao saldo de abertura que cada um já
+tinha (ou 50/50 se nenhum dos dois tiver saldo nenhum). **Como saldo de abertura entra
+uma vez só, em janeiro, e se soma em cada mês seguinte, esse ajuste desloca a curva
+INTEIRA (jan..dez) pelo mesmo valor** -- é o mesmo resultado que "retroagir o acumulado
+mês a mês pelos valores mensais do gráfico" pediria à mão: os incrementos mensais
+(chegadas) não mudam, só o ponto de partida.
+
+**O alvo (ano/mês/tipologias/valor) está hardcoded no módulo** (`ANO_ALVO_CALIBRACAO_LAB
+= 2026`, `MES_ALVO_CALIBRACAO_LAB = 7` [agosto, 0-indexado],
+`VALOR_ALVO_ACUMULADO_CALIBRACAO_LAB = 129058`) -- é uma calibração histórica de UM ponto
+no tempo, não uma fórmula viva. Fora do ano 2026 a função não faz nada (`idxAlvo < 0`).
+Se um dia precisar recalibrar com um número mais recente, é trocar essas constantes, não
+generalizar a função para uma lista de alvos -- só existe UM alvo até hoje.
+
 ## Atualizar Demandas ao clicar em "Atualizar dados" (2026-08-14)
 
 O botão "Atualizar dados" da Matriz de Orçamento (`tools/orcamento/render-dashboard.js`,
