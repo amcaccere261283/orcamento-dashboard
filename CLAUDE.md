@@ -27,6 +27,16 @@ Duas dependências de máquina, ambas fora do git:
 - **As planilhas de origem**, em caminhos `G:\Meu Drive\PMO\...` (ver
   `tools/orcamento/config.js`): a MATRIZ viva e o estudo de linha de base. Exige o Google
   Drive montado em `G:` com acesso à pasta PMO.
+- **`SOND_API_KEY`** — `tools/orcamento/atualizar-liberado-sond.js` (fetcher da aba
+  Demandas, porte de `extrato-gerencial-mensal/saldo_contratos.py`) autentica na API
+  PMO/BI com header `X-API-Key`. Resolve por env var primeiro; se ausente, cai no MESMO
+  arquivo fixo que o script Python já usa, `extrato-gerencial-mensal/API/chave_api.txt`
+  (fora deste repo git, sem override por env var pro caminho em si). A chave em si
+  **nunca** vai em arquivo do repositório — só a env var ou o arquivo de fallback fora
+  do git.
+- **`tools/orcamento/config.js:caminhoContratosSond`** — catálogo de contratos SOND
+  (`extrato-gerencial-mensal/contratos.yaml`, sibling repo), fonte do fetcher acima.
+  Aceita override por `ORCAMENTO_CAMINHO_CONTRATOS_SOND`.
 
 ## O HTML é gerado — não edite o build
 
