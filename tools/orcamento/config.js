@@ -22,4 +22,11 @@ module.exports = {
   // caminhos diferentes.
   caminhoContratosSond: process.env.ORCAMENTO_CAMINHO_CONTRATOS_SOND
     || path.resolve(__dirname, '../../../extrato-gerencial-mensal/contratos.yaml'),
+  // Radar de Demandas (fonte das propostas GANHAS ainda não formalizadas --
+  // ver tools/orcamento/parse-propostas-ganhas.js). O nome do arquivo carrega
+  // a revisão ("R02") -- precisa de bump MANUAL neste caminho quando o dono
+  // do projeto cortar uma revisão nova (R03 etc.), igual aos outros caminhos
+  // fixos deste arquivo.
+  caminhoRadarDemandas: process.env.ORCAMENTO_CAMINHO_RADAR_DEMANDAS
+    || 'G:\\Meu Drive\\PMO\\06 - Orçamento\\OR26 - Rev 01 - Frcst 6+6\\Modelo\\Radar de Demandas - R02.xlsx',
 };

@@ -13,11 +13,13 @@ const { excelSerialParaData } = require('../comum/datas.js');
 // tools/comum/linha-base.js, consumidos pelas duas páginas -- ver o
 // comentário de cabeçalho de lá.
 const { reconciliarLinhaBase, chaveMatriz } = require('../comum/linha-base.js');
+const { rotularTipologia } = require('../comum/tipologias-avancos.js');
 const config = require('./config.js');
 const { parseCsvGrid } = require('../semanal/parse-matriz-cliente.js');
 const { parseAvancos } = require('../semanal/parse-avancos.js');
 const { parseLab } = require('../semanal/parse-lab.js');
 const { redirecionarSupsDesconhecidos, chegadasMensaisPorRegistro, saldoAberturaPorRegistro } = require('../semanal/compute-demandas.js');
+const { montarPropostasGanhas } = require('./parse-propostas-ganhas.js');
 
 const RESUMO_ZERO = { pico: 0, media: 0, prod: 0, dias: 0 };
 
@@ -123,6 +125,47 @@ function montarDemandasChegadasMensais({
   return { chegadasMensais, saldoAbertura };
 }
 
+// Lê dist/liberado-sond-online.csv (OPCIONAL -- gerado por
+// atualizar-liberado-sond.js, que precisa de chave de API e rede, então não
+// roda em todo build local): uma linha por (contrato, sigla), com o volume
+// PREVISTO/EXECUTADO/SALDO já cadastrado pra execução na SOND. Agrega por
+// chaveMatriz(contrato, tipologia canônica) -- várias siglas cruas (SM,
+// SM.F, SR, ...) caem no mesmo bucket da MATRIZ (rotularTipologia), somando
+// prevista/executada/saldo entre elas. Sem o CSV, o build segue (aviso no
+// console); o funil de Demandas só fica sem a etapa "liberado na SOND".
+function montarLiberadoSond({ caminhoLiberadoSondOnline }) {
+  if (!fs.existsSync(caminhoLiberadoSondOnline)) {
+    console.warn(`AVISO: ${caminhoLiberadoSondOnline} não encontrado -- funil de Demandas fica sem a etapa "liberado na SOND". Rode "node tools/orcamento/atualizar-liberado-sond.js".`);
+    return {};
+  }
+
+  const grid = parseCsvGrid(fs.readFileSync(caminhoLiberadoSondOnline, 'utf8'));
+  const headerRow = grid[0] || [];
+  const colContrato = headerRow.indexOf('Contrato');
+  const colSigla = headerRow.indexOf('Sigla');
+  const colPrevista = headerRow.indexOf('Prevista');
+  const colExecutada = headerRow.indexOf('Executada');
+  const colSaldo = headerRow.indexOf('Saldo');
+  const faltando = ['Contrato', 'Sigla', 'Prevista', 'Executada', 'Saldo'].filter(nome => headerRow.indexOf(nome) === -1);
+  if (faltando.length) {
+    throw new Error(`${caminhoLiberadoSondOnline}: coluna(s) obrigatória(s) não encontrada(s) no cabeçalho: ${faltando.join(', ')}.`);
+  }
+
+  const liberadoSond = {};
+  for (let i = 1; i < grid.length; i++) {
+    const row = grid[i];
+    if (!row || row.every(v => String(v || '').trim() === '')) continue;
+    const contrato = row[colContrato];
+    const tipologia = rotularTipologia(row[colSigla]);
+    const chave = chaveMatriz(contrato, tipologia);
+    if (!liberadoSond[chave]) liberadoSond[chave] = { prevista: 0, executada: 0, saldo: 0 };
+    liberadoSond[chave].prevista += Number(row[colPrevista]) || 0;
+    liberadoSond[chave].executada += Number(row[colExecutada]) || 0;
+    liberadoSond[chave].saldo += Number(row[colSaldo]) || 0;
+  }
+  return liberadoSond;
+}
+
 const LOGO_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-suporte-infra-negativo.png');
 const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'logo-alvo.png');
 
@@ -143,6 +186,7 @@ function build({
   caminhoDemandasSondagemOnline = path.join(__dirname, '..', '..', 'dist', 'demandas-sondagem-online.csv'),
   caminhoLabOnline = path.join(__dirname, '..', '..', 'dist', 'lab-online.csv'),
   caminhoDemandasLabOnline = path.join(__dirname, '..', '..', 'dist', 'demandas-lab-online.json'),
+  caminhoLiberadoSondOnline = path.join(__dirname, '..', '..', 'dist', 'liberado-sond-online.csv'),
 } = {}) {
   if (!senha) {
     throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
@@ -167,8 +211,12 @@ function build({
     registros, periodos, caminhoAvancosOnline, caminhoDemandasSondagemOnline, caminhoLabOnline, caminhoDemandasLabOnline,
   });
 
+  const liberadoSond = montarLiberadoSond({ registros, caminhoLiberadoSondOnline });
+  const propostasGanhas = montarPropostasGanhas({ registros, liberadoSond, caminhoRadarDemandas: config.caminhoRadarDemandas });
+
   const html = renderDashboard({
     registros, periodos, generatedAt: today, senha, demandasChegadasMensais, demandasSaldoAbertura,
+    liberadoSond, propostasGanhas,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
   });
 
@@ -188,4 +236,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, anexarPrevistoInicial, montarDemandasChegadasMensais };
+module.exports = { build, anexarPrevistoInicial, montarDemandasChegadasMensais, montarLiberadoSond };

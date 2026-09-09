@@ -124,11 +124,35 @@ function construirPlanilhaLinhaBaseTeste() {
   ]);
 }
 
+// Aba "propostas-..." sintética e VAZIA (só cabeçalho, nenhuma linha GANHA)
+// -- usada só pra deixar build() e2e completo sem precisar de um Radar de
+// Demandas real. Os testes dedicados de propostas GANHAS ficam em
+// test/orcamento-parse-propostas-ganhas.test.js.
+function construirPlanilhaRadarDemandasVaziaTeste() {
+  const sharedStrings = ['sup', 'status', 'contratante', 'clienteFinal', 'objeto'];
+  const idx = name => sharedStrings.indexOf(name);
+  const header = celulaStr(idx('sup'), 'A1') + celulaStr(idx('status'), 'B1') +
+    celulaStr(idx('contratante'), 'C1') + celulaStr(idx('clienteFinal'), 'D1') + celulaStr(idx('objeto'), 'E1');
+  const sheetXml = `<worksheet><sheetData><row r="1">${header}</row></sheetData></worksheet>`;
+  const workbookXml = '<?xml version="1.0"?><workbook xmlns:r="rels"><sheets><sheet name="propostas-teste" sheetId="1" r:id="rId1"/></sheets></workbook>';
+  const relsXml = '<?xml version="1.0"?><Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>';
+  const sharedStringsXml = '<sst>' + sharedStrings.map(s => `<si><t>${s}</t></si>`).join('') + '</sst>';
+
+  return buildMinimalZip([
+    { name: 'xl/workbook.xml', data: Buffer.from(workbookXml, 'utf8'), method: 0 },
+    { name: 'xl/_rels/workbook.xml.rels', data: Buffer.from(relsXml, 'utf8'), method: 0 },
+    { name: 'xl/sharedStrings.xml', data: Buffer.from(sharedStringsXml, 'utf8'), method: 0 },
+    { name: 'xl/worksheets/sheet1.xml', data: Buffer.from(sheetXml, 'utf8'), method: 8 },
+  ]);
+}
+
 test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and writes a dashboard HTML with only the 2 real tipologia rows', () => {
   const xlsxPath = path.join(os.tmpdir(), `orcamento-e2e-${Date.now()}.xlsx`);
   fs.writeFileSync(xlsxPath, construirPlanilhaTeste());
   const linhaBasePath = path.join(os.tmpdir(), `orcamento-linha-base-e2e-${Date.now()}.xlsx`);
   fs.writeFileSync(linhaBasePath, construirPlanilhaLinhaBaseTeste());
+  const radarDemandasPath = path.join(os.tmpdir(), `orcamento-radar-demandas-e2e-${Date.now()}.xlsx`);
+  fs.writeFileSync(radarDemandasPath, construirPlanilhaRadarDemandasVaziaTeste());
   const outPath = path.join(os.tmpdir(), `orcamento-dashboard-e2e-${Date.now()}.html`);
 
   // Troca a config real por uma apontando pras planilhas sintéticas -- o
@@ -141,6 +165,7 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
     exports: {
       caminhoArquivo: xlsxPath, nomeAba: 'MATRIZ',
       caminhoLinhaBase: linhaBasePath, nomeAbaLinhaBase: 'PROJ. GERAL - 110MM',
+      caminhoRadarDemandas: radarDemandasPath,
     },
   };
   const buildPath = require.resolve('../tools/orcamento/build-dashboard.js');
@@ -172,6 +197,12 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
     const dados = JSON.parse(decifrarComSenha(JSON.parse(match[1]), senha));
     const registros = dados.registros;
     assert.ok(dados.demandasChegadasMensais && typeof dados.demandasChegadasMensais === 'object', 'o blob decifrado tem que trazer demandasChegadasMensais, mesmo vazio');
+    // liberadoSond/propostasGanhas: build() já monta e passa os dois pra
+    // renderDashboard (ver abaixo), mas renderDashboard ainda não os
+    // destructura/usa -- tarefa futura. Passar propriedade extra pra uma
+    // função que destructura um subconjunto é no-op em JS, então elas não
+    // aparecem no blob cifrado ainda; não há o que afirmar aqui até essa
+    // tarefa futura ligar os dois.
     const tipologias = registros.map(r => r.tipologia);
     const grupos = registros.map(r => r.grupo);
     assert.ok(tipologias.includes('SP'));
@@ -193,6 +224,7 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
   } finally {
     fs.unlinkSync(xlsxPath);
     fs.unlinkSync(linhaBasePath);
+    fs.unlinkSync(radarDemandasPath);
     fs.unlinkSync(avancosPath);
     fs.unlinkSync(labPath);
     if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
@@ -279,4 +311,52 @@ test('montarDemandasChegadasMensais: erro claro quando avancos-online.csv (obrig
     }),
     /atualizar-avancos-online\.js/,
   );
+});
+
+test('montarLiberadoSond: soma prevista/executada/saldo de siglas diferentes que caem no mesmo bucket canônico (SM, SM.F, SR -> "SM / SM.F / SR")', () => {
+  const { montarLiberadoSond } = require('../tools/orcamento/build-dashboard.js');
+  const csv = 'Cliente,Contrato,Sigla,Prevista,Executada,Saldo\n'
+    + 'Cliente A,SUP-8224-25 (AB),SM,100,40,60\n'
+    + 'Cliente A,SUP-8224-25 (AB),SM.F,50,10,40\n'
+    + 'Cliente A,SUP-8224-25 (AB),SR,25,5,20\n'
+    + 'Cliente A,SUP-8224-25 (AB),SP,30,30,0\n';
+  const csvPath = path.join(os.tmpdir(), `liberado-sond-online-teste-${Date.now()}.csv`);
+  fs.writeFileSync(csvPath, csv);
+  try {
+    const liberadoSond = montarLiberadoSond({ caminhoLiberadoSondOnline: csvPath });
+    assert.deepEqual(liberadoSond['SUP-8224-25 (AB)||SM / SM.F / SR'], { prevista: 175, executada: 55, saldo: 120 });
+    assert.deepEqual(liberadoSond['SUP-8224-25 (AB)||SP'], { prevista: 30, executada: 30, saldo: 0 });
+  } finally {
+    fs.unlinkSync(csvPath);
+  }
+});
+
+test('montarLiberadoSond: dist/liberado-sond-online.csv ausente é OPCIONAL -- avisa e devolve objeto vazio, não quebra o build', () => {
+  const { montarLiberadoSond } = require('../tools/orcamento/build-dashboard.js');
+  const avisos = [];
+  const warnOriginal = console.warn;
+  console.warn = (msg) => avisos.push(msg);
+  try {
+    const liberadoSond = montarLiberadoSond({ caminhoLiberadoSondOnline: path.join(os.tmpdir(), 'liberado-sond-online-nunca-existiu.csv') });
+    assert.deepEqual(liberadoSond, {});
+    assert.ok(avisos.some(m => /atualizar-liberado-sond\.js/.test(m)), 'aviso deve citar o comando pra gerar o CSV');
+  } finally {
+    console.warn = warnOriginal;
+  }
+});
+
+test('montarLiberadoSond: sigla fora de MAPA_TIPOLOGIAS propaga o erro de rotularTipologia, não engole em silêncio', () => {
+  const { montarLiberadoSond } = require('../tools/orcamento/build-dashboard.js');
+  const csv = 'Cliente,Contrato,Sigla,Prevista,Executada,Saldo\n'
+    + 'Cliente A,SUP-8224-25 (AB),XYZ-DESCONHECIDA,10,0,10\n';
+  const csvPath = path.join(os.tmpdir(), `liberado-sond-online-erro-teste-${Date.now()}.csv`);
+  fs.writeFileSync(csvPath, csv);
+  try {
+    assert.throws(
+      () => montarLiberadoSond({ caminhoLiberadoSondOnline: csvPath }),
+      /Tipologia desconhecida/,
+    );
+  } finally {
+    fs.unlinkSync(csvPath);
+  }
 });
