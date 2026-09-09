@@ -25,6 +25,15 @@ const BASE_URL = 'https://app.sond.com.br';
 const CAMINHO_CHAVE_API_FALLBACK = 'C:\\Users\\amcac\\OneDrive\\Desktop\\Projetos IA\\extrato-gerencial-mensal\\API\\chave_api.txt';
 const INTERVALO_ENTRE_CHAMADAS_MS = 2100; // 30 req/min permitidas -> ~1 a cada 2s, com folga
 const TIMEOUT_MS = 30000;
+// saldo_contratos.py:buscar_demandas retenta 429 de forma REALMENTE
+// ilimitada (recursão sem contador, só sleep(retry_after) e chama de novo).
+// Aqui o retry é DELIBERADAMENTE finito -- um teto bem alto (não 2) pra imitar
+// "insiste até passar" na prática, mas com uma rede de segurança: uma API
+// permanentemente hostil não trava este processo pra sempre, só desiste após
+// um número de tentativas grande o bastante pra representar dezenas de
+// minutos de backoff legítimo. Não é paridade exata com o Python -- é uma
+// aproximação segura de propósito.
+const MAX_TENTATIVAS_429_PADRAO = 50;
 const OUT_PATH = path.join(__dirname, '..', '..', 'dist', 'liberado-sond-online.csv');
 const HEADER = ['Cliente', 'Contrato', 'Sigla', 'Prevista', 'Executada', 'Saldo'];
 
@@ -57,22 +66,26 @@ function autenticar(opts = {}) {
 }
 
 /**
- * Uma chamada GET ao endpoint de demandas, com retry-once-em-429 respeitando
- * retry_after (segundos). `httpGet` e `sleep` são injetáveis pra teste (sem
- * rede real, sem timers reais).
+ * Uma chamada GET ao endpoint de demandas, com retry em 429 respeitando
+ * retry_after (segundos) -- mesma lógica do Python (buscar_demandas), exceto
+ * que o número de tentativas é um teto alto e finito, não recursão
+ * ilimitada (ver comentário de MAX_TENTATIVAS_429_PADRAO acima). `httpGet` e
+ * `sleep` são injetáveis pra teste (sem rede real, sem timers reais).
  *
  * @param {string} chaveApi
  * @param {number} contratoId
  * @param {object} [opts]
  * @param {(url: string, opts: {headers: object, timeoutMs: number}) => Promise<{status: number, json: () => Promise<any>}>} [opts.httpGet]
  * @param {(ms: number) => Promise<void>} [opts.sleep]
- * @param {number} [opts.maxTentativas] - default 2 (1 tentativa + 1 retry em 429)
+ * @param {number} [opts.maxTentativas] - default MAX_TENTATIVAS_429_PADRAO (50):
+ *   teto de segurança, não paridade exata com a recursão ilimitada do Python.
+ *   Testes que precisam exercitar "desiste eventualmente" passam um valor baixo.
  * @returns {Promise<Array<{sigla: string, prevista: number, executada: number, saldo: number}>>}
  */
 async function buscarDemandas(chaveApi, contratoId, opts = {}) {
   const httpGet = opts.httpGet || httpGetPadrao;
   const sleep = opts.sleep || sleepPadrao;
-  const maxTentativas = opts.maxTentativas || 2;
+  const maxTentativas = opts.maxTentativas || MAX_TENTATIVAS_429_PADRAO;
 
   let tentativa = 0;
   for (;;) {
@@ -160,7 +173,7 @@ async function main() {
   const ativos = contratos.filter((c) => c.ativo);
   console.log(`${contratos.length} contrato(s) no cadastro, ${ativos.length} ativo(s). Consultando API PMO/BI...`);
 
-  const linhas = await coletar(contratos, chaveApi);
+  const linhas = await coletar(ativos, chaveApi);
 
   gravarCsv(linhas, OUT_PATH);
   console.log(`Pronto: ${linhas.length} linha(s) gravada(s) em ${OUT_PATH}.`);

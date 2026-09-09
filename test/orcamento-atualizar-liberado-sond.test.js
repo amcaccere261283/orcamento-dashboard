@@ -124,6 +124,21 @@ test('buscarDemandas: 429 repetido esgota tentativas e lança erro (não loop in
   assert.equal(chamadas, 2);
 });
 
+test('buscarDemandas: teto padrão de tentativas é bem mais alto que 2 (segue insistindo além de 2 tentativas de 429)', async () => {
+  // Não testamos o valor exato de MAX_TENTATIVAS_429_PADRAO (não exportado),
+  // só o comportamento observável: com o default, uma 10ª tentativa que
+  // finalmente tem sucesso ainda é alcançada -- provando que o teto não é 2.
+  let chamadas = 0;
+  const httpGet = async () => {
+    chamadas++;
+    if (chamadas < 10) return resposta429(0);
+    return respostaOk([{ sigla: 'SPT', prevista: 1, executada: 0, saldo: 1 }]);
+  };
+  const demandas = await buscarDemandas('chave', 111, { httpGet, sleep: semSleep() });
+  assert.equal(chamadas, 10);
+  assert.deepEqual(demandas, [{ sigla: 'SPT', prevista: 1, executada: 0, saldo: 1 }]);
+});
+
 test('coletar: contratos ativo:false nunca são chamados', async () => {
   const contratos = [
     contrato({ cliente: 'ATIVO', numeroContrato: 'SUP-1', contratoId: 1, ativo: true }),
