@@ -462,6 +462,40 @@ test('renderDashboard embeds liberadoSond and propostasGanhas in the same encryp
   assert.deepStrictEqual(dadosSemValores.propostasGanhas, [], 'sem o parâmetro, o blob ainda tem que trazer propostasGanhas vazio, não undefined');
 });
 
+test('renderDashboard embeds demandasFunilLinhas and demandasFunilPropostas (o funil já pré-montado no build) in the same encrypted blob, defaulting to [] / [] when omitted', () => {
+  const registro = registroExemplo();
+  const linhaFunil = { sup: 'SUP-7133-24', tomador: 'Via Araucária S.A', tipologia: 'SM', contratado: 100, liberado: 60, executado: 40, saldoLiberadoNaoExecutado: 20, saldoAliberar: 40 };
+  const propostaFunil = { sup: 'SUP-9999-25', cliente: 'X', clienteFinal: 'Y', tipologia: 'SP', quantidade: 3, origem: 'Proposta', etapa: 'propostaGanha' };
+  const htmlComValores = renderComSenha([registro], {
+    demandasFunilLinhas: [linhaFunil],
+    demandasFunilPropostas: [propostaFunil],
+  });
+  const pacoteComValores = extrairPacoteCifrado(htmlComValores);
+  const dadosComValores = JSON.parse(decifrarComSenha(pacoteComValores, SENHA_TESTE));
+  assert.deepStrictEqual(dadosComValores.demandasFunilLinhas, [linhaFunil]);
+  assert.deepStrictEqual(dadosComValores.demandasFunilPropostas, [propostaFunil]);
+
+  const htmlSemValores = renderComSenha([registro]);
+  const pacoteSemValores = extrairPacoteCifrado(htmlSemValores);
+  const dadosSemValores = JSON.parse(decifrarComSenha(pacoteSemValores, SENHA_TESTE));
+  assert.deepStrictEqual(dadosSemValores.demandasFunilLinhas, [], 'sem o parâmetro, o blob ainda tem que trazer demandasFunilLinhas vazio, não undefined');
+  assert.deepStrictEqual(dadosSemValores.demandasFunilPropostas, [], 'sem o parâmetro, o blob ainda tem que trazer demandasFunilPropostas vazio, não undefined');
+});
+
+test('renderDashboard renders the 4th tab (Demandas) markup: aba button, section (hidden by default like Alertas/Gráfico), search box, own filtro-multi, main table shell and the propostas-ganhas table shell', () => {
+  const html = renderComSenha([registroExemplo()]);
+  assert.match(html, /<button id="aba-demandas" type="button">[\s\S]*?Demandas<\/button>/);
+  assert.match(html, /<div id="secao-demandas" style="display:none">/);
+  assert.match(html, /<input id="busca-demandas" type="text" class="busca-alertas"/);
+  assert.match(html, /<div class="filtro-multi" id="filtro-demandas-tipologia">/);
+  assert.match(html, /<table id="tabela-demandas">/);
+  assert.match(html, /<thead id="cabecalho-demandas">/);
+  assert.match(html, /<tbody id="corpo-demandas"><\/tbody>/);
+  assert.match(html, /<table id="tabela-demandas-propostas">/);
+  assert.match(html, /<tbody id="corpo-demandas-propostas"><\/tbody>/);
+  assert.match(html, /Propostas ganhas ainda não cadastradas/);
+});
+
 test('renderDashboard\'s encrypted blob fails to decrypt with the wrong senha (never silently returns garbage)', () => {
   const html = renderComSenha([registroExemplo()]);
   const pacote = extrairPacoteCifrado(html);
@@ -589,7 +623,9 @@ function extrairFuncoesPuras(html) {
       ' this.preencherLinha = preencherLinha;' +
       ' this.fecharTendenciaVigente = fecharTendenciaVigente;' +
       ' this.mediaEquipesPonderada = mediaEquipesPonderada;' +
-      ' this.periodosDoAnoOrcamento = periodosDoAnoOrcamento; this.recalcularDemandasAoVivo = recalcularDemandasAoVivo;',
+      ' this.periodosDoAnoOrcamento = periodosDoAnoOrcamento; this.recalcularDemandasAoVivo = recalcularDemandasAoVivo;' +
+      ' this.renderCorpoDemandas = renderCorpoDemandas; this.renderCorpoPropostasGanhas = renderCorpoPropostasGanhas;' +
+      ' this.linhaDemandasCombina = linhaDemandasCombina;',
     sandbox
   );
   return {
@@ -631,6 +667,9 @@ function extrairFuncoesPuras(html) {
     mediaEquipesPonderada: sandbox.mediaEquipesPonderada,
     periodosDoAnoOrcamento: sandbox.periodosDoAnoOrcamento,
     recalcularDemandasAoVivo: sandbox.recalcularDemandasAoVivo,
+    renderCorpoDemandas: sandbox.renderCorpoDemandas,
+    renderCorpoPropostasGanhas: sandbox.renderCorpoPropostasGanhas,
+    linhaDemandasCombina: sandbox.linhaDemandasCombina,
     window: sandbox.window,
   };
 }
@@ -2185,6 +2224,31 @@ test('fecharTendenciaVigente: também desembrulha liberadoSond e propostasGanhas
   assert.deepStrictEqual(sandboxWindow.__PROPOSTAS_GANHAS__, [{ sup: 'SUP-X', cliente: 'X', clienteFinal: 'Y', tipologia: 'SP', quantidade: 2, origem: 'Proposta' }], 'live-refresh não deve apagar as propostas ganhas do build');
 });
 
+test('fecharTendenciaVigente: também desembrulha demandasFunilLinhas e demandasFunilPropostas em window.__DEMANDAS_FUNIL_LINHAS__/__DEMANDAS_FUNIL_PROPOSTAS__, mesma regra condicional de window.__DEMANDAS_MENSAIS__', () => {
+  const html = construirHtmlGolden();
+  const { fecharTendenciaVigente, window: sandboxWindow } = extrairFuncoesPuras(html);
+
+  const registro = { sup: 'SUP-X', tipologia: 'SP', total: null, realizado: null };
+  const linhaFunil = { sup: 'SUP-X', tomador: 'Cliente X', tipologia: 'SP', contratado: 100, liberado: 60, executado: 40, saldoLiberadoNaoExecutado: 20, saldoAliberar: 40 };
+  const propostaFunil = { sup: 'SUP-Z', cliente: 'W', clienteFinal: 'V', tipologia: 'ST', quantidade: 5, origem: 'Proposta', etapa: 'propostaGanha' };
+  fecharTendenciaVigente({
+    registros: [registro],
+    demandasFunilLinhas: [linhaFunil],
+    demandasFunilPropostas: [propostaFunil],
+  }, 5);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_FUNIL_LINHAS__, [linhaFunil]);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_FUNIL_PROPOSTAS__, [propostaFunil]);
+
+  // live-refresh: array puro, sem demandasFunilLinhas/demandasFunilPropostas
+  // -- preserva o que já tinha sido setado no desbloqueio (o botão "Atualizar
+  // dados" nunca recomputa esse funil, ver o cabeçalho de
+  // compute-demandas-funil.js), mesma regra de __DEMANDAS_MENSAIS__.
+  const registrosNovos = [{ sup: 'SUP-Y', tipologia: 'ST', total: null, realizado: null }];
+  fecharTendenciaVigente(registrosNovos, 5);
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_FUNIL_LINHAS__, [linhaFunil], 'live-refresh não deve apagar as linhas do funil do build');
+  assert.deepStrictEqual(sandboxWindow.__DEMANDAS_FUNIL_PROPOSTAS__, [propostaFunil], 'live-refresh não deve apagar as propostas ganhas do funil do build');
+});
+
 test('o gate de senha (tentarDesbloquear) fecha a Tendência com fecharTendenciaVigente logo após decifrar, antes de montarDashboard', () => {
   const html = renderComSenha([registroExemplo()]);
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
@@ -2607,4 +2671,63 @@ test('aplicarBuscaAlertas (extraído do HTML real gerado) hides rows whose data-
 test('renderDashboard includes the busca-alertas text input above the Alertas table', () => {
   const html = renderComSenha([registroExemplo()]);
   assert.match(html, /<input id="busca-alertas" type="text" class="busca-alertas" placeholder="Buscar\.\.\." autocomplete="off">/);
+});
+
+// ---- Aba Demandas: renderCorpoDemandas/renderCorpoPropostasGanhas/linhaDemandasCombina ----
+
+function linhaFunilExemplo(overrides) {
+  return {
+    sup: 'SUP-7133-24', tomador: 'Via Araucária S.A', tipologia: 'SM',
+    contratado: 100, liberado: 60, executado: 40, saldoLiberadoNaoExecutado: 20, saldoAliberar: 40,
+    ...overrides,
+  };
+}
+
+test('renderCorpoDemandas emits one <tr> per linha (Cliente/Contrato/Tipologia + 5 colunas numéricas) plus a TOTAL row (linha-total linha-total-geral) summing the numeric columns of the rows it received', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoDemandas } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoDemandas([
+    linhaFunilExemplo(),
+    linhaFunilExemplo({ sup: 'SUP-8000-24', tomador: 'Outra Empresa', tipologia: 'SP', contratado: 50, liberado: 10, executado: 5, saldoLiberadoNaoExecutado: 5, saldoAliberar: 40 }),
+  ]);
+  assert.match(corpo, /<td>Via Araucária S\.A<\/td><td>SUP-7133-24<\/td><td>SM<\/td><td class="num">100<\/td><td class="num">60<\/td><td class="num">40<\/td><td class="num">20<\/td><td class="num">40<\/td>/);
+  assert.match(corpo, /<td>Outra Empresa<\/td><td>SUP-8000-24<\/td><td>SP<\/td><td class="num">50<\/td><td class="num">10<\/td><td class="num">5<\/td><td class="num">5<\/td><td class="num">40<\/td>/);
+  assert.match(corpo, /<tr class="linha-total linha-total-geral"><td><\/td><td><\/td><td>TOTAL<\/td><td class="num">150<\/td><td class="num">70<\/td><td class="num">45<\/td><td class="num">25<\/td><td class="num">80<\/td><\/tr>/);
+});
+
+test('renderCorpoDemandas shows "—" for Cliente/tomador when null -- the synthetic rows compute-demandas-funil.js emits for a liberadoSond key with no matching MATRIZ registro', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoDemandas } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoDemandas([linhaFunilExemplo({ tomador: null, contratado: 0, saldoAliberar: 0 })]);
+  assert.match(corpo, /<td>—<\/td><td>SUP-7133-24<\/td><td>SM<\/td>/);
+});
+
+test('renderCorpoDemandas escapes tomador/sup/tipologia (XSS-unsafe characters never reach the HTML raw)', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoDemandas } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoDemandas([linhaFunilExemplo({ tomador: '<script>alert(1)</script>' })]);
+  assert.doesNotMatch(corpo, /<script>alert\(1\)<\/script>/);
+  assert.match(corpo, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+});
+
+test('renderCorpoPropostasGanhas emits one <tr> per proposta (Cliente/Cliente Final/Contrato/Tipologia/Quantidade/Origem), no TOTAL row', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { renderCorpoPropostasGanhas } = extrairFuncoesPuras(html);
+  const corpo = renderCorpoPropostasGanhas([
+    { sup: 'SUP-9999-25', cliente: 'Cliente X', clienteFinal: 'Final Y', tipologia: 'SP', quantidade: 3, origem: 'Proposta Comercial', etapa: 'propostaGanha' },
+  ]);
+  assert.match(corpo, /<td>Cliente X<\/td><td>Final Y<\/td><td>SUP-9999-25<\/td><td>SP<\/td><td class="num">3<\/td><td>Proposta Comercial<\/td>/);
+  assert.doesNotMatch(corpo, /linha-total/);
+});
+
+test('linhaDemandasCombina: substring match (case/accent-insensitive, via normalizarBusca) across sup/tomador/tipologia, plus an optional tipologia Set filter', () => {
+  const html = renderComSenha([registroExemplo()]);
+  const { linhaDemandasCombina } = extrairFuncoesPuras(html);
+  const linha = linhaFunilExemplo({ tomador: 'Via Araucária S.A' });
+  assert.equal(linhaDemandasCombina(linha, 'araucaria', new Set()), true, 'busca sem acento combina com "Araucária" (normalizarBusca remove acento)');
+  assert.equal(linhaDemandasCombina(linha, 'via arauc', new Set()), true);
+  assert.equal(linhaDemandasCombina(linha, 'nao-existe', new Set()), false);
+  assert.equal(linhaDemandasCombina(linha, '', new Set(['SM'])), true, 'filtro de tipologia bate com a linha');
+  assert.equal(linhaDemandasCombina(linha, '', new Set(['SP'])), false, 'filtro de tipologia não bate -- linha excluída mesmo sem termo de busca');
+  assert.equal(linhaDemandasCombina(linha, '', new Set()), true, 'Set vazio (nenhuma tipologia marcada) não filtra nada, mesma convenção dos demais filtros');
 });

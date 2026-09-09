@@ -197,12 +197,20 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
     const dados = JSON.parse(decifrarComSenha(JSON.parse(match[1]), senha));
     const registros = dados.registros;
     assert.ok(dados.demandasChegadasMensais && typeof dados.demandasChegadasMensais === 'object', 'o blob decifrado tem que trazer demandasChegadasMensais, mesmo vazio');
-    // liberadoSond/propostasGanhas: build() já monta e passa os dois pra
-    // renderDashboard (ver abaixo), mas renderDashboard ainda não os
-    // destructura/usa -- tarefa futura. Passar propriedade extra pra uma
-    // função que destructura um subconjunto é no-op em JS, então elas não
-    // aparecem no blob cifrado ainda; não há o que afirmar aqui até essa
-    // tarefa futura ligar os dois.
+    // demandasFunilLinhas: build() chama montarFunilDemandas({registros,
+    // liberadoSond, propostasGanhas}) e passa o resultado pra renderDashboard
+    // -- prova que a ligação (Parte 1 da Task 6) está de fato acontecendo, não
+    // só que a função existe isolada (já coberta em
+    // test/orcamento-compute-demandas-funil.test.js). Sem liberadoSond real
+    // nesta fixture (caminhoLiberadoSondOnline não foi passado a build()),
+    // uma linha por registro da MATRIZ ainda aparece (contratado real,
+    // liberado/executado zerados por falta de entrada na SOND).
+    assert.ok(Array.isArray(dados.demandasFunilLinhas), 'o blob decifrado tem que trazer demandasFunilLinhas, mesmo vazio');
+    assert.equal(dados.demandasFunilLinhas.length, registros.length, 'uma linha do funil por registro da MATRIZ, sem entradas extras da SOND (liberadoSond vazio nesta fixture)');
+    const linhaFunilSP = dados.demandasFunilLinhas.find(l => l.tipologia === 'SP');
+    assert.ok(linhaFunilSP, 'a linha do funil da tipologia SP existe');
+    assert.equal(linhaFunilSP.liberado, 0, 'sem liberadoSond de verdade nesta fixture, liberado fica 0');
+    assert.ok(Array.isArray(dados.demandasFunilPropostas), 'o blob decifrado tem que trazer demandasFunilPropostas, mesmo vazio');
     const tipologias = registros.map(r => r.tipologia);
     const grupos = registros.map(r => r.grupo);
     assert.ok(tipologias.includes('SP'));

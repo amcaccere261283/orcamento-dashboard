@@ -20,6 +20,7 @@ const { parseAvancos } = require('../semanal/parse-avancos.js');
 const { parseLab } = require('../semanal/parse-lab.js');
 const { redirecionarSupsDesconhecidos, chegadasMensaisPorRegistro, saldoAberturaPorRegistro } = require('../semanal/compute-demandas.js');
 const { montarPropostasGanhas } = require('./parse-propostas-ganhas.js');
+const { montarFunilDemandas } = require('./compute-demandas-funil.js');
 
 const RESUMO_ZERO = { pico: 0, media: 0, prod: 0, dias: 0 };
 
@@ -215,10 +216,12 @@ function build({
 
   const liberadoSond = montarLiberadoSond({ caminhoLiberadoSondOnline });
   const propostasGanhas = montarPropostasGanhas({ registros, liberadoSond, caminhoRadarDemandas: config.caminhoRadarDemandas });
+  const { linhas: demandasFunilLinhas, propostasGanhas: demandasFunilPropostas } = montarFunilDemandas({ registros, liberadoSond, propostasGanhas });
 
   const html = renderDashboard({
     registros, periodos, generatedAt: today, senha, demandasChegadasMensais, demandasSaldoAbertura,
     liberadoSond, propostasGanhas,
+    demandasFunilLinhas, demandasFunilPropostas,
     logoDataUri: loadDataUri(LOGO_PATH), iconDataUri: loadDataUri(ICON_PATH),
   });
 
