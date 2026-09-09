@@ -2,7 +2,6 @@
 'use strict';
 
 const path = require('path');
-const fs = require('fs');
 
 // Os dois caminhos aceitam override por variável de ambiente -- o dono do
 // projeto tem a pasta PMO direto no "Meu Drive" (caminho fixo abaixo
@@ -20,18 +19,7 @@ module.exports = {
   nomeAbaLinhaBase: 'PROJ. GERAL - 110MM',
   // Catálogo de contratos SOND (source de verdade: extrato-gerencial-mensal/contratos.yaml,
   // sibling repo). Pode ser sobrescrito por variável de ambiente para colaboradores com
-  // caminhos diferentes. A resolução de caminho relativo funciona tanto no checkout
-  // principal quanto em worktrees: tenta primeiro o caminho do checkout principal,
-  // depois o da worktree.
+  // caminhos diferentes.
   caminhoContratosSond: process.env.ORCAMENTO_CAMINHO_CONTRATOS_SOND
-    || (() => {
-      const relativoAoRepo = path.resolve(__dirname, '../../../extrato-gerencial-mensal/contratos.yaml');
-      if (fs.existsSync(relativoAoRepo)) {
-        return relativoAoRepo;
-      }
-      // Se estamos em uma worktree, o caminho precisa de mais níveis de subida
-      // (../../../../../ = orcamento-dashboard root, ../../../../../../ = Projetos IA)
-      const relativoAoWorktree = path.resolve(__dirname, '../../../../../../extrato-gerencial-mensal/contratos.yaml');
-      return relativoAoWorktree;
-    })(),
+    || path.resolve(__dirname, '../../../extrato-gerencial-mensal/contratos.yaml'),
 };

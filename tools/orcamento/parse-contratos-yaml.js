@@ -23,16 +23,16 @@ function parseContratosYaml(texto) {
     // Remove comentário (tudo depois de #), mas preserva # dentro de string
     // Estratégia: procura por # que não está dentro de aspas
     const linhaLimpa = removerComentario(linha);
-    const lineaSemEspacoAnt = linhaLimpa.replace(/^\s+/, '');
-    const indentacao = linhaLimpa.length - lineaSemEspacoAnt.length;
+    const linhaSemEspacoAnt = linhaLimpa.replace(/^\s+/, '');
+    const indentacao = linhaLimpa.length - linhaSemEspacoAnt.length;
 
     // Linha vazia
-    if (!lineaSemEspacoAnt) {
+    if (!linhaSemEspacoAnt) {
       continue;
     }
 
     // Detecta `contratos:` na raiz (indentação 0)
-    if (indentacao === 0 && lineaSemEspacoAnt.startsWith('contratos:')) {
+    if (indentacao === 0 && linhaSemEspacoAnt.startsWith('contratos:')) {
       emListaDeContratos = true;
       continue;
     }
@@ -43,27 +43,35 @@ function parseContratosYaml(texto) {
     }
 
     // Detecta início de um novo item da lista: `- slug:`
-    if (lineaSemEspacoAnt.startsWith('- ')) {
+    if (linhaSemEspacoAnt.startsWith('- ')) {
       // Se temos um contrato anterior, o salvamos
-      if (contratoAtual && temCamposEssenciais(contratoAtual)) {
-        contratos.push(normalizarContrato(contratoAtual));
+      if (contratoAtual) {
+        if (temCamposEssenciais(contratoAtual)) {
+          contratos.push(normalizarContrato(contratoAtual));
+        } else {
+          console.warn('Contrato incompleto descartado (faltam cliente ou contrato_id):', contratoAtual);
+        }
       }
       contratoAtual = {};
       // Processa a linha do próprio `- chave: valor`
-      processarLinhaDeChaveValor(lineaSemEspacoAnt.slice(2), contratoAtual);
+      processarLinhaDeChaveValor(linhaSemEspacoAnt.slice(2), contratoAtual);
       continue;
     }
 
     // Linha que começa com espaço (dentro de um item da lista)
     if (indentacao > 0 && contratoAtual) {
-      processarLinhaDeChaveValor(lineaSemEspacoAnt, contratoAtual);
+      processarLinhaDeChaveValor(linhaSemEspacoAnt, contratoAtual);
       continue;
     }
   }
 
   // Salva o último contrato se válido
-  if (contratoAtual && temCamposEssenciais(contratoAtual)) {
-    contratos.push(normalizarContrato(contratoAtual));
+  if (contratoAtual) {
+    if (temCamposEssenciais(contratoAtual)) {
+      contratos.push(normalizarContrato(contratoAtual));
+    } else {
+      console.warn('Contrato incompleto descartado (faltam cliente ou contrato_id):', contratoAtual);
+    }
   }
 
   return contratos;
