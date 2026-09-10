@@ -276,6 +276,7 @@ function build({
   caminhoLabOnline = path.join(__dirname, '..', '..', 'dist', 'lab-online.csv'),
   caminhoDemandasLabOnline = path.join(__dirname, '..', '..', 'dist', 'demandas-lab-online.json'),
   caminhoLiberadoSondOnline = path.join(__dirname, '..', '..', 'dist', 'liberado-sond-online.csv'),
+  caminhoDemandasContratadoOnline = path.join(__dirname, '..', '..', 'dist', 'demandas-contratado-online.csv'),
 } = {}) {
   if (!senha) {
     throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
@@ -325,7 +326,8 @@ function build({
   }
 
   const csvDemandasContratado = gerarDemandasContratadoOnline(demandasFunilLinhas);
-  fs.writeFileSync(path.join(__dirname, '..', '..', 'dist', 'demandas-contratado-online.csv'), csvDemandasContratado, 'utf8');
+  fs.mkdirSync(path.dirname(caminhoDemandasContratadoOnline), { recursive: true });
+  fs.writeFileSync(caminhoDemandasContratadoOnline, csvDemandasContratado, 'utf8');
 
   const html = renderDashboard({
     registros, periodos, generatedAt: today, senha, demandasChegadasMensais, demandasSaldoAbertura,

@@ -154,6 +154,7 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
   const radarDemandasPath = path.join(os.tmpdir(), `orcamento-radar-demandas-e2e-${Date.now()}.xlsx`);
   fs.writeFileSync(radarDemandasPath, construirPlanilhaRadarDemandasVaziaTeste());
   const outPath = path.join(os.tmpdir(), `orcamento-dashboard-e2e-${Date.now()}.html`);
+  const demandasContratadoPath = path.join(os.tmpdir(), `demandas-contratado-online-e2e-${Date.now()}.csv`);
 
   // Troca a config real por uma apontando pras planilhas sintéticas -- o
   // require cache garante que build-dashboard.js enxergue essa troca antes
@@ -194,6 +195,10 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
       // batia mais com o número de linhas do funil (uma por combinação
       // SUP+tipologia da SOND, não uma por registro da MATRIZ).
       caminhoLiberadoSondOnline: path.join(os.tmpdir(), 'inexistente-liberado-sond-e2e.csv'),
+      // Idem outPath: sem override aqui, build() sobrescreveria o CSV real e
+      // commitado em dist/demandas-contratado-online.csv com o resultado
+      // desta fixture sintética toda vez que a suíte rodar.
+      caminhoDemandasContratadoOnline: demandasContratadoPath,
     });
     const html = fs.readFileSync(outPath, 'utf8');
 
@@ -246,6 +251,7 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
     fs.unlinkSync(avancosPath);
     fs.unlinkSync(labPath);
     if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
+    if (fs.existsSync(demandasContratadoPath)) fs.unlinkSync(demandasContratadoPath);
     delete require.cache[configPath];
     delete require.cache[buildPath];
   }
