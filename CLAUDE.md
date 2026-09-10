@@ -250,6 +250,22 @@ fetcher na hora), só não ganha `cp` pra `docs/`. **A "Regra permanente" de pub
 topo deste arquivo não precisa de passo novo por causa desta feature** — nenhum arquivo
 adicional entra na lista de cópias `dist/` → `docs/`.
 
+**Novo consumidor externo (2026-09-10):** `dist/demandas-contratado-online.csv` (CSV
+ABERTO, sem senha — ao contrário do HTML principal deste dashboard) exporta o lado
+"contratado" deste mesmo funil (`Cliente,Contrato`, uma linha por `(sup, tipologia)`
+com `contratado > 0` e `tomador` não nulo — linhas órfãs do liberadoSond ficam de
+fora). Escrito em TODO build normal (`gerarDemandasContratadoOnline`,
+`tools/orcamento/build-dashboard.js`), sem depender de nenhuma busca de API extra —
+diferente de `liberado-sond-online.csv`, que só é atualizado rodando
+`atualizar-liberado-sond.js` à parte. Consumido pelo dashboard de medições
+(`matriz-equipes-source`, `tools/medicoes/build-dashboard.js`) pra enxergar SUPs
+contratados na MATRIZ mesmo antes de aparecerem liberados na SOND — ver
+`docs/superpowers/specs/2026-09-10-backlog-demandas-contratado-design.md` naquele
+repositório. Deve ser commitado em `dist/` (mesma convenção dos outros CSVs "online"
+deste repositório) e entra no fluxo normal de publicação (Step 3 abaixo) — é
+regenerado sempre que `dist/orcamento-dashboard.html` também é, então **não precisa de
+passo de publicação próprio**.
+
 ## Pendência conhecida: aba Gerencial
 
 Uma 3ª aba (além de Tabela/Gráfico) foi investigada e **adiada** pelo usuário em
