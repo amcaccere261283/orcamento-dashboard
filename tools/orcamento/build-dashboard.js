@@ -21,6 +21,7 @@ const { parseLab } = require('../semanal/parse-lab.js');
 const { redirecionarSupsDesconhecidos, chegadasMensaisPorRegistro, saldoAberturaPorRegistro } = require('../semanal/compute-demandas.js');
 const { montarPropostasGanhas } = require('./parse-propostas-ganhas.js');
 const { montarFunilDemandas } = require('./compute-demandas-funil.js');
+const { gridParaCsv } = require('../semanal/csv-writer-avancos.js');
 
 const RESUMO_ZERO = { pico: 0, media: 0, prod: 0, dias: 0 };
 
@@ -204,6 +205,23 @@ function calibrarSaldoAberturaLab({ registros, periodos, chegadasMensais, saldoA
 // console); o funil de Demandas só fica sem a etapa "liberado na SOND".
 // Não recebe `registros` -- a agregação só depende do próprio CSV, o join
 // com a MATRIZ acontece depois, no consumidor do funil (fora desta task).
+// Exporta o lado "contratado" do funil de Demandas em CSV ABERTO (sem senha)
+// -- dist/demandas-contratado-online.csv, consumido pelo build das medições
+// (repositório matriz-equipes-source, tools/medicoes/build-dashboard.js) pra
+// saber quais SUPs já estão contratados na MATRIZ (aba Demandas daqui), mesmo
+// antes de aparecerem em liberado-sond-online.csv. Só linhas com tomador
+// (veio da MATRIZ, não é órfã do liberadoSond -- ver montarFunilDemandas) e
+// contratado > 0. Roda em TODO build normal -- a MATRIZ já é lida sempre,
+// sem depender de nenhuma busca de API extra (diferente de
+// liberado-sond-online.csv, que precisa do fetcher separado). Ver
+// docs/superpowers/specs/2026-09-10-backlog-demandas-contratado-design.md
+// no repositório matriz-equipes-source.
+function gerarDemandasContratadoOnline(demandasFunilLinhas) {
+  const linhasValidas = (demandasFunilLinhas || []).filter((l) => l.tomador && l.contratado > 0);
+  const grid = [['Cliente', 'Contrato'], ...linhasValidas.map((l) => [l.tomador, l.sup])];
+  return gridParaCsv(grid);
+}
+
 function montarLiberadoSond({ caminhoLiberadoSondOnline }) {
   if (!fs.existsSync(caminhoLiberadoSondOnline)) {
     console.warn(`AVISO: ${caminhoLiberadoSondOnline} não encontrado -- funil de Demandas fica sem a etapa "liberado na SOND". Rode "node tools/orcamento/atualizar-liberado-sond.js".`);
@@ -306,6 +324,9 @@ function build({
     console.warn(`AVISO: funil de Demandas tem ${orfasFunilDemandas.length} linha(s) órfã(s) do liberadoSond sem registro correspondente na MATRIZ${detalhe}`);
   }
 
+  const csvDemandasContratado = gerarDemandasContratadoOnline(demandasFunilLinhas);
+  fs.writeFileSync(path.join(__dirname, '..', '..', 'dist', 'demandas-contratado-online.csv'), csvDemandasContratado, 'utf8');
+
   const html = renderDashboard({
     registros, periodos, generatedAt: today, senha, demandasChegadasMensais, demandasSaldoAbertura,
     liberadoSond, propostasGanhas,
@@ -329,4 +350,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, anexarPrevistoInicial, montarDemandasChegadasMensais, calibrarSaldoAberturaLab, montarLiberadoSond };
+module.exports = { build, anexarPrevistoInicial, montarDemandasChegadasMensais, calibrarSaldoAberturaLab, montarLiberadoSond, gerarDemandasContratadoOnline };

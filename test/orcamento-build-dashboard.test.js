@@ -378,3 +378,32 @@ test('montarLiberadoSond: sigla fora de MAPA_TIPOLOGIAS propaga o erro de rotula
     fs.unlinkSync(csvPath);
   }
 });
+
+test('gerarDemandasContratadoOnline: uma linha por (sup,tipologia) com tomador e contratado > 0, órfãs (tomador null) e contratado 0 ficam de fora', () => {
+  const { gerarDemandasContratadoOnline } = require('../tools/orcamento/build-dashboard.js');
+  const linhas = [
+    { sup: 'SUP-8520-26', tomador: 'Cliente A', tipologia: 'SP', contratado: 100, liberado: 0, executado: 0 },
+    { sup: 'SUP-8520-26', tomador: 'Cliente A', tipologia: 'PI', contratado: 50, liberado: 0, executado: 0 },
+    { sup: 'SUP-9999-26', tomador: null, tipologia: 'SP', contratado: 0, liberado: 20, executado: 10 }, // órfã do liberadoSond
+    { sup: 'SUP-1000-24', tomador: 'Cliente B', tipologia: 'ST', contratado: 0, liberado: 0, executado: 0 }, // contratado zero
+  ];
+  const csv = gerarDemandasContratadoOnline(linhas);
+  const linhasCsv = csv.trim().split('\n');
+  assert.equal(linhasCsv[0], 'Cliente,Contrato');
+  assert.equal(linhasCsv.length, 3); // cabeçalho + 2 linhas de SUP-8520-26 (uma por tipologia)
+  assert.ok(linhasCsv.slice(1).every((l) => l.startsWith('Cliente A,SUP-8520-26')));
+});
+
+test('gerarDemandasContratadoOnline: lista vazia devolve só o cabeçalho', () => {
+  const { gerarDemandasContratadoOnline } = require('../tools/orcamento/build-dashboard.js');
+  assert.equal(gerarDemandasContratadoOnline([]).trim(), 'Cliente,Contrato');
+  assert.equal(gerarDemandasContratadoOnline(undefined).trim(), 'Cliente,Contrato');
+});
+
+test('gerarDemandasContratadoOnline: tomador com vírgula é escapado (reaproveita gridParaCsv)', () => {
+  const { gerarDemandasContratadoOnline } = require('../tools/orcamento/build-dashboard.js');
+  const csv = gerarDemandasContratadoOnline([
+    { sup: 'SUP-1-24', tomador: 'Empresa, Ltda', tipologia: 'SP', contratado: 10 },
+  ]);
+  assert.match(csv, /"Empresa, Ltda",SUP-1-24/);
+});
