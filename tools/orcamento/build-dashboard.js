@@ -22,6 +22,7 @@ const { redirecionarSupsDesconhecidos, chegadasMensaisPorRegistro, saldoAbertura
 const { montarPropostasGanhas } = require('./parse-propostas-ganhas.js');
 const { montarFunilDemandas } = require('./compute-demandas-funil.js');
 const { gridParaCsv } = require('../semanal/csv-writer-avancos.js');
+const { montarBacklog2026, gerarBacklog2026Online } = require('./compute-backlog-2026.js');
 
 const RESUMO_ZERO = { pico: 0, media: 0, prod: 0, dias: 0 };
 
@@ -277,6 +278,7 @@ function build({
   caminhoDemandasLabOnline = path.join(__dirname, '..', '..', 'dist', 'demandas-lab-online.json'),
   caminhoLiberadoSondOnline = path.join(__dirname, '..', '..', 'dist', 'liberado-sond-online.csv'),
   caminhoDemandasContratadoOnline = path.join(__dirname, '..', '..', 'dist', 'demandas-contratado-online.csv'),
+  caminhoBacklog2026Online = path.join(__dirname, '..', '..', 'dist', 'backlog-2026-online.csv'),
 } = {}) {
   if (!senha) {
     throw new Error('Defina a variável de ambiente ORCAMENTO_SENHA antes de rodar o build (a senha nunca fica em um arquivo do repositório).');
@@ -328,6 +330,12 @@ function build({
   const csvDemandasContratado = gerarDemandasContratadoOnline(demandasFunilLinhas);
   fs.mkdirSync(path.dirname(caminhoDemandasContratadoOnline), { recursive: true });
   fs.writeFileSync(caminhoDemandasContratadoOnline, csvDemandasContratado, 'utf8');
+
+  // Realizado + tendência 2026 por SUP, em R$ (ver compute-backlog-2026.js)
+  // -- aberto, sem senha, lido pelo Backlog das medições.
+  const csvBacklog2026 = gerarBacklog2026Online(montarBacklog2026({ registros, periodos, today }));
+  fs.mkdirSync(path.dirname(caminhoBacklog2026Online), { recursive: true });
+  fs.writeFileSync(caminhoBacklog2026Online, csvBacklog2026, 'utf8');
 
   const html = renderDashboard({
     registros, periodos, generatedAt: today, senha, demandasChegadasMensais, demandasSaldoAbertura,

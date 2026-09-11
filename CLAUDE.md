@@ -266,6 +266,19 @@ deste repositório) e entra no fluxo normal de publicação (Step 3 abaixo) — 
 regenerado sempre que `dist/orcamento-dashboard.html` também é, então **não precisa de
 passo de publicação próprio**.
 
+**Segundo consumidor externo (2026-09-11):** `dist/backlog-2026-online.csv` (ABERTO,
+mesmo esquema) exporta, por SUP (todas as tipologias somadas), o **Realizado 2026 e a
+Tendência restante de 2026 em R$** — os mesmos números da Tabela (série Financeiro):
+realizado = série R de janeiro até o mês vigente; tendência = Total do ano (série T
+"fechada", como `fecharTendenciaVigente` faz no navegador) menos o realizado. Colunas
+`Cliente,Contrato,Realizado2026,TendenciaRestante2026`, ponto decimal sem milhar.
+Gerado em todo build (`tools/orcamento/compute-backlog-2026.js`). **Essa função porta
+pro Node a regra de fechamento que hoje só existe no bundle do navegador
+(`render-dashboard.js`) — mudou lá, muda aqui**, senão o Backlog das medições deixa de
+bater com a Tabela. Conferido em 2026-09-11 com o SUP-7285-24: 4.759.080 + 9.419.610 =
+14.178.690. Diferente dos dois CSVs de identificação, este carrega R$ de propósito — o
+dashboard de medições que o consome já é público e já mostra valor de contrato e saldo.
+
 ## Pendência conhecida: aba Gerencial
 
 Uma 3ª aba (além de Tabela/Gráfico) foi investigada e **adiada** pelo usuário em

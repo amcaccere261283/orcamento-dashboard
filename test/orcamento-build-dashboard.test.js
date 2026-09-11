@@ -155,6 +155,7 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
   fs.writeFileSync(radarDemandasPath, construirPlanilhaRadarDemandasVaziaTeste());
   const outPath = path.join(os.tmpdir(), `orcamento-dashboard-e2e-${Date.now()}.html`);
   const demandasContratadoPath = path.join(os.tmpdir(), `demandas-contratado-online-e2e-${Date.now()}.csv`);
+  const backlog2026Path = path.join(os.tmpdir(), `backlog-2026-online-e2e-${Date.now()}.csv`);
 
   // Troca a config real por uma apontando pras planilhas sintéticas -- o
   // require cache garante que build-dashboard.js enxergue essa troca antes
@@ -199,8 +200,10 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
       // commitado em dist/demandas-contratado-online.csv com o resultado
       // desta fixture sintética toda vez que a suíte rodar.
       caminhoDemandasContratadoOnline: demandasContratadoPath,
+      caminhoBacklog2026Online: backlog2026Path,
     });
     const html = fs.readFileSync(outPath, 'utf8');
+    assert.match(fs.readFileSync(backlog2026Path, 'utf8'), /^Cliente,Contrato,Realizado2026,TendenciaRestante2026\n/);
 
     // O conteúdo real (tipologia/grupo) fica cifrado no HTML -- decifra com
     // node:crypto (via criptografia.js) pra verificar as mesmas regras de
@@ -252,6 +255,7 @@ test('build() reads a synthetic MATRIZ, skips the aggregate/trailer rows, and wr
     fs.unlinkSync(labPath);
     if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
     if (fs.existsSync(demandasContratadoPath)) fs.unlinkSync(demandasContratadoPath);
+    if (fs.existsSync(backlog2026Path)) fs.unlinkSync(backlog2026Path);
     delete require.cache[configPath];
     delete require.cache[buildPath];
   }
