@@ -279,6 +279,18 @@ bater com a Tabela. Conferido em 2026-09-11 com o SUP-7285-24: 4.759.080 + 9.419
 14.178.690. Diferente dos dois CSVs de identificação, este carrega R$ de propósito — o
 dashboard de medições que o consome já é público e já mostra valor de contrato e saldo.
 
+**Atualização diária do orçamento (2026-09-11):** tarefa do Task Scheduler
+`OrcamentoDashboard-BuildDiario`, às 7h, **só na máquina que enxerga a MATRIZ** (hoje a
+do Américo, COMP-074) — roda `tools/orcamento/atualizar-orcamento-diario.js`: fetch +
+rebase, build, cópia pra `docs/index.html`, commit e `push origin HEAD:master` com
+retry. Registrar: `powershell -ExecutionPolicy Bypass -File
+tools\orcamento\configurar-tarefa-orcamento-diario.ps1`. Log em
+`%USERPROFILE%\orcamento-dashboard-logs\orcamento-diario.log`. É separada da rotina
+escalonada da página semanal **de propósito**: aquela roda na 1ª das 3 máquinas que
+conseguir (quase sempre a do Patrick, sem a MATRIZ) e as outras pulam o dia, então um
+build do orçamento pendurado nela quase nunca rodaria. É ela que faz o 2026 do Backlog
+das medições andar sozinho (o workflow das medições lê os CSVs daqui a cada 2h).
+
 ## Pendência conhecida: aba Gerencial
 
 Uma 3ª aba (além de Tabela/Gráfico) foi investigada e **adiada** pelo usuário em
